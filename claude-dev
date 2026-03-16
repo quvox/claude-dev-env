@@ -1,0 +1,481 @@
+#!/bin/bash
+# =============================================================================
+# claude-dev - Claude Code 安全開発環境 CLI
+# =============================================================================
+# 任意のプロジェクトディレクトリで claude-dev start するだけで
+# コンテナ隔離された Claude Code 環境が起動する
+# =============================================================================
+set -e
+
+# --- パス解決 ---
+SCRIPT_PATH="$(readlink -f "$0" 2>/dev/null || realpath "$0")"
+BASE_DIR="$(dirname "$SCRIPT_PATH")"
+CONFIG_FILE="${BASE_DIR}/.env"
+
+# --- 設定読み込み ---
+if [ -f "$CONFIG_FILE" ]; then
+    set -a
+    source "$CONFIG_FILE"
+    set +a
+fi
+
+SAMBA_SHARE_DIR="${SAMBA_SHARE_DIR:-$HOME}"
+SAMBA_USER="${SAMBA_USER:-claude}"
+SAMBA_PASSWORD="${SAMBA_PASSWORD:-claude}"
+SAMBA_PORT="${SAMBA_PORT:-445}"
+
+# --- 定数 ---
+NETWORK="claude-dev-net"
+VOL_AUTH="claude-dev-auth"
+VOL_HISTORY="claude-dev-history"
+IMG_CLAUDE="claude-dev-claude"
+IMG_SAMBA="claude-dev-samba"
+
+# =============================================================================
+# ヘルパー関数
+# =============================================================================
+
+# プロジェクト名（カレントディレクトリから導出）
+project_name() {
+    basename "$(pwd)" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9._-]/-/g'
+}
+
+# コンテナ名
+container_name() {
+    echo "claude-$(project_name)"
+}
+
+# イメージが存在するか
+image_exists() {
+    docker image inspect "$1" >/dev/null 2>&1
+}
+
+# コンテナが実行中か
+is_running() {
+    docker ps -q -f "name=^${1}$" 2>/dev/null | grep -q .
+}
+
+# コンテナが存在するか（停止含む）
+container_exists() {
+    docker ps -aq -f "name=^${1}$" 2>/dev/null | grep -q .
+}
+
+# セットアップ済みか確認（イメージがなければ自動ビルド）
+require_setup() {
+    if ! image_exists "$IMG_CLAUDE"; then
+        echo "📦 Claude イメージが見つかりません。ビルドします..."
+        docker build -t "$IMG_CLAUDE" \
+            -f "${BASE_DIR}/.devcontainer/Dockerfile.claude" "$BASE_DIR"
+    fi
+}
+
+# Docker リソースの準備
+ensure_infrastructure() {
+    docker network create "$NETWORK" 2>/dev/null || true
+    docker volume create "$VOL_AUTH" >/dev/null 2>&1 || true
+    docker volume create "$VOL_HISTORY" >/dev/null 2>&1 || true
+}
+
+# =============================================================================
+# コマンド
+# =============================================================================
+case "${1:-help}" in
+
+# -----------------------------------------------------------------------------
+# 初回セットアップ
+# -----------------------------------------------------------------------------
+setup)
+    echo "🚀 Claude Code 開発環境セットアップ"
+    echo ""
+
+    # .env
+    if [ ! -f "${BASE_DIR}/.env" ]; then
+        cp "${BASE_DIR}/.env.example" "${BASE_DIR}/.env"
+        echo "✅ .env を作成しました（必要に応じて ${BASE_DIR}/.env を編集）"
+    else
+        echo "ℹ️  .env は既に存在します"
+    fi
+
+    # ネットワーク
+    docker network create "$NETWORK" 2>/dev/null || true
+    echo "✅ ネットワーク: $NETWORK"
+
+    # ボリューム
+    docker volume create "$VOL_AUTH" >/dev/null 2>&1 || true
+    docker volume create "$VOL_HISTORY" >/dev/null 2>&1 || true
+    echo "✅ ボリューム: $VOL_AUTH, $VOL_HISTORY"
+
+    # イメージビルド
+    echo ""
+    echo "📦 Docker イメージをビルド中..."
+    docker build -t "$IMG_CLAUDE" \
+        -f "${BASE_DIR}/.devcontainer/Dockerfile.claude" "$BASE_DIR"
+    docker build -t "$IMG_SAMBA" \
+        -f "${BASE_DIR}/.devcontainer/Dockerfile.samba" "$BASE_DIR"
+    echo "✅ イメージビルド完了"
+
+    # Samba 起動
+    echo ""
+    echo "🔄 Samba を起動中..."
+    docker rm -f claude-samba 2>/dev/null || true
+    docker run -d \
+        --name claude-samba \
+        --hostname claude-samba \
+        --restart unless-stopped \
+        -v "${SAMBA_SHARE_DIR}:/workspace" \
+        -p "${SAMBA_PORT}:445" \
+        -e "SAMBA_USER=${SAMBA_USER}" \
+        -e "SAMBA_PASSWORD=${SAMBA_PASSWORD}" \
+        "$IMG_SAMBA" >/dev/null
+    echo "✅ samba 起動 (smb://<server>:${SAMBA_PORT}/workspace)"
+
+    echo ""
+    echo "============================================"
+    echo "✅ セットアップ完了！"
+    echo ""
+    echo "次のステップ:"
+    echo "  1. claude-dev login"
+    echo "  2. cd /path/to/your/project"
+    echo "  3. claude-dev start"
+    echo ""
+    if ! command -v claude-dev >/dev/null 2>&1; then
+        echo "PATH に追加:"
+        echo "  sudo ln -sf ${BASE_DIR}/claude-dev /usr/local/bin/claude-dev"
+    fi
+    echo "============================================"
+    ;;
+
+# -----------------------------------------------------------------------------
+# OAuth ログイン
+# -----------------------------------------------------------------------------
+login)
+    require_setup
+    ensure_infrastructure
+    echo "📋 Claude OAuth ログイン"
+    echo ""
+    echo "Claude Code が起動します。ログインを完了してから /exit で終了してください。"
+    echo ""
+
+    # claude-dev-auth ボリュームを ~/.claude にマウント
+    # Claude Code は ~/.claude.json と ~/.claude/ の両方を使うため、
+    # entrypoint で ~/.claude.json → ~/.claude/.claude.json のシンボリックリンクを作成する代わりに
+    # ここでは login 用に直接両方をマウントする
+    #
+    # 方式: ボリュームを /home/devuser/.claude にマウントし、
+    #        .claude.json は ~/.claude/ 内に保存、ホームに symlink
+    docker run --rm -it \
+        --network "$NETWORK" \
+        --entrypoint bash \
+        --user devuser \
+        -e "TERM=${TERM:-xterm-256color}" \
+        -e "LANG=en_US.UTF-8" \
+        -v "${VOL_AUTH}:/home/devuser/.claude" \
+        "$IMG_CLAUDE" \
+        -l -c '
+            # ~/.claude.json がボリューム内にあれば symlink
+            if [ -f ~/.claude/.claude.json ]; then
+                ln -sf ~/.claude/.claude.json ~/.claude.json
+            fi
+
+            claude || true
+
+            # login 後: ~/.claude.json をボリューム内にコピーして永続化
+            if [ -f ~/.claude.json ] && [ ! -L ~/.claude.json ]; then
+                cp ~/.claude.json ~/.claude/.claude.json
+            fi
+        '
+
+    echo "✅ ログイン処理完了"
+    ;;
+
+# -----------------------------------------------------------------------------
+# ログイン情報削除
+# -----------------------------------------------------------------------------
+logout)
+    require_setup
+    echo "🗑️  認証情報を削除中..."
+    # auth ボリューム（= ~/.claude/）をクリア
+    # 実行中のコンテナがあるとボリュームが使用中なので先に停止
+    echo "   実行中のコンテナを停止中..."
+    docker ps -a --filter "ancestor=$IMG_CLAUDE" -q | xargs -r docker rm -f 2>/dev/null || true
+    # ボリュームを空にする
+    docker run --rm --entrypoint bash \
+        -v "${VOL_AUTH}:/auth" \
+        "$IMG_CLAUDE" \
+        -c "rm -rf /auth/* /auth/.*" 2>/dev/null || true
+    echo "✅ 認証情報を削除しました"
+    echo "   再ログイン: claude-dev login"
+    ;;
+
+# -----------------------------------------------------------------------------
+# トークン手動設定
+# -----------------------------------------------------------------------------
+set-token)
+    require_setup
+    if [ -z "$2" ]; then
+        echo "使い方: claude-dev set-token YOUR_TOKEN"
+        exit 1
+    fi
+    # auth ボリュームに直接書き込み
+    docker run --rm \
+        -v "${VOL_AUTH}:/auth" \
+        alpine sh -c "echo '$2' > /auth/token"
+    echo "✅ トークン設定完了"
+    ;;
+
+# -----------------------------------------------------------------------------
+# プロジェクト開始（カレントディレクトリ）
+# -----------------------------------------------------------------------------
+start)
+    require_setup
+    NAME=$(container_name)
+    PROJECT_DIR="$(pwd)"
+
+    # 既に実行中 → attach（tmux セッションがなければ再作成）
+    if is_running "$NAME"; then
+        echo "✅ ${NAME} は実行中。接続します..."
+        if ! docker exec -u devuser "$NAME" tmux has-session -t main 2>/dev/null; then
+            docker exec -u devuser "$NAME" tmux new-session -d -s main 2>/dev/null || true
+            sleep 0.5
+        fi
+        docker exec -it -u devuser "$NAME" tmux attach -t main
+        exit 0
+    fi
+
+    # 停止中のコンテナがあれば削除
+    if container_exists "$NAME"; then
+        docker rm -f "$NAME" >/dev/null
+    fi
+
+    # インフラ確認
+    ensure_infrastructure
+
+    # コンテナ起動
+    echo "🚀 起動中... [${NAME}] → ${PROJECT_DIR}"
+    docker run -d \
+        --name "$NAME" \
+        --hostname "$NAME" \
+        --network "$NETWORK" \
+        --cap-add NET_ADMIN \
+        --cap-add NET_RAW \
+        --restart unless-stopped \
+        -v "${PROJECT_DIR}:/workspace" \
+        -v "${VOL_HISTORY}:/home/devuser/.command_history" \
+        -v "${VOL_AUTH}:/home/devuser/.claude" \
+        -v "${BASE_DIR}/scripts/tmux.conf:/home/devuser/.tmux.conf:ro" \
+        -v "${BASE_DIR}/CLAUDE.md:/home/devuser/CLAUDE.md:ro" \
+        -e NODE_OPTIONS=--max-old-space-size=4096 \
+        -t \
+        "$IMG_CLAUDE" >/dev/null
+
+    # tmux 起動を待つ
+    for i in $(seq 1 10); do
+        if docker exec -u devuser "$NAME" tmux has-session -t main 2>/dev/null; then
+            break
+        fi
+        sleep 0.5
+    done
+
+    echo "✅ 起動完了（Ctrl-B D で切断、claude-dev start で再接続）"
+    docker exec -it -u devuser "$NAME" tmux attach -t main
+    ;;
+
+# -----------------------------------------------------------------------------
+# Claude Code を新しい tmux ウィンドウで起動
+# -----------------------------------------------------------------------------
+code)
+    require_setup
+    NAME=$(container_name)
+
+    if ! is_running "$NAME"; then
+        echo "❌ コンテナが起動していません: claude-dev start を先に実行"
+        exit 1
+    fi
+
+    docker exec -it -u devuser "$NAME" tmux new-window -t main "claude"
+    docker exec -it -u devuser "$NAME" tmux attach -t main
+    ;;
+
+# -----------------------------------------------------------------------------
+# 既存セッションに接続
+# -----------------------------------------------------------------------------
+attach)
+    require_setup
+    if [ -n "$2" ]; then
+        # 名前指定
+        NAME="claude-${2}"
+    else
+        NAME=$(container_name)
+    fi
+
+    if ! is_running "$NAME"; then
+        echo "❌ ${NAME} は起動していません"
+        echo "   実行中のセッション: claude-dev list"
+        exit 1
+    fi
+
+    docker exec -it -u devuser "$NAME" tmux attach -t main
+    ;;
+
+# -----------------------------------------------------------------------------
+# プロジェクト停止
+# -----------------------------------------------------------------------------
+stop)
+    if [ -n "$2" ]; then
+        NAME="claude-${2}"
+    else
+        NAME=$(container_name)
+    fi
+
+    if container_exists "$NAME"; then
+        docker rm -f "$NAME" >/dev/null
+        echo "✅ ${NAME} を停止しました"
+    else
+        echo "ℹ️  ${NAME} は存在しません"
+    fi
+    ;;
+
+# -----------------------------------------------------------------------------
+# 実行中セッション一覧
+# -----------------------------------------------------------------------------
+list)
+    echo "=== 実行中の Claude Code セッション ==="
+    docker ps --filter "ancestor=$IMG_CLAUDE" \
+        --format "table {{.Names}}\t{{.Status}}\t{{.Mounts}}" 2>/dev/null || true
+    echo ""
+    echo "=== 共有サービス ==="
+    for svc in claude-samba; do
+        if is_running "$svc"; then
+            echo "  ✅ ${svc}"
+        else
+            echo "  ❌ ${svc} (停止中)"
+        fi
+    done
+    ;;
+
+# -----------------------------------------------------------------------------
+# Claude Code アップグレード
+# -----------------------------------------------------------------------------
+upgrade)
+    echo "📦 Claude Code を最新版に更新中..."
+    docker build --no-cache -t "$IMG_CLAUDE" \
+        -f "${BASE_DIR}/.devcontainer/Dockerfile.claude" "$BASE_DIR"
+    echo ""
+    echo "✅ イメージ更新完了"
+    echo "   実行中のコンテナは stop → start で反映されます"
+    ;;
+
+# -----------------------------------------------------------------------------
+# 共有サービス管理
+# -----------------------------------------------------------------------------
+services)
+    case "${2:-status}" in
+        start)
+            if ! is_running "claude-samba"; then
+                if ! image_exists "$IMG_SAMBA"; then
+                    echo "📦 Samba イメージをビルド中..."
+                    docker build -t "$IMG_SAMBA" \
+                        -f "${BASE_DIR}/.devcontainer/Dockerfile.samba" "$BASE_DIR"
+                fi
+                docker rm -f claude-samba 2>/dev/null || true
+                docker run -d \
+                    --name claude-samba \
+                    --hostname claude-samba \
+                    --restart unless-stopped \
+                    -v "${SAMBA_SHARE_DIR}:/workspace" \
+                    -p "${SAMBA_PORT}:445" \
+                    -e "SAMBA_USER=${SAMBA_USER}" \
+                    -e "SAMBA_PASSWORD=${SAMBA_PASSWORD}" \
+                    "$IMG_SAMBA" >/dev/null
+            fi
+            echo "✅ Samba 起動"
+            ;;
+        stop)
+            docker rm -f claude-samba 2>/dev/null || true
+            echo "✅ Samba 停止"
+            ;;
+        status|*)
+            if is_running "claude-samba"; then
+                echo "✅ claude-samba: 実行中"
+            else
+                echo "❌ claude-samba: 停止"
+            fi
+            ;;
+    esac
+    ;;
+
+# -----------------------------------------------------------------------------
+# ファイアウォール確認
+# -----------------------------------------------------------------------------
+firewall)
+    NAME=$(container_name)
+    if ! is_running "$NAME"; then
+        echo "❌ コンテナが起動していません"
+        exit 1
+    fi
+    docker exec "$NAME" iptables -L OUTPUT -n --line-numbers
+    ;;
+
+# -----------------------------------------------------------------------------
+# 全リセット
+# -----------------------------------------------------------------------------
+reset)
+    echo "⚠️  以下を全て削除します:"
+    echo "   - 全 Claude Code コンテナ"
+    echo "   - Samba"
+    echo "   - 認証情報・履歴ボリューム"
+    echo "   - Docker イメージ"
+    echo ""
+    read -p "実行しますか？ (y/N) " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        echo "キャンセルしました"
+        exit 0
+    fi
+
+    # プロジェクトコンテナ停止
+    docker ps -a --filter "ancestor=$IMG_CLAUDE" -q | xargs -r docker rm -f 2>/dev/null || true
+    # 共有サービス停止
+    docker rm -f claude-samba 2>/dev/null || true
+    # ボリューム削除
+    docker volume rm -f "$VOL_AUTH" "$VOL_HISTORY" 2>/dev/null || true
+    # ネットワーク削除
+    docker network rm "$NETWORK" 2>/dev/null || true
+    # イメージ削除
+    docker rmi -f "$IMG_CLAUDE" "$IMG_SAMBA" 2>/dev/null || true
+
+    echo "✅ 全リセット完了"
+    ;;
+
+# -----------------------------------------------------------------------------
+# ヘルプ
+# -----------------------------------------------------------------------------
+help|*)
+    cat << 'EOF'
+claude-dev - Claude Code 安全開発環境
+
+セットアップ（初回のみ）:
+  claude-dev setup             イメージビルド + 共有サービス起動
+  claude-dev login             OAuth ログイン
+
+開発:
+  claude-dev start             カレントディレクトリで Claude Code 環境を起動
+  claude-dev code              新しい tmux ウィンドウで Claude Code を起動
+  claude-dev attach [NAME]     既存セッションに接続
+  claude-dev stop [NAME]       セッションを停止
+  claude-dev list              実行中セッション一覧
+
+メンテナンス:
+  claude-dev upgrade [VER]     Claude Code を更新（デフォルト: latest）
+  claude-dev set-token TOKEN   認証トークンを手動設定
+  claude-dev logout            認証情報を削除
+  claude-dev firewall          ファイアウォールルール確認
+  claude-dev services [start|stop|status]  共有サービス管理
+  claude-dev reset             全削除
+
+使い方:
+  cd ~/repos/my-project
+  claude-dev start
+EOF
+    ;;
+esac

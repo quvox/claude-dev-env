@@ -1,0 +1,154 @@
+# =============================================================================
+# Claude Code コンテナ
+# =============================================================================
+# ベース: Ubuntu 24.04
+# 言語: Node.js (fnm), Python3 (venv), Go, Rust
+# ツール: git, tmux, zsh, vim, make, gcc, curl, wget, etc.
+# Claude Code CLI
+# ブラックリスト方式ファイアウォール
+# 認証情報はボリュームマウントで管理
+# =============================================================================
+FROM ubuntu:24.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# --- ユーザー名・パスを先に定義（全体で参照する）---
+ARG USERNAME=devuser
+ARG USER_UID=1500
+ARG USER_GID=1500
+ENV USER_HOME=/home/devuser
+
+# --- システムパッケージ ---
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    # ファイアウォール
+    iptables ipset dnsutils \
+    # シェル・ターミナル
+    zsh tmux vim \
+    # VCS
+    git git-lfs \
+    # ネットワーク
+    curl wget jq ca-certificates \
+    iproute2 net-tools iputils-ping \
+    # ビルドツール
+    make gcc g++ pkg-config \
+    # sudo・プロセス管理
+    sudo procps \
+    # Python 3
+    python3 python3-pip python3-venv python3-dev \
+    # サンドボックス（Claude Code 推奨）
+    bubblewrap socat \
+    # Chromium / Playwright 依存パッケージ
+    chromium-browser \
+    fonts-liberation fonts-noto-cjk fonts-noto-color-emoji \
+    libasound2t64 libatk-bridge2.0-0 libatk1.0-0 libcairo2 libcups2 \
+    libdbus-1-3 libdrm2 libgbm1 libglib2.0-0 libgtk-3-0 libnspr4 \
+    libnss3 libpango-1.0-0 libx11-6 libxcomposite1 libxdamage1 \
+    libxext6 libxfixes3 libxrandr2 libxshmfence1 libxkbcommon0 \
+    xdg-utils \
+    # その他
+    unzip xz-utils gnupg locales \
+    && rm -rf /var/lib/apt/lists/*
+
+# --- Playwright のブラウザパスを環境変数で設定 ---
+ENV CHROME_PATH=/usr/bin/chromium-browser
+ENV PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium-browser
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
+
+# --- ロケール設定 ---
+RUN locale-gen en_US.UTF-8
+ENV LANG=en_US.UTF-8
+ENV LC_ALL=en_US.UTF-8
+
+# --- 非root ユーザー作成 ---
+RUN groupadd --gid $USER_GID $USERNAME \
+    && useradd --uid $USER_UID --gid $USER_GID -m -s /bin/zsh $USERNAME \
+    && echo "$USERNAME ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/$USERNAME \
+    && chmod 0440 /etc/sudoers.d/$USERNAME \
+    && mkdir -p $USER_HOME/.claude \
+    && mkdir -p $USER_HOME/.command_history \
+    && chown -R $USERNAME:$USERNAME $USER_HOME
+
+# =============================================================================
+# 言語ランタイム（devuser でインストール）
+# =============================================================================
+USER $USERNAME
+
+# --- fnm (Node.js バージョン管理) ---
+# /home/devuser/.local/share/fnm に絶対パスでインストール
+RUN curl -fsSL https://fnm.vercel.app/install | bash -s -- \
+        --install-dir "${USER_HOME}/.local/share/fnm" --skip-shell \
+    && export PATH="${USER_HOME}/.local/share/fnm:$PATH" \
+    && eval "$($USER_HOME/.local/share/fnm/fnm env)" \
+    && fnm install 24 \
+    && fnm default 24 \
+    && fnm install 22 \
+    && fnm use 24
+
+# --- Go ---
+ARG GO_VERSION=1.24.1
+RUN curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-$(dpkg --print-architecture).tar.gz" \
+    | sudo tar -C /usr/local -xz
+
+# --- Rust (rustup) ---
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+    | sh -s -- -y --default-toolchain stable --profile minimal
+
+# --- シェル初期化: .zshrc / .bashrc に PATH と fnm を設定 ---
+# ここで全ランタイムの PATH を一箇所にまとめる
+RUN { \
+        echo ''; \
+        echo '# --- claude-dev: PATH ---'; \
+        echo 'export PATH="${HOME}/.local/share/fnm:${PATH}"'; \
+        echo 'eval "$(fnm env --use-on-cd --shell zsh)"'; \
+        echo 'export PATH="${HOME}/.local/bin:${HOME}/.cargo/bin:/usr/local/go/bin:${HOME}/go/bin:${PATH}"'; \
+    } >> ${USER_HOME}/.zshrc \
+    && { \
+        echo ''; \
+        echo '# --- claude-dev: PATH ---'; \
+        echo 'export PATH="${HOME}/.local/share/fnm:${PATH}"'; \
+        echo 'eval "$(fnm env --use-on-cd --shell bash)"'; \
+        echo 'export PATH="${HOME}/.local/bin:${HOME}/.cargo/bin:/usr/local/go/bin:${HOME}/go/bin:${PATH}"'; \
+    } >> ${USER_HOME}/.bashrc
+
+# --- pnpm ---
+RUN export PATH="${USER_HOME}/.local/share/fnm:$PATH" \
+    && eval "$($USER_HOME/.local/share/fnm/fnm env)" \
+    && corepack enable \
+    && corepack prepare pnpm@latest --activate
+
+# --- Playwright（システムの Chromium を使用）---
+RUN export PATH="${USER_HOME}/.local/share/fnm:$PATH" \
+    && eval "$($USER_HOME/.local/share/fnm/fnm env)" \
+    && npx -y playwright@latest install-deps 2>/dev/null || true
+
+# --- Claude Code CLI (ネイティブインストーラー) ---
+# 公式ドキュメント: WORKDIR /tmp でインストーラーがファイルシステム全体をスキャンするのを防ぐ
+WORKDIR /tmp
+RUN curl -fsSL https://claude.ai/install.sh | bash
+WORKDIR /workspace
+
+# =============================================================================
+# コンテナ設定
+# =============================================================================
+USER root
+
+# --- スクリプト設置 ---
+COPY scripts/init-firewall-claude.sh /usr/local/bin/init-firewall.sh
+COPY scripts/entrypoint-claude.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/init-firewall.sh /usr/local/bin/entrypoint.sh
+
+# --- 作業ディレクトリ ---
+RUN mkdir -p /workspace && chown $USERNAME:$USERNAME /workspace
+WORKDIR /workspace
+
+# --- Claude Code 設定 ---
+RUN mkdir -p $USER_HOME/.claude \
+    && echo '{"permissions":{"defaultMode":"bypassPermissions"}}' \
+       > $USER_HOME/.claude/settings.json \
+    && chown -R $USERNAME:$USERNAME $USER_HOME/.claude
+
+# --- デフォルトシェル ---
+ENV SHELL=/bin/zsh
+
+# root で起動し、entrypoint が UID/GID 調整後に devuser へ切り替える
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
