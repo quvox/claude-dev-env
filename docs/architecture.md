@@ -20,7 +20,7 @@ Linux サーバ (SSH でアクセス)
 │   └── claude-dev-net         コンテナ間通信
 │
 └── Docker ボリューム
-    ├── claude-dev-auth        OAuth 認証情報
+    ├── claude-dev-auth        認証情報（~/.claude/ と ~/.claude.json）
     └── claude-dev-history     コマンド履歴
 ```
 
@@ -37,12 +37,13 @@ Linux サーバ (SSH でアクセス)
 │  Node.js 24/22 (fnm) + pnpm + Claude Code    │
 │  Python3 + venv                               │
 │  Go, Rust                                     │
+│  Chromium + Playwright 依存パッケージ           │
 │  git, zsh, tmux, vim, make, gcc, curl, wget   │
 │  iptables ファイアウォール                      │
 │                                               │
-│  /workspace ← ホストのプロジェクトディレクトリ    │
-│  ~/.claude-auth/ ← 認証情報（読み取り専用）      │
-│  ~/.claude.json ← 起動時にコピー               │
+│  /workspace      ← ホストのプロジェクト (RW)    │
+│  ~/.claude/      ← 認証ボリューム (RW)          │
+│  ~/.claude.json  ← symlink → ~/.claude/ 内     │
 │                                               │
 │  ※ Docker ソケットなし                         │
 │  ※ UID/GID はホストに自動追従                   │
@@ -52,9 +53,9 @@ Linux サーバ (SSH でアクセス)
 - **イメージ**: `claude-dev-claude`
 - **ベース**: `ubuntu:24.04`
 - **言語**: Node.js 24/22 (fnm), Python3 (venv), Go, Rust
-- **ツール**: git, zsh, tmux, vim, make, gcc, curl, wget, pnpm, etc.
+- **ツール**: git, zsh, tmux, vim, make, gcc, curl, wget, pnpm, Chromium, etc.
 - **ユーザー**: `devuser` (UID はホストに自動追従)
-- **起動**: entrypoint が UID/GID 調整 → 認証情報コピー → ファイアウォール → tmux → 待機
+- **起動**: entrypoint が UID/GID 調整 → 認証 symlink → ファイアウォール → tmux → 待機
 
 ### Samba コンテナ（常駐）
 
@@ -65,32 +66,69 @@ Linux サーバ (SSH でアクセス)
 - **共有先**: `.env` の `SAMBA_SHARE_DIR` で指定したディレクトリ
 - **macOS 互換**: VFS fruit モジュール有効
 
-## 認証フロー
+## 認証の仕組み
+
+Claude Code は認証情報を以下の 2 箇所に保存する：
+
+- `~/.claude.json` — アカウント情報、設定、セッションデータ
+- `~/.claude/` — 設定ファイル、内部データ
+
+### ボリュームマウント方式
+
+`claude-dev-auth` ボリュームを `~/.claude/` に直接マウントすることで、認証情報を永続化する。`~/.claude.json` は `~/.claude/.claude.json` へのシンボリックリンクとして管理する。
 
 ```
-┌─────────┐     ┌───────────────┐     ┌──────────────┐
-│ ユーザー │     │ 一時コンテナ   │     │  auth volume  │
-└────┬────┘     └───────┬───────┘     └──────┬───────┘
-     │                  │                     │
-     │ claude-dev login │                     │
-     │─────────────────→│                     │
-     │                  │                     │
-     │    URL 表示      │                     │
-     │←─────────────────│                     │
-     │                  │                     │
-     │ ブラウザで認証    │                     │
-     │─────────────────→│                     │
-     │                  │ claude.json 保存     │
-     │                  │────────────────────→│
-     │                  │                     │
+Docker ボリューム: claude-dev-auth
+    │
+    ├── .claude.json     ← ~/.claude.json の実体
+    ├── settings.json    ← bypassPermissions 設定
+    └── (その他の内部データ)
+
+コンテナ内:
+    ~/.claude/           ← ボリュームが直接マウント (RW)
+    ~/.claude.json       ← symlink → ~/.claude/.claude.json
 ```
 
-1. `claude-dev login` が Claude イメージを使った一時コンテナを起動
-2. コンテナ内で `claude login` を実行（ブラウザ認証）
-3. 認証情報 (`~/.claude.json`) を `claude-dev-auth` ボリュームに `claude.json` として保存
-4. 一時コンテナは終了
+この方式により：
+- login で保存した認証情報が、全プロジェクトコンテナで共有される
+- コンテナを削除・再作成しても認証情報は失われない
+- コピー処理が不要（ボリュームが直接マウントされるため）
 
-### プロジェクト起動時の認証
+### 認証フロー
+
+```
+┌─────────┐     ┌───────────────────┐     ┌──────────────┐
+│ ユーザー │     │ login 一時コンテナ │     │ auth volume  │
+└────┬────┘     └────────┬──────────┘     └──────┬───────┘
+     │                   │                        │
+     │ claude-dev login  │                        │
+     │──────────────────→│                        │
+     │                   │ volume を ~/.claude に   │
+     │                   │ 直接マウント             │
+     │                   │←───────────────────────│
+     │                   │                        │
+     │ Claude Code 起動  │                        │
+     │   URL 表示        │                        │
+     │←──────────────────│                        │
+     │                   │                        │
+     │ ブラウザで認証     │                        │
+     │──────────────────→│                        │
+     │                   │ ~/.claude.json 書込     │
+     │                   │ ~/.claude/ 書込         │
+     │                   │───────────────────────→│
+     │                   │                        │
+     │ /exit で終了      │ .claude.json を         │
+     │──────────────────→│ ボリュームにコピー        │
+     │                   │───────────────────────→│
+```
+
+1. `claude-dev login` が一時コンテナを起動（`claude-dev-auth` ボリュームを `~/.claude/` にマウント）
+2. Claude Code が対話的に起動し、ブラウザ認証 URL を表示
+3. ユーザーがブラウザで認証を完了
+4. Claude Code が `~/.claude.json` と `~/.claude/` に認証データを書き込み
+5. `/exit` で終了すると、`~/.claude.json` がボリューム内（`~/.claude/.claude.json`）にコピーされ永続化
+
+### プロジェクト起動時
 
 ```
 claude-dev start
@@ -99,14 +137,15 @@ claude-dev start
 ┌─ entrypoint-claude.sh ──────────────────────┐
 │ 1. /workspace の UID/GID を検出              │
 │ 2. devuser の UID/GID をホストに合わせる      │
-│ 3. ~/.claude-auth/claude.json (RO) を       │
-│    ~/.claude.json にコピー                   │
-│ 4. ファイアウォール設定                       │
-│ 5. tmux セッション開始                       │
+│ 3. ~/.claude/.claude.json への symlink 作成  │
+│    → ~/.claude.json                         │
+│ 4. settings.json がなければ再作成            │
+│ 5. ファイアウォール設定                       │
+│ 6. tmux セッション開始                       │
 └──────────────────────────────────────────────┘
 ```
 
-`claude-dev-auth` ボリュームは読み取り専用 (`:ro`) でマウントされる。entrypoint がコンテナ内の `~/.claude.json` にコピーすることで Claude Code が認証情報を読み取れるようになる。
+`claude-dev-auth` ボリュームが `~/.claude/` にマウントされるため、login で保存した認証情報がそのまま使える。entrypoint はシンボリックリンクの作成と `settings.json` の確保のみ行う。
 
 ## Docker リソース
 
@@ -118,16 +157,16 @@ claude-dev start
 
 ### ボリューム
 
-| 名前 | 用途 | アクセス |
-|------|------|---------|
-| `claude-dev-auth` | OAuth 認証情報 | login 時に書き込み、start 時に読み取り専用マウント |
-| `claude-dev-history` | bash/zsh 履歴の永続化 | 全 Claude コンテナ |
+| 名前 | 用途 | マウント先 |
+|------|------|-----------|
+| `claude-dev-auth` | 認証情報（`~/.claude.json` + `~/.claude/`） | `/home/devuser/.claude` (RW) |
+| `claude-dev-history` | bash/zsh 履歴の永続化 | `/home/devuser/.command_history` |
 
 ### イメージ
 
 | 名前 | ベース | サイズ目安 |
 |------|--------|----------|
-| `claude-dev-claude` | ubuntu:24.04 | ~2GB |
+| `claude-dev-claude` | ubuntu:24.04 | ~2.5GB |
 | `claude-dev-samba` | alpine:3.21 | ~15MB |
 
 ## コンテナのライフサイクル
@@ -147,8 +186,8 @@ start で起動 → 常駐（restart: unless-stopped）→ stop で破棄
 ```
 
 - `claude-dev start`: 起動 + tmux アタッチ
-- SSH 切断 / tmux デタッチ: コンテナは動き続ける
-- `claude-dev start`（再実行）: 既存コンテナに再接続
+- SSH 切断 / tmux デタッチ (`Ctrl-B D`): コンテナは動き続ける
+- `claude-dev start`（再実行）: 既存コンテナに再接続（tmux セッションがなければ再作成）
 - `claude-dev stop`: コンテナ削除（プロジェクトファイルはホスト上なので安全）
 
 ## ディレクトリマッピング
@@ -157,12 +196,13 @@ start で起動 → 常駐（restart: unless-stopped）→ stop で破棄
 ホスト                         コンテナ内
 ───────────────────────────    ─────────────────────────
 ~/repos/my-project        →   /workspace (RW)
-claude-dev-auth volume    →   /home/devuser/.claude-auth (RO)
+claude-dev-auth volume    →   /home/devuser/.claude (RW)
+                               /home/devuser/.claude.json → symlink
 ~/claude-dev-env/CLAUDE.md →  /home/devuser/CLAUDE.md (RO)
 ~/claude-dev-env/scripts/  →  /home/devuser/.tmux.conf (RO)
                                /usr/local/bin/init-firewall.sh
                                /usr/local/bin/entrypoint.sh
 ```
 
-プロジェクトディレクトリは読み書き可能でマウントされる。
-認証情報・CLAUDE.md・tmux.conf は読み取り専用。
+プロジェクトディレクトリと認証情報は読み書き可能。
+CLAUDE.md・tmux.conf は読み取り専用。

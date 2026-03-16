@@ -163,11 +163,11 @@ claude-dev services status
 claude-dev services start
 ```
 
-### OAuth トークンが期限切れ
+### OAuth トークンが期限切れ / 再ログインしたい
 
 ```bash
-claude-dev logout   # 既存の認証情報を削除
-claude-dev login    # 再ログイン
+claude-dev logout   # 認証情報を削除（実行中コンテナも停止される）
+claude-dev login    # 再ログイン（/exit で終了）
 ```
 
 ### Claude Code を更新したい

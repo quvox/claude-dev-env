@@ -208,22 +208,6 @@ logout)
     ;;
 
 # -----------------------------------------------------------------------------
-# トークン手動設定
-# -----------------------------------------------------------------------------
-set-token)
-    require_setup
-    if [ -z "$2" ]; then
-        echo "使い方: claude-dev set-token YOUR_TOKEN"
-        exit 1
-    fi
-    # auth ボリュームに直接書き込み
-    docker run --rm \
-        -v "${VOL_AUTH}:/auth" \
-        alpine sh -c "echo '$2' > /auth/token"
-    echo "✅ トークン設定完了"
-    ;;
-
-# -----------------------------------------------------------------------------
 # プロジェクト開始（カレントディレクトリ）
 # -----------------------------------------------------------------------------
 start)
@@ -466,8 +450,7 @@ claude-dev - Claude Code 安全開発環境
   claude-dev list              実行中セッション一覧
 
 メンテナンス:
-  claude-dev upgrade [VER]     Claude Code を更新（デフォルト: latest）
-  claude-dev set-token TOKEN   認証トークンを手動設定
+  claude-dev upgrade            Claude Code を更新
   claude-dev logout            認証情報を削除
   claude-dev firewall          ファイアウォールルール確認
   claude-dev services [start|stop|status]  共有サービス管理

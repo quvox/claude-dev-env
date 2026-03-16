@@ -48,7 +48,9 @@ claude-dev setup
 
 #### `claude-dev login`
 
-OAuth 認証を実行する。Claude イメージを使った一時コンテナを起動し、`claude login` を実行する。認証完了後、認証情報を `claude-dev-auth` ボリュームに保存する。
+OAuth 認証を実行する。Claude イメージを使った一時コンテナを起動し、Claude Code を対話的に起動する。`claude-dev-auth` ボリュームが `~/.claude/` に直接マウントされ、認証情報はそのまま永続化される。
+
+ログイン完了後、`/exit` で Claude Code を終了する。
 
 ```bash
 claude-dev login
@@ -58,7 +60,7 @@ claude-dev login
 
 #### `claude-dev logout`
 
-認証情報を削除する。`claude-dev-auth` ボリューム内のファイルをすべて削除する。
+認証情報を削除する。実行中の全プロジェクトコンテナを停止し、`claude-dev-auth` ボリューム内のファイルをすべて削除する。
 
 ```bash
 claude-dev logout
@@ -222,4 +224,5 @@ claude-dev reset
 | セッション一覧 | `claude-dev list` |
 | OAuth ログイン | `make login` または `claude-dev login` |
 | 認証情報削除 | `claude-dev logout` |
+| 全リセット | `make clean` または `claude-dev reset` |
 | 全リセット | `make clean` または `claude-dev reset` |
