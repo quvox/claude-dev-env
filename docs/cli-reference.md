@@ -70,13 +70,16 @@ claude-dev logout
 
 ### 開発
 
-#### `claude-dev start`
+#### `claude-dev start [--chrome]`
 
 カレントディレクトリをワークスペースとして Claude Code 環境を起動する。
 
 ```bash
 cd ~/repos/my-project
 claude-dev start
+
+# Chrome/VNC 付きで起動
+claude-dev start --chrome
 ```
 
 動作:
@@ -85,6 +88,12 @@ claude-dev start
 - 停止中のコンテナがある場合は削除して新規起動
 - イメージが存在しなければ自動ビルド
 - 認証情報がなければエラーで停止
+
+`--chrome` オプション:
+- コンテナ内に仮想ディスプレイ（Xvfb）+ VNC + noVNC を起動する
+- ローカル PC のブラウザから `http://localhost:<port>/vnc.html` で Chrome を操作できる
+- noVNC ポートは 6080 から自動割り当て（複数プロジェクト同時起動対応）
+- tmux 内で `chromium-browser` や `google-chrome` を起動すると noVNC 画面に表示される
 
 #### `claude-dev code`
 

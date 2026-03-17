@@ -57,6 +57,36 @@ fi
 # --- ファイアウォール設定 ---
 /usr/local/bin/init-firewall.sh 2>/dev/null || true
 
+# --- VNC 環境起動（ENABLE_VNC=1 の場合） ---
+if [ "${ENABLE_VNC:-0}" = "1" ]; then
+    VNC_DISPLAY="${VNC_DISPLAY:-99}"
+    VNC_RESOLUTION="${VNC_RESOLUTION:-1920x1080x24}"
+    VNC_PORT=5900
+    NOVNC_PORT=6080
+
+    # Xvfb（仮想ディスプレイ）
+    su "$USERNAME" -c "Xvfb :${VNC_DISPLAY} -screen 0 ${VNC_RESOLUTION} &"
+    sleep 1
+
+    # openbox（ウィンドウマネージャ）
+    su "$USERNAME" -c "DISPLAY=:${VNC_DISPLAY} openbox &"
+    sleep 0.5
+
+    # x11vnc（VNC サーバー）
+    su "$USERNAME" -c "x11vnc -display :${VNC_DISPLAY} -forever -nopw -rfbport ${VNC_PORT} -shared &"
+    sleep 0.5
+
+    # websockify + noVNC（Web ブラウザからアクセス）
+    su "$USERNAME" -c "websockify --web /usr/share/novnc ${NOVNC_PORT} localhost:${VNC_PORT} &"
+    sleep 0.5
+
+    # DISPLAY 環境変数をシェル設定に追加（tmux 内で Chrome が使えるように）
+    echo "export DISPLAY=:${VNC_DISPLAY}" >> "$USER_HOME/.zshrc"
+    echo "export DISPLAY=:${VNC_DISPLAY}" >> "$USER_HOME/.bashrc"
+
+    echo "🖥️  VNC 起動 (noVNC: port ${NOVNC_PORT}, VNC: port ${VNC_PORT})"
+fi
+
 # --- tmux セッション開始 ---
 su "$USERNAME" -s /bin/zsh -l -c \
     "cd /workspace && tmux -f ~/.tmux.conf new-session -d -s main 'exec zsh -l'" \

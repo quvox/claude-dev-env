@@ -40,6 +40,7 @@ Linux サーバ (SSH でアクセス)
 │  Chromium + Playwright 依存パッケージ           │
 │  git, zsh, tmux, vim, make, gcc, curl, wget   │
 │  iptables ファイアウォール                      │
+│  Xvfb + x11vnc + noVNC（--chrome 時のみ起動）  │
 │                                               │
 │  /workspace      ← ホストのプロジェクト (RW)    │
 │  ~/.claude/      ← 認証ボリューム (RW)          │
@@ -55,7 +56,8 @@ Linux サーバ (SSH でアクセス)
 - **言語**: Node.js 24/22 (fnm), Python3 (venv), Go, Rust
 - **ツール**: git, zsh, tmux, vim, make, gcc, curl, wget, pnpm, Chromium, etc.
 - **ユーザー**: `devuser` (UID はホストに自動追従)
-- **起動**: entrypoint が UID/GID 調整 → 認証 symlink → ファイアウォール → tmux → 待機
+- **起動**: entrypoint が UID/GID 調整 → 認証 symlink → ファイアウォール → (VNC) → tmux → 待機
+- **`--chrome` モード**: `ENABLE_VNC=1` 環境変数で Xvfb + x11vnc + noVNC を起動。ポート 6080 を公開し、ブラウザから Chrome を操作できる
 
 ### Samba コンテナ（常駐）
 

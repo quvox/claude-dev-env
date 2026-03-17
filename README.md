@@ -75,8 +75,13 @@ claude-dev attach my-project  # 名前指定も可
 cd ~/repos/other-project
 claude-dev start
 
+# Chrome が必要なプロジェクト（OAuth 認証、Web テスト等）
+cd ~/repos/web-project
+claude-dev start --chrome     # VNC 付きで起動
+# → http://localhost:6080/vnc.html で Chrome を操作
+
 # 管理
-claude-dev list               # 実行中セッション一覧
+claude-dev list               # 実行中セッション一覧（noVNC URL も表示）
 claude-dev stop my-project    # 停止
 claude-dev upgrade            # Claude Code 更新
 make status                   # 全体の状態確認

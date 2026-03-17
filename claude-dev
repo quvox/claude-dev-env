@@ -26,6 +26,7 @@ SAMBA_PORT="${SAMBA_PORT:-445}"
 
 # --- 定数 ---
 NETWORK="claude-dev-net"
+NOVNC_BASE_PORT=6080   # --chrome 時の noVNC ポート開始番号
 VOL_AUTH="claude-dev-auth"
 VOL_HISTORY="claude-dev-history"
 IMG_CLAUDE="claude-dev-claude"
@@ -58,6 +59,24 @@ is_running() {
 # コンテナが存在するか（停止含む）
 container_exists() {
     docker ps -aq -f "name=^${1}$" 2>/dev/null | grep -q .
+}
+
+# 使用可能な noVNC ポートを探す
+find_available_novnc_port() {
+    local port=$NOVNC_BASE_PORT
+    while [ $port -lt $((NOVNC_BASE_PORT + 100)) ]; do
+        if ! docker ps --format '{{.Ports}}' 2>/dev/null | grep -q "0.0.0.0:${port}->"; then
+            echo "$port"
+            return
+        fi
+        port=$((port + 1))
+    done
+    echo "$NOVNC_BASE_PORT"
+}
+
+# 実行中コンテナの noVNC ポートを取得
+get_novnc_port() {
+    docker port "$1" 6080 2>/dev/null | head -1 | sed 's/.*://'
 }
 
 # セットアップ済みか確認（イメージがなければ自動ビルド）
@@ -215,9 +234,22 @@ start)
     NAME=$(container_name)
     PROJECT_DIR="$(pwd)"
 
+    # --chrome オプション解析
+    ENABLE_CHROME=0
+    shift
+    for arg in "$@"; do
+        case "$arg" in
+            --chrome) ENABLE_CHROME=1 ;;
+        esac
+    done
+
     # 既に実行中 → attach（tmux セッションがなければ再作成）
     if is_running "$NAME"; then
         echo "✅ ${NAME} は実行中。接続します..."
+        NOVNC_PORT=$(get_novnc_port "$NAME")
+        if [ -n "$NOVNC_PORT" ]; then
+            echo "🖥️  noVNC: http://localhost:${NOVNC_PORT}/vnc.html"
+        fi
         if ! docker exec -u devuser "$NAME" tmux has-session -t main 2>/dev/null; then
             docker exec -u devuser "$NAME" tmux new-session -d -s main 2>/dev/null || true
             sleep 0.5
@@ -234,6 +266,13 @@ start)
     # インフラ確認
     ensure_infrastructure
 
+    # --chrome: VNC 用オプションを構築
+    CHROME_OPTS=""
+    if [ "$ENABLE_CHROME" = "1" ]; then
+        NOVNC_PORT=$(find_available_novnc_port)
+        CHROME_OPTS="-e ENABLE_VNC=1 -p ${NOVNC_PORT}:6080"
+    fi
+
     # コンテナ起動
     echo "🚀 起動中... [${NAME}] → ${PROJECT_DIR}"
     docker run -d \
@@ -249,6 +288,7 @@ start)
         -v "${BASE_DIR}/scripts/tmux.conf:/home/devuser/.tmux.conf:ro" \
         -v "${BASE_DIR}/CLAUDE.md:/home/devuser/CLAUDE.md:ro" \
         -e NODE_OPTIONS=--max-old-space-size=4096 \
+        $CHROME_OPTS \
         -t \
         "$IMG_CLAUDE" >/dev/null
 
@@ -261,6 +301,10 @@ start)
     done
 
     echo "✅ 起動完了（Ctrl-B D で切断、claude-dev start で再接続）"
+    if [ "$ENABLE_CHROME" = "1" ]; then
+        echo "🖥️  noVNC: http://localhost:${NOVNC_PORT}/vnc.html"
+        echo "   tmux 内で google-chrome or chromium-browser を起動できます"
+    fi
     docker exec -it -u devuser "$NAME" tmux attach -t main
     ;;
 
@@ -326,6 +370,16 @@ list)
     echo "=== 実行中の Claude Code セッション ==="
     docker ps --filter "ancestor=$IMG_CLAUDE" \
         --format "table {{.Names}}\t{{.Status}}\t{{.Mounts}}" 2>/dev/null || true
+
+    # noVNC URL の表示
+    for cid in $(docker ps --filter "ancestor=$IMG_CLAUDE" -q 2>/dev/null); do
+        cname=$(docker inspect --format '{{.Name}}' "$cid" | sed 's/^\//')
+        novnc_port=$(docker port "$cid" 6080 2>/dev/null | head -1 | sed 's/.*://')
+        if [ -n "$novnc_port" ]; then
+            echo "  🖥️  ${cname} → noVNC: http://localhost:${novnc_port}/vnc.html"
+        fi
+    done
+
     echo ""
     echo "=== 共有サービス ==="
     for svc in claude-samba; do
@@ -444,6 +498,7 @@ claude-dev - Claude Code 安全開発環境
 
 開発:
   claude-dev start             カレントディレクトリで Claude Code 環境を起動
+  claude-dev start --chrome    Chrome/VNC 付きで起動（noVNC でブラウザ操作可能）
   claude-dev code              新しい tmux ウィンドウで Claude Code を起動
   claude-dev attach [NAME]     既存セッションに接続
   claude-dev stop [NAME]       セッションを停止
