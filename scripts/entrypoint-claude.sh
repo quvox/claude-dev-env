@@ -2,14 +2,15 @@
 # =============================================================================
 # Claude コンテナ エントリポイント
 # =============================================================================
-# 1. /workspace の所有者 UID/GID に devuser を合わせる
+# 1. /workspace の所有者 UID/GID にコンテナユーザーを合わせる
 # 2. ~/.claude/.claude.json → ~/.claude.json の symlink 作成
 # 3. ファイアウォール設定
 # 4. tmux 起動
 # =============================================================================
 set -e
 
-USERNAME="devuser"
+# CONTAINER_USER は Dockerfile の ENV で設定される（デフォルト: devuser）
+USERNAME="${CONTAINER_USER:-devuser}"
 USER_HOME="/home/$USERNAME"
 
 # --- /workspace の所有者に UID/GID を合わせる ---

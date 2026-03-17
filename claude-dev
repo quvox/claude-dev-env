@@ -19,18 +19,16 @@ if [ -f "$CONFIG_FILE" ]; then
     set +a
 fi
 
-SAMBA_SHARE_DIR="${SAMBA_SHARE_DIR:-$HOME}"
-SAMBA_USER="${SAMBA_USER:-claude}"
-SAMBA_PASSWORD="${SAMBA_PASSWORD:-claude}"
-SAMBA_PORT="${SAMBA_PORT:-445}"
-
 # --- 定数 ---
 NETWORK="claude-dev-net"
 NOVNC_BASE_PORT=6080   # --chrome 時の noVNC ポート開始番号
 VOL_AUTH="claude-dev-auth"
 VOL_HISTORY="claude-dev-history"
 IMG_CLAUDE="claude-dev-claude"
-IMG_SAMBA="claude-dev-samba"
+
+# --- コンテナ内ユーザー名（ホストのカレントユーザーに合わせる）---
+CUSER="$(whoami)"
+CHOME="/home/${CUSER}"
 
 # =============================================================================
 # ヘルパー関数
@@ -84,6 +82,7 @@ require_setup() {
     if ! image_exists "$IMG_CLAUDE"; then
         echo "📦 Claude イメージが見つかりません。ビルドします..."
         docker build -t "$IMG_CLAUDE" \
+            --build-arg USERNAME="$CUSER" \
             -f "${BASE_DIR}/.devcontainer/Dockerfile.claude" "$BASE_DIR"
     fi
 }
@@ -126,27 +125,11 @@ setup)
 
     # イメージビルド
     echo ""
-    echo "📦 Docker イメージをビルド中..."
+    echo "📦 Docker イメージをビルド中... (user: $CUSER)"
     docker build -t "$IMG_CLAUDE" \
+        --build-arg USERNAME="$CUSER" \
         -f "${BASE_DIR}/.devcontainer/Dockerfile.claude" "$BASE_DIR"
-    docker build -t "$IMG_SAMBA" \
-        -f "${BASE_DIR}/.devcontainer/Dockerfile.samba" "$BASE_DIR"
     echo "✅ イメージビルド完了"
-
-    # Samba 起動
-    echo ""
-    echo "🔄 Samba を起動中..."
-    docker rm -f claude-samba 2>/dev/null || true
-    docker run -d \
-        --name claude-samba \
-        --hostname claude-samba \
-        --restart unless-stopped \
-        -v "${SAMBA_SHARE_DIR}:/workspace" \
-        -p "${SAMBA_PORT}:445" \
-        -e "SAMBA_USER=${SAMBA_USER}" \
-        -e "SAMBA_PASSWORD=${SAMBA_PASSWORD}" \
-        "$IMG_SAMBA" >/dev/null
-    echo "✅ samba 起動 (smb://<server>:${SAMBA_PORT}/workspace)"
 
     echo ""
     echo "============================================"
@@ -180,15 +163,15 @@ login)
     # entrypoint で ~/.claude.json → ~/.claude/.claude.json のシンボリックリンクを作成する代わりに
     # ここでは login 用に直接両方をマウントする
     #
-    # 方式: ボリュームを /home/devuser/.claude にマウントし、
+    # 方式: ボリュームを ${CHOME}/.claude にマウントし、
     #        .claude.json は ~/.claude/ 内に保存、ホームに symlink
     docker run --rm -it \
         --network "$NETWORK" \
         --entrypoint bash \
-        --user devuser \
+        --user "$CUSER" \
         -e "TERM=${TERM:-xterm-256color}" \
         -e "LANG=en_US.UTF-8" \
-        -v "${VOL_AUTH}:/home/devuser/.claude" \
+        -v "${VOL_AUTH}:${CHOME}/.claude" \
         "$IMG_CLAUDE" \
         -l -c '
             # ~/.claude.json がボリューム内にあれば symlink
@@ -250,11 +233,11 @@ start)
         if [ -n "$NOVNC_PORT" ]; then
             echo "🖥️  noVNC: http://localhost:${NOVNC_PORT}/vnc.html"
         fi
-        if ! docker exec -u devuser "$NAME" tmux has-session -t main 2>/dev/null; then
-            docker exec -u devuser "$NAME" tmux new-session -d -s main 2>/dev/null || true
+        if ! docker exec -u "$CUSER" "$NAME" tmux has-session -t main 2>/dev/null; then
+            docker exec -u "$CUSER" "$NAME" tmux new-session -d -s main 2>/dev/null || true
             sleep 0.5
         fi
-        docker exec -it -u devuser "$NAME" tmux attach -t main
+        docker exec -it -u "$CUSER" "$NAME" tmux attach -t main
         exit 0
     fi
 
@@ -283,10 +266,10 @@ start)
         --cap-add NET_RAW \
         --restart unless-stopped \
         -v "${PROJECT_DIR}:/workspace" \
-        -v "${VOL_HISTORY}:/home/devuser/.command_history" \
-        -v "${VOL_AUTH}:/home/devuser/.claude" \
-        -v "${BASE_DIR}/scripts/tmux.conf:/home/devuser/.tmux.conf:ro" \
-        -v "${BASE_DIR}/CLAUDE.md:/home/devuser/CLAUDE.md:ro" \
+        -v "${VOL_HISTORY}:${CHOME}/.command_history" \
+        -v "${VOL_AUTH}:${CHOME}/.claude" \
+        -v "${BASE_DIR}/scripts/tmux.conf:${CHOME}/.tmux.conf:ro" \
+        -v "${BASE_DIR}/CLAUDE.md:${CHOME}/CLAUDE.md:ro" \
         -e NODE_OPTIONS=--max-old-space-size=4096 \
         $CHROME_OPTS \
         -t \
@@ -294,7 +277,7 @@ start)
 
     # tmux 起動を待つ
     for i in $(seq 1 10); do
-        if docker exec -u devuser "$NAME" tmux has-session -t main 2>/dev/null; then
+        if docker exec -u "$CUSER" "$NAME" tmux has-session -t main 2>/dev/null; then
             break
         fi
         sleep 0.5
@@ -305,7 +288,7 @@ start)
         echo "🖥️  noVNC: http://localhost:${NOVNC_PORT}/vnc.html"
         echo "   tmux 内で google-chrome or chromium-browser を起動できます"
     fi
-    docker exec -it -u devuser "$NAME" tmux attach -t main
+    docker exec -it -u "$CUSER" "$NAME" tmux attach -t main
     ;;
 
 # -----------------------------------------------------------------------------
@@ -320,8 +303,8 @@ code)
         exit 1
     fi
 
-    docker exec -it -u devuser "$NAME" tmux new-window -t main "claude"
-    docker exec -it -u devuser "$NAME" tmux attach -t main
+    docker exec -it -u "$CUSER" "$NAME" tmux new-window -t main "claude"
+    docker exec -it -u "$CUSER" "$NAME" tmux attach -t main
     ;;
 
 # -----------------------------------------------------------------------------
@@ -342,7 +325,7 @@ attach)
         exit 1
     fi
 
-    docker exec -it -u devuser "$NAME" tmux attach -t main
+    docker exec -it -u "$CUSER" "$NAME" tmux attach -t main
     ;;
 
 # -----------------------------------------------------------------------------
@@ -380,15 +363,6 @@ list)
         fi
     done
 
-    echo ""
-    echo "=== 共有サービス ==="
-    for svc in claude-samba; do
-        if is_running "$svc"; then
-            echo "  ✅ ${svc}"
-        else
-            echo "  ❌ ${svc} (停止中)"
-        fi
-    done
     ;;
 
 # -----------------------------------------------------------------------------
@@ -397,49 +371,11 @@ list)
 upgrade)
     echo "📦 Claude Code を最新版に更新中..."
     docker build --no-cache -t "$IMG_CLAUDE" \
+        --build-arg USERNAME="$CUSER" \
         -f "${BASE_DIR}/.devcontainer/Dockerfile.claude" "$BASE_DIR"
     echo ""
     echo "✅ イメージ更新完了"
     echo "   実行中のコンテナは stop → start で反映されます"
-    ;;
-
-# -----------------------------------------------------------------------------
-# 共有サービス管理
-# -----------------------------------------------------------------------------
-services)
-    case "${2:-status}" in
-        start)
-            if ! is_running "claude-samba"; then
-                if ! image_exists "$IMG_SAMBA"; then
-                    echo "📦 Samba イメージをビルド中..."
-                    docker build -t "$IMG_SAMBA" \
-                        -f "${BASE_DIR}/.devcontainer/Dockerfile.samba" "$BASE_DIR"
-                fi
-                docker rm -f claude-samba 2>/dev/null || true
-                docker run -d \
-                    --name claude-samba \
-                    --hostname claude-samba \
-                    --restart unless-stopped \
-                    -v "${SAMBA_SHARE_DIR}:/workspace" \
-                    -p "${SAMBA_PORT}:445" \
-                    -e "SAMBA_USER=${SAMBA_USER}" \
-                    -e "SAMBA_PASSWORD=${SAMBA_PASSWORD}" \
-                    "$IMG_SAMBA" >/dev/null
-            fi
-            echo "✅ Samba 起動"
-            ;;
-        stop)
-            docker rm -f claude-samba 2>/dev/null || true
-            echo "✅ Samba 停止"
-            ;;
-        status|*)
-            if is_running "claude-samba"; then
-                echo "✅ claude-samba: 実行中"
-            else
-                echo "❌ claude-samba: 停止"
-            fi
-            ;;
-    esac
     ;;
 
 # -----------------------------------------------------------------------------
@@ -460,7 +396,6 @@ firewall)
 reset)
     echo "⚠️  以下を全て削除します:"
     echo "   - 全 Claude Code コンテナ"
-    echo "   - Samba"
     echo "   - 認証情報・履歴ボリューム"
     echo "   - Docker イメージ"
     echo ""
@@ -473,14 +408,12 @@ reset)
 
     # プロジェクトコンテナ停止
     docker ps -a --filter "ancestor=$IMG_CLAUDE" -q | xargs -r docker rm -f 2>/dev/null || true
-    # 共有サービス停止
-    docker rm -f claude-samba 2>/dev/null || true
     # ボリューム削除
     docker volume rm -f "$VOL_AUTH" "$VOL_HISTORY" 2>/dev/null || true
     # ネットワーク削除
     docker network rm "$NETWORK" 2>/dev/null || true
     # イメージ削除
-    docker rmi -f "$IMG_CLAUDE" "$IMG_SAMBA" 2>/dev/null || true
+    docker rmi -f "$IMG_CLAUDE" 2>/dev/null || true
 
     echo "✅ 全リセット完了"
     ;;
@@ -493,7 +426,7 @@ help|*)
 claude-dev - Claude Code 安全開発環境
 
 セットアップ（初回のみ）:
-  claude-dev setup             イメージビルド + 共有サービス起動
+  claude-dev setup             イメージビルド + インフラ構築
   claude-dev login             OAuth ログイン
 
 開発:
@@ -505,10 +438,9 @@ claude-dev - Claude Code 安全開発環境
   claude-dev list              実行中セッション一覧
 
 メンテナンス:
-  claude-dev upgrade            Claude Code を更新
+  claude-dev upgrade           Claude Code を更新
   claude-dev logout            認証情報を削除
   claude-dev firewall          ファイアウォールルール確認
-  claude-dev services [start|stop|status]  共有サービス管理
   claude-dev reset             全削除
 
 使い方:

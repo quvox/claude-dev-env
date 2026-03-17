@@ -10,13 +10,10 @@
 
 | ターゲット | 内容 |
 |-----------|------|
-| `make setup` | 初回セットアップ一括実行（env + network + volumes + build + services + install） |
+| `make setup` | 初回セットアップ一括実行（env + network + volumes + build + install） |
 | `make login` | OAuth ログイン |
-| `make build` | 全イメージビルド |
-| `make build-claude` | Claude イメージのみビルド |
-| `make build-samba` | Samba イメージのみビルド |
-| `make start-services` | Samba 起動 |
-| `make stop-services` | Samba 停止 |
+| `make build` | イメージビルド |
+| `make build-claude` | Claude イメージをビルド |
 | `make upgrade` | Claude Code を最新版にリビルド（`--no-cache`） |
 | `make status` | イメージ・コンテナ・ボリュームの状態確認 |
 | `make install` | `claude-dev` を `/usr/local/bin/` にシンボリックリンク |
@@ -39,8 +36,7 @@
 1. `.env` ファイルを `.env.example` からコピー（未作成時）
 2. Docker ネットワーク `claude-dev-net` を作成
 3. Docker ボリューム `claude-dev-auth`, `claude-dev-history` を作成
-4. Docker イメージをビルド（claude, samba）
-5. Samba コンテナを起動
+4. Docker イメージをビルド
 
 ```bash
 claude-dev setup
@@ -132,7 +128,7 @@ claude-dev stop my-project
 
 #### `claude-dev list`
 
-実行中の Claude Code セッションと Samba の状態を表示する。
+実行中の Claude Code セッションを表示する。`--chrome` で起動したコンテナは noVNC の URL も表示される。
 
 ```bash
 claude-dev list
@@ -144,9 +140,7 @@ claude-dev list
 NAMES               STATUS          MOUNTS
 claude-my-project   Up 2 hours      /home/user/repos/my-project...
 claude-api-server   Up 30 minutes   /home/user/repos/api-server...
-
-=== 共有サービス ===
-  ✅ claude-samba
+  🖥️  claude-my-project → noVNC: http://localhost:6080/vnc.html
 ```
 
 ---
@@ -162,16 +156,6 @@ claude-dev upgrade
 ```
 
 更新後、実行中のコンテナには即座に反映されない。`stop` → `start` で新しいイメージが使われる。
-
-#### `claude-dev services [start|stop|status]`
-
-Samba コンテナを管理する。
-
-```bash
-claude-dev services status   # 状態確認
-claude-dev services start    # 起動
-claude-dev services stop     # 停止
-```
 
 #### `claude-dev firewall`
 
@@ -191,30 +175,17 @@ claude-dev reset
 
 削除対象:
 - 全プロジェクトコンテナ
-- Samba コンテナ
 - `claude-dev-auth`, `claude-dev-history` ボリューム
 - `claude-dev-net` ネットワーク
-- `claude-dev-claude`, `claude-dev-samba` イメージ
+- `claude-dev-claude` イメージ
 
 ---
-
-## 設定ファイル
-
-`<claude-dev-env>/.env` に記述する。
-
-| 変数 | デフォルト | 説明 |
-|------|-----------|------|
-| `SAMBA_SHARE_DIR` | `/home/user/repos` | Samba で共有するディレクトリ |
-| `SAMBA_PORT` | `445` | Samba のポート |
-| `SAMBA_USER` | `claude` | Samba ユーザー名 |
-| `SAMBA_PASSWORD` | `claude` | Samba パスワード |
 
 ## コンテナ命名規則
 
 | 種類 | 命名パターン | 例 |
 |------|-------------|-----|
 | プロジェクト | `claude-<ディレクトリ名>` | `claude-my-project` |
-| Samba | `claude-samba` | - |
 
 ディレクトリ名は小文字化され、英数字・ハイフン・ドット・アンダースコア以外は `-` に置換される。
 
@@ -225,7 +196,6 @@ claude-dev reset
 | 初回セットアップ | `make setup` |
 | イメージビルド | `make build` |
 | Claude Code 更新 | `make upgrade` |
-| Samba 起動/停止 | `make start-services` / `make stop-services` |
 | 状態確認（全体） | `make status` |
 | PATH 登録 | `make install` |
 | プロジェクトで開発開始 | `claude-dev start` |
@@ -233,5 +203,4 @@ claude-dev reset
 | セッション一覧 | `claude-dev list` |
 | OAuth ログイン | `make login` または `claude-dev login` |
 | 認証情報削除 | `claude-dev logout` |
-| 全リセット | `make clean` または `claude-dev reset` |
 | 全リセット | `make clean` または `claude-dev reset` |

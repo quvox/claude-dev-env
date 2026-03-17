@@ -14,24 +14,12 @@
 git clone https://github.com/quvox/claude-dev-env.git ~/claude-dev-env
 cd ~/claude-dev-env
 
-# 2. 設定ファイルを編集
+# 2. 設定ファイルを作成
 cp .env.example .env
-vim .env
-```
-
-`.env` で設定する主要項目:
-
-```bash
-# Samba で共有するディレクトリ（プロジェクト群の親ディレクトリ）
-SAMBA_SHARE_DIR=/home/user/repos
-
-# Samba 認証（デフォルトから必ず変更すること）
-SAMBA_USER=yourname
-SAMBA_PASSWORD=your-secure-password
 ```
 
 ```bash
-# 3. セットアップ実行（ビルド + Samba 起動 + PATH 登録を一括）
+# 3. セットアップ実行（ビルド + PATH 登録を一括）
 make setup
 
 # 4. OAuth ログイン
@@ -41,9 +29,8 @@ make login
 `make setup` は以下を順に実行する:
 1. `.env` ファイルの作成
 2. Docker ネットワーク・ボリュームの作成
-3. Docker イメージのビルド（claude, samba）
-4. Samba コンテナの起動
-5. `claude-dev` コマンドを `/usr/local/bin/` にシンボリックリンク
+3. Docker イメージのビルド
+4. `claude-dev` コマンドを `/usr/local/bin/` にシンボリックリンク
 
 `make login` を実行すると URL が表示されるので、ブラウザでアクセスして認証を完了する。
 
@@ -52,7 +39,6 @@ make login
 ```bash
 make build            # イメージビルドのみ
 make build-claude     # Claude イメージのみ
-make start-services   # Samba 起動のみ
 make install          # PATH 登録のみ
 ```
 
@@ -126,28 +112,6 @@ claude-dev stop project-a    # 停止
 | ペイン移動 | `Ctrl-B 矢印キー` |
 | スクロールモード | `Ctrl-B [` |
 
-## Samba でファイルにアクセスする
-
-IDE（VS Code, IntelliJ 等）からサーバ上のファイルを直接編集できる。
-
-### macOS から接続
-
-Finder → 移動 → サーバへ接続:
-```
-smb://<サーバIP>:445/workspace
-```
-
-### Windows から接続
-
-エクスプローラのアドレスバーに:
-```
-\\<サーバIP>\workspace
-```
-
-### VS Code Remote で使う場合
-
-SSH Remote で直接サーバにログインする方が高速。Samba はファイルブラウジングや非 SSH 対応のツールから使う場合に有用。
-
 ## トラブルシューティング
 
 ### `claude-dev start` でエラーが出る
@@ -155,12 +119,6 @@ SSH Remote で直接サーバにログインする方が高速。Samba はファ
 ```bash
 # セットアップが済んでいるか確認
 claude-dev list
-
-# Samba の状態確認
-claude-dev services status
-
-# Samba が停止していたら起動
-claude-dev services start
 ```
 
 ### OAuth トークンが期限切れ / 再ログインしたい

@@ -90,7 +90,7 @@ claude-dev start
 
 ### グローバル設定（全プロジェクト共通）
 
-`<claude-dev-env>/CLAUDE.md` を編集する。このファイルはコンテナ内の `/home/devuser/CLAUDE.md` に読み取り専用でマウントされ、Claude Code がどのプロジェクトでも読み取る。
+`<claude-dev-env>/CLAUDE.md` を編集する。このファイルはコンテナ内のホームディレクトリに読み取り専用でマウントされ、Claude Code がどのプロジェクトでも読み取る。
 
 ```markdown
 # CLAUDE.md - コンテナ内開発環境
@@ -144,33 +144,6 @@ set -g mouse off
 claude-dev stop my-project
 cd ~/repos/my-project
 claude-dev start
-```
-
-## Samba 設定のカスタマイズ
-
-### 共有ディレクトリの変更
-
-`.env` を編集:
-
-```bash
-SAMBA_SHARE_DIR=/home/user/all-projects
-```
-
-反映:
-
-```bash
-make stop-services
-make start-services
-```
-
-### Samba の詳細設定
-
-`.devcontainer/samba/smb.conf` を編集する。変更後はイメージの再ビルドが必要:
-
-```bash
-make build-samba
-make stop-services
-make start-services
 ```
 
 ## Claude コンテナに追加パッケージをインストールする

@@ -8,9 +8,6 @@ Linux サーバ (SSH でアクセス)
 ├── Makefile          セットアップ・ビルド・管理タスク
 ├── claude-dev CLI    日常の開発操作（/usr/local/bin/claude-dev にシンボリックリンク）
 │
-├── Samba コンテナ（常駐）
-│   └── ファイル共有
-│
 ├── プロジェクトコンテナ（都度起動）
 │   ├── claude-project-a       ~/repos/project-a をマウント
 │   ├── claude-project-b       ~/repos/project-b をマウント
@@ -55,18 +52,9 @@ Linux サーバ (SSH でアクセス)
 - **ベース**: `ubuntu:24.04`
 - **言語**: Node.js 24/22 (fnm), Python3 (venv), Go, Rust
 - **ツール**: git, zsh, tmux, vim, make, gcc, curl, wget, pnpm, Chromium, etc.
-- **ユーザー**: `devuser` (UID はホストに自動追従)
+- **ユーザー**: ホストのカレントユーザーと同名 (UID/GID はホストに自動追従)
 - **起動**: entrypoint が UID/GID 調整 → 認証 symlink → ファイアウォール → (VNC) → tmux → 待機
 - **`--chrome` モード**: `ENABLE_VNC=1` 環境変数で Xvfb + x11vnc + noVNC を起動。ポート 6080 を公開し、ブラウザから Chrome を操作できる
-
-### Samba コンテナ（常駐）
-
-プロジェクトファイルをネットワーク経由で公開する。
-
-- **イメージ**: `claude-dev-samba`
-- **ベース**: `alpine:3.21`
-- **共有先**: `.env` の `SAMBA_SHARE_DIR` で指定したディレクトリ
-- **macOS 互換**: VFS fruit モジュール有効
 
 ## 認証の仕組み
 
@@ -138,7 +126,7 @@ claude-dev start
      ▼
 ┌─ entrypoint-claude.sh ──────────────────────┐
 │ 1. /workspace の UID/GID を検出              │
-│ 2. devuser の UID/GID をホストに合わせる      │
+│ 2. ユーザーの UID/GID をホストに合わせる        │
 │ 3. ~/.claude/.claude.json への symlink 作成  │
 │    → ~/.claude.json                         │
 │ 4. settings.json がなければ再作成            │
@@ -161,27 +149,16 @@ claude-dev start
 
 | 名前 | 用途 | マウント先 |
 |------|------|-----------|
-| `claude-dev-auth` | 認証情報（`~/.claude.json` + `~/.claude/`） | `/home/devuser/.claude` (RW) |
-| `claude-dev-history` | bash/zsh 履歴の永続化 | `/home/devuser/.command_history` |
+| `claude-dev-auth` | 認証情報（`~/.claude.json` + `~/.claude/`） | `/home/<user>/.claude` (RW) |
+| `claude-dev-history` | bash/zsh 履歴の永続化 | `/home/<user>/.command_history` |
 
 ### イメージ
 
 | 名前 | ベース | サイズ目安 |
 |------|--------|----------|
 | `claude-dev-claude` | ubuntu:24.04 | ~2.5GB |
-| `claude-dev-samba` | alpine:3.21 | ~15MB |
 
 ## コンテナのライフサイクル
-
-### Samba（常駐）
-
-```
-make setup で起動 → 常駐（restart: unless-stopped）→ make clean で破棄
-```
-
-サーバ再起動後も自動復帰する。
-
-### プロジェクトコンテナ
 
 ```
 start で起動 → 常駐（restart: unless-stopped）→ stop で破棄
@@ -198,10 +175,10 @@ start で起動 → 常駐（restart: unless-stopped）→ stop で破棄
 ホスト                         コンテナ内
 ───────────────────────────    ─────────────────────────
 ~/repos/my-project        →   /workspace (RW)
-claude-dev-auth volume    →   /home/devuser/.claude (RW)
-                               /home/devuser/.claude.json → symlink
-~/claude-dev-env/CLAUDE.md →  /home/devuser/CLAUDE.md (RO)
-~/claude-dev-env/scripts/  →  /home/devuser/.tmux.conf (RO)
+claude-dev-auth volume    →   /home/<user>/.claude (RW)
+                               /home/<user>/.claude.json → symlink
+~/claude-dev-env/CLAUDE.md →  /home/<user>/CLAUDE.md (RO)
+~/claude-dev-env/scripts/  →  /home/<user>/.tmux.conf (RO)
                                /usr/local/bin/init-firewall.sh
                                /usr/local/bin/entrypoint.sh
 ```
