@@ -44,9 +44,9 @@ project_name() {
     basename "$(pwd)" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9._-]/-/g'
 }
 
-# コンテナ名
+# コンテナ名（= ディレクトリ名）
 container_name() {
-    echo "claude-$(project_name)"
+    project_name
 }
 
 # イメージが存在するか
@@ -377,7 +377,7 @@ attach)
     require_setup
     if [ -n "$2" ]; then
         # 名前指定
-        NAME="claude-${2}"
+        NAME="${2}"
     else
         NAME=$(container_name)
     fi
@@ -396,7 +396,7 @@ attach)
 # -----------------------------------------------------------------------------
 stop)
     if [ -n "$2" ]; then
-        NAME="claude-${2}"
+        NAME="${2}"
     else
         NAME=$(container_name)
     fi
@@ -414,7 +414,7 @@ stop)
 # -----------------------------------------------------------------------------
 ports)
     if [ -n "$2" ]; then
-        NAME="claude-${2}"
+        NAME="${2}"
     else
         NAME=$(container_name)
     fi
@@ -433,7 +433,7 @@ ports)
 # -----------------------------------------------------------------------------
 ssh-forward)
     if [ -n "$2" ]; then
-        NAME="claude-${2}"
+        NAME="${2}"
     else
         NAME=$(container_name)
     fi
@@ -485,21 +485,31 @@ ssh-forward)
 # -----------------------------------------------------------------------------
 list)
     echo "=== 実行中の Claude Code セッション ==="
-    docker ps --filter "ancestor=$IMG_CLAUDE" \
-        --format "table {{.Names}}\t{{.Status}}\t{{.Mounts}}" 2>/dev/null || true
-
-    # ポートマッピングと noVNC URL の表示
+    _has_containers=0
     for cid in $(docker ps --filter "ancestor=$IMG_CLAUDE" -q 2>/dev/null); do
+        _has_containers=1
         cname=$(docker inspect --format '{{.Name}}' "$cid" | sed 's|^/||')
+        _name="${cname}"
+        _status=$(docker inspect --format '{{.State.Status}}' "$cid")
+        _workspace=$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/workspace"}}{{.Source}}{{end}}{{end}}' "$cid")
+        _ports=""
         webapp_base=$(get_webapp_base_port "$cname")
         if [ -n "$webapp_base" ]; then
-            echo "  📡 ${cname} → Ports: ${webapp_base}-$((webapp_base + WEBAPP_PORTS_PER_CONTAINER - 1))"
+            _ports="Ports: ${webapp_base}-$((webapp_base + WEBAPP_PORTS_PER_CONTAINER - 1))"
         fi
         novnc_port=$(docker port "$cid" 6080 2>/dev/null | head -1 | sed 's/.*://')
         if [ -n "$novnc_port" ]; then
-            echo "  🖥️  ${cname} → noVNC: http://localhost:${novnc_port}/vnc.html"
+            _ports="${_ports:+${_ports}, }noVNC: http://localhost:${novnc_port}/vnc.html"
         fi
+        echo ""
+        echo "  NAME:      ${_name}"
+        echo "  STATUS:    ${_status}"
+        echo "  WORKSPACE: ${_workspace}"
+        [ -n "$_ports" ] && echo "  PORTS:     ${_ports}"
     done
+    if [ $_has_containers -eq 0 ]; then
+        echo "  (実行中のセッションはありません)"
+    fi
 
     ;;
 
@@ -564,34 +574,42 @@ help|*)
 claude-dev - Claude Code 安全開発環境
 
 セットアップ（初回のみ）:
-  claude-dev setup             イメージビルド + インフラ構築
-  claude-dev login             OAuth ログイン
+  claude-dev setup               イメージビルド + インフラ構築
+  claude-dev login               OAuth ログイン
+  claude-dev logout              認証情報を削除
 
 開発:
-  claude-dev start             カレントディレクトリで Claude Code 環境を起動
-  claude-dev start --chrome    Chrome/VNC 付きで起動（noVNC でブラウザ操作可能）
-  claude-dev code              新しい tmux ウィンドウで Claude Code を起動
-  claude-dev attach [NAME]     既存セッションに接続
-  claude-dev stop [NAME]       セッションを停止
-  claude-dev list              実行中セッション一覧
-  claude-dev ports [NAME]      ポートマッピング表示
-  claude-dev ssh-forward [NAME] SSH ポートフォワードコマンド生成
+  claude-dev start               カレントディレクトリで環境を起動（devポート自動マッピング）
+  claude-dev start --chrome      Chrome/VNC 付きで起動（noVNC でブラウザ操作可能）
+  claude-dev code                新しい tmux ウィンドウで Claude Code を起動
+  claude-dev attach [NAME]       既存セッションに接続
+  claude-dev stop [NAME]         セッションを停止
+  claude-dev list                実行中セッション一覧
+
+Web アプリアクセス:
+  claude-dev ports [NAME]        ポートマッピング表示
+  claude-dev ssh-forward [NAME]  SSH ポートフォワードコマンド生成
 
 メンテナンス:
-  claude-dev upgrade           Claude Code を更新
-  claude-dev logout            認証情報を削除
-  claude-dev firewall          ファイアウォールルール確認
-  claude-dev reset             全削除
+  claude-dev upgrade             Claude Code を更新（イメージ再ビルド）
+  claude-dev firewall            ファイアウォールルール確認
+  claude-dev reset               全削除（コンテナ・ボリューム・イメージ）
 
 使い方:
-  cd ~/repos/my-project
-  claude-dev start
+  cd ~/repos/my-project && claude-dev start
 
-Web アプリへのアクセス:
-  1. claude-dev start でコンテナ起動（ポートは自動マッピング）
-  2. claude-dev ports でマッピングを確認
-  3. クライアント PC から: ssh -O forward -L <port>:localhost:<port> <server>
-  4. ブラウザで http://localhost:<port> にアクセス
+[NAME] について:
+  NAME はプロジェクトのディレクトリ名です。
+  省略するとカレントディレクトリから自動判定します。
+  claude-dev list で実行中セッションの NAME を確認できます。
+
+Web アプリへのリモートアクセス:
+  1. claude-dev start       → コンテナ起動（devポートは自動マッピング）
+  2. claude-dev ports       → ホスト側ポート番号を確認
+  3. クライアント PC で SSH ポートフォワード:
+     ssh -O forward -L <host-port>:localhost:<host-port> <server>
+  4. ブラウザで http://localhost:<host-port> にアクセス
+  ※ claude-dev ssh-forward でコピペ用コマンドを生成できます
 EOF
     ;;
 esac
