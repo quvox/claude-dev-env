@@ -124,6 +124,20 @@ RUN export PATH="${USER_HOME}/.local/share/fnm:$PATH" \
     && eval "$($USER_HOME/.local/share/fnm/fnm env)" \
     && npx -y playwright@latest install-deps 2>/dev/null || true
 
+# --- AWS CLI v2 ---
+RUN curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-$(uname -m).zip" -o /tmp/awscliv2.zip \
+    && unzip -q /tmp/awscliv2.zip -d /tmp \
+    && sudo /tmp/aws/install \
+    && rm -rf /tmp/aws /tmp/awscliv2.zip
+
+# --- Google Cloud CLI ---
+RUN curl -fsSL https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-cli-linux-$(uname -m).tar.gz \
+    | tar -xz -C ${USER_HOME} \
+    && ${USER_HOME}/google-cloud-sdk/install.sh --quiet --path-update=false \
+    && sudo ln -s ${USER_HOME}/google-cloud-sdk/bin/gcloud /usr/local/bin/gcloud \
+    && sudo ln -s ${USER_HOME}/google-cloud-sdk/bin/gsutil /usr/local/bin/gsutil \
+    && sudo ln -s ${USER_HOME}/google-cloud-sdk/bin/bq /usr/local/bin/bq
+
 # --- Claude Code CLI (ネイティブインストーラー) ---
 # 公式ドキュメント: WORKDIR /tmp でインストーラーがファイルシステム全体をスキャンするのを防ぐ
 WORKDIR /tmp
@@ -134,6 +148,9 @@ WORKDIR /workspace
 # コンテナ設定
 # =============================================================================
 USER root
+
+# --- tmux 設定 ---
+COPY .devcontainer/tmux.conf /etc/tmux.conf
 
 # --- スクリプト設置 ---
 COPY scripts/init-firewall-claude.sh /usr/local/bin/init-firewall.sh

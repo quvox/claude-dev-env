@@ -98,6 +98,77 @@ claude-dev attach project-a  # 名前で接続
 claude-dev stop project-a    # 停止
 ```
 
+## Web アプリへのアクセス
+
+コンテナ内で起動した Web アプリにクライアント PC のブラウザからアクセスできる。主要な開発ポートは `claude-dev start` 時に自動的にホストにマッピングされる。
+
+### ワークフロー
+
+```bash
+# --- ターミナル 1: サーバ上で開発 ---
+$ ssh myserver
+$ cd ~/repos/my-webapp
+$ claude-dev start
+  📡 Port mappings (host → container):
+     8100→3000  8101→4200  8102→5173  8103→5000
+     8104→8000  8105→8080  8106→8888
+
+# コンテナ内で Claude が Vite アプリを起動 → localhost:5173
+
+# --- ターミナル 2: クライアント PC で SSH トンネル ---
+$ ssh -O forward -L 8102:localhost:8102 myserver
+
+# --- ブラウザ ---
+# http://localhost:8102 でアクセス
+```
+
+### SSH ControlMaster の設定（推奨）
+
+`-O forward` を使うには SSH 接続が ControlMaster モードで動作している必要がある。クライアント PC の `~/.ssh/config` に以下を追加しておくと便利:
+
+```
+Host myserver
+    ControlMaster auto
+    ControlPath /tmp/ssh-%r@%h:%p
+    ControlPersist 10m
+```
+
+この設定があれば、通常の `ssh myserver` だけで ControlMaster が有効になり、別ターミナルから `-O forward` でポートフォワードを動的に追加できる。
+
+### ポートマッピングの確認
+
+```bash
+# サーバ上で実行
+claude-dev ports              # カレントディレクトリのプロジェクト
+claude-dev ssh-forward        # SSH 転送コマンドを生成
+```
+
+### 複数プロジェクト同時開発時
+
+各コンテナに異なるポートブロックが割り当てられるため、衝突しない:
+
+```bash
+# Project A: Ports 8100-8109
+$ cd ~/repos/frontend && claude-dev start
+
+# Project B: Ports 8110-8119
+$ cd ~/repos/backend && claude-dev start
+
+# クライアント PC からそれぞれにフォワード
+$ ssh -O forward -L 8102:localhost:8102 myserver  # frontend の Vite
+$ ssh -O forward -L 8115:localhost:8115 myserver  # backend の Go
+```
+
+### 注意事項
+
+- コンテナ内の Web アプリは `0.0.0.0` にバインドする必要がある（`localhost` / `127.0.0.1` ではコンテナ外からアクセスできない）
+- 多くのフレームワークはデフォルトで `localhost` にバインドするため、`--host 0.0.0.0` オプションが必要な場合がある:
+  - Vite: `vite --host 0.0.0.0`
+  - Next.js: デフォルトで `0.0.0.0`（変更不要）
+  - Django: `python manage.py runserver 0.0.0.0:8000`
+  - Flask: `flask run --host 0.0.0.0`
+  - Go: `http.ListenAndServe(":8080", ...)` — デフォルトで全インターフェース
+
 ## tmux の基本操作
 
 プレフィックスキーは tmux デフォルトの `Ctrl-B`。

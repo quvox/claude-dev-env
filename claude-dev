@@ -22,6 +22,11 @@ fi
 # --- 定数 ---
 NETWORK="claude-dev-net"
 NOVNC_BASE_PORT=6080   # --chrome 時の noVNC ポート開始番号
+WEBAPP_BASE_PORT=8100   # Web アプリ用ポート開始番号
+WEBAPP_PORTS_PER_CONTAINER=10  # コンテナあたりのポートブロックサイズ
+# コンテナ内ポート → ブロック内オフセットのマッピング
+WEBAPP_DEV_PORTS=(3000 4200 5173 5000 8000 8080 8888)
+WEBAPP_DEV_LABELS=("React/Next/Express/Rails" "Angular" "Vite" "Flask" "Django/FastAPI/Hugo" "Go/Spring Boot" "Jupyter")
 VOL_AUTH="claude-dev-auth"
 VOL_HISTORY="claude-dev-history"
 IMG_CLAUDE="claude-dev-claude"
@@ -75,6 +80,51 @@ find_available_novnc_port() {
 # 実行中コンテナの noVNC ポートを取得
 get_novnc_port() {
     docker port "$1" 6080 2>/dev/null | head -1 | sed 's/.*://'
+}
+
+# 使用可能な Web アプリ用ポートブロックを探す（10 ポート単位）
+find_available_webapp_port_block() {
+    local base=$WEBAPP_BASE_PORT
+    local max=$((WEBAPP_BASE_PORT + 800))  # 8100-8899
+    while [ $base -lt $max ]; do
+        local in_use=0
+        # ブロックの先頭ポートが使用中かチェック
+        if docker ps --format '{{.Ports}}' 2>/dev/null | grep -q "0.0.0.0:${base}->"; then
+            in_use=1
+        fi
+        if [ $in_use -eq 0 ]; then
+            echo "$base"
+            return
+        fi
+        base=$((base + WEBAPP_PORTS_PER_CONTAINER))
+    done
+    echo "$WEBAPP_BASE_PORT"
+}
+
+# 実行中コンテナの Web アプリ用ポートブロックのベースを取得
+get_webapp_base_port() {
+    local port
+    port=$(docker port "$1" 3000 2>/dev/null | head -1 | sed 's/.*://')
+    if [ -n "$port" ]; then
+        echo "$port"
+    fi
+}
+
+# ポートマッピング表示
+show_port_mappings() {
+    local name="$1"
+    local base
+    base=$(get_webapp_base_port "$name")
+    if [ -z "$base" ]; then
+        echo "   (ポートマッピングなし)"
+        return
+    fi
+    local i=0
+    for cport in "${WEBAPP_DEV_PORTS[@]}"; do
+        local hport=$((base + i))
+        printf "   Host :%d → Container :%d  (%s)\n" "$hport" "$cport" "${WEBAPP_DEV_LABELS[$i]}"
+        i=$((i + 1))
+    done
 }
 
 # セットアップ済みか確認（イメージがなければ自動ビルド）
@@ -256,6 +306,16 @@ start)
         CHROME_OPTS="-e ENABLE_VNC=1 -p ${NOVNC_PORT}:6080"
     fi
 
+    # Web アプリ用ポートマッピングを構築
+    WEBAPP_BASE=$(find_available_webapp_port_block)
+    WEBAPP_PORT_OPTS=""
+    _i=0
+    for cport in "${WEBAPP_DEV_PORTS[@]}"; do
+        _hport=$((WEBAPP_BASE + _i))
+        WEBAPP_PORT_OPTS="${WEBAPP_PORT_OPTS} -p ${_hport}:${cport}"
+        _i=$((_i + 1))
+    done
+
     # コンテナ起動
     echo "🚀 起動中... [${NAME}] → ${PROJECT_DIR}"
     docker run -d \
@@ -272,6 +332,7 @@ start)
         -v "${BASE_DIR}/CLAUDE.md:${CHOME}/CLAUDE.md:ro" \
         -e NODE_OPTIONS=--max-old-space-size=4096 \
         $CHROME_OPTS \
+        $WEBAPP_PORT_OPTS \
         -t \
         "$IMG_CLAUDE" >/dev/null
 
@@ -284,6 +345,8 @@ start)
     done
 
     echo "✅ 起動完了（Ctrl-B D で切断、claude-dev start で再接続）"
+    echo "📡 Port mappings (host → container):"
+    show_port_mappings "$NAME"
     if [ "$ENABLE_CHROME" = "1" ]; then
         echo "🖥️  noVNC: http://localhost:${NOVNC_PORT}/vnc.html"
         echo "   tmux 内で google-chrome or chromium-browser を起動できます"
@@ -347,6 +410,77 @@ stop)
     ;;
 
 # -----------------------------------------------------------------------------
+# ポートマッピング表示
+# -----------------------------------------------------------------------------
+ports)
+    if [ -n "$2" ]; then
+        NAME="claude-${2}"
+    else
+        NAME=$(container_name)
+    fi
+
+    if ! is_running "$NAME"; then
+        echo "❌ ${NAME} は起動していません"
+        exit 1
+    fi
+
+    echo "📡 ${NAME} port mappings:"
+    show_port_mappings "$NAME"
+    ;;
+
+# -----------------------------------------------------------------------------
+# SSH フォワードコマンド生成
+# -----------------------------------------------------------------------------
+ssh-forward)
+    if [ -n "$2" ]; then
+        NAME="claude-${2}"
+    else
+        NAME=$(container_name)
+    fi
+
+    if ! is_running "$NAME"; then
+        echo "❌ ${NAME} は起動していません"
+        exit 1
+    fi
+
+    _base=$(get_webapp_base_port "$NAME")
+    if [ -z "$_base" ]; then
+        echo "❌ ポートマッピングが見つかりません"
+        exit 1
+    fi
+
+    echo "📋 SSH ControlMaster 設定（クライアント PC の ~/.ssh/config に追加を推奨）:"
+    echo "  Host <server-name>"
+    echo "      ControlMaster auto"
+    echo "      ControlPath /tmp/ssh-%r@%h:%p"
+    echo "      ControlPersist 10m"
+    echo ""
+
+    # 個別フォワードコマンド
+    echo "📋 ポートフォワード追加コマンド（クライアント PC で実行）:"
+    _i=0
+    _forward_args=""
+    for cport in "${WEBAPP_DEV_PORTS[@]}"; do
+        _hport=$((_base + _i))
+        echo "  ssh -O forward -L ${_hport}:localhost:${_hport} <server-name>   # → container:${cport} (${WEBAPP_DEV_LABELS[$_i]})"
+        _forward_args="${_forward_args} -L ${_hport}:localhost:${_hport}"
+        _i=$((_i + 1))
+    done
+
+    echo ""
+    echo "📋 一括転送（ControlMaster 未使用時）:"
+    echo "  ssh${_forward_args} <server-name>"
+
+    # noVNC ポートがあれば追加
+    novnc_port=$(get_novnc_port "$NAME")
+    if [ -n "$novnc_port" ]; then
+        echo ""
+        echo "📋 noVNC 用:"
+        echo "  ssh -O forward -L ${novnc_port}:localhost:${novnc_port} <server-name>"
+    fi
+    ;;
+
+# -----------------------------------------------------------------------------
 # 実行中セッション一覧
 # -----------------------------------------------------------------------------
 list)
@@ -354,9 +488,13 @@ list)
     docker ps --filter "ancestor=$IMG_CLAUDE" \
         --format "table {{.Names}}\t{{.Status}}\t{{.Mounts}}" 2>/dev/null || true
 
-    # noVNC URL の表示
+    # ポートマッピングと noVNC URL の表示
     for cid in $(docker ps --filter "ancestor=$IMG_CLAUDE" -q 2>/dev/null); do
-        cname=$(docker inspect --format '{{.Name}}' "$cid" | sed 's/^\//')
+        cname=$(docker inspect --format '{{.Name}}' "$cid" | sed 's|^/||')
+        webapp_base=$(get_webapp_base_port "$cname")
+        if [ -n "$webapp_base" ]; then
+            echo "  📡 ${cname} → Ports: ${webapp_base}-$((webapp_base + WEBAPP_PORTS_PER_CONTAINER - 1))"
+        fi
         novnc_port=$(docker port "$cid" 6080 2>/dev/null | head -1 | sed 's/.*://')
         if [ -n "$novnc_port" ]; then
             echo "  🖥️  ${cname} → noVNC: http://localhost:${novnc_port}/vnc.html"
@@ -436,6 +574,8 @@ claude-dev - Claude Code 安全開発環境
   claude-dev attach [NAME]     既存セッションに接続
   claude-dev stop [NAME]       セッションを停止
   claude-dev list              実行中セッション一覧
+  claude-dev ports [NAME]      ポートマッピング表示
+  claude-dev ssh-forward [NAME] SSH ポートフォワードコマンド生成
 
 メンテナンス:
   claude-dev upgrade           Claude Code を更新
@@ -446,6 +586,12 @@ claude-dev - Claude Code 安全開発環境
 使い方:
   cd ~/repos/my-project
   claude-dev start
+
+Web アプリへのアクセス:
+  1. claude-dev start でコンテナ起動（ポートは自動マッピング）
+  2. claude-dev ports でマッピングを確認
+  3. クライアント PC から: ssh -O forward -L <port>:localhost:<port> <server>
+  4. ブラウザで http://localhost:<port> にアクセス
 EOF
     ;;
 esac
