@@ -146,6 +146,29 @@ cd ~/repos/my-project
 claude-dev start
 ```
 
+## zshrc のカスタマイズ
+
+`~/.zshrc` は `claude-dev-config` ボリュームに保存され、全コンテナ間で共有される（ホストとは共有しない）。
+
+任意のコンテナ内で `~/.zshrc` を編集すれば、他のコンテナにも反映される:
+
+```bash
+# コンテナ内で
+echo 'alias ll="ls -la"' >> ~/.zshrc
+source ~/.zshrc
+```
+
+PATH やランタイム初期化（fnm, Go, Rust 等）はシステム側 (`/etc/zsh/zshrc`) に配置されており、`~/.zshrc` を編集しても壊れない。
+
+**注意:** `~/.zshrc` のリセットが必要な場合は、`claude-dev-config` ボリュームを削除してコンテナを再起動する:
+
+```bash
+claude-dev stop my-project
+docker volume rm claude-dev-config
+cd ~/repos/my-project
+claude-dev start   # ボリュームが再作成され、デフォルトの .zshrc がコピーされる
+```
+
 ## Claude コンテナに追加パッケージをインストールする
 
 ### 一時的（コンテナ再起動で消える）

@@ -85,6 +85,9 @@ claude-dev start --chrome
 - イメージが存在しなければ自動ビルド
 - 認証情報がなければエラーで停止
 - 主要な開発ポート（3000, 4200, 5173, 5000, 8000, 8080, 8888）を自動マッピング
+- ssh-agent が未起動なら自動起動し、鍵が未登録なら `ssh-add` を実行
+- `~/.gitconfig` があればコンテナに共有（読み取り専用）
+- SSH agent ソケット・`~/.ssh/known_hosts`・`~/.ssh/config` をコンテナに共有（読み取り専用。秘密鍵はマウントしない）
 
 `--chrome` オプション:
 - コンテナ内に仮想ディスプレイ（Xvfb）+ VNC + noVNC を起動する
@@ -228,7 +231,7 @@ claude-dev reset
 
 削除対象:
 - 全プロジェクトコンテナ
-- `claude-dev-auth`, `claude-dev-history` ボリューム
+- `claude-dev-auth`, `claude-dev-history`, `claude-dev-config` ボリューム
 - `claude-dev-net` ネットワーク
 - `claude-dev-claude` イメージ
 

@@ -20,20 +20,62 @@ if [ -d /workspace ]; then
     CURRENT_UID=$(id -u "$USERNAME" 2>/dev/null || echo "1500")
     CURRENT_GID=$(id -g "$USERNAME" 2>/dev/null || echo "1500")
 
-    if [ "$HOST_UID" != "0" ] && [ "$HOST_UID" != "$CURRENT_UID" ]; then
-        # GID 変更（既存グループと被る場合はスキップ）
+    if [ "$HOST_UID" != "0" ]; then
+        # GID 変更
         if [ "$HOST_GID" != "$CURRENT_GID" ]; then
-            if ! getent group "$HOST_GID" >/dev/null 2>&1; then
-                groupmod -g "$HOST_GID" "$USERNAME" 2>/dev/null || true
+            CONFLICT_GROUP=$(getent group "$HOST_GID" 2>/dev/null | cut -d: -f1)
+            if [ -n "$CONFLICT_GROUP" ] && [ "$CONFLICT_GROUP" != "$USERNAME" ]; then
+                # 競合するグループの GID を退避（99xx 番台の空き番号へ）
+                TEMP_GID=9900
+                while getent group "$TEMP_GID" >/dev/null 2>&1; do
+                    TEMP_GID=$((TEMP_GID + 1))
+                done
+                groupmod -g "$TEMP_GID" "$CONFLICT_GROUP" 2>/dev/null || true
             fi
+            groupmod -g "$HOST_GID" "$USERNAME" 2>/dev/null || true
         fi
-        # UID 変更（既存ユーザーと被る場合はスキップ）
-        if ! getent passwd "$HOST_UID" >/dev/null 2>&1; then
+        # UID 変更
+        if [ "$HOST_UID" != "$CURRENT_UID" ]; then
+            CONFLICT_USER=$(getent passwd "$HOST_UID" 2>/dev/null | cut -d: -f1)
+            if [ -n "$CONFLICT_USER" ] && [ "$CONFLICT_USER" != "$USERNAME" ]; then
+                # 競合するユーザーの UID を退避（99xx 番台の空き番号へ）
+                TEMP_UID=9900
+                while getent passwd "$TEMP_UID" >/dev/null 2>&1; do
+                    TEMP_UID=$((TEMP_UID + 1))
+                done
+                usermod -u "$TEMP_UID" "$CONFLICT_USER" 2>/dev/null || true
+            fi
             usermod -u "$HOST_UID" "$USERNAME" 2>/dev/null || true
         fi
         # ホームディレクトリの所有権を更新
         chown -R "$USERNAME":"$USERNAME" "$USER_HOME" 2>/dev/null || true
     fi
+fi
+
+# --- ~/.ssh ディレクトリの所有権・パーミッション ---
+if [ -d "$USER_HOME/.ssh" ]; then
+    chown "$USERNAME":"$USERNAME" "$USER_HOME/.ssh" 2>/dev/null || true
+    chmod 700 "$USER_HOME/.ssh" 2>/dev/null || true
+    # known_hosts, config は読み取り専用マウントなので chown/chmod しない
+fi
+
+# --- .zshrc の共有（ボリューム経由でコンテナ間共有）---
+# ~/.config-shared/ はボリュームとしてマウントされている
+SHARED_DIR="$USER_HOME/.config-shared"
+if [ -d "$SHARED_DIR" ]; then
+    chown "$USERNAME":"$USERNAME" "$SHARED_DIR" 2>/dev/null || true
+    # 初回: ボリュームに .zshrc がなければイメージのデフォルトをコピー
+    if [ ! -f "$SHARED_DIR/.zshrc" ]; then
+        if [ -f "$USER_HOME/.zshrc" ] && [ ! -L "$USER_HOME/.zshrc" ]; then
+            cp "$USER_HOME/.zshrc" "$SHARED_DIR/.zshrc"
+        else
+            touch "$SHARED_DIR/.zshrc"
+        fi
+        chown "$USERNAME":"$USERNAME" "$SHARED_DIR/.zshrc"
+    fi
+    # ~/.zshrc をボリューム内のファイルに symlink
+    ln -sf "$SHARED_DIR/.zshrc" "$USER_HOME/.zshrc"
+    chown -h "$USERNAME":"$USERNAME" "$USER_HOME/.zshrc"
 fi
 
 # --- 認証情報の symlink ---

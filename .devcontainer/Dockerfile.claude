@@ -63,7 +63,16 @@ ENV LANG=en_US.UTF-8
 ENV LC_ALL=en_US.UTF-8
 
 # --- 非root ユーザー作成 ---
-RUN groupadd --gid $USER_GID $USERNAME \
+# GID/UID が既存のグループ/ユーザーと競合する場合は退避してから作成
+RUN existing_group=$(getent group $USER_GID | cut -d: -f1); \
+    if [ -n "$existing_group" ] && [ "$existing_group" != "$USERNAME" ]; then \
+        groupmod -g 9999 "$existing_group"; \
+    fi; \
+    existing_user=$(getent passwd $USER_UID | cut -d: -f1); \
+    if [ -n "$existing_user" ] && [ "$existing_user" != "$USERNAME" ]; then \
+        usermod -u 9999 "$existing_user"; \
+    fi; \
+    groupadd --gid $USER_GID $USERNAME \
     && useradd --uid $USER_UID --gid $USER_GID -m -s /bin/zsh $USERNAME \
     && echo "$USERNAME ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/$USERNAME \
     && chmod 0440 /etc/sudoers.d/$USERNAME \
@@ -95,23 +104,6 @@ RUN curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-$(dpkg --print-architect
 # --- Rust (rustup) ---
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
     | sh -s -- -y --default-toolchain stable --profile minimal
-
-# --- シェル初期化: .zshrc / .bashrc に PATH と fnm を設定 ---
-# ここで全ランタイムの PATH を一箇所にまとめる
-RUN { \
-        echo ''; \
-        echo '# --- claude-dev: PATH ---'; \
-        echo 'export PATH="${HOME}/.local/share/fnm:${PATH}"'; \
-        echo 'eval "$(fnm env --use-on-cd --shell zsh)"'; \
-        echo 'export PATH="${HOME}/.local/bin:${HOME}/.cargo/bin:/usr/local/go/bin:${HOME}/go/bin:${PATH}"'; \
-    } >> ${USER_HOME}/.zshrc \
-    && { \
-        echo ''; \
-        echo '# --- claude-dev: PATH ---'; \
-        echo 'export PATH="${HOME}/.local/share/fnm:${PATH}"'; \
-        echo 'eval "$(fnm env --use-on-cd --shell bash)"'; \
-        echo 'export PATH="${HOME}/.local/bin:${HOME}/.cargo/bin:/usr/local/go/bin:${HOME}/go/bin:${PATH}"'; \
-    } >> ${USER_HOME}/.bashrc
 
 # --- pnpm ---
 RUN export PATH="${USER_HOME}/.local/share/fnm:$PATH" \
@@ -148,6 +140,24 @@ WORKDIR /workspace
 # コンテナ設定
 # =============================================================================
 USER root
+
+# --- シェル初期化: PATH と fnm を設定 ---
+# システム側（/etc/zsh/zshrc, /etc/bash.bashrc）に配置し、
+# ~/.zshrc はユーザーカスタマイズ用としてボリュームで共有する
+RUN mkdir -p /etc/zsh && { \
+        echo ''; \
+        echo '# --- claude-dev: PATH ---'; \
+        echo 'export PATH="${HOME}/.local/share/fnm:${PATH}"'; \
+        echo 'eval "$(fnm env --use-on-cd --shell zsh 2>/dev/null)"'; \
+        echo 'export PATH="${HOME}/.local/bin:${HOME}/.cargo/bin:/usr/local/go/bin:${HOME}/go/bin:${PATH}"'; \
+    } >> /etc/zsh/zshrc \
+    && { \
+        echo ''; \
+        echo '# --- claude-dev: PATH ---'; \
+        echo 'export PATH="${HOME}/.local/share/fnm:${PATH}"'; \
+        echo 'eval "$(fnm env --use-on-cd --shell bash 2>/dev/null)"'; \
+        echo 'export PATH="${HOME}/.local/bin:${HOME}/.cargo/bin:/usr/local/go/bin:${HOME}/go/bin:${PATH}"'; \
+    } >> /etc/bash.bashrc
 
 # --- tmux 設定 ---
 COPY .devcontainer/tmux.conf /etc/tmux.conf

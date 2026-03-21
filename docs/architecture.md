@@ -42,9 +42,11 @@ Linux サーバ (SSH でアクセス)
 │  /workspace      ← ホストのプロジェクト (RW)    │
 │  ~/.claude/      ← 認証ボリューム (RW)          │
 │  ~/.claude.json  ← symlink → ~/.claude/ 内     │
+│  ~/.gitconfig    ← ホストから共有 (RO)           │
+│  SSH agent       ← ソケット転送（鍵ファイルなし） │
 │                                               │
 │  ※ Docker ソケットなし                         │
-│  ※ UID/GID はホストに自動追従                   │
+│  ※ UID/GID はビルド時にホストと一致させる        │
 └───────────────────────────────────────────────┘
 ```
 
@@ -52,8 +54,10 @@ Linux サーバ (SSH でアクセス)
 - **ベース**: `ubuntu:24.04`
 - **言語**: Node.js 24/22 (fnm), Python3 (venv), Go, Rust
 - **ツール**: git, zsh, tmux, vim, make, gcc, curl, wget, pnpm, Chromium, etc.
-- **ユーザー**: ホストのカレントユーザーと同名 (UID/GID はホストに自動追従)
-- **起動**: entrypoint が UID/GID 調整 → 認証 symlink → ファイアウォール → (VNC) → tmux → 待機
+- **ユーザー**: ホストのカレントユーザーと同名 (UID/GID はビルド時にホストと一致。entrypoint でも競合を解消して追従)
+- **git 設定**: ホストの `~/.gitconfig` を読み取り専用でマウント（存在する場合）
+- **SSH**: SSH agent ソケットを転送。秘密鍵ファイルはマウントしない。`~/.ssh/known_hosts` と `~/.ssh/config` は読み取り専用でマウント
+- **起動**: ssh-agent 準備 → コンテナ作成 → entrypoint が UID/GID 調整 → 認証 symlink → ファイアウォール → (VNC) → tmux → 待機
 - **`--chrome` モード**: `ENABLE_VNC=1` 環境変数で Xvfb + x11vnc + noVNC を起動。ポート 6080 を公開し、ブラウザから Chrome を操作できる
 
 ## 認証の仕組み
@@ -123,15 +127,22 @@ Docker ボリューム: claude-dev-auth
 ```
 claude-dev start
      │
+     ├─ ホスト側（claude-dev CLI）
+     │   1. ssh-agent が未起動なら起動
+     │   2. 鍵が未登録なら ssh-add を実行
+     │   3. コンテナを作成・起動
+     │
      ▼
 ┌─ entrypoint-claude.sh ──────────────────────┐
 │ 1. /workspace の UID/GID を検出              │
 │ 2. ユーザーの UID/GID をホストに合わせる        │
-│ 3. ~/.claude/.claude.json への symlink 作成  │
+│    （競合する既存ユーザー/グループは退避）       │
+│ 3. ~/.ssh ディレクトリの所有権を設定           │
+│ 4. ~/.claude/.claude.json への symlink 作成  │
 │    → ~/.claude.json                         │
-│ 4. settings.json がなければ再作成            │
-│ 5. ファイアウォール設定                       │
-│ 6. tmux セッション開始                       │
+│ 5. settings.json がなければ再作成            │
+│ 6. ファイアウォール設定                       │
+│ 7. tmux セッション開始                       │
 └──────────────────────────────────────────────┘
 ```
 
@@ -221,6 +232,7 @@ ssh -O forward -L 8102:localhost:8102 myserver
 |------|------|-----------|
 | `claude-dev-auth` | 認証情報（`~/.claude.json` + `~/.claude/`） | `/home/<user>/.claude` (RW) |
 | `claude-dev-history` | bash/zsh 履歴の永続化 | `/home/<user>/.command_history` |
+| `claude-dev-config` | 共有シェル設定（`.zshrc`） | `/home/<user>/.config-shared` (RW) |
 
 ### イメージ
 
@@ -247,11 +259,30 @@ start で起動 → 常駐（restart: unless-stopped）→ stop で破棄
 ~/repos/my-project        →   /workspace (RW)
 claude-dev-auth volume    →   /home/<user>/.claude (RW)
                                /home/<user>/.claude.json → symlink
+claude-dev-config volume  →   /home/<user>/.config-shared (RW)
+                               /home/<user>/.zshrc → symlink → .config-shared/.zshrc
 ~/claude-dev-env/CLAUDE.md →  /home/<user>/CLAUDE.md (RO)
 ~/claude-dev-env/scripts/  →  /home/<user>/.tmux.conf (RO)
                                /usr/local/bin/init-firewall.sh
                                /usr/local/bin/entrypoint.sh
+~/.gitconfig              →   /home/<user>/.gitconfig (RO)  ※存在時のみ
+$SSH_AUTH_SOCK             →   /tmp/ssh-agent.sock (RO)     ※存在時のみ
+~/.ssh/known_hosts        →   /home/<user>/.ssh/known_hosts (RO)  ※存在時のみ
+~/.ssh/config             →   /home/<user>/.ssh/config (RO)       ※存在時のみ
 ```
 
-プロジェクトディレクトリと認証情報は読み書き可能。
-CLAUDE.md・tmux.conf は読み取り専用。
+プロジェクトディレクトリ・認証情報・シェル設定は読み書き可能。
+CLAUDE.md・tmux.conf・gitconfig・SSH 関連ファイルは読み取り専用。
+SSH 秘密鍵ファイル (`id_rsa`, `id_ed25519` 等) はマウントされない。
+
+### シェル設定の共有
+
+PATH やランタイム初期化はシステム側 (`/etc/zsh/zshrc`) に配置され、イメージに焼かれる。ユーザーの `~/.zshrc` は `claude-dev-config` ボリュームに保存され、コンテナ間で共有される（ホストとは共有しない）。
+
+```
+/etc/zsh/zshrc              ← PATH, fnm 等（イメージに固定、全コンテナ共通）
+~/.zshrc → symlink          ← ユーザーカスタマイズ（ボリュームで共有）
+    └→ ~/.config-shared/.zshrc
+```
+
+初回起動時にイメージのデフォルト `.zshrc` がボリュームにコピーされる。以降はボリューム側のファイルが使われるため、あるコンテナ内で `~/.zshrc` を編集すると、他のコンテナにも反映される。

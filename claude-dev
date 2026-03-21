@@ -29,6 +29,7 @@ WEBAPP_DEV_PORTS=(3000 4200 5173 5000 8000 8080 8888)
 WEBAPP_DEV_LABELS=("React/Next/Express/Rails" "Angular" "Vite" "Flask" "Django/FastAPI/Hugo" "Go/Spring Boot" "Jupyter")
 VOL_AUTH="claude-dev-auth"
 VOL_HISTORY="claude-dev-history"
+VOL_CONFIG="claude-dev-config"
 IMG_CLAUDE="claude-dev-claude"
 
 # --- コンテナ内ユーザー名（ホストのカレントユーザーに合わせる）---
@@ -38,6 +39,21 @@ CHOME="/home/${CUSER}"
 # =============================================================================
 # ヘルパー関数
 # =============================================================================
+
+# ssh-agent が動いていなければ起動し、鍵が未登録なら ssh-add する
+ensure_ssh_agent() {
+    # agent が動いていなければ起動
+    if [ -z "${SSH_AUTH_SOCK:-}" ] || [ ! -S "${SSH_AUTH_SOCK:-}" ]; then
+        eval "$(ssh-agent -s)" >/dev/null
+        echo "🔑 ssh-agent を起動しました"
+    fi
+
+    # 鍵が1つも登録されていなければ ssh-add
+    if ! ssh-add -l >/dev/null 2>&1; then
+        echo "🔑 SSH 鍵を追加します..."
+        ssh-add
+    fi
+}
 
 # プロジェクト名（カレントディレクトリから導出）
 project_name() {
@@ -133,6 +149,8 @@ require_setup() {
         echo "📦 Claude イメージが見つかりません。ビルドします..."
         docker build -t "$IMG_CLAUDE" \
             --build-arg USERNAME="$CUSER" \
+            --build-arg USER_UID="$(id -u)" \
+            --build-arg USER_GID="$(id -g)" \
             -f "${BASE_DIR}/.devcontainer/Dockerfile.claude" "$BASE_DIR"
     fi
 }
@@ -142,6 +160,7 @@ ensure_infrastructure() {
     docker network create "$NETWORK" 2>/dev/null || true
     docker volume create "$VOL_AUTH" >/dev/null 2>&1 || true
     docker volume create "$VOL_HISTORY" >/dev/null 2>&1 || true
+    docker volume create "$VOL_CONFIG" >/dev/null 2>&1 || true
 }
 
 # =============================================================================
@@ -171,13 +190,16 @@ setup)
     # ボリューム
     docker volume create "$VOL_AUTH" >/dev/null 2>&1 || true
     docker volume create "$VOL_HISTORY" >/dev/null 2>&1 || true
-    echo "✅ ボリューム: $VOL_AUTH, $VOL_HISTORY"
+    docker volume create "$VOL_CONFIG" >/dev/null 2>&1 || true
+    echo "✅ ボリューム: $VOL_AUTH, $VOL_HISTORY, $VOL_CONFIG"
 
     # イメージビルド
     echo ""
     echo "📦 Docker イメージをビルド中... (user: $CUSER)"
     docker build -t "$IMG_CLAUDE" \
         --build-arg USERNAME="$CUSER" \
+        --build-arg USER_UID="$(id -u)" \
+        --build-arg USER_GID="$(id -g)" \
         -f "${BASE_DIR}/.devcontainer/Dockerfile.claude" "$BASE_DIR"
     echo "✅ イメージビルド完了"
 
@@ -316,6 +338,27 @@ start)
         _i=$((_i + 1))
     done
 
+    # ~/.gitconfig があればマウント（読み取り専用）
+    GITCONFIG_OPT=""
+    if [ -f "${HOME}/.gitconfig" ]; then
+        GITCONFIG_OPT="-v ${HOME}/.gitconfig:${CHOME}/.gitconfig:ro"
+    fi
+
+    # SSH agent 準備 & ソケット転送（秘密鍵ファイルはマウントしない）
+    ensure_ssh_agent
+    SSH_OPTS=""
+    if [ -n "${SSH_AUTH_SOCK:-}" ] && [ -S "$SSH_AUTH_SOCK" ]; then
+        SSH_OPTS="-v ${SSH_AUTH_SOCK}:/tmp/ssh-agent.sock:ro -e SSH_AUTH_SOCK=/tmp/ssh-agent.sock"
+    fi
+    # ~/.ssh/known_hosts（読み取り専用、秘密情報なし）
+    if [ -f "${HOME}/.ssh/known_hosts" ]; then
+        SSH_OPTS="${SSH_OPTS} -v ${HOME}/.ssh/known_hosts:${CHOME}/.ssh/known_hosts:ro"
+    fi
+    # ~/.ssh/config（読み取り専用）
+    if [ -f "${HOME}/.ssh/config" ]; then
+        SSH_OPTS="${SSH_OPTS} -v ${HOME}/.ssh/config:${CHOME}/.ssh/config:ro"
+    fi
+
     # コンテナ起動
     echo "🚀 起動中... [${NAME}] → ${PROJECT_DIR}"
     docker run -d \
@@ -328,8 +371,11 @@ start)
         -v "${PROJECT_DIR}:/workspace" \
         -v "${VOL_HISTORY}:${CHOME}/.command_history" \
         -v "${VOL_AUTH}:${CHOME}/.claude" \
+        -v "${VOL_CONFIG}:${CHOME}/.config-shared" \
         -v "${BASE_DIR}/scripts/tmux.conf:${CHOME}/.tmux.conf:ro" \
         -v "${BASE_DIR}/CLAUDE.md:${CHOME}/CLAUDE.md:ro" \
+        $GITCONFIG_OPT \
+        $SSH_OPTS \
         -e NODE_OPTIONS=--max-old-space-size=4096 \
         $CHROME_OPTS \
         $WEBAPP_PORT_OPTS \
@@ -520,6 +566,8 @@ upgrade)
     echo "📦 Claude Code を最新版に更新中..."
     docker build --no-cache -t "$IMG_CLAUDE" \
         --build-arg USERNAME="$CUSER" \
+        --build-arg USER_UID="$(id -u)" \
+        --build-arg USER_GID="$(id -g)" \
         -f "${BASE_DIR}/.devcontainer/Dockerfile.claude" "$BASE_DIR"
     echo ""
     echo "✅ イメージ更新完了"
@@ -557,7 +605,7 @@ reset)
     # プロジェクトコンテナ停止
     docker ps -a --filter "ancestor=$IMG_CLAUDE" -q | xargs -r docker rm -f 2>/dev/null || true
     # ボリューム削除
-    docker volume rm -f "$VOL_AUTH" "$VOL_HISTORY" 2>/dev/null || true
+    docker volume rm -f "$VOL_AUTH" "$VOL_HISTORY" "$VOL_CONFIG" 2>/dev/null || true
     # ネットワーク削除
     docker network rm "$NETWORK" 2>/dev/null || true
     # イメージ削除

@@ -21,6 +21,7 @@ CUSER := $(shell whoami)
 NETWORK := claude-dev-net
 VOL_AUTH := claude-dev-auth
 VOL_HISTORY := claude-dev-history
+VOL_CONFIG := claude-dev-config
 
 # =============================================================================
 # メインターゲット
@@ -108,7 +109,8 @@ network:
 volumes:
 	@docker volume create $(VOL_AUTH) >/dev/null 2>&1 || true
 	@docker volume create $(VOL_HISTORY) >/dev/null 2>&1 || true
-	@echo "✅ ボリューム: $(VOL_AUTH), $(VOL_HISTORY)"
+	@docker volume create $(VOL_CONFIG) >/dev/null 2>&1 || true
+	@echo "✅ ボリューム: $(VOL_AUTH), $(VOL_HISTORY), $(VOL_CONFIG)"
 
 # =============================================================================
 # ビルド
@@ -122,6 +124,8 @@ build-claude:
 	@echo "📦 Claude イメージをビルド中..."
 	@docker build -t $(IMG_CLAUDE) \
 		--build-arg USERNAME=$(CUSER) \
+		--build-arg USER_UID=$$(id -u) \
+		--build-arg USER_GID=$$(id -g) \
 		-f $(BASE_DIR)/.devcontainer/Dockerfile.claude $(BASE_DIR)
 	@echo "✅ $(IMG_CLAUDE)"
 
@@ -142,6 +146,8 @@ upgrade:
 	@echo "📦 Claude Code を最新版に更新中..."
 	@docker build --no-cache -t $(IMG_CLAUDE) \
 		--build-arg USERNAME=$(CUSER) \
+		--build-arg USER_UID=$$(id -u) \
+		--build-arg USER_GID=$$(id -g) \
 		-f $(BASE_DIR)/.devcontainer/Dockerfile.claude $(BASE_DIR)
 	@echo ""
 	@echo "✅ イメージ更新完了"
@@ -171,7 +177,7 @@ clean:
 	@# プロジェクトコンテナ停止
 	@docker ps -a --filter "ancestor=$(IMG_CLAUDE)" -q | xargs -r docker rm -f 2>/dev/null || true
 	@# ボリューム削除
-	@docker volume rm -f $(VOL_AUTH) $(VOL_HISTORY) 2>/dev/null || true
+	@docker volume rm -f $(VOL_AUTH) $(VOL_HISTORY) $(VOL_CONFIG) 2>/dev/null || true
 	@# ネットワーク削除
 	@docker network rm $(NETWORK) 2>/dev/null || true
 	@# イメージ削除

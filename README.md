@@ -25,9 +25,11 @@ Linux サーバ (SSH)
 │   ├── claude-project-b     ~/repos/project-b → /workspace
 │   └── ...                  同時に複数起動可能
 │
-├── claude-dev-net           コンテナ間ネットワーク
+├── claude-dev-net            コンテナ間ネットワーク
 │
-└── claude-dev-auth (volume) 認証情報（~/.claude/ に直接マウント）
+├── claude-dev-auth (volume)  認証情報（~/.claude/ に直接マウント）
+├── claude-dev-config (volume) 共有シェル設定（.zshrc をコンテナ間共有）
+└── claude-dev-history (volume) コマンド履歴
 ```
 
 ## クイックスタート
@@ -89,12 +91,13 @@ make status                   # 全体の状態確認
 多層防御で Claude Code の暴走リスクを軽減する。
 
 1. **Docker コンテナ隔離** — ホストファイルシステムへのアクセスを遮断
-2. **マウント制限** — `~/.ssh`, `~/.aws`, `.env` 等はコンテナに存在しない
+2. **マウント制限** — SSH 秘密鍵、`~/.aws`, `.env` 等はコンテナに存在しない
 3. **認証情報の保護** — 専用ボリュームにマウント。ファイアウォールで窃取先をブロック
 4. **Docker ソケット非共有** — コンテナ脱獄を防止
-5. **ブラックリスト FW** — ペーストサイト、Webhook、メタデータエンドポイント、SMTP、外部 SSH をブロック
-6. **非 root 実行** — ホストと同じユーザー名で実行。UID/GID はホストに自動追従
-7. **git ロールバック** — 変更はすべて `git diff` で確認、`git checkout` で復元可能
+5. **SSH agent 転送** — 秘密鍵ファイルを渡さず、agent ソケット経由で署名操作のみ許可
+6. **ブラックリスト FW** — ペーストサイト、Webhook、メタデータエンドポイント、SMTP、外部 SSH をブロック
+7. **非 root 実行** — ホストと同じユーザー名・UID/GID で実行（ビルド時に一致させる）
+8. **git ロールバック** — 変更はすべて `git diff` で確認、`git checkout` で復元可能
 
 ## ドキュメント
 
