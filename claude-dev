@@ -240,23 +240,29 @@ login)
     docker run --rm -it \
         --network "$NETWORK" \
         --entrypoint bash \
-        --user "$CUSER" \
         -e "TERM=${TERM:-xterm-256color}" \
         -e "LANG=en_US.UTF-8" \
+        -e "CUSER=$CUSER" \
+        -e "CHOME=$CHOME" \
         -v "${VOL_AUTH}:${CHOME}/.claude" \
         "$IMG_CLAUDE" \
-        -l -c '
-            # ~/.claude.json がボリューム内にあれば symlink
-            if [ -f ~/.claude/.claude.json ]; then
-                ln -sf ~/.claude/.claude.json ~/.claude.json
-            fi
+        -c '
+            # root で所有権を修正してからユーザーに切り替え
+            chown -R "$CUSER":"$CUSER" "$CHOME/.claude" 2>/dev/null || true
 
-            claude || true
+            su "$CUSER" -s /bin/bash -l -c "
+                # ~/.claude.json がボリューム内にあれば symlink
+                if [ -f ~/.claude/.claude.json ]; then
+                    ln -sf ~/.claude/.claude.json ~/.claude.json
+                fi
 
-            # login 後: ~/.claude.json をボリューム内にコピーして永続化
-            if [ -f ~/.claude.json ] && [ ! -L ~/.claude.json ]; then
-                cp ~/.claude.json ~/.claude/.claude.json
-            fi
+                claude || true
+
+                # login 後: ~/.claude.json をボリューム内にコピーして永続化
+                if [ -f ~/.claude.json ] && [ ! -L ~/.claude.json ]; then
+                    cp ~/.claude.json ~/.claude/.claude.json
+                fi
+            "
         '
 
     echo "✅ ログイン処理完了"
