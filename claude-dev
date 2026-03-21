@@ -21,7 +21,7 @@ fi
 
 # --- 定数 ---
 NETWORK="claude-dev-net"
-NOVNC_BASE_PORT=6080   # --chrome 時の noVNC ポート開始番号
+NOVNC_BASE_PORT=6080   # Chrome/VNC コンテナの noVNC ポート開始番号
 WEBAPP_BASE_PORT=8100   # Web アプリ用ポート開始番号
 WEBAPP_PORTS_PER_CONTAINER=10  # コンテナあたりのポートブロックサイズ
 # コンテナ内ポート → ブロック内オフセットのマッピング
@@ -30,7 +30,10 @@ WEBAPP_DEV_LABELS=("React/Next/Express/Rails" "Angular" "Vite" "Flask" "Django/F
 VOL_AUTH="claude-dev-auth"
 VOL_HISTORY="claude-dev-history"
 VOL_CONFIG="claude-dev-config"
+VOL_CHROME="claude-dev-chrome-data"
 IMG_CLAUDE="claude-dev-claude"
+IMG_CHROME="claude-dev-chrome"
+CHROME_CONTAINER="claude-dev-chrome"
 
 # --- コンテナ内ユーザー名（ホストのカレントユーザーに合わせる）---
 CUSER="$(whoami)"
@@ -48,10 +51,36 @@ ensure_ssh_agent() {
         echo "🔑 ssh-agent を起動しました"
     fi
 
-    # 鍵が1つも登録されていなければ ssh-add
-    if ! ssh-add -l >/dev/null 2>&1; then
-        echo "🔑 SSH 鍵を追加します..."
-        ssh-add
+    # 鍵が既に登録されていれば何もしない
+    if ssh-add -l >/dev/null 2>&1; then
+        return 0
+    fi
+
+    # ~/.ssh に秘密鍵があるか確認
+    local keys=()
+    for f in ~/.ssh/id_*; do
+        # .pub ファイルは除外
+        case "$f" in *.pub) continue ;; esac
+        [ -f "$f" ] && keys+=("$f")
+    done
+
+    if [ ${#keys[@]} -eq 0 ]; then
+        echo "⚠️  SSH 鍵が見つかりません（~/.ssh/id_*）。git の SSH 操作はできません"
+        return 0
+    fi
+
+    # パスフレーズなしの鍵だけ自動追加（パスフレーズ付きはスキップ）
+    local added=0
+    for key in "${keys[@]}"; do
+        if SSH_ASKPASS=/bin/false SSH_ASKPASS_REQUIRE=force ssh-add "$key" 2>/dev/null; then
+            added=1
+        else
+            echo "⚠️  ${key}: パスフレーズ付きのためスキップ。事前に ssh-add してください"
+        fi
+    done
+
+    if [ "$added" -eq 0 ]; then
+        echo "⚠️  SSH 鍵を追加できませんでした。手動で ssh-add を実行してから再度 claude-dev start してください"
     fi
 }
 
@@ -91,11 +120,6 @@ find_available_novnc_port() {
         port=$((port + 1))
     done
     echo "$NOVNC_BASE_PORT"
-}
-
-# 実行中コンテナの noVNC ポートを取得
-get_novnc_port() {
-    docker port "$1" 6080 2>/dev/null | head -1 | sed 's/.*://'
 }
 
 # 使用可能な Web アプリ用ポートブロックを探す（10 ポート単位）
@@ -161,6 +185,66 @@ ensure_infrastructure() {
     docker volume create "$VOL_AUTH" >/dev/null 2>&1 || true
     docker volume create "$VOL_HISTORY" >/dev/null 2>&1 || true
     docker volume create "$VOL_CONFIG" >/dev/null 2>&1 || true
+    docker volume create "$VOL_CHROME" >/dev/null 2>&1 || true
+}
+
+# Chrome/VNC 共有コンテナを起動（未起動の場合のみ）
+ensure_chrome_container() {
+    # イメージがなければビルド
+    if ! image_exists "$IMG_CHROME"; then
+        echo "📦 Chrome/VNC イメージが見つかりません。ビルドします..."
+        docker build -t "$IMG_CHROME" \
+            --build-arg USERNAME="$CUSER" \
+            --build-arg USER_UID="$(id -u)" \
+            --build-arg USER_GID="$(id -g)" \
+            -f "${BASE_DIR}/.devcontainer/Dockerfile.chrome" "$BASE_DIR"
+    fi
+
+    # 既に実行中なら何もしない
+    if is_running "$CHROME_CONTAINER"; then
+        return 0
+    fi
+
+    # 停止中のコンテナがあれば削除
+    if container_exists "$CHROME_CONTAINER"; then
+        docker rm -f "$CHROME_CONTAINER" >/dev/null
+    fi
+
+    local novnc_port
+    novnc_port=$(find_available_novnc_port)
+
+    docker run -d \
+        --name "$CHROME_CONTAINER" \
+        --hostname "$CHROME_CONTAINER" \
+        --network "$NETWORK" \
+        --restart unless-stopped \
+        -v "${VOL_AUTH}:${CHOME}/.claude" \
+        -v "${VOL_CHROME}:${CHOME}/.config/google-chrome" \
+        -p "${novnc_port}:6080" \
+        -t \
+        "$IMG_CHROME" >/dev/null
+
+    echo "🖥️  Chrome/VNC コンテナ起動: http://localhost:${novnc_port}/vnc.html"
+    echo "   日本語入力: Ctrl+Space で切り替え"
+}
+
+# Chrome/VNC コンテナの noVNC URL を取得
+get_chrome_novnc_url() {
+    local port
+    port=$(docker port "$CHROME_CONTAINER" 6080 2>/dev/null | head -1 | sed 's/.*://')
+    if [ -n "$port" ]; then
+        echo "http://localhost:${port}/vnc.html"
+    fi
+}
+
+# Claude コンテナが 0 なら Chrome/VNC コンテナを停止
+stop_chrome_if_idle() {
+    local count
+    count=$(docker ps --filter "ancestor=$IMG_CLAUDE" -q 2>/dev/null | wc -l)
+    if [ "$count" -eq 0 ] && is_running "$CHROME_CONTAINER"; then
+        docker rm -f "$CHROME_CONTAINER" >/dev/null
+        echo "🖥️  Chrome/VNC コンテナを停止しました（Claude コンテナなし）"
+    fi
 }
 
 # =============================================================================
@@ -191,17 +275,28 @@ setup)
     docker volume create "$VOL_AUTH" >/dev/null 2>&1 || true
     docker volume create "$VOL_HISTORY" >/dev/null 2>&1 || true
     docker volume create "$VOL_CONFIG" >/dev/null 2>&1 || true
-    echo "✅ ボリューム: $VOL_AUTH, $VOL_HISTORY, $VOL_CONFIG"
+    docker volume create "$VOL_CHROME" >/dev/null 2>&1 || true
+    echo "✅ ボリューム: $VOL_AUTH, $VOL_HISTORY, $VOL_CONFIG, $VOL_CHROME"
 
-    # イメージビルド
+    # Claude イメージビルド
     echo ""
-    echo "📦 Docker イメージをビルド中... (user: $CUSER)"
+    echo "📦 Claude イメージをビルド中... (user: $CUSER)"
     docker build -t "$IMG_CLAUDE" \
         --build-arg USERNAME="$CUSER" \
         --build-arg USER_UID="$(id -u)" \
         --build-arg USER_GID="$(id -g)" \
         -f "${BASE_DIR}/.devcontainer/Dockerfile.claude" "$BASE_DIR"
-    echo "✅ イメージビルド完了"
+    echo "✅ Claude イメージビルド完了"
+
+    # Chrome/VNC イメージビルド
+    echo ""
+    echo "📦 Chrome/VNC イメージをビルド中..."
+    docker build -t "$IMG_CHROME" \
+        --build-arg USERNAME="$CUSER" \
+        --build-arg USER_UID="$(id -u)" \
+        --build-arg USER_GID="$(id -g)" \
+        -f "${BASE_DIR}/.devcontainer/Dockerfile.chrome" "$BASE_DIR"
+    echo "✅ Chrome/VNC イメージビルド完了"
 
     echo ""
     echo "============================================"
@@ -278,6 +373,10 @@ logout)
     # 実行中のコンテナがあるとボリュームが使用中なので先に停止
     echo "   実行中のコンテナを停止中..."
     docker ps -a --filter "ancestor=$IMG_CLAUDE" -q | xargs -r docker rm -f 2>/dev/null || true
+    # Chrome コンテナも停止
+    if container_exists "$CHROME_CONTAINER"; then
+        docker rm -f "$CHROME_CONTAINER" >/dev/null 2>&1 || true
+    fi
     # ボリュームを空にする
     docker run --rm --entrypoint bash \
         -v "${VOL_AUTH}:/auth" \
@@ -294,23 +393,16 @@ start)
     require_setup
     NAME=$(container_name)
     PROJECT_DIR="$(pwd)"
-
-    # --chrome オプション解析
-    ENABLE_CHROME=0
-    shift
-    for arg in "$@"; do
-        case "$arg" in
-            --chrome) ENABLE_CHROME=1 ;;
-        esac
-    done
+    shift || true
 
     # 既に実行中 → attach（tmux セッションがなければ再作成）
     if is_running "$NAME"; then
         echo "✅ ${NAME} は実行中。接続します..."
-        NOVNC_PORT=$(get_novnc_port "$NAME")
-        if [ -n "$NOVNC_PORT" ]; then
-            echo "🖥️  noVNC: http://localhost:${NOVNC_PORT}/vnc.html"
-        fi
+        # Chrome/VNC コンテナも確認
+        ensure_infrastructure
+        ensure_chrome_container
+        _url=$(get_chrome_novnc_url)
+        [ -n "$_url" ] && echo "🖥️  noVNC: $_url"
         if ! docker exec -u "$CUSER" "$NAME" tmux has-session -t main 2>/dev/null; then
             docker exec -u "$CUSER" "$NAME" tmux new-session -d -s main 2>/dev/null || true
             sleep 0.5
@@ -327,12 +419,8 @@ start)
     # インフラ確認
     ensure_infrastructure
 
-    # --chrome: VNC 用オプションを構築
-    CHROME_OPTS=""
-    if [ "$ENABLE_CHROME" = "1" ]; then
-        NOVNC_PORT=$(find_available_novnc_port)
-        CHROME_OPTS="-e ENABLE_VNC=1 -p ${NOVNC_PORT}:6080"
-    fi
+    # Chrome/VNC 共有コンテナ起動
+    ensure_chrome_container
 
     # Web アプリ用ポートマッピングを構築
     WEBAPP_BASE=$(find_available_webapp_port_block)
@@ -383,7 +471,6 @@ start)
         $GITCONFIG_OPT \
         $SSH_OPTS \
         -e NODE_OPTIONS=--max-old-space-size=4096 \
-        $CHROME_OPTS \
         $WEBAPP_PORT_OPTS \
         -t \
         "$IMG_CLAUDE" >/dev/null
@@ -396,13 +483,11 @@ start)
         sleep 0.5
     done
 
-    echo "✅ 起動完了（Ctrl-B D で切断、claude-dev start で再接続）"
+    echo "✅ 起動完了（Ctrl-_ D で切断、claude-dev start で再接続）"
     echo "📡 Port mappings (host → container):"
     show_port_mappings "$NAME"
-    if [ "$ENABLE_CHROME" = "1" ]; then
-        echo "🖥️  noVNC: http://localhost:${NOVNC_PORT}/vnc.html"
-        echo "   tmux 内で google-chrome or chromium-browser を起動できます"
-    fi
+    _url=$(get_chrome_novnc_url)
+    [ -n "$_url" ] && echo "🖥️  noVNC: $_url"
     docker exec -it -u "$CUSER" "$NAME" tmux attach -t main
     ;;
 
@@ -459,6 +544,9 @@ stop)
     else
         echo "ℹ️  ${NAME} は存在しません"
     fi
+
+    # Claude コンテナが残っていなければ Chrome/VNC も停止
+    stop_chrome_if_idle
     ;;
 
 # -----------------------------------------------------------------------------
@@ -478,6 +566,12 @@ ports)
 
     echo "📡 ${NAME} port mappings:"
     show_port_mappings "$NAME"
+
+    _url=$(get_chrome_novnc_url)
+    if [ -n "$_url" ]; then
+        echo ""
+        echo "🖥️  Chrome/VNC: $_url"
+    fi
     ;;
 
 # -----------------------------------------------------------------------------
@@ -519,17 +613,16 @@ ssh-forward)
         _i=$((_i + 1))
     done
 
+    # Chrome/VNC の noVNC ポート
+    novnc_port=$(docker port "$CHROME_CONTAINER" 6080 2>/dev/null | head -1 | sed 's/.*://')
+    if [ -n "$novnc_port" ]; then
+        echo "  ssh -O forward -L ${novnc_port}:localhost:${novnc_port} <server-name>   # → noVNC (Chrome)"
+        _forward_args="${_forward_args} -L ${novnc_port}:localhost:${novnc_port}"
+    fi
+
     echo ""
     echo "📋 一括転送（ControlMaster 未使用時）:"
     echo "  ssh${_forward_args} <server-name>"
-
-    # noVNC ポートがあれば追加
-    novnc_port=$(get_novnc_port "$NAME")
-    if [ -n "$novnc_port" ]; then
-        echo ""
-        echo "📋 noVNC 用:"
-        echo "  ssh -O forward -L ${novnc_port}:localhost:${novnc_port} <server-name>"
-    fi
     ;;
 
 # -----------------------------------------------------------------------------
@@ -549,10 +642,6 @@ list)
         if [ -n "$webapp_base" ]; then
             _ports="Ports: ${webapp_base}-$((webapp_base + WEBAPP_PORTS_PER_CONTAINER - 1))"
         fi
-        novnc_port=$(docker port "$cid" 6080 2>/dev/null | head -1 | sed 's/.*://')
-        if [ -n "$novnc_port" ]; then
-            _ports="${_ports:+${_ports}, }noVNC: http://localhost:${novnc_port}/vnc.html"
-        fi
         echo ""
         echo "  NAME:      ${_name}"
         echo "  STATUS:    ${_status}"
@@ -561,6 +650,17 @@ list)
     done
     if [ $_has_containers -eq 0 ]; then
         echo "  (実行中のセッションはありません)"
+    fi
+
+    # Chrome/VNC コンテナの状態
+    echo ""
+    echo "=== Chrome/VNC コンテナ ==="
+    if is_running "$CHROME_CONTAINER"; then
+        _url=$(get_chrome_novnc_url)
+        echo "  STATUS:  running"
+        echo "  noVNC:   ${_url:-N/A}"
+    else
+        echo "  STATUS:  stopped（claude-dev start で自動起動）"
     fi
 
     ;;
@@ -575,8 +675,18 @@ upgrade)
         --build-arg USER_UID="$(id -u)" \
         --build-arg USER_GID="$(id -g)" \
         -f "${BASE_DIR}/.devcontainer/Dockerfile.claude" "$BASE_DIR"
+    echo "✅ Claude イメージ更新完了"
+
     echo ""
-    echo "✅ イメージ更新完了"
+    echo "📦 Chrome/VNC イメージを更新中..."
+    docker build --no-cache -t "$IMG_CHROME" \
+        --build-arg USERNAME="$CUSER" \
+        --build-arg USER_UID="$(id -u)" \
+        --build-arg USER_GID="$(id -g)" \
+        -f "${BASE_DIR}/.devcontainer/Dockerfile.chrome" "$BASE_DIR"
+    echo "✅ Chrome/VNC イメージ更新完了"
+
+    echo ""
     echo "   実行中のコンテナは stop → start で反映されます"
     ;;
 
@@ -598,6 +708,7 @@ firewall)
 reset)
     echo "⚠️  以下を全て削除します:"
     echo "   - 全 Claude Code コンテナ"
+    echo "   - Chrome/VNC コンテナ"
     echo "   - 認証情報・履歴ボリューム"
     echo "   - Docker イメージ"
     echo ""
@@ -610,12 +721,14 @@ reset)
 
     # プロジェクトコンテナ停止
     docker ps -a --filter "ancestor=$IMG_CLAUDE" -q | xargs -r docker rm -f 2>/dev/null || true
+    # Chrome/VNC コンテナ停止
+    docker rm -f "$CHROME_CONTAINER" 2>/dev/null || true
     # ボリューム削除
-    docker volume rm -f "$VOL_AUTH" "$VOL_HISTORY" "$VOL_CONFIG" 2>/dev/null || true
+    docker volume rm -f "$VOL_AUTH" "$VOL_HISTORY" "$VOL_CONFIG" "$VOL_CHROME" 2>/dev/null || true
     # ネットワーク削除
     docker network rm "$NETWORK" 2>/dev/null || true
     # イメージ削除
-    docker rmi -f "$IMG_CLAUDE" 2>/dev/null || true
+    docker rmi -f "$IMG_CLAUDE" "$IMG_CHROME" 2>/dev/null || true
 
     echo "✅ 全リセット完了"
     ;;
@@ -633,8 +746,8 @@ claude-dev - Claude Code 安全開発環境
   claude-dev logout              認証情報を削除
 
 開発:
-  claude-dev start               カレントディレクトリで環境を起動（devポート自動マッピング）
-  claude-dev start --chrome      Chrome/VNC 付きで起動（noVNC でブラウザ操作可能）
+  claude-dev start               カレントディレクトリで環境を起動
+                                 （Chrome/VNC コンテナも自動起動）
   claude-dev code                新しい tmux ウィンドウで Claude Code を起動
   claude-dev attach [NAME]       既存セッションに接続
   claude-dev stop [NAME]         セッションを停止
@@ -645,12 +758,16 @@ Web アプリアクセス:
   claude-dev ssh-forward [NAME]  SSH ポートフォワードコマンド生成
 
 メンテナンス:
-  claude-dev upgrade             Claude Code を更新（イメージ再ビルド）
+  claude-dev upgrade             Claude Code + Chrome を更新（イメージ再ビルド）
   claude-dev firewall            ファイアウォールルール確認
   claude-dev reset               全削除（コンテナ・ボリューム・イメージ）
 
 使い方:
   cd ~/repos/my-project && claude-dev start
+
+  Chrome/VNC は全プロジェクトで共有される専用コンテナで自動起動されます。
+  noVNC URL は起動時に表示されます（http://localhost:6080/vnc.html）。
+  日本語入力は Ctrl+Space で切り替え（fcitx5-mozc）。
 
 [NAME] について:
   NAME はプロジェクトのディレクトリ名です。

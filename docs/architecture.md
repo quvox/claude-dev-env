@@ -13,11 +13,14 @@ Linux サーバ (SSH でアクセス)
 │   ├── claude-project-b       ~/repos/project-b をマウント
 │   └── ...
 │
+├── Chrome/VNC コンテナ（共有、自動管理）
+│   └── claude-dev-chrome      全 Claude コンテナで共有
+│
 ├── Docker ネットワーク
 │   └── claude-dev-net         コンテナ間通信
 │
 └── Docker ボリューム
-    ├── claude-dev-auth        認証情報（~/.claude/ と ~/.claude.json）
+    ├── claude-dev-auth        認証情報（~/.claude/ と ~/.claude.json）+ Chrome 認証共有
     └── claude-dev-history     コマンド履歴
 ```
 
@@ -34,10 +37,9 @@ Linux サーバ (SSH でアクセス)
 │  Node.js 24/22 (fnm) + pnpm + Claude Code    │
 │  Python3 + venv                               │
 │  Go, Rust                                     │
-│  Chromium + Playwright 依存パッケージ           │
+│  Playwright Chromium（ヘッドレステスト用）       │
 │  git, zsh, tmux, vim, make, gcc, curl, wget   │
 │  iptables ファイアウォール                      │
-│  Xvfb + x11vnc + noVNC（--chrome 時のみ起動）  │
 │                                               │
 │  /workspace      ← ホストのプロジェクト (RW)    │
 │  ~/.claude/      ← 認証ボリューム (RW)          │
@@ -53,12 +55,38 @@ Linux サーバ (SSH でアクセス)
 - **イメージ**: `claude-dev-claude`
 - **ベース**: `ubuntu:24.04`
 - **言語**: Node.js 24/22 (fnm), Python3 (venv), Go, Rust
-- **ツール**: git, zsh, tmux, vim, make, gcc, curl, wget, pnpm, Chromium, etc.
+- **ツール**: git, zsh, tmux, vim, make, gcc, curl, wget, pnpm, Playwright Chromium（ヘッドレステスト用）, etc.
 - **ユーザー**: ホストのカレントユーザーと同名 (UID/GID はビルド時にホストと一致。entrypoint でも競合を解消して追従)
 - **git 設定**: ホストの `~/.gitconfig` を読み取り専用でマウント（存在する場合）
 - **SSH**: SSH agent ソケットを転送。秘密鍵ファイルはマウントしない。`~/.ssh/known_hosts` と `~/.ssh/config` は読み取り専用でマウント
-- **起動**: ssh-agent 準備 → コンテナ作成 → entrypoint が UID/GID 調整 → 認証 symlink → ファイアウォール → (VNC) → tmux → 待機
-- **`--chrome` モード**: `ENABLE_VNC=1` 環境変数で Xvfb + x11vnc + noVNC を起動。ポート 6080 を公開し、ブラウザから Chrome を操作できる
+- **起動**: ssh-agent 準備 → Chrome コンテナ自動起動 → Claude コンテナ作成 → entrypoint が UID/GID 調整 → 認証 symlink → ファイアウォール → tmux → 待機
+
+### Chrome/VNC コンテナ（共有）
+
+全 Claude コンテナで共有される GUI 環境。`claude-dev start` 時に自動的に起動される。
+
+```
+┌───────────────────────────────────────────────┐
+│ claude-dev-chrome  (ubuntu:24.04)             │
+│                                               │
+│  Google Chrome + 日本語入力（fcitx5-mozc）      │
+│  Xvfb + x11vnc + noVNC                       │
+│  ポート 6080 で noVNC を公開                    │
+│                                               │
+│  ~/.claude/      ← 認証ボリューム (RW)          │
+│                    Chrome 認証情報の共有用       │
+│                                               │
+│  ※ Ctrl+Space で日本語入力切替                  │
+│  ※ 全 Claude コンテナ停止時に自動停止            │
+└───────────────────────────────────────────────┘
+```
+
+- **イメージ**: `claude-dev-chrome`
+- **ベース**: `ubuntu:24.04`
+- **ツール**: Google Chrome, Xvfb, x11vnc, noVNC, fcitx5-mozc（日本語入力）
+- **ポート**: 6080（noVNC、全コンテナ共有）
+- **ボリューム**: `claude-dev-auth` を `~/.claude/` にマウント（Chrome の認証情報共有用）
+- **ライフサイクル**: `claude-dev start` で自動起動、全 Claude コンテナ停止時に自動停止
 
 ## 認証の仕組み
 
@@ -193,7 +221,7 @@ claude-dev start
 
 | 用途 | 範囲 | 備考 |
 |------|------|------|
-| noVNC | 6080-6179 | `--chrome` オプション用（既存） |
+| noVNC | 6080 | Chrome/VNC 共有コンテナ用（固定） |
 | Web アプリ | 8100-8899 | コンテナごとに 10 ポートブロック（最大 80 コンテナ） |
 
 **例: コンテナ 2 つの場合**
@@ -239,6 +267,7 @@ ssh -O forward -L 8102:localhost:8102 myserver
 | 名前 | ベース | サイズ目安 |
 |------|--------|----------|
 | `claude-dev-claude` | ubuntu:24.04 | ~2.5GB |
+| `claude-dev-chrome` | ubuntu:24.04 | — |
 
 ## コンテナのライフサイクル
 
@@ -246,10 +275,10 @@ ssh -O forward -L 8102:localhost:8102 myserver
 start で起動 → 常駐（restart: unless-stopped）→ stop で破棄
 ```
 
-- `claude-dev start`: 起動 + tmux アタッチ
+- `claude-dev start`: Claude コンテナ起動 + Chrome コンテナ自動起動 + tmux アタッチ
 - SSH 切断 / tmux デタッチ (`Ctrl-B D`): コンテナは動き続ける
 - `claude-dev start`（再実行）: 既存コンテナに再接続（tmux セッションがなければ再作成）
-- `claude-dev stop`: コンテナ削除（プロジェクトファイルはホスト上なので安全）
+- `claude-dev stop`: Claude コンテナ削除（全 Claude コンテナ停止時は Chrome コンテナも自動停止）
 
 ## ディレクトリマッピング
 

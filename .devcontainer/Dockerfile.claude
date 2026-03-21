@@ -38,24 +38,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 python3-pip python3-venv python3-dev \
     # サンドボックス（Claude Code 推奨）
     bubblewrap socat \
-    # Chromium / Playwright 依存パッケージ
-    chromium-browser \
+    # Chromium / Playwright 依存パッケージ（chromium-browser は Ubuntu 24.04 で snap 専用のため除外）
     fonts-liberation fonts-noto-cjk fonts-noto-color-emoji \
     libasound2t64 libatk-bridge2.0-0 libatk1.0-0 libcairo2 libcups2 \
     libdbus-1-3 libdrm2 libgbm1 libglib2.0-0 libgtk-3-0 libnspr4 \
     libnss3 libpango-1.0-0 libx11-6 libxcomposite1 libxdamage1 \
     libxext6 libxfixes3 libxrandr2 libxshmfence1 libxkbcommon0 \
     xdg-utils \
-    # VNC リモートデスクトップ（--chrome オプション用）
-    xvfb x11vnc novnc websockify openbox \
     # その他
     unzip xz-utils gnupg locales \
     && rm -rf /var/lib/apt/lists/*
 
-# --- Playwright のブラウザパスを環境変数で設定 ---
-ENV CHROME_PATH=/usr/bin/chromium-browser
-ENV PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium-browser
-ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
+# --- Chromium: Playwright 経由でインストール（後段）---
+# 環境変数はラッパースクリプト作成時に /etc/zsh/zshrc 等で設定する
 
 # --- ロケール設定 ---
 RUN locale-gen en_US.UTF-8
@@ -111,10 +106,12 @@ RUN export PATH="${USER_HOME}/.local/share/fnm:$PATH" \
     && corepack enable \
     && corepack prepare pnpm@latest --activate
 
-# --- Playwright（システムの Chromium を使用）---
+# --- Playwright + Chromium インストール ---
+# Ubuntu 24.04 では chromium-browser パッケージが snap 専用のため、
+# Playwright 経由で Chromium をインストールする
 RUN export PATH="${USER_HOME}/.local/share/fnm:$PATH" \
     && eval "$($USER_HOME/.local/share/fnm/fnm env)" \
-    && npx -y playwright@latest install-deps 2>/dev/null || true
+    && npx -y playwright@latest install --with-deps chromium
 
 # --- AWS CLI v2 ---
 RUN curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-$(uname -m).zip" -o /tmp/awscliv2.zip \
@@ -141,6 +138,33 @@ WORKDIR /workspace
 # =============================================================================
 USER root
 
+# --- Playwright Chromium ラッパー + 環境変数（ヘッドレステスト用）---
+RUN CHROMIUM_PATH=$(find ${USER_HOME}/.cache/ms-playwright -name "chrome" \( -path "*/chrome-linux/chrome" -o -path "*/chrome-linux64/chrome" \) 2>/dev/null | head -1) \
+    && if [ -n "$CHROMIUM_PATH" ]; then \
+        { echo '#!/bin/bash'; \
+          echo 'export DBUS_SESSION_BUS_ADDRESS=disabled:'; \
+          printf '"%s" --no-sandbox --disable-gpu --disable-software-rasterizer --disable-dev-shm-usage --headless "$@" 2> >(grep -v -E "dbus|DEPRECATED_ENDPOINT" >&2)\n' "$CHROMIUM_PATH"; \
+        } > /usr/local/bin/chromium-browser \
+        && chmod +x /usr/local/bin/chromium-browser \
+        && ln -sf /usr/local/bin/chromium-browser /usr/local/bin/chromium \
+        && ln -sf /usr/local/bin/chromium-browser /usr/local/bin/chrome \
+        && { \
+            echo ""; \
+            echo "# --- claude-dev: Playwright Chromium ---"; \
+            echo "export CHROME_PATH=\"${CHROMIUM_PATH}\""; \
+            echo "export PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=\"${CHROMIUM_PATH}\""; \
+            echo "export PUPPETEER_EXECUTABLE_PATH=\"${CHROMIUM_PATH}\""; \
+        } >> /etc/zsh/zshrc \
+        && { \
+            echo ""; \
+            echo "# --- claude-dev: Playwright Chromium ---"; \
+            echo "export CHROME_PATH=\"${CHROMIUM_PATH}\""; \
+            echo "export PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=\"${CHROMIUM_PATH}\""; \
+            echo "export PUPPETEER_EXECUTABLE_PATH=\"${CHROMIUM_PATH}\""; \
+        } >> /etc/bash.bashrc; \
+    fi
+
+
 # --- シェル初期化: PATH と fnm を設定 ---
 # システム側（/etc/zsh/zshrc, /etc/bash.bashrc）に配置し、
 # ~/.zshrc はユーザーカスタマイズ用としてボリュームで共有する
@@ -158,6 +182,10 @@ RUN mkdir -p /etc/zsh && { \
         echo 'eval "$(fnm env --use-on-cd --shell bash 2>/dev/null)"'; \
         echo 'export PATH="${HOME}/.local/bin:${HOME}/.cargo/bin:/usr/local/go/bin:${HOME}/go/bin:${PATH}"'; \
     } >> /etc/bash.bashrc
+
+# --- デフォルト .zshrc ---
+COPY .zshrc $USER_HOME/.zshrc.default
+RUN chown $USERNAME:$USERNAME $USER_HOME/.zshrc.default
 
 # --- tmux 設定 ---
 COPY .devcontainer/tmux.conf /etc/tmux.conf

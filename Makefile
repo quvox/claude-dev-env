@@ -17,18 +17,21 @@ INSTALL_PATH := /usr/local/bin/claude-dev
 
 # --- Docker リソース名 ---
 IMG_CLAUDE := claude-dev-claude
+IMG_CHROME := claude-dev-chrome
+CHROME_CONTAINER := claude-dev-chrome
 CUSER := $(shell whoami)
 NETWORK := claude-dev-net
 VOL_AUTH := claude-dev-auth
 VOL_HISTORY := claude-dev-history
 VOL_CONFIG := claude-dev-config
+VOL_CHROME := claude-dev-chrome-data
 
 # =============================================================================
 # メインターゲット
 # =============================================================================
 
 .PHONY: help setup install login build network volumes \
-        upgrade status clean uninstall build-claude
+        upgrade status clean uninstall build-claude build-chrome
 
 ## デフォルト: ヘルプ表示
 help:
@@ -39,11 +42,12 @@ help:
 	@echo "  make login        OAuth ログイン"
 	@echo ""
 	@echo "ビルド:"
-	@echo "  make build        イメージをビルド"
+	@echo "  make build        全イメージをビルド"
 	@echo "  make build-claude Claude イメージをビルド"
+	@echo "  make build-chrome Chrome/VNC イメージをビルド"
 	@echo ""
 	@echo "メンテナンス:"
-	@echo "  make upgrade      Claude Code を最新版に更新"
+	@echo "  make upgrade      Claude Code + Chrome を最新版に更新"
 	@echo "  make status       状態確認"
 	@echo "  make clean        全リセット（コンテナ・ボリューム・イメージ削除）"
 	@echo "  make uninstall    CLI のシンボリックリンクを削除"
@@ -110,14 +114,15 @@ volumes:
 	@docker volume create $(VOL_AUTH) >/dev/null 2>&1 || true
 	@docker volume create $(VOL_HISTORY) >/dev/null 2>&1 || true
 	@docker volume create $(VOL_CONFIG) >/dev/null 2>&1 || true
-	@echo "✅ ボリューム: $(VOL_AUTH), $(VOL_HISTORY), $(VOL_CONFIG)"
+	@docker volume create $(VOL_CHROME) >/dev/null 2>&1 || true
+	@echo "✅ ボリューム: $(VOL_AUTH), $(VOL_HISTORY), $(VOL_CONFIG), $(VOL_CHROME)"
 
 # =============================================================================
 # ビルド
 # =============================================================================
 
-## イメージビルド
-build: build-claude
+## 全イメージビルド
+build: build-claude build-chrome
 
 ## Claude Code イメージ
 build-claude:
@@ -128,6 +133,16 @@ build-claude:
 		--build-arg USER_GID=$$(id -g) \
 		-f $(BASE_DIR)/.devcontainer/Dockerfile.claude $(BASE_DIR)
 	@echo "✅ $(IMG_CLAUDE)"
+
+## Chrome/VNC イメージ
+build-chrome:
+	@echo "📦 Chrome/VNC イメージをビルド中..."
+	@docker build -t $(IMG_CHROME) \
+		--build-arg USERNAME=$(CUSER) \
+		--build-arg USER_UID=$$(id -u) \
+		--build-arg USER_GID=$$(id -g) \
+		-f $(BASE_DIR)/.devcontainer/Dockerfile.chrome $(BASE_DIR)
+	@echo "✅ $(IMG_CHROME)"
 
 # =============================================================================
 # 認証
@@ -141,27 +156,39 @@ login:
 # メンテナンス
 # =============================================================================
 
-## Claude Code を最新版に更新
+## Claude Code + Chrome を最新版に更新
 upgrade:
-	@echo "📦 Claude Code を最新版に更新中..."
+	@echo "📦 Claude イメージを更新中..."
 	@docker build --no-cache -t $(IMG_CLAUDE) \
 		--build-arg USERNAME=$(CUSER) \
 		--build-arg USER_UID=$$(id -u) \
 		--build-arg USER_GID=$$(id -g) \
 		-f $(BASE_DIR)/.devcontainer/Dockerfile.claude $(BASE_DIR)
+	@echo "✅ Claude イメージ更新完了"
 	@echo ""
-	@echo "✅ イメージ更新完了"
+	@echo "📦 Chrome/VNC イメージを更新中..."
+	@docker build --no-cache -t $(IMG_CHROME) \
+		--build-arg USERNAME=$(CUSER) \
+		--build-arg USER_UID=$$(id -u) \
+		--build-arg USER_GID=$$(id -g) \
+		-f $(BASE_DIR)/.devcontainer/Dockerfile.chrome $(BASE_DIR)
+	@echo "✅ Chrome/VNC イメージ更新完了"
+	@echo ""
 	@echo "   実行中のコンテナは claude-dev stop → claude-dev start で反映"
 
 ## 状態確認
 status:
 	@echo "=== Docker イメージ ==="
 	@docker images --format "table {{.Repository}}\t{{.Tag}}\t{{.Size}}" \
-		--filter "reference=$(IMG_CLAUDE)" 2>/dev/null || true
+		--filter "reference=$(IMG_CLAUDE)" --filter "reference=$(IMG_CHROME)" 2>/dev/null || true
 	@echo ""
 	@echo "=== 実行中の Claude Code セッション ==="
 	@docker ps --filter "ancestor=$(IMG_CLAUDE)" \
 		--format "table {{.Names}}\t{{.Status}}" 2>/dev/null || true
+	@echo ""
+	@echo "=== Chrome/VNC コンテナ ==="
+	@docker ps --filter "name=^$(CHROME_CONTAINER)$$" \
+		--format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" 2>/dev/null || true
 	@echo ""
 	@echo "=== ボリューム ==="
 	@docker volume ls --filter "name=claude-dev" --format "table {{.Name}}\t{{.Driver}}" 2>/dev/null || true
@@ -170,16 +197,19 @@ status:
 clean:
 	@echo "⚠️  以下を全て削除します:"
 	@echo "   - 全 Claude Code コンテナ"
+	@echo "   - Chrome/VNC コンテナ"
 	@echo "   - 認証情報・履歴ボリューム"
 	@echo "   - Docker イメージ"
 	@echo ""
 	@read -p "実行しますか？ (y/N) " ans && [ "$$ans" = "y" ] || { echo "キャンセル"; exit 1; }
 	@# プロジェクトコンテナ停止
 	@docker ps -a --filter "ancestor=$(IMG_CLAUDE)" -q | xargs -r docker rm -f 2>/dev/null || true
+	@# Chrome/VNC コンテナ停止
+	@docker rm -f $(CHROME_CONTAINER) 2>/dev/null || true
 	@# ボリューム削除
-	@docker volume rm -f $(VOL_AUTH) $(VOL_HISTORY) $(VOL_CONFIG) 2>/dev/null || true
+	@docker volume rm -f $(VOL_AUTH) $(VOL_HISTORY) $(VOL_CONFIG) $(VOL_CHROME) 2>/dev/null || true
 	@# ネットワーク削除
 	@docker network rm $(NETWORK) 2>/dev/null || true
 	@# イメージ削除
-	@docker rmi -f $(IMG_CLAUDE) 2>/dev/null || true
+	@docker rmi -f $(IMG_CLAUDE) $(IMG_CHROME) 2>/dev/null || true
 	@echo "✅ 全リセット完了"

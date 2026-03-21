@@ -195,5 +195,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 再ビルド:
 
 ```bash
-make build-claude
+make build-claude     # Claude イメージのみ
+make build-chrome     # Chrome/VNC イメージのみ
+make build            # 全イメージ
 ```

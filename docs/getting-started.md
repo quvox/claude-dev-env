@@ -37,8 +37,9 @@ make login
 ### 個別に実行する場合
 
 ```bash
-make build            # イメージビルドのみ
+make build            # 全イメージビルド
 make build-claude     # Claude イメージのみ
+make build-chrome     # Chrome/VNC イメージのみ
 make install          # PATH 登録のみ
 ```
 
@@ -54,10 +55,13 @@ claude-dev start
 ```
 
 これだけで:
-1. カレントディレクトリがコンテナの `/workspace` にマウントされる
-2. 認証情報がセットされる
-3. ファイアウォールが設定される
-4. tmux セッションが開始される
+1. Chrome/VNC 共有コンテナが自動起動される
+2. カレントディレクトリがコンテナの `/workspace` にマウントされる
+3. 認証情報がセットされる
+4. ファイアウォールが設定される
+5. tmux セッションが開始される
+
+Chrome/VNC コンテナが起動するので、`http://localhost:6080/vnc.html` から Google Chrome を操作できる（日本語入力対応、`Ctrl+Space` で切替）。
 
 ### Claude Code を起動する
 

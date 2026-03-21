@@ -21,11 +21,11 @@ if [ -d /workspace ]; then
     CURRENT_GID=$(id -g "$USERNAME" 2>/dev/null || echo "1500")
 
     if [ "$HOST_UID" != "0" ]; then
+        CHANGED=0
         # GID 変更
         if [ "$HOST_GID" != "$CURRENT_GID" ]; then
             CONFLICT_GROUP=$(getent group "$HOST_GID" 2>/dev/null | cut -d: -f1)
             if [ -n "$CONFLICT_GROUP" ] && [ "$CONFLICT_GROUP" != "$USERNAME" ]; then
-                # 競合するグループの GID を退避（99xx 番台の空き番号へ）
                 TEMP_GID=9900
                 while getent group "$TEMP_GID" >/dev/null 2>&1; do
                     TEMP_GID=$((TEMP_GID + 1))
@@ -33,12 +33,12 @@ if [ -d /workspace ]; then
                 groupmod -g "$TEMP_GID" "$CONFLICT_GROUP" 2>/dev/null || true
             fi
             groupmod -g "$HOST_GID" "$USERNAME" 2>/dev/null || true
+            CHANGED=1
         fi
         # UID 変更
         if [ "$HOST_UID" != "$CURRENT_UID" ]; then
             CONFLICT_USER=$(getent passwd "$HOST_UID" 2>/dev/null | cut -d: -f1)
             if [ -n "$CONFLICT_USER" ] && [ "$CONFLICT_USER" != "$USERNAME" ]; then
-                # 競合するユーザーの UID を退避（99xx 番台の空き番号へ）
                 TEMP_UID=9900
                 while getent passwd "$TEMP_UID" >/dev/null 2>&1; do
                     TEMP_UID=$((TEMP_UID + 1))
@@ -46,9 +46,15 @@ if [ -d /workspace ]; then
                 usermod -u "$TEMP_UID" "$CONFLICT_USER" 2>/dev/null || true
             fi
             usermod -u "$HOST_UID" "$USERNAME" 2>/dev/null || true
+            CHANGED=1
         fi
-        # ホームディレクトリの所有権を更新
-        chown -R "$USERNAME":"$USERNAME" "$USER_HOME" 2>/dev/null || true
+        # UID/GID が変更された場合のみ、ホームディレクトリの所有権を更新
+        if [ "$CHANGED" = "1" ]; then
+            # 旧 UID/GID のファイルだけを対象にする（全ファイル走査を避ける）
+            find "$USER_HOME" -not -path "$USER_HOME/.claude/*" \
+                \( -uid "$CURRENT_UID" -o -gid "$CURRENT_GID" \) \
+                -exec chown "$USERNAME":"$USERNAME" {} + 2>/dev/null || true
+        fi
     fi
 fi
 
@@ -64,9 +70,11 @@ fi
 SHARED_DIR="$USER_HOME/.config-shared"
 if [ -d "$SHARED_DIR" ]; then
     chown "$USERNAME":"$USERNAME" "$SHARED_DIR" 2>/dev/null || true
-    # 初回: ボリュームに .zshrc がなければイメージのデフォルトをコピー
+    # 初回: ボリュームに .zshrc がなければデフォルトをコピー
     if [ ! -f "$SHARED_DIR/.zshrc" ]; then
-        if [ -f "$USER_HOME/.zshrc" ] && [ ! -L "$USER_HOME/.zshrc" ]; then
+        if [ -f "$USER_HOME/.zshrc.default" ]; then
+            cp "$USER_HOME/.zshrc.default" "$SHARED_DIR/.zshrc"
+        elif [ -f "$USER_HOME/.zshrc" ] && [ ! -L "$USER_HOME/.zshrc" ]; then
             cp "$USER_HOME/.zshrc" "$SHARED_DIR/.zshrc"
         else
             touch "$SHARED_DIR/.zshrc"
@@ -99,36 +107,6 @@ fi
 
 # --- ファイアウォール設定 ---
 /usr/local/bin/init-firewall.sh 2>/dev/null || true
-
-# --- VNC 環境起動（ENABLE_VNC=1 の場合） ---
-if [ "${ENABLE_VNC:-0}" = "1" ]; then
-    VNC_DISPLAY="${VNC_DISPLAY:-99}"
-    VNC_RESOLUTION="${VNC_RESOLUTION:-1920x1080x24}"
-    VNC_PORT=5900
-    NOVNC_PORT=6080
-
-    # Xvfb（仮想ディスプレイ）
-    su "$USERNAME" -c "Xvfb :${VNC_DISPLAY} -screen 0 ${VNC_RESOLUTION} &"
-    sleep 1
-
-    # openbox（ウィンドウマネージャ）
-    su "$USERNAME" -c "DISPLAY=:${VNC_DISPLAY} openbox &"
-    sleep 0.5
-
-    # x11vnc（VNC サーバー）
-    su "$USERNAME" -c "x11vnc -display :${VNC_DISPLAY} -forever -nopw -rfbport ${VNC_PORT} -shared &"
-    sleep 0.5
-
-    # websockify + noVNC（Web ブラウザからアクセス）
-    su "$USERNAME" -c "websockify --web /usr/share/novnc ${NOVNC_PORT} localhost:${VNC_PORT} &"
-    sleep 0.5
-
-    # DISPLAY 環境変数をシェル設定に追加（tmux 内で Chrome が使えるように）
-    echo "export DISPLAY=:${VNC_DISPLAY}" >> "$USER_HOME/.zshrc"
-    echo "export DISPLAY=:${VNC_DISPLAY}" >> "$USER_HOME/.bashrc"
-
-    echo "🖥️  VNC 起動 (noVNC: port ${NOVNC_PORT}, VNC: port ${VNC_PORT})"
-fi
 
 # --- tmux セッション開始 ---
 su "$USERNAME" -s /bin/zsh -l -c \

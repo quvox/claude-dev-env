@@ -12,8 +12,9 @@
 |-----------|------|
 | `make setup` | 初回セットアップ一括実行（env + network + volumes + build + install） |
 | `make login` | OAuth ログイン |
-| `make build` | イメージビルド |
+| `make build` | 全イメージビルド |
 | `make build-claude` | Claude イメージをビルド |
+| `make build-chrome` | Chrome/VNC イメージをビルド |
 | `make upgrade` | Claude Code を最新版にリビルド（`--no-cache`） |
 | `make status` | イメージ・コンテナ・ボリュームの状態確認 |
 | `make install` | `claude-dev` を `/usr/local/bin/` にシンボリックリンク |
@@ -66,16 +67,13 @@ claude-dev logout
 
 ### 開発
 
-#### `claude-dev start [--chrome]`
+#### `claude-dev start`
 
 カレントディレクトリをワークスペースとして Claude Code 環境を起動する。
 
 ```bash
 cd ~/repos/my-project
 claude-dev start
-
-# Chrome/VNC 付きで起動
-claude-dev start --chrome
 ```
 
 動作:
@@ -88,12 +86,14 @@ claude-dev start --chrome
 - ssh-agent が未起動なら自動起動し、鍵が未登録なら `ssh-add` を実行
 - `~/.gitconfig` があればコンテナに共有（読み取り専用）
 - SSH agent ソケット・`~/.ssh/known_hosts`・`~/.ssh/config` をコンテナに共有（読み取り専用。秘密鍵はマウントしない）
+- Chrome/VNC 共有コンテナ（`claude-dev-chrome`）が未起動なら自動起動する
 
-`--chrome` オプション:
-- コンテナ内に仮想ディスプレイ（Xvfb）+ VNC + noVNC を起動する
-- ローカル PC のブラウザから `http://localhost:<port>/vnc.html` で Chrome を操作できる
-- noVNC ポートは 6080 から自動割り当て（複数プロジェクト同時起動対応）
-- tmux 内で `chromium-browser` や `google-chrome` を起動すると noVNC 画面に表示される
+Chrome/VNC コンテナ:
+- `claude-dev start` 時に自動的に起動される専用の共有コンテナ
+- ローカル PC のブラウザから `http://localhost:6080/vnc.html` で Google Chrome を操作できる
+- 日本語入力対応（fcitx5-mozc、`Ctrl+Space` で切替）
+- noVNC ポートは 6080（固定、全コンテナ共有）
+- 全 Claude コンテナが停止すると Chrome コンテナも自動停止する
 
 #### `claude-dev code`
 
@@ -196,7 +196,7 @@ claude-my-project   Up 2 hours      /home/user/repos/my-project...
 claude-api-server   Up 30 minutes   /home/user/repos/api-server...
   📡 claude-my-project → Ports: 8100-8109
   📡 claude-api-server → Ports: 8110-8119
-  🖥️  claude-my-project → noVNC: http://localhost:6080/vnc.html
+  🖥️  Chrome/VNC → noVNC: http://localhost:6080/vnc.html
 ```
 
 ---
@@ -233,7 +233,7 @@ claude-dev reset
 - 全プロジェクトコンテナ
 - `claude-dev-auth`, `claude-dev-history`, `claude-dev-config` ボリューム
 - `claude-dev-net` ネットワーク
-- `claude-dev-claude` イメージ
+- `claude-dev-claude`, `claude-dev-chrome` イメージ
 
 ---
 
