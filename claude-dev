@@ -69,15 +69,28 @@ ensure_ssh_agent() {
         return 0
     fi
 
-    # パスフレーズなしの鍵だけ自動追加（パスフレーズ付きはスキップ）
+    # まずパスフレーズなしの鍵を自動追加
     local added=0
+    local need_passphrase=()
     for key in "${keys[@]}"; do
         if SSH_ASKPASS=/bin/false SSH_ASKPASS_REQUIRE=force ssh-add "$key" 2>/dev/null; then
             added=1
         else
-            echo "⚠️  ${key}: パスフレーズ付きのためスキップ。事前に ssh-add してください"
+            need_passphrase+=("$key")
         fi
     done
+
+    # パスフレーズ付きの鍵は対話的に追加を試みる
+    if [ ${#need_passphrase[@]} -gt 0 ]; then
+        echo "🔑 パスフレーズ付きの SSH 鍵があります。パスフレーズを入力してください。"
+        for key in "${need_passphrase[@]}"; do
+            if ssh-add "$key"; then
+                added=1
+            else
+                echo "⚠️  ${key}: 追加できませんでした（スキップ）"
+            fi
+        done
+    fi
 
     if [ "$added" -eq 0 ]; then
         echo "⚠️  SSH 鍵を追加できませんでした。手動で ssh-add を実行してから再度 claude-dev start してください"
@@ -448,9 +461,12 @@ start)
     if [ -f "${HOME}/.ssh/known_hosts" ]; then
         SSH_OPTS="${SSH_OPTS} -v ${HOME}/.ssh/known_hosts:${CHOME}/.ssh/known_hosts:ro"
     fi
-    # ~/.ssh/config（読み取り専用）
+    # ~/.ssh/config（エージェント転送用に加工してマウント）
+    # IdentityFile / IdentitiesOnly はコンテナ内に鍵ファイルがないため除去
     if [ -f "${HOME}/.ssh/config" ]; then
-        SSH_OPTS="${SSH_OPTS} -v ${HOME}/.ssh/config:${CHOME}/.ssh/config:ro"
+        _ssh_config_tmp=$(mktemp /tmp/claude-dev-ssh-config.XXXXXX)
+        sed -E '/^[[:space:]]*(IdentityFile|IdentitiesOnly)/d' "${HOME}/.ssh/config" > "$_ssh_config_tmp"
+        SSH_OPTS="${SSH_OPTS} -v ${_ssh_config_tmp}:${CHOME}/.ssh/config:ro"
     fi
 
     # コンテナ起動

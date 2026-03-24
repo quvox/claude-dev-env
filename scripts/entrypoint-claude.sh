@@ -62,7 +62,22 @@ fi
 if [ -d "$USER_HOME/.ssh" ]; then
     chown "$USERNAME":"$USERNAME" "$USER_HOME/.ssh" 2>/dev/null || true
     chmod 700 "$USER_HOME/.ssh" 2>/dev/null || true
-    # known_hosts, config は読み取り専用マウントなので chown/chmod しない
+
+    # ~/.ssh/config は claude-dev スクリプト側でエージェント転送用に加工済みのものがマウントされる
+    # （IdentityFile / IdentitiesOnly 行は除去済み）
+fi
+
+# --- SSH_AUTH_SOCK をシェル初期化ファイルに設定 ---
+# Docker の -e で渡された SSH_AUTH_SOCK は su -l でリセットされるため、
+# シェル初期化ファイルに書き出して全シェルで利用可能にする
+if [ -S "/tmp/ssh-agent.sock" ]; then
+    for rc in /etc/zsh/zshrc /etc/bash.bashrc; do
+        if [ -f "$rc" ]; then
+            echo "" >> "$rc"
+            echo "# --- claude-dev: SSH agent forwarding ---" >> "$rc"
+            echo 'export SSH_AUTH_SOCK=/tmp/ssh-agent.sock' >> "$rc"
+        fi
+    done
 fi
 
 # --- .zshrc の共有（ボリューム経由でコンテナ間共有）---
