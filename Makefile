@@ -31,7 +31,7 @@ VOL_CHROME := claude-dev-chrome-data
 # =============================================================================
 
 .PHONY: help setup install login build network volumes \
-        upgrade status clean uninstall build-claude build-chrome
+        upgrade status clean uninstall build-claude build-chrome sync-zrt-tools
 
 ## デフォルト: ヘルプ表示
 help:
@@ -125,7 +125,7 @@ volumes:
 build: build-claude build-chrome
 
 ## Claude Code イメージ
-build-claude:
+build-claude: sync-zrt-tools
 	@echo "📦 Claude イメージをビルド中..."
 	@docker build -t $(IMG_CLAUDE) \
 		--build-arg USERNAME=$(CUSER) \
@@ -143,6 +143,18 @@ build-chrome:
 		--build-arg USER_GID=$$(id -g) \
 		-f $(BASE_DIR)/.devcontainer/Dockerfile.chrome $(BASE_DIR)
 	@echo "✅ $(IMG_CHROME)"
+
+## zrt-tools の取得・更新
+ZRT_REPO := https://github.com/zettant/zrt-tools.git
+ZRT_DIR := $(BASE_DIR)/zrt-tools
+sync-zrt-tools:
+	@if [ -d "$(ZRT_DIR)/.git" ]; then \
+		echo "📥 zrt-tools を更新中..."; \
+		cd "$(ZRT_DIR)" && git fetch origin && git checkout develop && git pull origin develop; \
+	else \
+		echo "📥 zrt-tools をクローン中..."; \
+		git clone --branch develop "$(ZRT_REPO)" "$(ZRT_DIR)"; \
+	fi
 
 # =============================================================================
 # 認証

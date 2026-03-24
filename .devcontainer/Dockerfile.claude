@@ -26,7 +26,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     # シェル・ターミナル
     zsh tmux vim \
     # VCS
-    git git-lfs \
+    git git-lfs git-secrets \
     # ネットワーク
     curl wget jq ca-certificates \
     iproute2 net-tools iputils-ping \
@@ -119,6 +119,13 @@ RUN curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-$(uname -m).zip" -
     && sudo /tmp/aws/install \
     && rm -rf /tmp/aws /tmp/awscliv2.zip
 
+# --- Terraform ---
+RUN curl -fsSL https://releases.hashicorp.com/terraform/index.json \
+    | jq -r '.versions | to_entries | map(select(.value.builds[]?.os == "linux")) | last | .key' \
+    | xargs -I{} curl -fsSL "https://releases.hashicorp.com/terraform/{}/terraform_{}_linux_$(dpkg --print-architecture).zip" -o /tmp/terraform.zip \
+    && sudo unzip -q /tmp/terraform.zip -d /usr/local/bin \
+    && rm /tmp/terraform.zip
+
 # --- Google Cloud CLI ---
 RUN curl -fsSL https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-cli-linux-$(uname -m).tar.gz \
     | tar -xz -C ${USER_HOME} \
@@ -126,6 +133,14 @@ RUN curl -fsSL https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google
     && sudo ln -s ${USER_HOME}/google-cloud-sdk/bin/gcloud /usr/local/bin/gcloud \
     && sudo ln -s ${USER_HOME}/google-cloud-sdk/bin/gsutil /usr/local/bin/gsutil \
     && sudo ln -s ${USER_HOME}/google-cloud-sdk/bin/bq /usr/local/bin/bq
+
+# --- zrt-tools ---
+COPY --chown=$USERNAME:$USERNAME zrt-tools/ /tmp/zrt-tools/
+RUN export PATH="/usr/local/go/bin:${USER_HOME}/go/bin:${PATH}" \
+    && cd /tmp/zrt-tools \
+    && make build \
+    && sudo cp build/zrt /usr/local/bin/ \
+    && rm -rf /tmp/zrt-tools
 
 # --- Claude Code CLI (ネイティブインストーラー) ---
 # 公式ドキュメント: WORKDIR /tmp でインストーラーがファイルシステム全体をスキャンするのを防ぐ
