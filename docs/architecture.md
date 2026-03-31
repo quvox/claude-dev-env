@@ -20,7 +20,7 @@ Linux サーバ (SSH でアクセス)
 │   └── claude-dev-net         コンテナ間通信
 │
 └── Docker ボリューム
-    ├── claude-dev-auth        認証情報（~/.claude/ と ~/.claude.json）+ Chrome 認証共有
+    ├── claude-dev-auth        認証ファイル（.credentials.json, .claude.json）
     └── claude-dev-history     コマンド履歴
 ```
 
@@ -37,12 +37,14 @@ Linux サーバ (SSH でアクセス)
 │  Node.js 24/22 (fnm) + pnpm + Claude Code    │
 │  Python3 + venv                               │
 │  Go, Rust                                     │
+│  Chrome DevTools MCP（noVNC Chrome 操作）       │
 │  Playwright Chromium（ヘッドレステスト用）       │
 │  git, zsh, tmux, vim, make, gcc, curl, wget   │
 │  iptables ファイアウォール                      │
 │                                               │
 │  /workspace      ← ホストのプロジェクト (RW)    │
-│  ~/.claude/      ← 認証ボリューム (RW)          │
+│  ~/.claude-shared/ ← 認証ボリューム (RW)        │
+│  ~/.claude/      ← コンテナローカル（認証はコピー）│
 │  ~/.claude.json  ← symlink → ~/.claude/ 内     │
 │  ~/.gitconfig    ← ホストから共有 (RO)           │
 │  SSH agent       ← ソケット転送（鍵ファイルなし） │
@@ -55,11 +57,12 @@ Linux サーバ (SSH でアクセス)
 - **イメージ**: `claude-dev-claude`
 - **ベース**: `ubuntu:24.04`
 - **言語**: Node.js 24/22 (fnm), Python3 (venv), Go, Rust
-- **ツール**: git, zsh, tmux, vim, make, gcc, curl, wget, pnpm, Playwright Chromium（ヘッドレステスト用）, etc.
+- **ツール**: git, zsh, tmux, vim, make, gcc, curl, wget, pnpm, Playwright Chromium（ヘッドレステスト用）, Chrome DevTools MCP, etc.
+- **Chrome DevTools MCP**: Chrome/VNC コンテナの Google Chrome に CDP 接続し、MCP ツール経由でページ遷移・スクリーンショット・クリック・入力等を実行。entrypoint が `/workspace/.claude/mcp.json` を自動生成
 - **ユーザー**: ホストのカレントユーザーと同名 (UID/GID はビルド時にホストと一致。entrypoint でも競合を解消して追従)
 - **git 設定**: ホストの `~/.gitconfig` を読み取り専用でマウント（存在する場合）
 - **SSH**: SSH agent ソケットを転送。秘密鍵ファイルはマウントしない。`~/.ssh/known_hosts` と `~/.ssh/config` は読み取り専用でマウント
-- **起動**: ssh-agent 準備 → Chrome コンテナ自動起動 → Claude コンテナ作成 → entrypoint が UID/GID 調整 → 認証 symlink → ファイアウォール → tmux → 待機
+- **起動**: ssh-agent 準備 → Chrome コンテナ自動起動 → Claude コンテナ作成 → entrypoint が UID/GID 調整 → 認証 symlink → MCP 設定 → ファイアウォール → tmux → 待機
 
 ### Chrome/VNC コンテナ（共有）
 
@@ -69,52 +72,113 @@ Linux サーバ (SSH でアクセス)
 ┌───────────────────────────────────────────────┐
 │ claude-dev-chrome  (ubuntu:24.04)             │
 │                                               │
-│  Google Chrome + 日本語入力（fcitx5-mozc）      │
-│  Xvfb + x11vnc + noVNC                       │
+│  Google Chrome + 日本語入力（IBus-Mozc）         │
+│  TigerVNC (Xvnc) + noVNC                     │
+│  CDP ポート 9222（Chrome DevTools Protocol）    │
 │  ポート 6080 で noVNC を公開                    │
 │                                               │
-│  ~/.claude/      ← 認証ボリューム (RW)          │
-│                    Chrome 認証情報の共有用       │
+│  ~/.claude-shared/ ← 認証ボリューム (RW)        │
+│  ~/.claude/      ← コンテナローカル              │
 │                                               │
-│  ※ Ctrl+Space で日本語入力切替                  │
+│  ※ Ctrl+\\ または F3 で日本語入力切替            │
 │  ※ 全 Claude コンテナ停止時に自動停止            │
 └───────────────────────────────────────────────┘
 ```
 
 - **イメージ**: `claude-dev-chrome`
 - **ベース**: `ubuntu:24.04`
-- **ツール**: Google Chrome, Xvfb, x11vnc, noVNC, fcitx5-mozc（日本語入力）
-- **ポート**: 6080（noVNC、全コンテナ共有）
+- **ツール**: Google Chrome, TigerVNC (Xvnc), noVNC (websockify), openbox, IBus-Mozc（日本語入力）
+- **ポート**: 6080（noVNC、全コンテナ共有）、9222（CDP、Claude コンテナから操作用）
 - **ボリューム**: `claude-dev-auth` を `~/.claude/` にマウント（Chrome の認証情報共有用）
 - **ライフサイクル**: `claude-dev start` で自動起動、全 Claude コンテナ停止時に自動停止
+- **CDP**: Chrome は `--remote-debugging-port=9222` で起動。Claude コンテナから Chrome DevTools MCP 経由で操作可能
+
+## Chrome DevTools MCP 連携
+
+Claude Code が noVNC の Chrome を直接操作して Web アプリの動作確認を行う仕組み。
+
+```
+┌─ ユーザーの PC ─────────────────┐
+│  ブラウザ → noVNC (port 6080)  │  ← リアルタイムで操作を確認
+└──────────────────────────────┘
+        │
+        ▼
+┌─ Chrome/VNC コンテナ (claude-dev-chrome) ─────────┐
+│  Google Chrome                                    │
+│    ├── noVNC (port 6080)  ← ユーザーが閲覧        │
+│    └── CDP  (port 9222)  ← Claude Code が操作     │
+└──────────────────────────────────────────────────┘
+        ▲ CDP 接続 (claude-dev-net)
+        │
+┌─ Claude コンテナ ────────────────────────────────┐
+│  Claude Code                                     │
+│    └── Chrome DevTools MCP サーバー               │
+│         └── browserUrl=http://claude-dev-chrome:9222 │
+│                                                  │
+│  /workspace/.claude/mcp.json ← entrypoint が生成 │
+└──────────────────────────────────────────────────┘
+```
+
+### 動作フロー
+
+1. `claude-dev start` 時に Chrome/VNC コンテナが起動（CDP ポート 9222 を公開）
+2. Claude コンテナの entrypoint が `/workspace/.claude/mcp.json` を生成（Chrome DevTools MCP の接続先を設定）
+3. Claude Code が MCP ツール（`navigate_page`, `take_screenshot`, `click` 等）を呼び出すと、Chrome DevTools MCP サーバーが CDP 経由で Chrome を操作
+4. ユーザーは noVNC で Chrome の画面をリアルタイムに確認できる
+
+### 主要な MCP ツール
+
+| ツール | 用途 |
+|--------|------|
+| `navigate_page` | URL に遷移 |
+| `take_screenshot` | スクリーンショット撮影 |
+| `take_snapshot` | DOM スナップショット取得 |
+| `click` | 要素をクリック |
+| `fill` | テキスト入力 |
+| `fill_form` | フォーム一括入力 |
+| `press_key` | キーボード操作 |
+| `evaluate_script` | JavaScript 実行 |
+| `list_console_messages` | コンソール出力取得 |
+| `list_network_requests` | ネットワークリクエスト確認 |
 
 ## 認証の仕組み
 
-Claude Code は認証情報を以下の 2 箇所に保存する：
+Claude Code は認証情報を以下の場所に保存する：
 
-- `~/.claude.json` — アカウント情報、設定、セッションデータ
-- `~/.claude/` — 設定ファイル、内部データ
+- `~/.claude/.credentials.json` — OAuth トークン（リフレッシュトークン含む）
+- `~/.claude/.claude.json` / `~/.claude.json` — アカウント情報
 
-### ボリュームマウント方式
+### 認証共有 + セッション分離
 
-`claude-dev-auth` ボリュームを `~/.claude/` に直接マウントすることで、認証情報を永続化する。`~/.claude.json` は `~/.claude/.claude.json` へのシンボリックリンクとして管理する。
+**設計原則:**
+- 認証ファイル（`.credentials.json`, `.claude.json`）だけをコンテナ間で共有
+- セッション・メモリ・設定（`settings.json`, `projects/`, `sessions/` 等）はコンテナごとに独立
+
+**方式: コピー + バックグラウンド同期（symlink は使わない）**
+
+symlink は Claude Code のアトミック書き込み（tmp → rename）で壊れるため、
+実体ファイルのコピーとバックグラウンド同期で認証を共有する。
 
 ```
-Docker ボリューム: claude-dev-auth
+Docker ボリューム: claude-dev-auth （認証ファイル専用）
     │
-    ├── .claude.json     ← ~/.claude.json の実体
-    ├── settings.json    ← bypassPermissions 設定
-    └── (その他の内部データ)
+    ├── .credentials.json   ← OAuth トークン
+    └── .claude.json        ← アカウント情報
 
 コンテナ内:
-    ~/.claude/           ← ボリュームが直接マウント (RW)
-    ~/.claude.json       ← symlink → ~/.claude/.claude.json
+    ~/.claude-shared/       ← auth ボリュームのマウントポイント（認証ファイルのみ）
+    ~/.claude/              ← コンテナローカル（overlay FS）
+        ├── .credentials.json   ← 起動時に ~/.claude-shared/ からコピー
+        ├── .claude.json        ← 起動時に ~/.claude-shared/ からコピー
+        ├── settings.json       ← コンテナ固有（bypassPermissions）
+        ├── projects/           ← コンテナ固有
+        └── sessions/           ← コンテナ固有
+    ~/.claude.json          ← symlink → ~/.claude/.claude.json
 ```
 
-この方式により：
-- login で保存した認証情報が、全プロジェクトコンテナで共有される
-- コンテナを削除・再作成しても認証情報は失われない
-- コピー処理が不要（ボリュームが直接マウントされるため）
+**バックグラウンド同期:**
+entrypoint が 30 秒ごとに認証ファイルの変更を検知し、共有ボリュームに書き戻す。
+これにより、トークンリフレッシュ等の更新が他コンテナ（次回起動時）に伝播する。
 
 ### 認証フロー
 
@@ -125,30 +189,27 @@ Docker ボリューム: claude-dev-auth
      │                   │                        │
      │ claude-dev login  │                        │
      │──────────────────→│                        │
-     │                   │ volume を ~/.claude に   │
-     │                   │ 直接マウント             │
+     │                   │ volume → ~/.claude-shared │
      │                   │←───────────────────────│
      │                   │                        │
-     │ Claude Code 起動  │                        │
-     │   URL 表示        │                        │
+     │ Claude Code 起動  │ 既存の認証ファイルを     │
+     │   URL 表示        │ ~/.claude/ にコピー     │
      │←──────────────────│                        │
      │                   │                        │
      │ ブラウザで認証     │                        │
      │──────────────────→│                        │
-     │                   │ ~/.claude.json 書込     │
-     │                   │ ~/.claude/ 書込         │
-     │                   │───────────────────────→│
+     │                   │ ~/.claude/ に書込       │
      │                   │                        │
-     │ /exit で終了      │ .claude.json を         │
-     │──────────────────→│ ボリュームにコピー        │
+     │ /exit で終了      │ 認証ファイルを           │
+     │──────────────────→│ ~/.claude-shared/ にコピー│
      │                   │───────────────────────→│
 ```
 
-1. `claude-dev login` が一時コンテナを起動（`claude-dev-auth` ボリュームを `~/.claude/` にマウント）
-2. Claude Code が対話的に起動し、ブラウザ認証 URL を表示
-3. ユーザーがブラウザで認証を完了
-4. Claude Code が `~/.claude.json` と `~/.claude/` に認証データを書き込み
-5. `/exit` で終了すると、`~/.claude.json` がボリューム内（`~/.claude/.claude.json`）にコピーされ永続化
+1. `claude-dev login` が一時コンテナを起動（auth ボリュームを `~/.claude-shared/` にマウント）
+2. 既存の認証ファイルがあれば `~/.claude/` にコピー
+3. Claude Code が対話的に起動し、ブラウザ認証 URL を表示
+4. ユーザーがブラウザで認証を完了
+5. `/exit` で終了後、認証ファイル（`.credentials.json`, `.claude.json`）を共有ボリュームにコピー
 
 ### プロジェクト起動時
 
@@ -161,20 +222,18 @@ claude-dev start
      │   3. コンテナを作成・起動
      │
      ▼
-┌─ entrypoint-claude.sh ──────────────────────┐
-│ 1. /workspace の UID/GID を検出              │
-│ 2. ユーザーの UID/GID をホストに合わせる        │
-│    （競合する既存ユーザー/グループは退避）       │
-│ 3. ~/.ssh ディレクトリの所有権を設定           │
-│ 4. ~/.claude/.claude.json への symlink 作成  │
-│    → ~/.claude.json                         │
-│ 5. settings.json がなければ再作成            │
-│ 6. ファイアウォール設定                       │
-│ 7. tmux セッション開始                       │
-└──────────────────────────────────────────────┘
+┌─ entrypoint-claude.sh ──────────────────────────┐
+│ 1. /workspace の UID/GID を検出                  │
+│ 2. ユーザーの UID/GID をホストに合わせる            │
+│ 3. ~/.ssh ディレクトリの所有権を設定               │
+│ 4. 認証ファイルを ~/.claude-shared/ → ~/.claude/ へコピー │
+│ 5. ~/.claude.json → ~/.claude/.claude.json へリンク │
+│ 6. settings.json がなければ新規作成（コンテナ固有）  │
+│ 7. 認証ファイル同期のバックグラウンドプロセス起動     │
+│ 8. ファイアウォール設定                           │
+│ 9. tmux セッション開始                           │
+└──────────────────────────────────────────────────┘
 ```
-
-`claude-dev-auth` ボリュームが `~/.claude/` にマウントされるため、login で保存した認証情報がそのまま使える。entrypoint はシンボリックリンクの作成と `settings.json` の確保のみ行う。
 
 ## ポートマッピング
 
@@ -258,7 +317,7 @@ ssh -O forward -L 8102:localhost:8102 myserver
 
 | 名前 | 用途 | マウント先 |
 |------|------|-----------|
-| `claude-dev-auth` | 認証情報（`~/.claude.json` + `~/.claude/`） | `/home/<user>/.claude` (RW) |
+| `claude-dev-auth` | 認証ファイル（`.credentials.json`, `.claude.json`） | `/home/<user>/.claude-shared` (RW) |
 | `claude-dev-history` | bash/zsh 履歴の永続化 | `/home/<user>/.command_history` |
 | `claude-dev-config` | 共有シェル設定（`.zshrc`） | `/home/<user>/.config-shared` (RW) |
 
@@ -286,7 +345,8 @@ start で起動 → 常駐（restart: unless-stopped）→ stop で破棄
 ホスト                         コンテナ内
 ───────────────────────────    ─────────────────────────
 ~/repos/my-project        →   /workspace (RW)
-claude-dev-auth volume    →   /home/<user>/.claude (RW)
+claude-dev-auth volume    →   /home/<user>/.claude-shared (RW)  ※認証ファイルのみ
+                               /home/<user>/.claude/ はコンテナローカル
                                /home/<user>/.claude.json → symlink
 claude-dev-config volume  →   /home/<user>/.config-shared (RW)
                                /home/<user>/.zshrc → symlink → .config-shared/.zshrc

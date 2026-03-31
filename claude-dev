@@ -231,14 +231,14 @@ ensure_chrome_container() {
         --hostname "$CHROME_CONTAINER" \
         --network "$NETWORK" \
         --restart unless-stopped \
-        -v "${VOL_AUTH}:${CHOME}/.claude" \
+        -v "${VOL_AUTH}:${CHOME}/.claude-shared" \
         -v "${VOL_CHROME}:${CHOME}/.config/google-chrome" \
         -p "${novnc_port}:6080" \
         -t \
         "$IMG_CHROME" >/dev/null
 
-    echo "🖥️  Chrome/VNC コンテナ起動: http://localhost:${novnc_port}/vnc.html"
-    echo "   日本語入力: Ctrl+Space で切り替え"
+    echo "🖥️  Chrome/VNC コンテナ起動: http://localhost:${novnc_port}/vnc.html?autoconnect=true"
+    echo "   日本語入力: Ctrl+\\ または F3 で切り替え"
 }
 
 # Chrome/VNC コンテナの noVNC URL を取得
@@ -246,7 +246,7 @@ get_chrome_novnc_url() {
     local port
     port=$(docker port "$CHROME_CONTAINER" 6080 2>/dev/null | head -1 | sed 's/.*://')
     if [ -n "$port" ]; then
-        echo "http://localhost:${port}/vnc.html"
+        echo "http://localhost:${port}/vnc.html?autoconnect=true"
     fi
 }
 
@@ -338,13 +338,9 @@ login)
     echo "Claude Code が起動します。ログインを完了してから /exit で終了してください。"
     echo ""
 
-    # claude-dev-auth ボリュームを ~/.claude にマウント
-    # Claude Code は ~/.claude.json と ~/.claude/ の両方を使うため、
-    # entrypoint で ~/.claude.json → ~/.claude/.claude.json のシンボリックリンクを作成する代わりに
-    # ここでは login 用に直接両方をマウントする
-    #
-    # 方式: ボリュームを ${CHOME}/.claude にマウントし、
-    #        .claude.json は ~/.claude/ 内に保存、ホームに symlink
+    # claude-dev-auth ボリュームを ~/.claude-shared にマウント
+    # 認証ファイル（.credentials.json, .claude.json）だけを共有ボリュームに永続化
+    # settings.json は共有しない（コンテナごとに独立管理）
     docker run --rm -it \
         --network "$NETWORK" \
         --entrypoint bash \
@@ -352,23 +348,42 @@ login)
         -e "LANG=en_US.UTF-8" \
         -e "CUSER=$CUSER" \
         -e "CHOME=$CHOME" \
-        -v "${VOL_AUTH}:${CHOME}/.claude" \
+        -v "${VOL_AUTH}:${CHOME}/.claude-shared" \
         "$IMG_CLAUDE" \
         -c '
-            # root で所有権を修正してからユーザーに切り替え
-            chown -R "$CUSER":"$CUSER" "$CHOME/.claude" 2>/dev/null || true
+            chown -R "$CUSER":"$CUSER" "$CHOME/.claude-shared" 2>/dev/null || true
+            mkdir -p "$CHOME/.claude"
+            chown "$CUSER":"$CUSER" "$CHOME/.claude"
 
             su "$CUSER" -s /bin/bash -l -c "
-                # ~/.claude.json がボリューム内にあれば symlink
+                # 共有ボリュームに認証情報があれば ~/.claude/ にコピー
+                for f in .credentials.json .claude.json; do
+                    if [ -f ~/.claude-shared/\$f ]; then
+                        cp ~/.claude-shared/\$f ~/.claude/\$f
+                    fi
+                done
+                # settings.json はローカルに作成（共有しない）
+                if [ ! -f ~/.claude/settings.json ]; then
+                    echo '{\"permissions\":{\"defaultMode\":\"bypassPermissions\"}}' > ~/.claude/settings.json
+                fi
+                # ~/.claude.json（ホーム直下）へのリンク
                 if [ -f ~/.claude/.claude.json ]; then
                     ln -sf ~/.claude/.claude.json ~/.claude.json
                 fi
 
                 claude || true
 
-                # login 後: ~/.claude.json をボリューム内にコピーして永続化
+                # login 後: 認証ファイルを共有ボリュームに永続化
+                for f in .credentials.json .claude.json; do
+                    src=~/.claude/\$f
+                    dst=~/.claude-shared/\$f
+                    if [ -f \"\$src\" ]; then
+                        cp \"\$src\" \"\$dst\"
+                    fi
+                done
+                # ホーム直下の .claude.json も確認
                 if [ -f ~/.claude.json ] && [ ! -L ~/.claude.json ]; then
-                    cp ~/.claude.json ~/.claude/.claude.json
+                    cp ~/.claude.json ~/.claude-shared/.claude.json
                 fi
             "
         '
@@ -382,7 +397,7 @@ login)
 logout)
     require_setup
     echo "🗑️  認証情報を削除中..."
-    # auth ボリューム（= ~/.claude/）をクリア
+    # auth ボリューム（= ~/.claude-shared/）をクリア
     # 実行中のコンテナがあるとボリュームが使用中なので先に停止
     echo "   実行中のコンテナを停止中..."
     docker ps -a --filter "ancestor=$IMG_CLAUDE" -q | xargs -r docker rm -f 2>/dev/null || true
@@ -435,6 +450,28 @@ start)
     # Chrome/VNC 共有コンテナ起動
     ensure_chrome_container
 
+    # 認証ファイルを共有ボリュームから /workspace/.claude/ にコピー
+    mkdir -p "${PROJECT_DIR}/.claude"
+    docker run --rm \
+        --entrypoint bash \
+        -v "${VOL_AUTH}:/auth:ro" \
+        -v "${PROJECT_DIR}/.claude:/target" \
+        "$IMG_CLAUDE" -c '
+            for f in .credentials.json .claude.json; do
+                [ -f "/auth/$f" ] && cp "/auth/$f" "/target/$f"
+            done
+            chown -R '"$(id -u):$(id -g)"' /target/
+        '
+
+    # .gitignore に .claude が含まれていなければ追加
+    if [ -f "${PROJECT_DIR}/.gitignore" ]; then
+        if ! grep -qxF '.claude' "${PROJECT_DIR}/.gitignore" && ! grep -qxF '.claude/' "${PROJECT_DIR}/.gitignore"; then
+            echo '.claude' >> "${PROJECT_DIR}/.gitignore"
+        fi
+    elif [ -d "${PROJECT_DIR}/.git" ]; then
+        echo '.claude' > "${PROJECT_DIR}/.gitignore"
+    fi
+
     # Web アプリ用ポートマッピングを構築
     WEBAPP_BASE=$(find_available_webapp_port_block)
     WEBAPP_PORT_OPTS=""
@@ -449,6 +486,12 @@ start)
     GITCONFIG_OPT=""
     if [ -f "${HOME}/.gitconfig" ]; then
         GITCONFIG_OPT="-v ${HOME}/.gitconfig:${CHOME}/.gitconfig:ro"
+    fi
+
+    # Docker ソケットマウント（ホストの Docker を利用）
+    DOCKER_OPTS=""
+    if [ -S /var/run/docker.sock ]; then
+        DOCKER_OPTS="-v /var/run/docker.sock:/var/run/docker.sock"
     fi
 
     # SSH agent 準備 & ソケット転送（秘密鍵ファイルはマウントしない）
@@ -480,12 +523,13 @@ start)
         --restart unless-stopped \
         -v "${PROJECT_DIR}:/workspace" \
         -v "${VOL_HISTORY}:${CHOME}/.command_history" \
-        -v "${VOL_AUTH}:${CHOME}/.claude" \
+        -v "${VOL_AUTH}:${CHOME}/.claude-shared" \
         -v "${VOL_CONFIG}:${CHOME}/.config-shared" \
         -v "${BASE_DIR}/scripts/tmux.conf:${CHOME}/.tmux.conf:ro" \
         -v "${BASE_DIR}/CLAUDE.md:${CHOME}/CLAUDE.md:ro" \
         $GITCONFIG_OPT \
         $SSH_OPTS \
+        $DOCKER_OPTS \
         -e NODE_OPTIONS=--max-old-space-size=4096 \
         $WEBAPP_PORT_OPTS \
         -t \
@@ -782,8 +826,8 @@ Web アプリアクセス:
   cd ~/repos/my-project && claude-dev start
 
   Chrome/VNC は全プロジェクトで共有される専用コンテナで自動起動されます。
-  noVNC URL は起動時に表示されます（http://localhost:6080/vnc.html）。
-  日本語入力は Ctrl+Space で切り替え（fcitx5-mozc）。
+  noVNC URL は起動時に表示されます（http://localhost:6080/vnc.html?autoconnect=true）。
+  日本語入力は Ctrl+\\ または F3 で切り替え（IBus-Mozc）。
 
 [NAME] について:
   NAME はプロジェクトのディレクトリ名です。

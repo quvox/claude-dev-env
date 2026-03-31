@@ -24,7 +24,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     # ファイアウォール
     iptables ipset dnsutils \
     # シェル・ターミナル
-    zsh tmux vim \
+    zsh tmux vim less \
     # VCS
     git git-lfs git-secrets openssh-client \
     # ネットワーク
@@ -45,8 +45,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libnss3 libpango-1.0-0 libx11-6 libxcomposite1 libxdamage1 \
     libxext6 libxfixes3 libxrandr2 libxshmfence1 libxkbcommon0 \
     xdg-utils \
+    # スクリーンショット・動画キャプチャ
+    scrot ffmpeg x11-apps \
     # その他
     unzip xz-utils gnupg locales \
+    && rm -rf /var/lib/apt/lists/* \
+    # --- Docker CLI + Docker Compose plugin ---
+    && install -m 0755 -d /etc/apt/keyrings \
+    && curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc \
+    && chmod a+r /etc/apt/keyrings/docker.asc \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" > /etc/apt/sources.list.d/docker.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends docker-ce-cli docker-compose-plugin \
     && rm -rf /var/lib/apt/lists/*
 
 # --- Chromium: Playwright 経由でインストール（後段）---
@@ -71,7 +81,6 @@ RUN existing_group=$(getent group $USER_GID | cut -d: -f1); \
     && useradd --uid $USER_UID --gid $USER_GID -m -s /bin/zsh $USERNAME \
     && echo "$USERNAME ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/$USERNAME \
     && chmod 0440 /etc/sudoers.d/$USERNAME \
-    && mkdir -p $USER_HOME/.claude \
     && mkdir -p $USER_HOME/.command_history \
     && chown -R $USERNAME:$USERNAME $USER_HOME
 
@@ -92,7 +101,7 @@ RUN curl -fsSL https://fnm.vercel.app/install | bash -s -- \
     && fnm use 24
 
 # --- Go ---
-ARG GO_VERSION=1.24.1
+ARG GO_VERSION=1.26.1
 RUN curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-$(dpkg --print-architecture).tar.gz" \
     | sudo tar -C /usr/local -xz
 
@@ -141,6 +150,12 @@ RUN export PATH="/usr/local/go/bin:${USER_HOME}/go/bin:${PATH}" \
     && make build \
     && sudo cp build/zrt /usr/local/bin/ \
     && rm -rf /tmp/zrt-tools
+
+# --- Chrome DevTools MCP サーバー（プリインストール）---
+# noVNC の Chrome に CDP 接続して Claude Code から操作するための MCP サーバー
+RUN export PATH="${USER_HOME}/.local/share/fnm:$PATH" \
+    && eval "$($USER_HOME/.local/share/fnm/fnm env)" \
+    && npm install -g chrome-devtools-mcp@latest
 
 # --- Claude Code CLI (ネイティブインストーラー) ---
 # 公式ドキュメント: WORKDIR /tmp でインストーラーがファイルシステム全体をスキャンするのを防ぐ
@@ -213,12 +228,6 @@ RUN chmod +x /usr/local/bin/init-firewall.sh /usr/local/bin/entrypoint.sh
 # --- 作業ディレクトリ ---
 RUN mkdir -p /workspace && chown $USERNAME:$USERNAME /workspace
 WORKDIR /workspace
-
-# --- Claude Code 設定 ---
-RUN mkdir -p $USER_HOME/.claude \
-    && echo '{"permissions":{"defaultMode":"bypassPermissions"}}' \
-       > $USER_HOME/.claude/settings.json \
-    && chown -R $USERNAME:$USERNAME $USER_HOME/.claude
 
 # --- デフォルトシェル ---
 ENV SHELL=/bin/zsh

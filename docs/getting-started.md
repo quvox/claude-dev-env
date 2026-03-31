@@ -61,7 +61,7 @@ claude-dev start
 4. ファイアウォールが設定される
 5. tmux セッションが開始される
 
-Chrome/VNC コンテナが起動するので、`http://localhost:6080/vnc.html` から Google Chrome を操作できる（日本語入力対応、`Ctrl+Space` で切替）。
+Chrome/VNC コンテナが起動するので、`http://localhost:6080/vnc.html` から Google Chrome を操作できる（日本語入力対応、`Ctrl+\\` または `F3` で切替）。
 
 ### Claude Code を起動する
 

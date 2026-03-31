@@ -74,9 +74,7 @@ claude-dev attach my-project  # 名前指定も可
 cd ~/repos/other-project
 claude-dev start
 
-# Chrome が必要なプロジェクト（OAuth 認証、Web テスト等）
-cd ~/repos/web-project
-claude-dev start --chrome     # VNC 付きで起動
+# Chrome/VNC コンテナは自動起動される
 # → http://localhost:6080/vnc.html で Chrome を操作
 
 # 管理
@@ -118,10 +116,12 @@ claude-dev-env/
 ├── .env.example                       設定テンプレート
 ├── CLAUDE.md                          コンテナ内の Claude Code 向け指示
 ├── .devcontainer/
-│   └── Dockerfile.claude              Claude Code コンテナ (Ubuntu 24.04)
+│   ├── Dockerfile.claude              Claude Code コンテナ (Ubuntu 24.04)
+│   └── Dockerfile.chrome              Chrome/VNC コンテナ (Ubuntu 24.04)
 ├── scripts/
 │   ├── init-firewall-claude.sh        ブラックリスト FW
-│   ├── entrypoint-claude.sh           コンテナ起動スクリプト
+│   ├── entrypoint-claude.sh           Claude コンテナ起動スクリプト
+│   ├── entrypoint-chrome.sh           Chrome/VNC コンテナ起動スクリプト
 │   └── tmux.conf                      tmux 設定
 └── docs/                              ドキュメント
 ```

@@ -91,7 +91,7 @@ claude-dev start
 Chrome/VNC コンテナ:
 - `claude-dev start` 時に自動的に起動される専用の共有コンテナ
 - ローカル PC のブラウザから `http://localhost:6080/vnc.html` で Google Chrome を操作できる
-- 日本語入力対応（fcitx5-mozc、`Ctrl+Space` で切替）
+- 日本語入力対応（IBus-Mozc、`Ctrl+\\` または `F3` で切替）
 - noVNC ポートは 6080（固定、全コンテナ共有）
 - 全 Claude コンテナが停止すると Chrome コンテナも自動停止する
 

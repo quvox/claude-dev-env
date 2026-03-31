@@ -12,11 +12,20 @@ USERNAME="${CONTAINER_USER:-devuser}"
 USER_HOME="/home/$USERNAME"
 
 # --- auth ボリュームの所有権 ---
+chown -R "$USERNAME":"$USERNAME" "$USER_HOME/.claude-shared" 2>/dev/null || true
+# 認証ファイルを共有ボリュームからコピー（symlink ではなく実体コピー）
+mkdir -p "$USER_HOME/.claude"
+chown "$USERNAME":"$USERNAME" "$USER_HOME/.claude"
+for f in .credentials.json .claude.json; do
+    if [ -f "$USER_HOME/.claude-shared/$f" ]; then
+        cp "$USER_HOME/.claude-shared/$f" "$USER_HOME/.claude/$f"
+        chown "$USERNAME":"$USERNAME" "$USER_HOME/.claude/$f"
+    fi
+done
 if [ -f "$USER_HOME/.claude/.claude.json" ]; then
     ln -sf "$USER_HOME/.claude/.claude.json" "$USER_HOME/.claude.json"
     chown -h "$USERNAME":"$USERNAME" "$USER_HOME/.claude.json"
 fi
-chown -R "$USERNAME":"$USERNAME" "$USER_HOME/.claude" 2>/dev/null || true
 
 # --- Chrome ユーザーデータの所有権（ボリュームマウント）---
 if [ -d "$USER_HOME/.config/google-chrome" ]; then
@@ -105,8 +114,8 @@ gsettings set org.freedesktop.ibus.general preload-engines "['xkb:us::eng', 'moz
 gsettings set org.freedesktop.ibus.general.hotkey triggers "[]" || echo "WARN: hotkey failed"
 gsettings set org.freedesktop.ibus.general use-global-engine true || echo "WARN: use-global-engine failed"
 
-# noVNC
-websockify --web /usr/share/novnc ${NOVNC_PORT} localhost:${VNC_PORT} &
+# noVNC（--heartbeat で WebSocket 接続を維持）
+websockify --heartbeat 30 --web /usr/share/novnc ${NOVNC_PORT} localhost:${VNC_PORT} &
 sleep 0.5
 
 # Chrome（--gtk-version=4 は Chrome 135+ の IBus バグ回避に必要）
@@ -114,7 +123,8 @@ sleep 2
 google-chrome-stable --no-sandbox --disable-gpu --disable-software-rasterizer \
     --disable-dev-shm-usage --disable-background-networking \
     --no-first-run --no-default-browser-check --start-maximized \
-    --gtk-version=4 &
+    --gtk-version=4 \
+    --remote-debugging-address=0.0.0.0 --remote-debugging-port=9222 &
 
 # 初期エンジンは mozc-jp（preload-engines の設定による）
 # ibus engine コマンドでの切り替えはフォーカスされた入力コンテキストが
@@ -134,7 +144,7 @@ su "$USERNAME" -c "/tmp/start-user-desktop.sh" &
 sleep 12
 
 echo "🖥️  Chrome/VNC 起動完了 (noVNC: port ${NOVNC_PORT})"
-echo "   日本語入力: Ctrl+Shift+Space で切り替え (IBus-Mozc)"
+echo "   日本語入力: Ctrl+\\ または F3 で切り替え (IBus-Mozc)"
 echo "   右クリック → Terminal でターミナル起動"
 
 # --- 待機 ---

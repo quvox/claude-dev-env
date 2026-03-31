@@ -34,7 +34,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     # 基本ツール
     curl ca-certificates sudo procps \
     # VNC / ディスプレイ（TigerVNC: X サーバー内蔵 VNC でキーイベントがネイティブ）
-    tigervnc-standalone-server novnc websockify openbox \
+    tigervnc-standalone-server python3-websockify openbox \
     # ターミナル / キー操作
     lxterminal xterm xclip x11-xserver-utils xdotool \
     # 日本語入力（IBus + Mozc）
@@ -57,6 +57,15 @@ RUN curl -fsSL https://dl.google.com/linux/direct/google-chrome-stable_current_a
     && apt-get install -y --no-install-recommends /tmp/google-chrome.deb \
     && rm -f /tmp/google-chrome.deb \
     && rm -rf /var/lib/apt/lists/*
+
+# --- noVNC（GitHub リリースから最新版をインストール）---
+# Ubuntu パッケージの noVNC 1.3.0 はブラウザ互換性の問題があるため、最新版を使用
+RUN curl -fsSL https://github.com/novnc/noVNC/archive/refs/tags/v1.6.0.tar.gz -o /tmp/novnc.tar.gz \
+    && rm -rf /usr/share/novnc \
+    && mkdir -p /usr/share/novnc \
+    && tar -xzf /tmp/novnc.tar.gz -C /usr/share/novnc --strip-components=1 \
+    && rm -f /tmp/novnc.tar.gz \
+    && ln -sf vnc.html /usr/share/novnc/index.html
 
 # --- GTK IM モジュールキャッシュ更新 ---
 # Ubuntu 24.04 では libgtk パッケージ名に t64 サフィックスが付く
@@ -148,7 +157,7 @@ RUN mkdir -p ${USER_HOME}/.config/openbox \
     <item label="Chrome"><action name="Execute"><execute>google-chrome-stable --no-sandbox --disable-gpu --disable-software-rasterizer --disable-dev-shm-usage --no-first-run --no-default-browser-check</execute></action></item>
     <item label="Terminal"><action name="Execute"><execute>lxterminal</execute></action></item>
     <separator />
-    <item label="Toggle IME (Ctrl+Shift+Space / F2)"><action name="Execute"><execute>toggle-ime</execute></action></item>
+    <item label="Toggle IME (Ctrl+\\ / F3)"><action name="Execute"><execute>toggle-ime</execute></action></item>
     <item label="IBus Setup"><action name="Execute"><execute>ibus-setup</execute></action></item>
   </menu>
 </openbox_menu>
@@ -160,10 +169,7 @@ RUN cat > ${USER_HOME}/.config/openbox/rc.xml << 'RCEOF'
     <keybind key="C-backslash">
       <action name="Execute"><execute>toggle-ime</execute></action>
     </keybind>
-    <keybind key="C-S-space">
-      <action name="Execute"><execute>toggle-ime</execute></action>
-    </keybind>
-    <keybind key="F2">
+    <keybind key="F3">
       <action name="Execute"><execute>toggle-ime</execute></action>
     </keybind>
   </keyboard>
