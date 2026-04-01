@@ -21,16 +21,15 @@ Linux サーバ (SSH)
 ├── claude-dev CLI   日常の開発操作（どこからでも実行可能）
 │
 ├── プロジェクトコンテナ（都度起動）
-│   ├── project-a              ~/repos/project-a → /workspace
-│   ├── project-b              ~/repos/project-b → /workspace
-│   └── ...                    同時に複数起動可能
+│   ├── project-a  (VNC あり)   Chrome + noVNC 内蔵
+│   ├── project-b  (--no-vnc)   軽量・ブラウザなし
+│   └── ...                     同時に複数起動可能
 │
-├── claude-dev-chrome (共有)    Chrome/VNC コンテナ（noVNC + CDP）
 ├── claude-dev-docker-proxy (共有) Docker Socket Proxy（危険操作をブロック）
 ├── claude-dev-net              コンテナ間ネットワーク
 │
-├── claude-dev-auth (volume)    認証情報（~/.claude/ に直接マウント）
-├── claude-dev-config (volume)  共有シェル設定（.zshrc をコンテナ間共有）
+├── claude-dev-auth (volume)    認証情報
+├── claude-dev-config (volume)  共有シェル設定
 ├── claude-dev-chrome-data (volume) Chrome プロファイル
 └── claude-dev-history (volume) コマンド履歴
 ```
@@ -67,7 +66,7 @@ claude-dev start              # 起動 & tmux 接続
 claude
 
 # 切断（SSH 切れても OK）
-Ctrl-B D
+Ctrl-_ D
 
 # 再接続
 claude-dev start              # 同じディレクトリなら自動再接続
@@ -77,8 +76,12 @@ claude-dev attach my-project  # 名前指定も可
 cd ~/repos/other-project
 claude-dev start
 
-# Chrome/VNC コンテナは自動起動される
-# → http://localhost:6080/vnc.html で Chrome を操作
+# VNC ありならブラウザで Chrome を確認できる
+# → noVNC URL は起動時に表示される
+
+# ブラウザ不要なプロジェクトは軽量モードで起動
+cd ~/repos/cli-tool
+claude-dev start --no-vnc
 
 # 管理
 claude-dev list               # 実行中セッション一覧（noVNC URL も表示）
@@ -118,16 +121,13 @@ claude-dev-env/
 ├── claude-dev                         CLI ツール本体
 ├── .env.example                       設定テンプレート
 ├── CLAUDE.md                          コンテナ内の Claude Code 向け指示
-├── .mcp.json                          MCP サーバ設定（Chrome DevTools 等）
 ├── .devcontainer/
-│   ├── Dockerfile.claude              Claude Code コンテナ (Ubuntu 24.04)
-│   ├── Dockerfile.chrome              Chrome/VNC コンテナ (Ubuntu 24.04)
+│   ├── Dockerfile.claude              Claude コンテナ (マルチステージ: base → vnc)
 │   └── Dockerfile.docker-proxy        Docker Socket Proxy コンテナ
 ├── docker-proxy/                      Docker Socket Proxy ソースコード
 ├── scripts/
 │   ├── init-firewall-claude.sh        ブラックリスト FW
 │   ├── entrypoint-claude.sh           Claude コンテナ起動スクリプト
-│   ├── entrypoint-chrome.sh           Chrome/VNC コンテナ起動スクリプト
 │   └── tmux.conf                      tmux 設定（prefix: Ctrl-_）
 └── docs/                              ドキュメント
 ```

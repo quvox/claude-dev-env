@@ -17,9 +17,8 @@ INSTALL_PATH := /usr/local/bin/claude-dev
 
 # --- Docker リソース名 ---
 IMG_CLAUDE := claude-dev-claude
-IMG_CHROME := claude-dev-chrome
+IMG_CLAUDE_VNC := claude-dev-claude-vnc
 IMG_DOCKER_PROXY := claude-dev-docker-proxy
-CHROME_CONTAINER := claude-dev-chrome
 DOCKER_PROXY_CONTAINER := claude-dev-docker-proxy
 CUSER := $(shell whoami)
 NETWORK := claude-dev-net
@@ -28,12 +27,13 @@ VOL_HISTORY := claude-dev-history
 VOL_CONFIG := claude-dev-config
 VOL_CHROME := claude-dev-chrome-data
 
+
 # =============================================================================
 # メインターゲット
 # =============================================================================
 
 .PHONY: help setup install login build network volumes \
-        upgrade status clean uninstall build-claude build-chrome build-docker-proxy sync-zrt-tools
+        upgrade status clean uninstall build-claude build-claude-vnc build-docker-proxy sync-zrt-tools
 
 ## デフォルト: ヘルプ表示
 help:
@@ -45,12 +45,12 @@ help:
 	@echo ""
 	@echo "ビルド:"
 	@echo "  make build              全イメージをビルド"
-	@echo "  make build-claude       Claude イメージをビルド"
-	@echo "  make build-chrome       Chrome/VNC イメージをビルド"
+	@echo "  make build-claude       Claude ベースイメージをビルド"
+	@echo "  make build-claude-vnc   Claude VNC イメージをビルド"
 	@echo "  make build-docker-proxy Docker Socket Proxy イメージをビルド"
 	@echo ""
 	@echo "メンテナンス:"
-	@echo "  make upgrade      Claude Code + Chrome を最新版に更新"
+	@echo "  make upgrade      全イメージを最新版に更新"
 	@echo "  make status       状態確認"
 	@echo "  make clean        全リセット（コンテナ・ボリューム・イメージ削除）"
 	@echo "  make uninstall    CLI のシンボリックリンクを削除"
@@ -125,27 +125,29 @@ volumes:
 # =============================================================================
 
 ## 全イメージビルド
-build: build-claude build-chrome build-docker-proxy
+build: build-claude build-claude-vnc build-docker-proxy
 
-## Claude Code イメージ
+## Claude ベースイメージ
 build-claude: sync-zrt-tools
-	@echo "📦 Claude イメージをビルド中..."
+	@echo "📦 Claude ベースイメージをビルド中..."
 	@docker build -t $(IMG_CLAUDE) \
+		--target base \
 		--build-arg USERNAME=$(CUSER) \
 		--build-arg USER_UID=$$(id -u) \
 		--build-arg USER_GID=$$(id -g) \
 		-f $(BASE_DIR)/.devcontainer/Dockerfile.claude $(BASE_DIR)
 	@echo "✅ $(IMG_CLAUDE)"
 
-## Chrome/VNC イメージ
-build-chrome:
-	@echo "📦 Chrome/VNC イメージをビルド中..."
-	@docker build -t $(IMG_CHROME) \
+## Claude VNC イメージ
+build-claude-vnc: build-claude
+	@echo "📦 Claude VNC イメージをビルド中..."
+	@docker build -t $(IMG_CLAUDE_VNC) \
+		--target vnc \
 		--build-arg USERNAME=$(CUSER) \
 		--build-arg USER_UID=$$(id -u) \
 		--build-arg USER_GID=$$(id -g) \
-		-f $(BASE_DIR)/.devcontainer/Dockerfile.chrome $(BASE_DIR)
-	@echo "✅ $(IMG_CHROME)"
+		-f $(BASE_DIR)/.devcontainer/Dockerfile.claude $(BASE_DIR)
+	@echo "✅ $(IMG_CLAUDE_VNC)"
 
 ## Docker Socket Proxy イメージ
 build-docker-proxy:
@@ -178,23 +180,25 @@ login:
 # メンテナンス
 # =============================================================================
 
-## Claude Code + Chrome を最新版に更新
+## 全イメージを最新版に更新
 upgrade:
-	@echo "📦 Claude イメージを更新中..."
+	@echo "📦 Claude ベースイメージを更新中..."
 	@docker build --no-cache -t $(IMG_CLAUDE) \
+		--target base \
 		--build-arg USERNAME=$(CUSER) \
 		--build-arg USER_UID=$$(id -u) \
 		--build-arg USER_GID=$$(id -g) \
 		-f $(BASE_DIR)/.devcontainer/Dockerfile.claude $(BASE_DIR)
-	@echo "✅ Claude イメージ更新完了"
+	@echo "✅ Claude ベースイメージ更新完了"
 	@echo ""
-	@echo "📦 Chrome/VNC イメージを更新中..."
-	@docker build --no-cache -t $(IMG_CHROME) \
+	@echo "📦 Claude VNC イメージを更新中..."
+	@docker build --no-cache -t $(IMG_CLAUDE_VNC) \
+		--target vnc \
 		--build-arg USERNAME=$(CUSER) \
 		--build-arg USER_UID=$$(id -u) \
 		--build-arg USER_GID=$$(id -g) \
-		-f $(BASE_DIR)/.devcontainer/Dockerfile.chrome $(BASE_DIR)
-	@echo "✅ Chrome/VNC イメージ更新完了"
+		-f $(BASE_DIR)/.devcontainer/Dockerfile.claude $(BASE_DIR)
+	@echo "✅ Claude VNC イメージ更新完了"
 	@echo ""
 	@echo "📦 Docker Socket Proxy イメージを更新中..."
 	@docker build --no-cache -t $(IMG_DOCKER_PROXY) \
@@ -207,14 +211,10 @@ upgrade:
 status:
 	@echo "=== Docker イメージ ==="
 	@docker images --format "table {{.Repository}}\t{{.Tag}}\t{{.Size}}" \
-		--filter "reference=$(IMG_CLAUDE)" --filter "reference=$(IMG_CHROME)" 2>/dev/null || true
+		--filter "reference=$(IMG_CLAUDE)" --filter "reference=$(IMG_CLAUDE_VNC)" --filter "reference=$(IMG_DOCKER_PROXY)" 2>/dev/null || true
 	@echo ""
 	@echo "=== 実行中の Claude Code セッション ==="
-	@docker ps --filter "ancestor=$(IMG_CLAUDE)" \
-		--format "table {{.Names}}\t{{.Status}}" 2>/dev/null || true
-	@echo ""
-	@echo "=== Chrome/VNC コンテナ ==="
-	@docker ps --filter "name=^$(CHROME_CONTAINER)$$" \
+	@docker ps --filter "ancestor=$(IMG_CLAUDE)" --filter "ancestor=$(IMG_CLAUDE_VNC)" \
 		--format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" 2>/dev/null || true
 	@echo ""
 	@echo "=== Docker Socket Proxy コンテナ ==="
@@ -234,9 +234,7 @@ clean:
 	@echo ""
 	@read -p "実行しますか？ (y/N) " ans && [ "$$ans" = "y" ] || { echo "キャンセル"; exit 1; }
 	@# プロジェクトコンテナ停止
-	@docker ps -a --filter "ancestor=$(IMG_CLAUDE)" -q | xargs -r docker rm -f 2>/dev/null || true
-	@# Chrome/VNC コンテナ停止
-	@docker rm -f $(CHROME_CONTAINER) 2>/dev/null || true
+	@docker ps -a --filter "ancestor=$(IMG_CLAUDE)" --filter "ancestor=$(IMG_CLAUDE_VNC)" -q | xargs -r docker rm -f 2>/dev/null || true
 	@# Docker Socket Proxy コンテナ停止
 	@docker rm -f $(DOCKER_PROXY_CONTAINER) 2>/dev/null || true
 	@# ボリューム削除
@@ -244,5 +242,5 @@ clean:
 	@# ネットワーク削除
 	@docker network rm $(NETWORK) 2>/dev/null || true
 	@# イメージ削除
-	@docker rmi -f $(IMG_CLAUDE) $(IMG_CHROME) $(IMG_DOCKER_PROXY) 2>/dev/null || true
+	@docker rmi -f $(IMG_CLAUDE) $(IMG_CLAUDE_VNC) $(IMG_DOCKER_PROXY) 2>/dev/null || true
 	@echo "✅ 全リセット完了"

@@ -8,7 +8,7 @@
 # ブラックリスト方式ファイアウォール
 # 認証情報はボリュームマウントで管理
 # =============================================================================
-FROM ubuntu:24.04
+FROM ubuntu:24.04 AS base
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -154,12 +154,6 @@ RUN export PATH="/usr/local/go/bin:${USER_HOME}/go/bin:${PATH}" \
     && sudo cp build/zrt /usr/local/bin/ \
     && rm -rf /tmp/zrt-tools
 
-# --- Chrome DevTools MCP サーバー（プリインストール）---
-# noVNC の Chrome に CDP 接続して Claude Code から操作するための MCP サーバー
-RUN export PATH="${USER_HOME}/.local/share/fnm:$PATH" \
-    && eval "$($USER_HOME/.local/share/fnm/fnm env)" \
-    && npm install -g chrome-devtools-mcp@latest
-
 # --- Claude Code CLI (ネイティブインストーラー) ---
 # 公式ドキュメント: WORKDIR /tmp でインストーラーがファイルシステム全体をスキャンするのを防ぐ
 WORKDIR /tmp
@@ -239,4 +233,139 @@ ENV SHELL=/bin/zsh
 ENV CONTAINER_USER=${USERNAME}
 
 # root で起動し、entrypoint が UID/GID 調整後にユーザーへ切り替える
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+
+# =============================================================================
+# VNC ステージ: Chrome + noVNC + 日本語入力
+# =============================================================================
+# claude-dev-claude-vnc イメージ
+# base レイヤーを共有し、GUI / ブラウザ関連のみ追加
+# =============================================================================
+FROM base AS vnc
+
+USER root
+
+# --- ja_JP.UTF-8 ロケール追加 ---
+RUN sed -i 's/# ja_JP.UTF-8/ja_JP.UTF-8/' /etc/locale.gen && locale-gen
+
+# --- VNC / GUI / 日本語入力パッケージ ---
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    # VNC / ディスプレイ（TigerVNC: X サーバー内蔵 VNC）
+    tigervnc-standalone-server python3-websockify openbox \
+    # ターミナル / キー操作
+    lxterminal xterm xclip x11-xserver-utils xdotool \
+    # 日本語入力（IBus + Mozc）
+    ibus ibus-mozc ibus-gtk ibus-gtk3 ibus-gtk4 \
+    mozc-utils-gui dbus-x11 im-config \
+    # gsettings / dconf バックエンド
+    libglib2.0-bin dconf-cli dconf-gsettings-backend dbus-user-session \
+    # Chrome 追加依存
+    libxss1 libatspi2.0-0 \
+    # フォント追加
+    fonts-noto-cjk-extra fonts-dejavu-core \
+    && rm -rf /var/lib/apt/lists/*
+
+# --- Google Chrome（安定版）---
+RUN curl -fsSL https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb -o /tmp/google-chrome.deb \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends /tmp/google-chrome.deb \
+    && rm -f /tmp/google-chrome.deb \
+    && rm -rf /var/lib/apt/lists/*
+
+# --- noVNC v1.6.0 ---
+RUN curl -fsSL https://github.com/novnc/noVNC/archive/refs/tags/v1.6.0.tar.gz -o /tmp/novnc.tar.gz \
+    && rm -rf /usr/share/novnc \
+    && mkdir -p /usr/share/novnc \
+    && tar -xzf /tmp/novnc.tar.gz -C /usr/share/novnc --strip-components=1 \
+    && rm -f /tmp/novnc.tar.gz \
+    && ln -sf vnc.html /usr/share/novnc/index.html
+
+# --- GTK IM モジュールキャッシュ更新 ---
+RUN find /usr/lib -name "gtk-query-immodules-2.0" -exec {} --update-cache \; 2>/dev/null || true \
+    && find /usr/lib -name "gtk-query-immodules-3.0" -exec {} --update-cache \; 2>/dev/null || true \
+    && find /usr/lib -name "gio-querymodules" -exec sh -c 'for d in /usr/lib/*/gtk-4.0/*/; do [ -d "$d" ] && {} "$d"; done' \; 2>/dev/null || true
+
+# --- D-Bus machine-id ---
+RUN dbus-uuidgen > /var/lib/dbus/machine-id 2>/dev/null || true
+
+# --- im-config で IBus をデフォルト入力メソッドに登録 ---
+RUN su ${USERNAME} -c "im-config -n ibus" 2>/dev/null || true
+
+# --- IME トグルスクリプト ---
+RUN cat > /usr/local/bin/toggle-ime << 'TOGGLEEOF'
+#!/bin/bash
+if [ -z "$DBUS_SESSION_BUS_ADDRESS" ]; then
+    IBUS_PID=$(pgrep -u "$(whoami)" -f ibus-daemon 2>/dev/null | head -1)
+    if [ -n "$IBUS_PID" ] && [ -r "/proc/$IBUS_PID/environ" ]; then
+        DBUS_SESSION_BUS_ADDRESS=$(tr '\0' '\n' < "/proc/$IBUS_PID/environ" 2>/dev/null | grep '^DBUS_SESSION_BUS_ADDRESS=' | cut -d= -f2-)
+        export DBUS_SESSION_BUS_ADDRESS
+    fi
+    if [ -z "$DBUS_SESSION_BUS_ADDRESS" ]; then
+        OB_PID=$(pgrep -u "$(whoami)" -f openbox 2>/dev/null | head -1)
+        if [ -n "$OB_PID" ] && [ -r "/proc/$OB_PID/environ" ]; then
+            DBUS_SESSION_BUS_ADDRESS=$(tr '\0' '\n' < "/proc/$OB_PID/environ" 2>/dev/null | grep '^DBUS_SESSION_BUS_ADDRESS=' | cut -d= -f2-)
+            export DBUS_SESSION_BUS_ADDRESS
+        fi
+    fi
+fi
+[ -z "$DISPLAY" ] && export DISPLAY=:99
+FOCUSED_WIN=$(xdotool getactivewindow 2>/dev/null)
+current=$(ibus engine 2>/dev/null)
+if [ "$current" = "mozc-jp" ]; then
+    ibus engine xkb:us::eng
+else
+    ibus engine mozc-jp
+    sleep 0.3
+    [ -n "$FOCUSED_WIN" ] && xdotool windowfocus --sync "$FOCUSED_WIN" 2>/dev/null
+    xdotool key --clearmodifiers Zenkaku_Hankaku 2>/dev/null || true
+fi
+TOGGLEEOF
+RUN chmod +x /usr/local/bin/toggle-ime
+
+# --- openbox 設定（右クリックメニュー + Ctrl+\ キーバインド）---
+RUN mkdir -p ${USER_HOME}/.config/openbox \
+    && cat > ${USER_HOME}/.config/openbox/menu.xml << 'MENU_EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<openbox_menu xmlns="http://openbox.org/3.4/menu">
+  <menu id="root-menu" label="Menu">
+    <item label="Chrome"><action name="Execute"><execute>google-chrome-stable --no-sandbox --disable-gpu --disable-software-rasterizer --disable-dev-shm-usage --no-first-run --no-default-browser-check</execute></action></item>
+    <item label="Terminal"><action name="Execute"><execute>lxterminal</execute></action></item>
+    <separator />
+    <item label="Toggle IME (Ctrl+\\ / F3)"><action name="Execute"><execute>toggle-ime</execute></action></item>
+    <item label="IBus Setup"><action name="Execute"><execute>ibus-setup</execute></action></item>
+  </menu>
+</openbox_menu>
+MENU_EOF
+RUN cat > ${USER_HOME}/.config/openbox/rc.xml << 'RCEOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<openbox_config xmlns="http://openbox.org/3.4/rc">
+  <keyboard>
+    <keybind key="C-backslash">
+      <action name="Execute"><execute>toggle-ime</execute></action>
+    </keybind>
+    <keybind key="F3">
+      <action name="Execute"><execute>toggle-ime</execute></action>
+    </keybind>
+  </keyboard>
+  <mouse>
+    <context name="Root">
+      <mousebind button="Right" action="Press">
+        <action name="ShowMenu"><menu>root-menu</menu></action>
+      </mousebind>
+    </context>
+  </mouse>
+</openbox_config>
+RCEOF
+RUN chown -R ${USERNAME}:${USERNAME} ${USER_HOME}/.config
+
+# --- VNC 環境変数 ---
+ENV DISPLAY=:99
+ENV GTK_IM_MODULE=ibus
+ENV QT_IM_MODULE=ibus
+ENV XMODIFIERS=@im=ibus
+ENV IBUS_ENABLE_SYNC_MODE=1
+ENV CLAUDE_DEV_VNC=1
+
+EXPOSE 6080
+
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

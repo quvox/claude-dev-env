@@ -7,7 +7,7 @@
 
 ## 注意事項
 
-- Docker ソケットはホストからマウント。docker / docker compose コマンドが利用可能
+- Docker Socket Proxy 経由で docker / docker compose コマンドが利用可能（生ソケットは非マウント）
 - git でコミットする前にファイルの状態を確認すること
 - 必ず公式の最新情報、最新仕様を調べて、それを適用すること
 
@@ -21,32 +21,19 @@
 
 ## Web アプリの動作確認（重要）
 
-- **ヘッドレスブラウザを直接起動しないこと**（`chromium.launch()` 等は禁止）
-- 別コンテナ `claude-dev-chrome` で Google Chrome が起動している。ユーザーは noVNC 経由でブラウザ画面をリアルタイムに確認できる
-- Chrome DevTools MCP が設定済みで、MCP ツール経由で noVNC の Chrome を直接操作できる
+- コンテナ内で Google Chrome が動作している。ユーザーは noVNC 経由でブラウザ画面をリアルタイムに確認できる
+- Claude Code の組み込みブラウザツール（computer use）で Chrome を直接操作すること
+- **ヘッドレスブラウザを別途起動しないこと**（`chromium.launch()` 等は禁止）
 
 ### 動作確認の手順
 
 1. 開発サーバーを起動する（`0.0.0.0` にバインドすること）
-2. MCP ツールで Chrome を操作する（ページ遷移、クリック、入力、スクリーンショット等）
+2. 組み込みブラウザツールで Chrome を操作する（ページ遷移、クリック、入力、スクリーンショット等）
 3. ユーザーは noVNC 画面で操作をリアルタイムに確認できる
 
-### 利用可能な主要 MCP ツール
-
-- `navigate_page` — URL に遷移する
-- `take_screenshot` — スクリーンショットを撮る
-- `click` — 要素をクリックする
-- `fill` — 入力欄にテキストを入力する
-- `fill_form` — 複数のフォーム要素を一括入力する
-- `press_key` — キーボード操作を送信する
-- `evaluate_script` — JavaScript を実行する
-- `list_console_messages` — コンソール出力を取得する
-- `list_network_requests` — ネットワークリクエストを確認する
-- `take_snapshot` — DOM スナップショットを取得する
-
 ### 注意事項
-- URL には `localhost` ではなく**コンテナ名**を使うこと（例: `http://claude-dev-env:3000`）
 - 開発サーバーは `0.0.0.0` にバインドする（`--host 0.0.0.0` 等）
+- コンテナ内の Chrome からは `localhost` で開発サーバーにアクセスできる
 
 ## Docker ネットワーク（重要）
 

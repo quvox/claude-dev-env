@@ -186,73 +186,6 @@ fi
     done
 ) &
 
-# --- Chrome DevTools MCP 設定 ---
-# claude mcp add で MCP サーバーを登録する。このコマンドは:
-#   1. /workspace/.mcp.json に chrome-devtools エントリを作成/更新
-#   2. .claude.json の enabledMcpjsonServers に自動追加（trust 承認含む）
-# .mcp.json を直接編集すると trust ダイアログの承認が別途必要になるため、
-# 必ず claude mcp add を使う。
-# 注意: Claude Code は ~/.claude/mcp.json ではなく .mcp.json（プロジェクトルート直下）を読む。
-# claude mcp add --scope project は /workspace/.mcp.json に書き込む
-# su -l のログインシェルでは ~/.local/bin が PATH に入らない場合があるため、
-# claude のフルパスを使用する
-CLAUDE_BIN="$USER_HOME/.local/bin/claude"
-MCP_JSON="/workspace/.mcp.json"
-MCP_NEED_ADD=0
-if [ ! -f "$MCP_JSON" ]; then
-    MCP_NEED_ADD=1
-elif ! grep -q '"chrome-devtools"' "$MCP_JSON" 2>/dev/null; then
-    MCP_NEED_ADD=1
-elif ! grep -q '127\.0\.0\.1:9222' "$MCP_JSON" 2>/dev/null; then
-    # エントリはあるが接続先が古い場合は再登録
-    su "$USERNAME" -s /bin/zsh -l -c "cd /workspace && $CLAUDE_BIN mcp remove chrome-devtools --scope project" 2>/dev/null || true
-    MCP_NEED_ADD=1
-fi
-if [ "$MCP_NEED_ADD" = "1" ] && [ -x "$CLAUDE_BIN" ]; then
-    # スクリプト経由で実行（su -l の cd $HOME 問題を回避）
-    cat > /tmp/mcp-add.sh << 'MCP_SCRIPT'
-#!/bin/zsh
-cd /workspace
-"$1" mcp add --transport stdio chrome-devtools --scope project -- chrome-devtools-mcp --browserUrl=http://127.0.0.1:9222
-MCP_SCRIPT
-    chmod +x /tmp/mcp-add.sh
-    su "$USERNAME" -s /bin/zsh -c "/tmp/mcp-add.sh $CLAUDE_BIN" 2>/dev/null || true
-    rm -f /tmp/mcp-add.sh
-fi
-
-# --- .claude.json の enabledMcpjsonServers に chrome-devtools を追加 ---
-# claude mcp add は .mcp.json を作成するが、enabledMcpjsonServers への追加は
-# Claude Code の trust ダイアログ経由でしか行われない。
-# コンテナ環境では --dangerously-skip-permissions で動作する前提のため、
-# entrypoint で直接追加する。
-CLAUDE_JSON="$LOCAL_CLAUDE/.claude.json"
-if command -v jq >/dev/null 2>&1; then
-    # .claude.json がなければ最小限の内容で作成
-    if [ ! -f "$CLAUDE_JSON" ]; then
-        echo '{}' > "$CLAUDE_JSON"
-        chown "$USERNAME":"$USERNAME" "$CLAUDE_JSON"
-    fi
-    if ! jq -e '.projects["/workspace"].enabledMcpjsonServers // [] | index("chrome-devtools")' "$CLAUDE_JSON" >/dev/null 2>&1; then
-        TMP_CJ=$(mktemp)
-        jq '
-            .projects["/workspace"].enabledMcpjsonServers = (
-                (.projects["/workspace"].enabledMcpjsonServers // []) + ["chrome-devtools"] | unique
-            )
-        ' "$CLAUDE_JSON" > "$TMP_CJ" \
-            && mv "$TMP_CJ" "$CLAUDE_JSON" \
-            && chown "$USERNAME":"$USERNAME" "$CLAUDE_JSON"
-    fi
-fi
-
-# --- Chrome DevTools CDP リレー ---
-# Chrome 146+ では CDP が 127.0.0.1 にのみバインドされ、Host ヘッダーが
-# IP または localhost でないと拒否される。socat でローカルにリレーすることで
-# MCP が http://127.0.0.1:9222 に接続できるようにする。
-# Chrome コンテナ側でも socat が 0.0.0.0:9223 → 127.0.0.1:9222 にリレーしている。
-if command -v socat >/dev/null 2>&1; then
-    socat TCP-LISTEN:9222,fork,reuseaddr,bind=127.0.0.1 TCP:claude-dev-chrome:9223 &
-fi
-
 # --- ファイアウォール設定 ---
 /usr/local/bin/init-firewall.sh 2>/dev/null || true
 
@@ -292,35 +225,31 @@ ${MARKER_START}
 
 - 必ず公式の最新情報、最新仕様を調べて、それを適用すること
 
+CLAUDE_AUTO_EOF
+
+    # VNC ありの場合はブラウザ関連の情報を追加
+    if [ "${CLAUDE_DEV_VNC:-}" = "1" ]; then
+        cat >> /workspace/CLAUDE.md << 'CLAUDE_VNC_EOF'
 ## Web アプリの動作確認（重要）
 
-- **ヘッドレスブラウザを直接起動しないこと**（\`chromium.launch()\` 等は禁止）
-- 別コンテナ \`claude-dev-chrome\` で Google Chrome が起動している。ユーザーは noVNC 経由でブラウザ画面をリアルタイムに確認できる
-- Chrome DevTools MCP が設定済みで、MCP ツール経由で noVNC の Chrome を直接操作できる
+- コンテナ内で Google Chrome が動作している。ユーザーは noVNC 経由でブラウザ画面をリアルタイムに確認できる
+- Claude Code の組み込みブラウザツール（computer use）で Chrome を直接操作すること
+- **ヘッドレスブラウザを別途起動しないこと**（`chromium.launch()` 等は禁止）
 
 ### 動作確認の手順
 
-1. 開発サーバーを起動する（\`0.0.0.0\` にバインドすること）
-2. MCP ツールで Chrome を操作する（ページ遷移、クリック、入力、スクリーンショット等）
+1. 開発サーバーを起動する（`0.0.0.0` にバインドすること）
+2. 組み込みブラウザツールで Chrome を操作する（ページ遷移、クリック、入力、スクリーンショット等）
 3. ユーザーは noVNC 画面で操作をリアルタイムに確認できる
 
-### 利用可能な主要 MCP ツール
-
-- \`navigate_page\` — URL に遷移する
-- \`take_screenshot\` — スクリーンショットを撮る
-- \`click\` — 要素をクリックする
-- \`fill\` — 入力欄にテキストを入力する
-- \`fill_form\` — 複数のフォーム要素を一括入力する
-- \`press_key\` — キーボード操作を送信する
-- \`evaluate_script\` — JavaScript を実行する
-- \`list_console_messages\` — コンソール出力を取得する
-- \`list_network_requests\` — ネットワークリクエストを確認する
-- \`take_snapshot\` — DOM スナップショットを取得する
-
 ### 注意事項
-- URL には \`localhost\` ではなく**コンテナ名**を使うこと（例: \`http://${CONTAINER_NAME}:3000\`）
-- 開発サーバーは \`0.0.0.0\` にバインドする（\`--host 0.0.0.0\` 等）
+- 開発サーバーは `0.0.0.0` にバインドする（`--host 0.0.0.0` 等）
+- コンテナ内の Chrome からは `localhost` で開発サーバーにアクセスできる
 
+CLAUDE_VNC_EOF
+    fi
+
+    cat >> /workspace/CLAUDE.md << CLAUDE_DOCKER_EOF
 ## Docker ネットワーク（重要）
 
 - このシェルは Docker コンテナ \`${CONTAINER_NAME}\` 内で動作している
@@ -331,8 +260,99 @@ ${MARKER_START}
 - 全コンテナは Docker ネットワーク \`claude-dev-net\` に接続されている
 
 ${MARKER_END}
-CLAUDE_AUTO_EOF
+CLAUDE_DOCKER_EOF
     chown "$USERNAME":"$USERNAME" /workspace/CLAUDE.md 2>/dev/null || true
+fi
+
+# --- VNC / Chrome 起動（VNC ありイメージの場合のみ）---
+if [ "${CLAUDE_DEV_VNC:-}" = "1" ]; then
+    VNC_DISPLAY="${VNC_DISPLAY:-99}"
+    VNC_RESOLUTION="${VNC_RESOLUTION:-1280x800}"
+    VNC_PORT=5999
+    NOVNC_PORT=6080
+
+    # システム D-Bus デーモン
+    mkdir -p /run/dbus
+    dbus-daemon --system --fork 2>/dev/null || true
+
+    # GTK immodules キャッシュ更新
+    find /usr/lib -name "gtk-query-immodules-2.0" -exec {} --update-cache \; 2>/dev/null || true
+    find /usr/lib -name "gtk-query-immodules-3.0" -exec {} --update-cache \; 2>/dev/null || true
+
+    # VNC パスワードなし設定
+    mkdir -p "$USER_HOME/.vnc"
+    cat > "$USER_HOME/.vnc/xstartup" << 'XSTARTUP_EOF'
+#!/bin/bash
+XSTARTUP_EOF
+    chmod +x "$USER_HOME/.vnc/xstartup"
+    chown -R "$USERNAME":"$USERNAME" "$USER_HOME/.vnc"
+
+    # Chrome プロファイルディレクトリの所有権
+    if [ -d "$USER_HOME/.chrome-profile" ]; then
+        chown "$USERNAME":"$USERNAME" "$USER_HOME/.chrome-profile" 2>/dev/null || true
+    fi
+
+    # デスクトッププロセスをユーザー権限で起動
+    cat > /tmp/start-user-desktop.sh << DESKEOF
+#!/bin/bash
+export DISPLAY=:${VNC_DISPLAY}
+export GTK_IM_MODULE=ibus
+export QT_IM_MODULE=ibus
+export XMODIFIERS=@im=ibus
+export LANG=ja_JP.UTF-8
+export LC_ALL=ja_JP.UTF-8
+export IBUS_ENABLE_SYNC_MODE=1
+
+# Xvnc（X サーバー + VNC サーバー一体型）
+Xvnc :${VNC_DISPLAY} -geometry ${VNC_RESOLUTION} -depth 24 \
+    -SecurityTypes None -rfbport ${VNC_PORT} \
+    -AlwaysShared -AcceptKeyEvents -AcceptPointerEvents &
+sleep 2
+
+# キーボードレイアウト設定
+setxkbmap -layout us,jp -model pc105 2>/dev/null || setxkbmap -layout us 2>/dev/null || true
+
+# D-Bus セッションバス
+eval "\\\$(dbus-launch --sh-syntax)"
+export DBUS_SESSION_BUS_ADDRESS
+
+# openbox
+openbox &
+sleep 0.5
+
+# IBus デーモン
+ibus-daemon -xrR &
+for i in \\\$(seq 1 30); do
+    ibus list-engine >/dev/null 2>&1 && break
+    sleep 1
+done
+
+# IBus 設定
+gsettings set org.freedesktop.ibus.general preload-engines "['xkb:us::eng', 'mozc-jp']" 2>/dev/null || true
+gsettings set org.freedesktop.ibus.general.hotkey triggers "[]" 2>/dev/null || true
+gsettings set org.freedesktop.ibus.general use-global-engine true 2>/dev/null || true
+
+# noVNC（websockify: HTTP port ${NOVNC_PORT} → VNC port ${VNC_PORT}）
+websockify --heartbeat 30 --web /usr/share/novnc ${NOVNC_PORT} localhost:${VNC_PORT} &
+sleep 0.5
+
+# Chrome
+sleep 2
+google-chrome-stable --no-sandbox --disable-gpu --disable-software-rasterizer \
+    --disable-dev-shm-usage --disable-background-networking \
+    --no-first-run --no-default-browser-check --start-maximized \
+    --gtk-version=4 \
+    --user-data-dir=\${HOME}/.chrome-profile &
+
+wait
+DESKEOF
+
+    chmod +x /tmp/start-user-desktop.sh
+    chown "$USERNAME":"$USERNAME" /tmp/start-user-desktop.sh
+    su "$USERNAME" -c "/tmp/start-user-desktop.sh" &
+    sleep 12
+    echo "🖥️  VNC 起動完了 (noVNC: port ${NOVNC_PORT})"
+    echo "   日本語入力: Ctrl+\\ または F3 で切り替え (IBus-Mozc)"
 fi
 
 # --- tmux セッション開始 ---

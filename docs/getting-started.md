@@ -29,7 +29,7 @@ make login
 `make setup` は以下を順に実行する:
 1. `.env` ファイルの作成
 2. Docker ネットワーク・ボリュームの作成
-3. Docker イメージのビルド（Claude / Chrome/VNC / Docker Socket Proxy）
+3. Docker イメージのビルド（Claude ベース / Claude VNC / Docker Socket Proxy）
 4. `claude-dev` コマンドを `/usr/local/bin/` にシンボリックリンク
 
 `make login` を実行すると URL が表示されるので、ブラウザでアクセスして認証を完了する。
@@ -38,8 +38,7 @@ make login
 
 ```bash
 make build            # 全イメージビルド
-make build-claude     # Claude イメージのみ
-make build-chrome     # Chrome/VNC イメージのみ
+make build-claude     # Claude イメージのみ（ベース + VNC 両方）
 make install          # PATH 登録のみ
 ```
 
@@ -67,17 +66,22 @@ ssh_keys:
 
 ```bash
 cd ~/repos/my-project
-claude-dev start
+claude-dev start            # Chrome + VNC 付き（デフォルト）
+claude-dev start --no-vnc   # Chrome / VNC なし（軽量）
 ```
 
-これだけで:
-1. Chrome/VNC 共有コンテナが自動起動される
-2. カレントディレクトリがコンテナの `/workspace` にマウントされる
-3. 認証情報がセットされる
-4. ファイアウォールが設定される
+デフォルト（VNC あり）の場合:
+1. カレントディレクトリがコンテナの `/workspace` にマウントされる
+2. 認証情報がセットされる
+3. ファイアウォールが設定される
+4. TigerVNC + Google Chrome が起動される
 5. tmux セッションが開始される
 
-Chrome/VNC コンテナが起動するので、`http://localhost:6080/vnc.html` から Google Chrome を操作できる（日本語入力対応、`Ctrl+\\` または `F3` で切替）。
+noVNC URL が起動時に表示されるので、ブラウザでアクセスして Chrome 画面を確認できる（日本語入力対応、`Ctrl+\\` または `F3` で切替）。noVNC ポートは 6080〜 から空きを動的に割り当てるため、複数プロジェクト間で衝突しない。あとから `claude-dev list` や `claude-dev ports` でポート番号を確認できる。
+
+Claude Code は組み込みブラウザツールで Chrome を直接操作する。
+
+`--no-vnc` の場合は Chrome / VNC が起動せず、軽量なコンテナで開発できる。バックエンド開発や CLI ツール開発など、ブラウザ不要なプロジェクト向け。
 
 ### Claude Code を起動する
 
@@ -108,7 +112,7 @@ cd ~/repos/project-b
 claude-dev start
 ```
 
-プロジェクトごとに独立したコンテナが起動する。
+プロジェクトごとに独立したコンテナが起動する。VNC ありの場合、各プロジェクトに独立した Chrome/noVNC が割り当てられるため、複数プロジェクトで同時にブラウザを使っても競合しない。
 
 ### セッション管理
 
@@ -222,7 +226,7 @@ claude-dev login    # 再ログイン（/exit で終了）
 ### Claude Code を更新したい
 
 ```bash
-# Makefile 経由（Claude + Chrome/VNC + Docker Socket Proxy を一括更新）
+# Makefile 経由（Claude ベース + VNC + Docker Socket Proxy を一括更新）
 make upgrade
 
 # または claude-dev コマンド

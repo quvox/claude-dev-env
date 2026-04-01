@@ -13,9 +13,9 @@
 | `make setup` | 初回セットアップ一括実行（env + network + volumes + build + install） |
 | `make login` | OAuth ログイン |
 | `make build` | 全イメージビルド |
-| `make build-claude` | Claude イメージをビルド |
-| `make build-chrome` | Chrome/VNC イメージをビルド |
-| `make upgrade` | Claude Code を最新版にリビルド（`--no-cache`） |
+| `make build-claude` | Claude イメージをビルド（ベース + VNC 両方） |
+| `make build-docker-proxy` | Docker Socket Proxy イメージをビルド |
+| `make upgrade` | 全イメージを最新版にリビルド（`--no-cache`） |
 | `make status` | イメージ・コンテナ・ボリュームの状態確認 |
 | `make install` | `claude-dev` を `/usr/local/bin/` にシンボリックリンク |
 | `make uninstall` | シンボリックリンクを削除 |
@@ -36,8 +36,8 @@
 
 1. `.env` ファイルを `.env.example` からコピー（未作成時）
 2. Docker ネットワーク `claude-dev-net` を作成
-3. Docker ボリューム `claude-dev-auth`, `claude-dev-history` を作成
-4. Docker イメージをビルド
+3. Docker ボリューム `claude-dev-auth`, `claude-dev-history`, `claude-dev-config`, `claude-dev-chrome-data` を作成
+4. Docker イメージをビルド（Claude ベース / Claude VNC / Docker Socket Proxy）
 
 ```bash
 claude-dev setup
@@ -73,27 +73,34 @@ claude-dev logout
 
 ```bash
 cd ~/repos/my-project
-claude-dev start
+claude-dev start            # Chrome + VNC 付き（デフォルト）
+claude-dev start --no-vnc   # Chrome / VNC なし（軽量）
 ```
 
 動作:
-- コンテナ名: `claude-<ディレクトリ名>`（例: `claude-my-project`）
+- コンテナ名: ディレクトリ名（例: `my-project`）
 - 同名コンテナが実行中の場合は再接続する
 - 停止中のコンテナがある場合は削除して新規起動
 - イメージが存在しなければ自動ビルド
 - 認証情報がなければエラーで停止
 - 主要な開発ポート（3000, 4200, 5173, 5000, 8000, 8080, 8888）を自動マッピング
-- ssh-agent が未起動なら自動起動し、鍵が未登録なら `ssh-add` を実行
+- ssh-agent が未起動なら自動起動し、鍵が未登録なら `ssh-add` を実行（`~/.config/claude-dev.yaml` から鍵リストを読み込み）
 - `~/.gitconfig` があればコンテナに共有（読み取り専用）
 - SSH agent ソケット・`~/.ssh/known_hosts`・`~/.ssh/config` をコンテナに共有（読み取り専用。秘密鍵はマウントしない）
-- Chrome/VNC 共有コンテナ（`claude-dev-chrome`）が未起動なら自動起動する
+- Docker Socket Proxy コンテナ（`claude-dev-docker-proxy`）が未起動なら自動起動する
 
-Chrome/VNC コンテナ:
-- `claude-dev start` 時に自動的に起動される専用の共有コンテナ
-- ローカル PC のブラウザから `http://localhost:6080/vnc.html` で Google Chrome を操作できる
+VNC あり（デフォルト）:
+- `claude-dev-claude-vnc` イメージを使用
+- コンテナ内で Xvnc + noVNC + Google Chrome が起動
+- noVNC ポート（HTTP/WebSocket）は起動時に 6080〜 から空きを動的に割り当て。VNC 生ポートはホストに公開しない
+- 起動時に noVNC URL が表示される。あとから `claude-dev list` や `claude-dev ports` でも確認可能
+- Claude Code が組み込みブラウザツール（computer use）で Chrome を直接操作
 - 日本語入力対応（IBus-Mozc、`Ctrl+\\` または `F3` で切替）
-- noVNC ポートは 6080（固定、全コンテナ共有）
-- 全 Claude コンテナが停止すると Chrome コンテナも自動停止する
+
+VNC なし（`--no-vnc`）:
+- `claude-dev-claude` イメージを使用（軽量）
+- Chrome / VNC は起動しない
+- バックエンド開発、CLI ツール開発など、ブラウザ不要なプロジェクト向け
 
 #### `claude-dev code`
 
@@ -144,7 +151,7 @@ claude-dev ports my-project
 
 出力例:
 ```
-📡 claude-my-project port mappings:
+📡 my-project port mappings:
   Host :8100 → Container :3000  (React/Next/Express/Rails)
   Host :8101 → Container :4200  (Angular)
   Host :8102 → Container :5173  (Vite)
@@ -191,12 +198,18 @@ claude-dev list
 出力例:
 ```
 === 実行中の Claude Code セッション ===
-NAMES               STATUS          MOUNTS
-claude-my-project   Up 2 hours      /home/user/repos/my-project...
-claude-api-server   Up 30 minutes   /home/user/repos/api-server...
-  📡 claude-my-project → Ports: 8100-8109
-  📡 claude-api-server → Ports: 8110-8119
-  🖥️  Chrome/VNC → noVNC: http://localhost:6080/vnc.html
+
+  NAME:      my-project
+  STATUS:    running
+  WORKSPACE: /home/user/repos/my-project
+  PORTS:     Ports: 8100-8109
+  noVNC:     http://localhost:6080/vnc.html?autoconnect=true
+
+  NAME:      api-server
+  STATUS:    running
+  WORKSPACE: /home/user/repos/api-server
+  PORTS:     Ports: 8110-8119
+  (VNC なし)
 ```
 
 ---
@@ -205,7 +218,7 @@ claude-api-server   Up 30 minutes   /home/user/repos/api-server...
 
 #### `claude-dev upgrade`
 
-Claude Code を更新する。イメージを `--no-cache` でリビルドする。
+全イメージ（Claude ベース / VNC / Docker Socket Proxy）を `--no-cache` でリビルドする。
 
 ```bash
 claude-dev upgrade
@@ -231,9 +244,10 @@ claude-dev reset
 
 削除対象:
 - 全プロジェクトコンテナ
-- `claude-dev-auth`, `claude-dev-history`, `claude-dev-config` ボリューム
+- Docker Socket Proxy コンテナ
+- `claude-dev-auth`, `claude-dev-history`, `claude-dev-config`, `claude-dev-chrome-data` ボリューム
 - `claude-dev-net` ネットワーク
-- `claude-dev-claude`, `claude-dev-chrome` イメージ
+- `claude-dev-claude`, `claude-dev-claude-vnc`, `claude-dev-docker-proxy` イメージ
 
 ---
 
@@ -241,7 +255,8 @@ claude-dev reset
 
 | 種類 | 命名パターン | 例 |
 |------|-------------|-----|
-| プロジェクト | `claude-<ディレクトリ名>` | `claude-my-project` |
+| プロジェクト | `<ディレクトリ名>` | `my-project` |
+| Docker Socket Proxy | `claude-dev-docker-proxy` | （固定） |
 
 ディレクトリ名は小文字化され、英数字・ハイフン・ドット・アンダースコア以外は `-` に置換される。
 

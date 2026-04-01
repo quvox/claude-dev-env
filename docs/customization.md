@@ -126,9 +126,9 @@ claude-dev start
 `scripts/tmux.conf` を編集する。主な設定項目:
 
 ```bash
-# プレフィックスキーの変更（例: Ctrl-A に変更する場合）
+# プレフィックスキーの変更（デフォルト: Ctrl-_、例: Ctrl-A に変更する場合）
 set -g prefix C-a
-unbind C-b
+unbind C-_
 bind C-a send-prefix
 
 # 履歴の上限変更
@@ -182,7 +182,7 @@ sudo apt-get update && sudo apt-get install -y <package>
 
 ### 恒久的（Dockerfile を編集）
 
-`.devcontainer/Dockerfile.claude` の apt-get 行に追加:
+`.devcontainer/Dockerfile.claude` の `base` ステージの apt-get 行に追加（VNC あり/なし両方に反映される）:
 
 ```dockerfile
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -195,7 +195,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 再ビルド:
 
 ```bash
-make build-claude     # Claude イメージのみ
-make build-chrome     # Chrome/VNC イメージのみ
+make build-claude     # Claude イメージのみ（ベース + VNC 両方）
 make build            # 全イメージ
 ```
