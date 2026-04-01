@@ -43,6 +43,71 @@ CHOME="/home/${CUSER}"
 # ヘルパー関数
 # =============================================================================
 
+# --- ユーザー設定ファイル ---
+USER_CONFIG="${HOME}/.config/claude-dev.yaml"
+
+# ~/.config/claude-dev.yaml から ssh_keys のリストを読み取る
+# YAML が存在しなければ ~/.ssh/ の鍵ファイルを列挙して自動生成する
+load_ssh_keys_from_config() {
+    local config="$USER_CONFIG"
+
+    # 設定ファイルがなければ自動生成
+    if [ ! -f "$config" ]; then
+        local found_keys=()
+        for f in ~/.ssh/id_*; do
+            case "$f" in *.pub) continue ;; esac
+            [ -f "$f" ] && found_keys+=("$f")
+        done
+
+        mkdir -p "$(dirname "$config")"
+        {
+            echo "# claude-dev 設定ファイル"
+            echo "# ssh-agent に登録する SSH 鍵を指定してください"
+            echo "# 不要な鍵はコメントアウトまたは削除してください"
+            echo "ssh_keys:"
+            if [ ${#found_keys[@]} -eq 0 ]; then
+                echo "  # 鍵が見つかりませんでした。以下の形式で追加してください:"
+                echo '  # - ~/.ssh/id_ed25519'
+            else
+                for k in "${found_keys[@]}"; do
+                    echo "  - $k"
+                done
+            fi
+        } > "$config"
+        echo "📝 設定ファイルを作成しました: $config"
+    fi
+
+    # ssh_keys セクションからパスを読み取る
+    SSH_KEY_LIST=()
+    local in_section=0
+    while IFS= read -r line; do
+        # コメント行・空行をスキップ
+        case "$line" in
+            \#*|"") continue ;;
+        esac
+        # ssh_keys: セクション開始
+        if [[ "$line" =~ ^ssh_keys: ]]; then
+            in_section=1
+            continue
+        fi
+        # 別のトップレベルキーに到達したら終了
+        if [[ $in_section -eq 1 && "$line" =~ ^[a-zA-Z_] ]]; then
+            break
+        fi
+        # リストアイテムを読み取る
+        if [[ $in_section -eq 1 && "$line" =~ ^[[:space:]]*-[[:space:]]+(.*) ]]; then
+            local val="${BASH_REMATCH[1]}"
+            # コメント部分を除去
+            val="${val%%#*}"
+            # 前後の空白を除去
+            val="$(echo "$val" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+            # ~ をホームディレクトリに展開
+            val="${val/#\~/$HOME}"
+            [ -n "$val" ] && SSH_KEY_LIST+=("$val")
+        fi
+    done < "$config"
+}
+
 # ssh-agent が動いていなければ起動し、鍵が未登録なら ssh-add する
 ensure_ssh_agent() {
     # agent が動いていなければ起動
@@ -56,16 +121,26 @@ ensure_ssh_agent() {
         return 0
     fi
 
-    # ~/.ssh に秘密鍵があるか確認
+    # 設定ファイルから鍵リストを読み込む
+    load_ssh_keys_from_config
+
+    if [ ${#SSH_KEY_LIST[@]} -eq 0 ]; then
+        echo "⚠️  SSH 鍵が設定されていません。$USER_CONFIG を編集してください"
+        return 0
+    fi
+
+    # 存在しない鍵を警告しつつ、有効な鍵だけ処理する
     local keys=()
-    for f in ~/.ssh/id_*; do
-        # .pub ファイルは除外
-        case "$f" in *.pub) continue ;; esac
-        [ -f "$f" ] && keys+=("$f")
+    for key in "${SSH_KEY_LIST[@]}"; do
+        if [ -f "$key" ]; then
+            keys+=("$key")
+        else
+            echo "⚠️  ${key}: ファイルが見つかりません（スキップ）"
+        fi
     done
 
     if [ ${#keys[@]} -eq 0 ]; then
-        echo "⚠️  SSH 鍵が見つかりません（~/.ssh/id_*）。git の SSH 操作はできません"
+        echo "⚠️  有効な SSH 鍵がありません。$USER_CONFIG を確認してください"
         return 0
     fi
 
