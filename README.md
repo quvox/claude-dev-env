@@ -21,14 +21,17 @@ Linux サーバ (SSH)
 ├── claude-dev CLI   日常の開発操作（どこからでも実行可能）
 │
 ├── プロジェクトコンテナ（都度起動）
-│   ├── claude-project-a     ~/repos/project-a → /workspace
-│   ├── claude-project-b     ~/repos/project-b → /workspace
-│   └── ...                  同時に複数起動可能
+│   ├── project-a              ~/repos/project-a → /workspace
+│   ├── project-b              ~/repos/project-b → /workspace
+│   └── ...                    同時に複数起動可能
 │
-├── claude-dev-net            コンテナ間ネットワーク
+├── claude-dev-chrome (共有)    Chrome/VNC コンテナ（noVNC + CDP）
+├── claude-dev-docker-proxy (共有) Docker Socket Proxy（危険操作をブロック）
+├── claude-dev-net              コンテナ間ネットワーク
 │
-├── claude-dev-auth (volume)  認証情報（~/.claude/ に直接マウント）
-├── claude-dev-config (volume) 共有シェル設定（.zshrc をコンテナ間共有）
+├── claude-dev-auth (volume)    認証情報（~/.claude/ に直接マウント）
+├── claude-dev-config (volume)  共有シェル設定（.zshrc をコンテナ間共有）
+├── claude-dev-chrome-data (volume) Chrome プロファイル
 └── claude-dev-history (volume) コマンド履歴
 ```
 
@@ -80,7 +83,7 @@ claude-dev start
 # 管理
 claude-dev list               # 実行中セッション一覧（noVNC URL も表示）
 claude-dev stop my-project    # 停止
-claude-dev upgrade            # Claude Code 更新
+claude-dev upgrade            # Claude Code + Chrome + Docker Proxy 更新
 make status                   # 全体の状態確認
 ```
 
@@ -91,7 +94,7 @@ make status                   # 全体の状態確認
 1. **Docker コンテナ隔離** — ホストファイルシステムへのアクセスを遮断
 2. **マウント制限** — SSH 秘密鍵、`~/.aws`, `.env` 等はコンテナに存在しない
 3. **認証情報の保護** — 専用ボリュームにマウント。ファイアウォールで窃取先をブロック
-4. **Docker ソケット非共有** — コンテナ脱獄を防止
+4. **Docker Socket Proxy** — 生ソケットを渡さず、プロキシ経由でホストマウント・特権モード等の危険操作をブロック
 5. **SSH agent 転送** — 秘密鍵ファイルを渡さず、agent ソケット経由で署名操作のみ許可
 6. **ブラックリスト FW** — ペーストサイト、Webhook、メタデータエンドポイント、SMTP、外部 SSH をブロック
 7. **非 root 実行** — ホストと同じユーザー名・UID/GID で実行（ビルド時に一致させる）
@@ -115,13 +118,16 @@ claude-dev-env/
 ├── claude-dev                         CLI ツール本体
 ├── .env.example                       設定テンプレート
 ├── CLAUDE.md                          コンテナ内の Claude Code 向け指示
+├── .mcp.json                          MCP サーバ設定（Chrome DevTools 等）
 ├── .devcontainer/
 │   ├── Dockerfile.claude              Claude Code コンテナ (Ubuntu 24.04)
-│   └── Dockerfile.chrome              Chrome/VNC コンテナ (Ubuntu 24.04)
+│   ├── Dockerfile.chrome              Chrome/VNC コンテナ (Ubuntu 24.04)
+│   └── Dockerfile.docker-proxy        Docker Socket Proxy コンテナ
+├── docker-proxy/                      Docker Socket Proxy ソースコード
 ├── scripts/
 │   ├── init-firewall-claude.sh        ブラックリスト FW
 │   ├── entrypoint-claude.sh           Claude コンテナ起動スクリプト
 │   ├── entrypoint-chrome.sh           Chrome/VNC コンテナ起動スクリプト
-│   └── tmux.conf                      tmux 設定
+│   └── tmux.conf                      tmux 設定（prefix: Ctrl-_）
 └── docs/                              ドキュメント
 ```

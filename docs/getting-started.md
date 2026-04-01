@@ -29,7 +29,7 @@ make login
 `make setup` は以下を順に実行する:
 1. `.env` ファイルの作成
 2. Docker ネットワーク・ボリュームの作成
-3. Docker イメージのビルド
+3. Docker イメージのビルド（Claude / Chrome/VNC / Docker Socket Proxy）
 4. `claude-dev` コマンドを `/usr/local/bin/` にシンボリックリンク
 
 `make login` を実行すると URL が表示されるので、ブラウザでアクセスして認証を完了する。
@@ -44,6 +44,22 @@ make install          # PATH 登録のみ
 ```
 
 すべてのターゲットは `make help` で確認できる。
+
+## SSH 鍵の設定
+
+`claude-dev start` 時に ssh-agent に登録する SSH 鍵を `~/.config/claude-dev.yaml` で管理する。初回実行時に `~/.ssh/id_*` を検出して自動生成される。
+
+```yaml
+# ~/.config/claude-dev.yaml
+ssh_keys:
+  - ~/.ssh/id_ed25519
+  - ~/.ssh/id_rsa
+  # 不要な鍵はコメントアウトまたは削除
+```
+
+- パスフレーズなしの鍵は自動で追加される
+- パスフレーズ付きの鍵は対話的に入力を求められる
+- コンテナには秘密鍵ファイルを渡さず、SSH agent ソケットのみ転送される
 
 ## 基本的な使い方
 
@@ -74,7 +90,7 @@ claude
 ### 切断と再接続
 
 ```
-Ctrl-B D          # tmux から切断（コンテナは動き続ける）
+Ctrl-_ D          # tmux から切断（コンテナは動き続ける）
 claude-dev start  # 同じディレクトリで再実行すると自動で再接続
 ```
 
@@ -175,17 +191,17 @@ $ ssh -O forward -L 8115:localhost:8115 myserver  # backend の Go
 
 ## tmux の基本操作
 
-プレフィックスキーは tmux デフォルトの `Ctrl-B`。
+プレフィックスキーは `Ctrl-_`（`Ctrl-B` からカスタマイズ済み）。
 
 | 操作 | キー |
 |------|------|
-| 切断（デタッチ） | `Ctrl-B D` |
-| 新しいウィンドウ | `Ctrl-B C` |
-| ウィンドウ切替 | `Ctrl-B 数字` |
-| 画面を縦分割 | `Ctrl-B %` |
-| 画面を横分割 | `Ctrl-B "` |
-| ペイン移動 | `Ctrl-B 矢印キー` |
-| スクロールモード | `Ctrl-B [` |
+| 切断（デタッチ） | `Ctrl-_ D` |
+| 新しいウィンドウ | `Ctrl-_ C` |
+| ウィンドウ切替 | `Ctrl-_ 数字` |
+| 画面を縦分割 | `Ctrl-_ %` |
+| 画面を横分割 | `Ctrl-_ "` |
+| ペイン移動 | `Ctrl-_ 矢印キー` |
+| スクロールモード | `Ctrl-_ [` |
 
 ## トラブルシューティング
 
@@ -206,7 +222,7 @@ claude-dev login    # 再ログイン（/exit で終了）
 ### Claude Code を更新したい
 
 ```bash
-# Makefile 経由
+# Makefile 経由（Claude + Chrome/VNC + Docker Socket Proxy を一括更新）
 make upgrade
 
 # または claude-dev コマンド

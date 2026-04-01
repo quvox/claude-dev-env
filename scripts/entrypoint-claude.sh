@@ -288,6 +288,10 @@ if [ -f /workspace/CLAUDE.md ]; then
 
 ${MARKER_START}
 
+## 注意事項
+
+- 必ず公式の最新情報、最新仕様を調べて、それを適用すること
+
 ## Web アプリの動作確認（重要）
 
 - **ヘッドレスブラウザを直接起動しないこと**（\`chromium.launch()\` 等は禁止）
