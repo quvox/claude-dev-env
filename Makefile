@@ -18,7 +18,9 @@ INSTALL_PATH := /usr/local/bin/claude-dev
 # --- Docker リソース名 ---
 IMG_CLAUDE := claude-dev-claude
 IMG_CHROME := claude-dev-chrome
+IMG_DOCKER_PROXY := claude-dev-docker-proxy
 CHROME_CONTAINER := claude-dev-chrome
+DOCKER_PROXY_CONTAINER := claude-dev-docker-proxy
 CUSER := $(shell whoami)
 NETWORK := claude-dev-net
 VOL_AUTH := claude-dev-auth
@@ -31,7 +33,7 @@ VOL_CHROME := claude-dev-chrome-data
 # =============================================================================
 
 .PHONY: help setup install login build network volumes \
-        upgrade status clean uninstall build-claude build-chrome sync-zrt-tools
+        upgrade status clean uninstall build-claude build-chrome build-docker-proxy sync-zrt-tools
 
 ## デフォルト: ヘルプ表示
 help:
@@ -42,9 +44,10 @@ help:
 	@echo "  make login        OAuth ログイン"
 	@echo ""
 	@echo "ビルド:"
-	@echo "  make build        全イメージをビルド"
-	@echo "  make build-claude Claude イメージをビルド"
-	@echo "  make build-chrome Chrome/VNC イメージをビルド"
+	@echo "  make build              全イメージをビルド"
+	@echo "  make build-claude       Claude イメージをビルド"
+	@echo "  make build-chrome       Chrome/VNC イメージをビルド"
+	@echo "  make build-docker-proxy Docker Socket Proxy イメージをビルド"
 	@echo ""
 	@echo "メンテナンス:"
 	@echo "  make upgrade      Claude Code + Chrome を最新版に更新"
@@ -122,7 +125,7 @@ volumes:
 # =============================================================================
 
 ## 全イメージビルド
-build: build-claude build-chrome
+build: build-claude build-chrome build-docker-proxy
 
 ## Claude Code イメージ
 build-claude: sync-zrt-tools
@@ -143,6 +146,13 @@ build-chrome:
 		--build-arg USER_GID=$$(id -g) \
 		-f $(BASE_DIR)/.devcontainer/Dockerfile.chrome $(BASE_DIR)
 	@echo "✅ $(IMG_CHROME)"
+
+## Docker Socket Proxy イメージ
+build-docker-proxy:
+	@echo "📦 Docker Socket Proxy イメージをビルド中..."
+	@docker build -t $(IMG_DOCKER_PROXY) \
+		-f $(BASE_DIR)/.devcontainer/Dockerfile.docker-proxy $(BASE_DIR)
+	@echo "✅ $(IMG_DOCKER_PROXY)"
 
 ## zrt-tools の取得・更新
 ZRT_REPO := https://github.com/zettant/zrt-tools.git
@@ -186,6 +196,11 @@ upgrade:
 		-f $(BASE_DIR)/.devcontainer/Dockerfile.chrome $(BASE_DIR)
 	@echo "✅ Chrome/VNC イメージ更新完了"
 	@echo ""
+	@echo "📦 Docker Socket Proxy イメージを更新中..."
+	@docker build --no-cache -t $(IMG_DOCKER_PROXY) \
+		-f $(BASE_DIR)/.devcontainer/Dockerfile.docker-proxy $(BASE_DIR)
+	@echo "✅ Docker Socket Proxy イメージ更新完了"
+	@echo ""
 	@echo "   実行中のコンテナは claude-dev stop → claude-dev start で反映"
 
 ## 状態確認
@@ -200,6 +215,10 @@ status:
 	@echo ""
 	@echo "=== Chrome/VNC コンテナ ==="
 	@docker ps --filter "name=^$(CHROME_CONTAINER)$$" \
+		--format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" 2>/dev/null || true
+	@echo ""
+	@echo "=== Docker Socket Proxy コンテナ ==="
+	@docker ps --filter "name=^$(DOCKER_PROXY_CONTAINER)$$" \
 		--format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" 2>/dev/null || true
 	@echo ""
 	@echo "=== ボリューム ==="
@@ -218,10 +237,12 @@ clean:
 	@docker ps -a --filter "ancestor=$(IMG_CLAUDE)" -q | xargs -r docker rm -f 2>/dev/null || true
 	@# Chrome/VNC コンテナ停止
 	@docker rm -f $(CHROME_CONTAINER) 2>/dev/null || true
+	@# Docker Socket Proxy コンテナ停止
+	@docker rm -f $(DOCKER_PROXY_CONTAINER) 2>/dev/null || true
 	@# ボリューム削除
 	@docker volume rm -f $(VOL_AUTH) $(VOL_HISTORY) $(VOL_CONFIG) $(VOL_CHROME) 2>/dev/null || true
 	@# ネットワーク削除
 	@docker network rm $(NETWORK) 2>/dev/null || true
 	@# イメージ削除
-	@docker rmi -f $(IMG_CLAUDE) $(IMG_CHROME) 2>/dev/null || true
+	@docker rmi -f $(IMG_CLAUDE) $(IMG_CHROME) $(IMG_DOCKER_PROXY) 2>/dev/null || true
 	@echo "✅ 全リセット完了"

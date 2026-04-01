@@ -33,7 +33,9 @@ VOL_CONFIG="claude-dev-config"
 VOL_CHROME="claude-dev-chrome-data"
 IMG_CLAUDE="claude-dev-claude"
 IMG_CHROME="claude-dev-chrome"
+IMG_DOCKER_PROXY="claude-dev-docker-proxy"
 CHROME_CONTAINER="claude-dev-chrome"
+DOCKER_PROXY_CONTAINER="claude-dev-docker-proxy"
 
 # --- コンテナ内ユーザー名（ホストのカレントユーザーに合わせる）---
 CUSER="$(whoami)"
@@ -307,7 +309,7 @@ ensure_chrome_container() {
         --network "$NETWORK" \
         --restart unless-stopped \
         -v "${VOL_AUTH}:${CHOME}/.claude-shared" \
-        -v "${VOL_CHROME}:${CHOME}/.config/google-chrome" \
+        -v "${VOL_CHROME}:${CHOME}/.chrome-profile" \
         -p "${novnc_port}:6080" \
         -t \
         "$IMG_CHROME" >/dev/null
@@ -325,14 +327,55 @@ get_chrome_novnc_url() {
     fi
 }
 
-# Claude コンテナが 0 なら Chrome/VNC コンテナを停止
+# Claude コンテナが 0 なら Chrome/VNC コンテナと Docker Proxy コンテナを停止
 stop_chrome_if_idle() {
     local count
     count=$(docker ps --filter "ancestor=$IMG_CLAUDE" -q 2>/dev/null | wc -l)
-    if [ "$count" -eq 0 ] && is_running "$CHROME_CONTAINER"; then
-        docker rm -f "$CHROME_CONTAINER" >/dev/null
-        echo "🖥️  Chrome/VNC コンテナを停止しました（Claude コンテナなし）"
+    if [ "$count" -eq 0 ]; then
+        if is_running "$CHROME_CONTAINER"; then
+            docker rm -f "$CHROME_CONTAINER" >/dev/null
+            echo "🖥️  Chrome/VNC コンテナを停止しました（Claude コンテナなし）"
+        fi
+        if is_running "$DOCKER_PROXY_CONTAINER"; then
+            docker rm -f "$DOCKER_PROXY_CONTAINER" >/dev/null
+            echo "🐳 Docker Socket Proxy コンテナを停止しました（Claude コンテナなし）"
+        fi
     fi
+}
+
+# Docker Socket Proxy 共有コンテナを起動（未起動の場合のみ）
+ensure_docker_proxy_container() {
+    # Docker ソケットがなければスキップ
+    if [ ! -S /var/run/docker.sock ]; then
+        return 0
+    fi
+
+    # イメージがなければビルド
+    if ! image_exists "$IMG_DOCKER_PROXY"; then
+        echo "📦 Docker Socket Proxy イメージが見つかりません。ビルドします..."
+        docker build -t "$IMG_DOCKER_PROXY" \
+            -f "${BASE_DIR}/.devcontainer/Dockerfile.docker-proxy" "$BASE_DIR"
+    fi
+
+    # 既に実行中なら何もしない
+    if is_running "$DOCKER_PROXY_CONTAINER"; then
+        return 0
+    fi
+
+    # 停止中のコンテナがあれば削除
+    if container_exists "$DOCKER_PROXY_CONTAINER"; then
+        docker rm -f "$DOCKER_PROXY_CONTAINER" >/dev/null
+    fi
+
+    docker run -d \
+        --name "$DOCKER_PROXY_CONTAINER" \
+        --hostname "$DOCKER_PROXY_CONTAINER" \
+        --network "$NETWORK" \
+        --restart unless-stopped \
+        -v /var/run/docker.sock:/var/run/docker.sock:ro \
+        "$IMG_DOCKER_PROXY" >/dev/null
+
+    echo "🐳 Docker Socket Proxy コンテナ起動"
 }
 
 # =============================================================================
@@ -385,6 +428,13 @@ setup)
         --build-arg USER_GID="$(id -g)" \
         -f "${BASE_DIR}/.devcontainer/Dockerfile.chrome" "$BASE_DIR"
     echo "✅ Chrome/VNC イメージビルド完了"
+
+    # Docker Socket Proxy イメージビルド
+    echo ""
+    echo "📦 Docker Socket Proxy イメージをビルド中..."
+    docker build -t "$IMG_DOCKER_PROXY" \
+        -f "${BASE_DIR}/.devcontainer/Dockerfile.docker-proxy" "$BASE_DIR"
+    echo "✅ Docker Socket Proxy イメージビルド完了"
 
     echo ""
     echo "============================================"
@@ -439,7 +489,7 @@ login)
                 done
                 # settings.json はローカルに作成（共有しない）
                 if [ ! -f ~/.claude/settings.json ]; then
-                    echo '{\"permissions\":{\"defaultMode\":\"bypassPermissions\"}}' > ~/.claude/settings.json
+                    echo '{\"permissions\":{\"defaultMode\":\"bypassPermissions\"},\"model\":\"sonnet\"}' > ~/.claude/settings.json
                 fi
                 # ~/.claude.json（ホーム直下）へのリンク
                 if [ -f ~/.claude/.claude.json ]; then
@@ -479,6 +529,10 @@ logout)
     # Chrome コンテナも停止
     if container_exists "$CHROME_CONTAINER"; then
         docker rm -f "$CHROME_CONTAINER" >/dev/null 2>&1 || true
+    fi
+    # Docker Socket Proxy コンテナも停止
+    if container_exists "$DOCKER_PROXY_CONTAINER"; then
+        docker rm -f "$DOCKER_PROXY_CONTAINER" >/dev/null 2>&1 || true
     fi
     # ボリュームを空にする
     docker run --rm --entrypoint bash \
@@ -563,10 +617,11 @@ start)
         GITCONFIG_OPT="-v ${HOME}/.gitconfig:${CHOME}/.gitconfig:ro"
     fi
 
-    # Docker ソケットマウント（ホストの Docker を利用）
+    # Docker Socket Proxy 経由で Docker API を利用（生ソケットはマウントしない）
     DOCKER_OPTS=""
     if [ -S /var/run/docker.sock ]; then
-        DOCKER_OPTS="-v /var/run/docker.sock:/var/run/docker.sock"
+        ensure_docker_proxy_container
+        DOCKER_OPTS="-e DOCKER_HOST=tcp://${DOCKER_PROXY_CONTAINER}:2375"
     fi
 
     # SSH agent 準備 & ソケット転送（秘密鍵ファイルはマウントしない）
@@ -798,6 +853,15 @@ list)
         echo "  STATUS:  stopped（claude-dev start で自動起動）"
     fi
 
+    # Docker Socket Proxy コンテナの状態
+    echo ""
+    echo "=== Docker Socket Proxy コンテナ ==="
+    if is_running "$DOCKER_PROXY_CONTAINER"; then
+        echo "  STATUS:  running"
+    else
+        echo "  STATUS:  stopped（claude-dev start で自動起動）"
+    fi
+
     ;;
 
 # -----------------------------------------------------------------------------
@@ -822,6 +886,12 @@ upgrade)
     echo "✅ Chrome/VNC イメージ更新完了"
 
     echo ""
+    echo "📦 Docker Socket Proxy イメージを更新中..."
+    docker build --no-cache -t "$IMG_DOCKER_PROXY" \
+        -f "${BASE_DIR}/.devcontainer/Dockerfile.docker-proxy" "$BASE_DIR"
+    echo "✅ Docker Socket Proxy イメージ更新完了"
+
+    echo ""
     echo "   実行中のコンテナは stop → start で反映されます"
     ;;
 
@@ -844,6 +914,7 @@ reset)
     echo "⚠️  以下を全て削除します:"
     echo "   - 全 Claude Code コンテナ"
     echo "   - Chrome/VNC コンテナ"
+    echo "   - Docker Socket Proxy コンテナ"
     echo "   - 認証情報・履歴ボリューム"
     echo "   - Docker イメージ"
     echo ""
@@ -858,12 +929,14 @@ reset)
     docker ps -a --filter "ancestor=$IMG_CLAUDE" -q | xargs -r docker rm -f 2>/dev/null || true
     # Chrome/VNC コンテナ停止
     docker rm -f "$CHROME_CONTAINER" 2>/dev/null || true
+    # Docker Socket Proxy コンテナ停止
+    docker rm -f "$DOCKER_PROXY_CONTAINER" 2>/dev/null || true
     # ボリューム削除
     docker volume rm -f "$VOL_AUTH" "$VOL_HISTORY" "$VOL_CONFIG" "$VOL_CHROME" 2>/dev/null || true
     # ネットワーク削除
     docker network rm "$NETWORK" 2>/dev/null || true
     # イメージ削除
-    docker rmi -f "$IMG_CLAUDE" "$IMG_CHROME" 2>/dev/null || true
+    docker rmi -f "$IMG_CLAUDE" "$IMG_CHROME" "$IMG_DOCKER_PROXY" 2>/dev/null || true
 
     echo "✅ 全リセット完了"
     ;;

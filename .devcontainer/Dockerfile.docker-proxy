@@ -1,0 +1,20 @@
+# =============================================================================
+# Docker Socket Proxy - Docker API を制限付きで中継
+# =============================================================================
+# Claude コンテナから Docker API を安全に利用するためのリバースプロキシ。
+# リクエストボディを検査し、ホストバインドマウント・privileged 等を拒否する。
+# =============================================================================
+FROM golang:1.24-alpine AS builder
+
+WORKDIR /app
+COPY docker-proxy/go.mod ./
+RUN go mod download
+COPY docker-proxy/*.go ./
+RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /docker-proxy .
+
+FROM alpine:3.21
+RUN apk add --no-cache ca-certificates
+COPY --from=builder /docker-proxy /usr/local/bin/docker-proxy
+
+EXPOSE 2375
+ENTRYPOINT ["/usr/local/bin/docker-proxy"]

@@ -62,10 +62,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # --- Chromium: Playwright 経由でインストール（後段）---
 # 環境変数はラッパースクリプト作成時に /etc/zsh/zshrc 等で設定する
 
-# --- ロケール設定 ---
+# --- ロケール・タイムゾーン設定 ---
 RUN locale-gen en_US.UTF-8
 ENV LANG=en_US.UTF-8
 ENV LC_ALL=en_US.UTF-8
+RUN ln -sf /usr/share/zoneinfo/Asia/Tokyo /etc/localtime \
+    && echo "Asia/Tokyo" > /etc/timezone
+ENV TZ=Asia/Tokyo
 
 # --- 非root ユーザー作成 ---
 # GID/UID が既存のグループ/ユーザーと競合する場合は退避してから作成

@@ -27,12 +27,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 ENV LANG=ja_JP.UTF-8
 ENV LANGUAGE=ja_JP:ja
+RUN ln -sf /usr/share/zoneinfo/Asia/Tokyo /etc/localtime \
+    && echo "Asia/Tokyo" > /etc/timezone
+ENV TZ=Asia/Tokyo
 ENV LC_ALL=ja_JP.UTF-8
 
 # --- システムパッケージ ---
 RUN apt-get update && apt-get install -y --no-install-recommends \
     # 基本ツール
-    curl ca-certificates sudo procps \
+    curl ca-certificates sudo procps socat \
     # VNC / ディスプレイ（TigerVNC: X サーバー内蔵 VNC でキーイベントがネイティブ）
     tigervnc-standalone-server python3-websockify openbox \
     # ターミナル / キー操作

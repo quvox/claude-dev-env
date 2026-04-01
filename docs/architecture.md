@@ -16,6 +16,9 @@ Linux サーバ (SSH でアクセス)
 ├── Chrome/VNC コンテナ（共有、自動管理）
 │   └── claude-dev-chrome      全 Claude コンテナで共有
 │
+├── Docker Socket Proxy コンテナ（共有、自動管理）
+│   └── claude-dev-docker-proxy   Docker API を制限付きで中継
+│
 ├── Docker ネットワーク
 │   └── claude-dev-net         コンテナ間通信
 │
@@ -49,7 +52,7 @@ Linux サーバ (SSH でアクセス)
 │  ~/.gitconfig    ← ホストから共有 (RO)           │
 │  SSH agent       ← ソケット転送（鍵ファイルなし） │
 │                                               │
-│  ※ Docker ソケットなし                         │
+│  ※ Docker ソケットなし（proxy 経由で Docker API を利用）│
 │  ※ UID/GID はビルド時にホストと一致させる        │
 └───────────────────────────────────────────────┘
 ```
@@ -58,7 +61,8 @@ Linux サーバ (SSH でアクセス)
 - **ベース**: `ubuntu:24.04`
 - **言語**: Node.js 24/22 (fnm), Python3 (venv), Go, Rust
 - **ツール**: git, zsh, tmux, vim, make, gcc, curl, wget, pnpm, Playwright Chromium（ヘッドレステスト用）, Chrome DevTools MCP, etc.
-- **Chrome DevTools MCP**: Chrome/VNC コンテナの Google Chrome に CDP 接続し、MCP ツール経由でページ遷移・スクリーンショット・クリック・入力等を実行。entrypoint が `/workspace/.claude/mcp.json` を自動生成
+- **Docker**: 生ソケットはマウントしない。`DOCKER_HOST=tcp://claude-dev-docker-proxy:2375` 経由で制限付き Docker API を利用
+- **Chrome DevTools MCP**: Chrome/VNC コンテナの Google Chrome に CDP 接続し、MCP ツール経由でページ遷移・スクリーンショット・クリック・入力等を実行。entrypoint が `claude mcp add` で `/workspace/.mcp.json` に登録
 - **ユーザー**: ホストのカレントユーザーと同名 (UID/GID はビルド時にホストと一致。entrypoint でも競合を解消して追従)
 - **git 設定**: ホストの `~/.gitconfig` を読み取り専用でマウント（存在する場合）
 - **SSH**: SSH agent ソケットを転送。秘密鍵ファイルはマウントしない。`~/.ssh/known_hosts` と `~/.ssh/config` は読み取り専用でマウント
@@ -91,11 +95,58 @@ Linux サーバ (SSH でアクセス)
 - **ポート**: 6080（noVNC、全コンテナ共有）、9222（CDP、Claude コンテナから操作用）
 - **ボリューム**: `claude-dev-auth` を `~/.claude/` にマウント（Chrome の認証情報共有用）
 - **ライフサイクル**: `claude-dev start` で自動起動、全 Claude コンテナ停止時に自動停止
-- **CDP**: Chrome は `--remote-debugging-port=9222` で起動。Claude コンテナから Chrome DevTools MCP 経由で操作可能
+- **CDP**: Chrome は `--remote-debugging-port=9222` で起動（127.0.0.1 のみ）。socat が 0.0.0.0:9223 → 127.0.0.1:9222 にリレーし、Claude コンテナから Chrome DevTools MCP 経由で操作可能
+
+### Docker Socket Proxy コンテナ（共有）
+
+Claude コンテナから Docker API を安全に利用するためのリバースプロキシ。全 Claude コンテナで共有される。
+
+```
+┌───────────────────────────────────────────────┐
+│ claude-dev-docker-proxy                       │
+│                                               │
+│  Go 製の HTTP リバースプロキシ                  │
+│  リクエストのエンドポイント + ボディを検査        │
+│  危険な操作（ホストマウント、privileged 等）を拒否 │
+│                                               │
+│  /var/run/docker.sock ← ホストからマウント (RO)  │
+│  TCP 2375 で Docker API を中継                  │
+│                                               │
+│  ※ Claude コンテナからのみアクセス可能            │
+│  ※ 全 Claude コンテナ停止時に自動停止            │
+└───────────────────────────────────────────────┘
+```
+
+- **イメージ**: `claude-dev-docker-proxy`
+- **ポート**: 2375（Docker API、`claude-dev-net` 内でのみアクセス可能。ホストには公開しない）
+- **ボリューム**: `/var/run/docker.sock` を読み取り専用でマウント
+- **ライフサイクル**: `claude-dev start` で自動起動、全 Claude コンテナ停止時に自動停止
+- **セキュリティ**: リクエストボディを検査し、ホストバインドマウント・privileged・`host` ネットワーク/PID モード等を拒否。詳細は [セキュリティ設計](security.md) を参照
+
+```
+Claude コンテナ                        Docker Socket Proxy               Docker Engine
+┌──────────────┐                      ┌─────────────────────┐           ┌──────────┐
+│ docker ps    │─── HTTP GET ────────→│ GET /containers/json │──────────→│          │
+│              │                      │ → 許可               │           │          │
+│ docker run   │─── HTTP POST ───────→│ POST /containers/    │           │          │
+│  -v /:/host  │                      │  create              │           │ docker   │
+│              │                      │ → Binds 検出 → 拒否  │    ×      │ daemon   │
+│              │                      │                      │           │          │
+│ docker run   │─── HTTP POST ───────→│ POST /containers/    │──────────→│          │
+│  myapp       │                      │  create              │           │          │
+│              │                      │ → Binds なし → 許可   │           │          │
+└──────────────┘                      └─────────────────────┘           └──────────┘
+```
 
 ## Chrome DevTools MCP 連携
 
 Claude Code が noVNC の Chrome を直接操作して Web アプリの動作確認を行う仕組み。
+
+### CDP 接続経路
+
+Chrome 128 以降、`--remote-debugging-address=0.0.0.0` はセキュリティ上の理由でサイレントに無効化されており、CDP は `127.0.0.1` にのみバインドされる。また、Chrome は CDP リクエストの `Host` ヘッダーが IP アドレスまたは `localhost` でない場合にリクエストを拒否する。
+
+この 2 つの制約を回避するため、socat による二段リレーで接続する:
 
 ```
 ┌─ ユーザーの PC ─────────────────┐
@@ -103,28 +154,69 @@ Claude Code が noVNC の Chrome を直接操作して Web アプリの動作確
 └──────────────────────────────┘
         │
         ▼
-┌─ Chrome/VNC コンテナ (claude-dev-chrome) ─────────┐
-│  Google Chrome                                    │
-│    ├── noVNC (port 6080)  ← ユーザーが閲覧        │
-│    └── CDP  (port 9222)  ← Claude Code が操作     │
-└──────────────────────────────────────────────────┘
-        ▲ CDP 接続 (claude-dev-net)
+┌─ Chrome/VNC コンテナ (claude-dev-chrome) ─────────────────────┐
+│  Google Chrome                                                │
+│    ├── noVNC (port 6080)         ← ユーザーが閲覧             │
+│    └── CDP  (127.0.0.1:9222)    ← Chrome 128+ で強制          │
+│                                                               │
+│  socat (0.0.0.0:9223 → 127.0.0.1:9222)                       │
+│    └── CDP を外部に公開                                        │
+└───────────────────────────────────────────────────────────────┘
+        ▲ TCP 9223 (claude-dev-net)
         │
-┌─ Claude コンテナ ────────────────────────────────┐
-│  Claude Code                                     │
-│    └── Chrome DevTools MCP サーバー               │
-│         └── browserUrl=http://claude-dev-chrome:9222 │
-│                                                  │
-│  /workspace/.claude/mcp.json ← entrypoint が生成 │
-└──────────────────────────────────────────────────┘
+┌─ Claude コンテナ ─────────────────────────────────────────────┐
+│  socat (127.0.0.1:9222 → claude-dev-chrome:9223)              │
+│    └── MCP が localhost に接続 → Host ヘッダーが IP → Chrome 許可│
+│                                                               │
+│  Chrome DevTools MCP サーバー                                  │
+│    └── browserUrl=http://127.0.0.1:9222                       │
+│                                                               │
+│  /workspace/.mcp.json ← claude mcp add で登録                 │
+└───────────────────────────────────────────────────────────────┘
 ```
+
+**なぜ二段リレーが必要か:**
+
+1. **Chrome 側 socat** (0.0.0.0:9223 → 127.0.0.1:9222): Chrome の CDP が 127.0.0.1 にしかバインドされないため、外部からアクセス可能にする
+2. **Claude 側 socat** (127.0.0.1:9222 → claude-dev-chrome:9223): MCP が `http://127.0.0.1:9222` に接続することで、HTTP の `Host` ヘッダーが IP アドレスになり、Chrome の Host ヘッダー検証を通過する
+
+### MCP サーバーの登録
+
+entrypoint が以下の 2 段階で Chrome DevTools MCP サーバーを登録する。
+
+**ステップ 1: `claude mcp add` で `.mcp.json` を作成**
+
+```bash
+claude mcp add --transport stdio chrome-devtools --scope project \
+    -- chrome-devtools-mcp --browserUrl=http://127.0.0.1:9222
+```
+
+- `/workspace/.mcp.json`（プロジェクトルート直下）に `chrome-devtools` エントリを作成
+- Claude Code が読む MCP 設定ファイルは `~/.claude/mcp.json` ではなく `.mcp.json`（プロジェクトルート直下）
+- entrypoint は起動のたびにエントリの存在と接続先を確認し、不足・不一致があれば再登録する
+- `su` 経由で実行する際は `cd /workspace` しないとホームディレクトリに `.mcp.json` が作られるため、スクリプトファイル経由で実行する
+
+**ステップ 2: `.claude.json` の `enabledMcpjsonServers` に直接追加**
+
+```bash
+jq '.projects["/workspace"].enabledMcpjsonServers |= (. // [] + ["chrome-devtools"] | unique)' \
+    /workspace/.claude/.claude.json
+```
+
+- `claude mcp add` は `.mcp.json` を作成するだけで、`enabledMcpjsonServers` への追加は行わない
+- Claude Code は `.mcp.json` に定義があっても、`.claude.json` の `enabledMcpjsonServers` に含まれていないサーバーのツールを有効化しない
+- 通常は Claude Code 起動時の trust ダイアログで承認すると追加されるが、`--dangerously-skip-permissions` のコンテナ環境では trust ダイアログが表示されない
+- `bypassPermissions` / `--dangerously-skip-permissions` は MCP サーバーの承認には影響しない（ファイル操作等の権限とは別のセキュリティ機構）
+- そのため、entrypoint で jq を使って直接 `enabledMcpjsonServers` に追加する
 
 ### 動作フロー
 
-1. `claude-dev start` 時に Chrome/VNC コンテナが起動（CDP ポート 9222 を公開）
-2. Claude コンテナの entrypoint が `/workspace/.claude/mcp.json` を生成（Chrome DevTools MCP の接続先を設定）
-3. Claude Code が MCP ツール（`navigate_page`, `take_screenshot`, `click` 等）を呼び出すと、Chrome DevTools MCP サーバーが CDP 経由で Chrome を操作
-4. ユーザーは noVNC で Chrome の画面をリアルタイムに確認できる
+1. `claude-dev start` 時に Chrome/VNC コンテナが起動。entrypoint が Chrome を起動後、socat で CDP をリレー (0.0.0.0:9223)
+2. Claude コンテナの entrypoint が socat でローカルリレーを起動 (127.0.0.1:9222 → claude-dev-chrome:9223)
+3. entrypoint が `claude mcp add` で `/workspace/.mcp.json` に MCP サーバーを登録（未登録 or 接続先変更時のみ）
+4. entrypoint が `.claude.json` の `enabledMcpjsonServers` に `chrome-devtools` を追加（未追加時のみ）
+4. Claude Code が MCP ツール（`navigate_page`, `take_screenshot`, `click` 等）を呼び出すと、Chrome DevTools MCP サーバーが socat 経由で CDP に接続し Chrome を操作
+5. ユーザーは noVNC で Chrome の画面をリアルタイムに確認できる
 
 ### 主要な MCP ツール
 
@@ -327,6 +419,7 @@ ssh -O forward -L 8102:localhost:8102 myserver
 |------|--------|----------|
 | `claude-dev-claude` | ubuntu:24.04 | ~2.5GB |
 | `claude-dev-chrome` | ubuntu:24.04 | — |
+| `claude-dev-docker-proxy` | golang (multi-stage → scratch or alpine) | ~15MB |
 
 ## コンテナのライフサイクル
 

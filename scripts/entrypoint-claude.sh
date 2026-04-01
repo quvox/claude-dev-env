@@ -59,18 +59,6 @@ if [ -d /workspace ]; then
     fi
 fi
 
-# --- Docker ソケットのグループ権限設定 ---
-if [ -S /var/run/docker.sock ]; then
-    DOCKER_SOCK_GID=$(stat -c '%g' /var/run/docker.sock)
-    # docker グループが存在しなければ作成、存在すれば GID を合わせる
-    if getent group docker >/dev/null 2>&1; then
-        groupmod -g "$DOCKER_SOCK_GID" docker 2>/dev/null || true
-    else
-        groupadd -g "$DOCKER_SOCK_GID" docker 2>/dev/null || true
-    fi
-    usermod -aG docker "$USERNAME" 2>/dev/null || true
-fi
-
 # --- ~/.ssh ディレクトリの所有権・パーミッション ---
 if [ -d "$USER_HOME/.ssh" ]; then
     chown "$USERNAME":"$USERNAME" "$USER_HOME/.ssh" 2>/dev/null || true
@@ -89,6 +77,21 @@ if [ -S "/tmp/ssh-agent.sock" ]; then
             echo "" >> "$rc"
             echo "# --- claude-dev: SSH agent forwarding ---" >> "$rc"
             echo 'export SSH_AUTH_SOCK=/tmp/ssh-agent.sock' >> "$rc"
+        fi
+    done
+fi
+
+# --- Docker Socket Proxy の設定 ---
+# docker run -e で渡された DOCKER_HOST は su -l でリセットされるため、
+# シェル初期化ファイルに書き出して全シェルで利用可能にする。
+# Docker CLI の "default" コンテキストは DOCKER_HOST 環境変数を参照するため、
+# 環境変数の設定だけで十分（カスタム context は不要）。
+if [ -n "${DOCKER_HOST:-}" ]; then
+    for rc in /etc/zsh/zshrc /etc/bash.bashrc; do
+        if [ -f "$rc" ]; then
+            echo "" >> "$rc"
+            echo "# --- claude-dev: Docker Socket Proxy ---" >> "$rc"
+            echo "export DOCKER_HOST='${DOCKER_HOST}'" >> "$rc"
         fi
     done
 fi
@@ -163,7 +166,7 @@ fi
 
 # --- settings.json はコンテナローカル（共有しない）---
 if [ ! -f "$LOCAL_CLAUDE/settings.json" ]; then
-    echo '{"permissions":{"defaultMode":"bypassPermissions"}}' > "$LOCAL_CLAUDE/settings.json"
+    echo '{"permissions":{"defaultMode":"bypassPermissions"},"model":"sonnet"}' > "$LOCAL_CLAUDE/settings.json"
     chown "$USERNAME":"$USERNAME" "$LOCAL_CLAUDE/settings.json"
 fi
 
@@ -184,32 +187,70 @@ fi
 ) &
 
 # --- Chrome DevTools MCP 設定 ---
-# Claude Code が noVNC の Chrome に CDP 接続できるよう mcp.json を設定する
-# mcp.json はプロジェクト単位（/workspace/.claude/mcp.json）に配置
-MCP_DIR="/workspace/.claude"
-MCP_JSON="$MCP_DIR/mcp.json"
-mkdir -p "$MCP_DIR"
-# mcp.json がなければ作成、既にあれば chrome-devtools がなければ追加
+# claude mcp add で MCP サーバーを登録する。このコマンドは:
+#   1. /workspace/.mcp.json に chrome-devtools エントリを作成/更新
+#   2. .claude.json の enabledMcpjsonServers に自動追加（trust 承認含む）
+# .mcp.json を直接編集すると trust ダイアログの承認が別途必要になるため、
+# 必ず claude mcp add を使う。
+# 注意: Claude Code は ~/.claude/mcp.json ではなく .mcp.json（プロジェクトルート直下）を読む。
+# claude mcp add --scope project は /workspace/.mcp.json に書き込む
+# su -l のログインシェルでは ~/.local/bin が PATH に入らない場合があるため、
+# claude のフルパスを使用する
+CLAUDE_BIN="$USER_HOME/.local/bin/claude"
+MCP_JSON="/workspace/.mcp.json"
+MCP_NEED_ADD=0
 if [ ! -f "$MCP_JSON" ]; then
-    cat > "$MCP_JSON" << 'MCP_EOF'
-{
-  "mcpServers": {
-    "chrome-devtools": {
-      "command": "chrome-devtools-mcp",
-      "args": ["--browserUrl=http://claude-dev-chrome:9222"]
-    }
-  }
-}
-MCP_EOF
-    chown "$USERNAME":"$USERNAME" "$MCP_JSON"
-elif ! grep -q "chrome-devtools" "$MCP_JSON" 2>/dev/null; then
-    # 既存の mcp.json に chrome-devtools を追加（jq が使えれば）
-    if command -v jq >/dev/null 2>&1; then
-        TMP_MCP=$(mktemp)
-        jq '.mcpServers["chrome-devtools"] = {"command":"chrome-devtools-mcp","args":["--browserUrl=http://claude-dev-chrome:9222"]}' "$MCP_JSON" > "$TMP_MCP" \
-            && mv "$TMP_MCP" "$MCP_JSON" \
-            && chown "$USERNAME":"$USERNAME" "$MCP_JSON"
+    MCP_NEED_ADD=1
+elif ! grep -q '"chrome-devtools"' "$MCP_JSON" 2>/dev/null; then
+    MCP_NEED_ADD=1
+elif ! grep -q '127\.0\.0\.1:9222' "$MCP_JSON" 2>/dev/null; then
+    # エントリはあるが接続先が古い場合は再登録
+    su "$USERNAME" -s /bin/zsh -l -c "cd /workspace && $CLAUDE_BIN mcp remove chrome-devtools --scope project" 2>/dev/null || true
+    MCP_NEED_ADD=1
+fi
+if [ "$MCP_NEED_ADD" = "1" ] && [ -x "$CLAUDE_BIN" ]; then
+    # スクリプト経由で実行（su -l の cd $HOME 問題を回避）
+    cat > /tmp/mcp-add.sh << 'MCP_SCRIPT'
+#!/bin/zsh
+cd /workspace
+"$1" mcp add --transport stdio chrome-devtools --scope project -- chrome-devtools-mcp --browserUrl=http://127.0.0.1:9222
+MCP_SCRIPT
+    chmod +x /tmp/mcp-add.sh
+    su "$USERNAME" -s /bin/zsh -c "/tmp/mcp-add.sh $CLAUDE_BIN" 2>/dev/null || true
+    rm -f /tmp/mcp-add.sh
+fi
+
+# --- .claude.json の enabledMcpjsonServers に chrome-devtools を追加 ---
+# claude mcp add は .mcp.json を作成するが、enabledMcpjsonServers への追加は
+# Claude Code の trust ダイアログ経由でしか行われない。
+# コンテナ環境では --dangerously-skip-permissions で動作する前提のため、
+# entrypoint で直接追加する。
+CLAUDE_JSON="$LOCAL_CLAUDE/.claude.json"
+if command -v jq >/dev/null 2>&1; then
+    # .claude.json がなければ最小限の内容で作成
+    if [ ! -f "$CLAUDE_JSON" ]; then
+        echo '{}' > "$CLAUDE_JSON"
+        chown "$USERNAME":"$USERNAME" "$CLAUDE_JSON"
     fi
+    if ! jq -e '.projects["/workspace"].enabledMcpjsonServers // [] | index("chrome-devtools")' "$CLAUDE_JSON" >/dev/null 2>&1; then
+        TMP_CJ=$(mktemp)
+        jq '
+            .projects["/workspace"].enabledMcpjsonServers = (
+                (.projects["/workspace"].enabledMcpjsonServers // []) + ["chrome-devtools"] | unique
+            )
+        ' "$CLAUDE_JSON" > "$TMP_CJ" \
+            && mv "$TMP_CJ" "$CLAUDE_JSON" \
+            && chown "$USERNAME":"$USERNAME" "$CLAUDE_JSON"
+    fi
+fi
+
+# --- Chrome DevTools CDP リレー ---
+# Chrome 146+ では CDP が 127.0.0.1 にのみバインドされ、Host ヘッダーが
+# IP または localhost でないと拒否される。socat でローカルにリレーすることで
+# MCP が http://127.0.0.1:9222 に接続できるようにする。
+# Chrome コンテナ側でも socat が 0.0.0.0:9223 → 127.0.0.1:9222 にリレーしている。
+if command -v socat >/dev/null 2>&1; then
+    socat TCP-LISTEN:9222,fork,reuseaddr,bind=127.0.0.1 TCP:claude-dev-chrome:9223 &
 fi
 
 # --- ファイアウォール設定 ---

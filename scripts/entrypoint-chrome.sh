@@ -28,8 +28,8 @@ if [ -f "$USER_HOME/.claude/.claude.json" ]; then
 fi
 
 # --- Chrome ユーザーデータの所有権（ボリュームマウント）---
-if [ -d "$USER_HOME/.config/google-chrome" ]; then
-    chown "$USERNAME":"$USERNAME" "$USER_HOME/.config/google-chrome" 2>/dev/null || true
+if [ -d "$USER_HOME/.chrome-profile" ]; then
+    chown "$USERNAME":"$USERNAME" "$USER_HOME/.chrome-profile" 2>/dev/null || true
 fi
 
 # --- GTK immodules キャッシュ更新 ---
@@ -124,7 +124,14 @@ google-chrome-stable --no-sandbox --disable-gpu --disable-software-rasterizer \
     --disable-dev-shm-usage --disable-background-networking \
     --no-first-run --no-default-browser-check --start-maximized \
     --gtk-version=4 \
-    --remote-debugging-address=0.0.0.0 --remote-debugging-port=9222 &
+    --user-data-dir=${USER_HOME}/.chrome-profile \
+    --remote-debugging-port=9222 &
+
+# Chrome 146+ では --remote-debugging-address=0.0.0.0 が無視され
+# CDP が 127.0.0.1 にのみバインドされる。socat でリレーして
+# 他コンテナからアクセス可能にする。
+sleep 3
+socat TCP-LISTEN:9223,fork,reuseaddr,bind=0.0.0.0 TCP:127.0.0.1:9222 &
 
 # 初期エンジンは mozc-jp（preload-engines の設定による）
 # ibus engine コマンドでの切り替えはフォーカスされた入力コンテキストが
