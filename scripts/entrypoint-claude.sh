@@ -362,7 +362,7 @@ sleep 2
 setxkbmap -layout us,jp -model pc105 2>/dev/null || setxkbmap -layout us 2>/dev/null || true
 
 # D-Bus セッションバス
-eval "\\\$(dbus-launch --sh-syntax)"
+eval "\$(dbus-launch --sh-syntax)"
 export DBUS_SESSION_BUS_ADDRESS
 
 # openbox
@@ -371,7 +371,7 @@ sleep 0.5
 
 # IBus デーモン
 ibus-daemon -xrR &
-for i in \\\$(seq 1 30); do
+for i in \$(seq 1 30); do
     ibus list-engine >/dev/null 2>&1 && break
     sleep 1
 done
@@ -388,7 +388,7 @@ sleep 0.5
 # Chrome プロファイルのロックファイルを削除（前回コンテナの残骸）
 # Docker ボリュームに永続化されたプロファイルには前回コンテナの SingletonLock が残るため、
 # 新コンテナで Chrome が「別プロセスが使用中」と判定し --remote-debugging-port を無視する
-rm -f \${HOME}/.chrome-profile/SingletonLock \${HOME}/.chrome-profile/SingletonSocket \${HOME}/.chrome-profile/SingletonCookie
+rm -f \$HOME/.chrome-profile/SingletonLock \$HOME/.chrome-profile/SingletonSocket \$HOME/.chrome-profile/SingletonCookie
 
 # Chrome
 sleep 2
@@ -397,14 +397,14 @@ google-chrome-stable --no-sandbox --disable-gpu --disable-software-rasterizer \
     --no-first-run --no-default-browser-check --start-maximized \
     --remote-debugging-port=9222 \
     --gtk-version=4 \
-    --user-data-dir=\${HOME}/.chrome-profile &
+    --user-data-dir=\$HOME/.chrome-profile &
 
 wait
 DESKEOF
 
     chmod +x /tmp/start-user-desktop.sh
     chown "$USERNAME":"$USERNAME" /tmp/start-user-desktop.sh
-    su "$USERNAME" -c "/tmp/start-user-desktop.sh" &
+    su "$USERNAME" -s /bin/bash -c "/tmp/start-user-desktop.sh" &
     # VNC 起動完了メッセージはバックグラウンドで（tmux 起動をブロックしない）
     (sleep 12 && echo "🖥️  VNC 起動完了 (noVNC: port ${NOVNC_PORT})" && echo "   日本語入力: Ctrl+\\ または F3 で切り替え (IBus-Mozc)") &
 fi
