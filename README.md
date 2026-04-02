@@ -21,7 +21,7 @@ Linux サーバ (SSH)
 ├── claude-dev CLI   日常の開発操作（どこからでも実行可能）
 │
 ├── プロジェクトコンテナ（都度起動）
-│   ├── project-a  (VNC あり)   Chrome + noVNC 内蔵
+│   ├── project-a  (VNC あり)   Chrome + noVNC + chrome-devtools MCP
 │   ├── project-b  (--no-vnc)   軽量・ブラウザなし
 │   └── ...                     同時に複数起動可能
 │
@@ -83,9 +83,14 @@ claude-dev start
 cd ~/repos/cli-tool
 claude-dev start --no-vnc
 
+# Web アプリのポートを動的にフォワード
+claude-dev forward 3000       # → host:8100 → container:3000
+claude-dev ports              # アクティブなフォワード一覧
+claude-dev unforward 3000     # フォワード解除
+
 # 管理
-claude-dev list               # 実行中セッション一覧（noVNC URL も表示）
-claude-dev stop my-project    # 停止
+claude-dev list               # 実行中セッション一覧（noVNC URL + フォワード状況も表示）
+claude-dev stop my-project    # 停止（フォワード用プロキシも自動クリーンアップ）
 claude-dev upgrade            # Claude Code + Chrome + Docker Proxy 更新
 make status                   # 全体の状態確認
 ```

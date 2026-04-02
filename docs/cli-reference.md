@@ -83,7 +83,7 @@ claude-dev start --no-vnc   # Chrome / VNC なし（軽量）
 - 停止中のコンテナがある場合は削除して新規起動
 - イメージが存在しなければ自動ビルド
 - 認証情報がなければエラーで停止
-- 主要な開発ポート（3000, 4200, 5173, 5000, 8000, 8080, 8888）を自動マッピング
+- Web アプリのポートマッピングは行わない（`claude-dev forward` で必要なときに動的にフォワード）
 - ssh-agent が未起動なら自動起動し、鍵が未登録なら `ssh-add` を実行（`~/.config/claude-dev.yaml` から鍵リストを読み込み）
 - `~/.gitconfig` があればコンテナに共有（読み取り専用）
 - SSH agent ソケット・`~/.ssh/known_hosts`・`~/.ssh/config` をコンテナに共有（読み取り専用。秘密鍵はマウントしない）
@@ -94,7 +94,7 @@ VNC あり（デフォルト）:
 - コンテナ内で Xvnc + noVNC + Google Chrome が起動
 - noVNC ポート（HTTP/WebSocket）は起動時に 6080〜 から空きを動的に割り当て。VNC 生ポートはホストに公開しない
 - 起動時に noVNC URL が表示される。あとから `claude-dev list` や `claude-dev ports` でも確認可能
-- Claude Code が組み込みブラウザツール（computer use）で Chrome を直接操作
+- Claude Code が chrome-devtools MCP サーバー経由で Chrome を操作
 - 日本語入力対応（IBus-Mozc、`Ctrl+\\` または `F3` で切替）
 
 VNC なし（`--no-vnc`）:
@@ -127,7 +127,7 @@ claude-dev attach my-project
 
 #### `claude-dev stop [NAME]`
 
-プロジェクトのコンテナを停止・削除する。プロジェクトファイルには影響しない。
+プロジェクトのコンテナを停止・削除する。プロジェクトファイルには影響しない。フォワード用プロキシコンテナ（`fwd-<name>-*`）も自動的にクリーンアップされる。
 
 ```bash
 # カレントディレクトリのプロジェクトを停止
@@ -137,9 +137,39 @@ claude-dev stop
 claude-dev stop my-project
 ```
 
+#### `claude-dev forward <port> [NAME]`
+
+コンテナ内のポートをホストに動的にフォワードする。軽量な socat プロキシコンテナ（`fwd-<name>-<port>`）を同じ Docker ネットワーク上に作成する。ホスト側ポートは 8100 番台から自動的に割り当てられる。
+
+```bash
+# カレントディレクトリのプロジェクト
+claude-dev forward 3000
+
+# プロジェクト名を指定
+claude-dev forward 8080 backend
+```
+
+出力例:
+```
+✅ host:8100 → my-project:3000
+   SSH: ssh -O forward -L 8100:localhost:8100 <server>
+```
+
+#### `claude-dev unforward <port> [NAME]`
+
+フォワードを解除する。対応するプロキシコンテナ（`fwd-<name>-<port>`）を停止・削除する。
+
+```bash
+# カレントディレクトリのプロジェクト
+claude-dev unforward 3000
+
+# プロジェクト名を指定
+claude-dev unforward 8080 backend
+```
+
 #### `claude-dev ports [NAME]`
 
-実行中のコンテナのポートマッピングを表示する。
+アクティブなフォワードと noVNC URL を表示する。
 
 ```bash
 # カレントディレクトリのプロジェクト
@@ -151,45 +181,16 @@ claude-dev ports my-project
 
 出力例:
 ```
-📡 my-project port mappings:
-  Host :8100 → Container :3000  (React/Next/Express/Rails)
-  Host :8101 → Container :4200  (Angular)
-  Host :8102 → Container :5173  (Vite)
-  Host :8103 → Container :5000  (Flask)
-  Host :8104 → Container :8000  (Django/FastAPI/Hugo)
-  Host :8105 → Container :8080  (Go/Spring Boot)
-  Host :8106 → Container :8888  (Jupyter)
-```
-
-#### `claude-dev ssh-forward [NAME]`
-
-クライアント PC で実行する SSH ポートフォワードコマンドを生成・表示する。
-
-```bash
-claude-dev ssh-forward
-claude-dev ssh-forward my-project
-```
-
-出力例:
-```
-📋 SSH ControlMaster 設定（~/.ssh/config に追加を推奨）:
-  Host myserver
-      ControlMaster auto
-      ControlPath /tmp/ssh-%r@%h:%p
-      ControlPersist 10m
-
-📋 ポートフォワード追加コマンド（クライアント PC で実行）:
-  ssh -O forward -L 8100:localhost:8100 myserver
-  ssh -O forward -L 8102:localhost:8102 myserver
-  ssh -O forward -L 8105:localhost:8105 myserver
-
-📋 一括転送（ControlMaster 未使用時）:
-  ssh -L 8100:localhost:8100 -L 8102:localhost:8102 -L 8105:localhost:8105 myserver
+📡 my-project:
+  noVNC: http://localhost:6080/vnc.html?autoconnect=true
+  Forwards:
+    host:8100 → my-project:3000
+    host:8101 → my-project:5173
 ```
 
 #### `claude-dev list`
 
-実行中の Claude Code セッションを表示する。ポートマッピングと noVNC URL も表示される。
+実行中の Claude Code セッションを表示する。アクティブなフォワードと noVNC URL も表示される。
 
 ```bash
 claude-dev list
@@ -202,14 +203,14 @@ claude-dev list
   NAME:      my-project
   STATUS:    running
   WORKSPACE: /home/user/repos/my-project
-  PORTS:     Ports: 8100-8109
   noVNC:     http://localhost:6080/vnc.html?autoconnect=true
+  Forwards:  host:8100→3000  host:8101→5173
 
   NAME:      api-server
   STATUS:    running
   WORKSPACE: /home/user/repos/api-server
-  PORTS:     Ports: 8110-8119
   (VNC なし)
+  Forwards:  host:8102→8080
 ```
 
 ---
@@ -271,8 +272,8 @@ claude-dev reset
 | PATH 登録 | `make install` |
 | プロジェクトで開発開始 | `claude-dev start` |
 | セッション接続/切断 | `claude-dev attach` / `claude-dev stop` |
-| ポートマッピング確認 | `claude-dev ports` |
-| SSH 転送コマンド生成 | `claude-dev ssh-forward` |
+| ポートフォワード | `claude-dev forward` / `claude-dev unforward` |
+| フォワード状況確認 | `claude-dev ports` |
 | セッション一覧 | `claude-dev list` |
 | OAuth ログイン | `make login` または `claude-dev login` |
 | 認証情報削除 | `claude-dev logout` |

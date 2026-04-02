@@ -233,13 +233,13 @@ CLAUDE_AUTO_EOF
 ## Web アプリの動作確認（重要）
 
 - コンテナ内で Google Chrome が動作している。ユーザーは noVNC 経由でブラウザ画面をリアルタイムに確認できる
-- Claude Code の組み込みブラウザツール（computer use）で Chrome を直接操作すること
+- chrome-devtools MCP サーバー経由で Chrome を操作すること
 - **ヘッドレスブラウザを別途起動しないこと**（`chromium.launch()` 等は禁止）
 
 ### 動作確認の手順
 
 1. 開発サーバーを起動する（`0.0.0.0` にバインドすること）
-2. 組み込みブラウザツールで Chrome を操作する（ページ遷移、クリック、入力、スクリーンショット等）
+2. chrome-devtools MCP で Chrome を操作する（ページ遷移、クリック、入力、スクリーンショット等）
 3. ユーザーは noVNC 画面で操作をリアルタイムに確認できる
 
 ### 注意事項
@@ -262,6 +262,55 @@ CLAUDE_VNC_EOF
 ${MARKER_END}
 CLAUDE_DOCKER_EOF
     chown "$USERNAME":"$USERNAME" /workspace/CLAUDE.md 2>/dev/null || true
+fi
+
+# --- MCP 設定（VNC ありの場合のみ）---
+# chrome-devtools MCP サーバーで Chrome を操作するための設定
+if [ "${CLAUDE_DEV_VNC:-}" = "1" ]; then
+    # .mcp.json: chrome-devtools エントリを確保
+    MCP_JSON="/workspace/.mcp.json"
+    CHROME_DEVTOOLS_ENTRY='{"command":"npx","args":["-y","chrome-devtools-mcp@latest","--browserUrl","http://localhost:9222"]}'
+
+    if [ ! -f "$MCP_JSON" ]; then
+        # 新規作成
+        echo "{\"mcpServers\":{\"chrome-devtools\":${CHROME_DEVTOOLS_ENTRY}}}" | jq . > "$MCP_JSON"
+    else
+        # 既存ファイルに chrome-devtools がなければ追加
+        if ! jq -e '.mcpServers["chrome-devtools"]' "$MCP_JSON" >/dev/null 2>&1; then
+            if jq --argjson entry "$CHROME_DEVTOOLS_ENTRY" '.mcpServers["chrome-devtools"] = $entry' "$MCP_JSON" > "${MCP_JSON}.tmp" 2>/dev/null; then
+                mv "${MCP_JSON}.tmp" "$MCP_JSON"
+            else
+                rm -f "${MCP_JSON}.tmp"
+                echo "⚠️  .mcp.json の更新に失敗しました（不正な JSON？）。chrome-devtools 追加をスキップします"
+            fi
+        fi
+    fi
+    chown "$USERNAME":"$USERNAME" "$MCP_JSON"
+
+    # .claude.json: chrome-devtools MCP を有効化
+    # .claude.json が存在しない場合は新規作成する
+    CLAUDE_JSON="$LOCAL_CLAUDE/.claude.json"
+    if [ ! -f "$CLAUDE_JSON" ]; then
+        echo '{}' > "$CLAUDE_JSON"
+        chown "$USERNAME":"$USERNAME" "$CLAUDE_JSON"
+        chmod 600 "$CLAUDE_JSON"
+    fi
+    if ! jq -e '(.projects["/workspace"].enabledMcpjsonServers // []) | index("chrome-devtools")' "$CLAUDE_JSON" >/dev/null 2>&1; then
+        if jq '
+            .projects //= {} |
+            .projects["/workspace"] //= {} |
+            .projects["/workspace"].enabledMcpjsonServers = (
+                (.projects["/workspace"].enabledMcpjsonServers // []) + ["chrome-devtools"] | unique
+            )
+        ' "$CLAUDE_JSON" > "${CLAUDE_JSON}.tmp" 2>/dev/null; then
+            mv "${CLAUDE_JSON}.tmp" "$CLAUDE_JSON"
+            chown "$USERNAME":"$USERNAME" "$CLAUDE_JSON"
+            chmod 600 "$CLAUDE_JSON"
+        else
+            rm -f "${CLAUDE_JSON}.tmp"
+            echo "⚠️  .claude.json の更新に失敗しました（不正な JSON？）。MCP 有効化をスキップします"
+        fi
+    fi
 fi
 
 # --- VNC / Chrome 起動（VNC ありイメージの場合のみ）---
@@ -336,11 +385,17 @@ gsettings set org.freedesktop.ibus.general use-global-engine true 2>/dev/null ||
 websockify --heartbeat 30 --web /usr/share/novnc ${NOVNC_PORT} localhost:${VNC_PORT} &
 sleep 0.5
 
+# Chrome プロファイルのロックファイルを削除（前回コンテナの残骸）
+# Docker ボリュームに永続化されたプロファイルには前回コンテナの SingletonLock が残るため、
+# 新コンテナで Chrome が「別プロセスが使用中」と判定し --remote-debugging-port を無視する
+rm -f \${HOME}/.chrome-profile/SingletonLock \${HOME}/.chrome-profile/SingletonSocket \${HOME}/.chrome-profile/SingletonCookie
+
 # Chrome
 sleep 2
 google-chrome-stable --no-sandbox --disable-gpu --disable-software-rasterizer \
     --disable-dev-shm-usage --disable-background-networking \
     --no-first-run --no-default-browser-check --start-maximized \
+    --remote-debugging-port=9222 \
     --gtk-version=4 \
     --user-data-dir=\${HOME}/.chrome-profile &
 
@@ -350,9 +405,8 @@ DESKEOF
     chmod +x /tmp/start-user-desktop.sh
     chown "$USERNAME":"$USERNAME" /tmp/start-user-desktop.sh
     su "$USERNAME" -c "/tmp/start-user-desktop.sh" &
-    sleep 12
-    echo "🖥️  VNC 起動完了 (noVNC: port ${NOVNC_PORT})"
-    echo "   日本語入力: Ctrl+\\ または F3 で切り替え (IBus-Mozc)"
+    # VNC 起動完了メッセージはバックグラウンドで（tmux 起動をブロックしない）
+    (sleep 12 && echo "🖥️  VNC 起動完了 (noVNC: port ${NOVNC_PORT})" && echo "   日本語入力: Ctrl+\\ または F3 で切り替え (IBus-Mozc)") &
 fi
 
 # --- tmux セッション開始 ---

@@ -79,7 +79,7 @@ claude-dev start --no-vnc   # Chrome / VNC なし（軽量）
 
 noVNC URL が起動時に表示されるので、ブラウザでアクセスして Chrome 画面を確認できる（日本語入力対応、`Ctrl+\\` または `F3` で切替）。noVNC ポートは 6080〜 から空きを動的に割り当てるため、複数プロジェクト間で衝突しない。あとから `claude-dev list` や `claude-dev ports` でポート番号を確認できる。
 
-Claude Code は組み込みブラウザツールで Chrome を直接操作する。
+Claude Code は chrome-devtools MCP サーバー経由で Chrome を操作する。
 
 `--no-vnc` の場合は Chrome / VNC が起動せず、軽量なコンテナで開発できる。バックエンド開発や CLI ツール開発など、ブラウザ不要なプロジェクト向け。
 
@@ -124,7 +124,7 @@ claude-dev stop project-a    # 停止
 
 ## Web アプリへのアクセス
 
-コンテナ内で起動した Web アプリにクライアント PC のブラウザからアクセスできる。主要な開発ポートは `claude-dev start` 時に自動的にホストにマッピングされる。
+コンテナ内で起動した Web アプリにクライアント PC のブラウザからアクセスできる。ポートは `claude-dev forward` で必要なときに動的にフォワードする（`claude-dev start` 時にはポートマッピングは行われない）。
 
 ### ワークフロー
 
@@ -132,18 +132,22 @@ claude-dev stop project-a    # 停止
 # --- ターミナル 1: サーバ上で開発 ---
 $ ssh myserver
 $ cd ~/repos/my-webapp
-$ claude-dev start
-  📡 Port mappings (host → container):
-     8100→3000  8101→4200  8102→5173  8103→5000
-     8104→8000  8105→8080  8106→8888
+$ claude-dev start                  # ポートマッピングなしで起動
 
 # コンテナ内で Claude が Vite アプリを起動 → localhost:5173
 
-# --- ターミナル 2: クライアント PC で SSH トンネル ---
-$ ssh -O forward -L 8102:localhost:8102 myserver
+# --- ターミナル 2: サーバ上でポートフォワード ---
+$ claude-dev forward 5173           # → ✅ host:8100 → my-webapp:5173
+                                    #    SSH: ssh -O forward -L 8100:localhost:8100 <server>
+
+# --- ターミナル 3: クライアント PC で SSH トンネル ---
+$ ssh -O forward -L 8100:localhost:8100 myserver
 
 # --- ブラウザ ---
-# http://localhost:8102 でアクセス
+# http://localhost:8100 でアクセス
+
+# 不要になったらフォワード解除
+$ claude-dev unforward 5173
 ```
 
 ### SSH ControlMaster の設定（推奨）
@@ -159,28 +163,29 @@ Host myserver
 
 この設定があれば、通常の `ssh myserver` だけで ControlMaster が有効になり、別ターミナルから `-O forward` でポートフォワードを動的に追加できる。
 
-### ポートマッピングの確認
+### フォワードの確認
 
 ```bash
 # サーバ上で実行
-claude-dev ports              # カレントディレクトリのプロジェクト
-claude-dev ssh-forward        # SSH 転送コマンドを生成
+claude-dev ports              # アクティブなフォワードと noVNC URL を表示
 ```
 
 ### 複数プロジェクト同時開発時
 
-各コンテナに異なるポートブロックが割り当てられるため、衝突しない:
+ポートは動的に割り当てられるため、必要なポートだけをフォワードする:
 
 ```bash
-# Project A: Ports 8100-8109
+# Project A
 $ cd ~/repos/frontend && claude-dev start
+$ claude-dev forward 5173             # → host:8100 → frontend:5173
 
-# Project B: Ports 8110-8119
+# Project B
 $ cd ~/repos/backend && claude-dev start
+$ claude-dev forward 8080 backend     # → host:8101 → backend:8080
 
 # クライアント PC からそれぞれにフォワード
-$ ssh -O forward -L 8102:localhost:8102 myserver  # frontend の Vite
-$ ssh -O forward -L 8115:localhost:8115 myserver  # backend の Go
+$ ssh -O forward -L 8100:localhost:8100 myserver  # frontend の Vite
+$ ssh -O forward -L 8101:localhost:8101 myserver  # backend の Go
 ```
 
 ### 注意事項
