@@ -116,7 +116,7 @@ make status                   # 全体の状態確認
 | [docs/architecture.md](docs/architecture.md) | システム設計・コンテナ構成・認証フロー |
 | [docs/security.md](docs/security.md) | 脅威モデルと防御層の詳細 |
 | [docs/cli-reference.md](docs/cli-reference.md) | 全コマンドのリファレンス |
-| [docs/customization.md](docs/customization.md) | ファイアウォール・CLAUDE.md・tmux 等のカスタマイズ |
+| [docs/customization.md](docs/customization.md) | ファイアウォール・CLAUDE.md・tmux・hooks/env 等のカスタマイズ |
 
 ## ファイル構成
 

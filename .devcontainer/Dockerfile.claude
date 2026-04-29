@@ -220,7 +220,10 @@ COPY .devcontainer/tmux.conf /etc/tmux.conf
 # --- スクリプト設置 ---
 COPY scripts/init-firewall-claude.sh /usr/local/bin/init-firewall.sh
 COPY scripts/entrypoint-claude.sh /usr/local/bin/entrypoint.sh
-RUN chmod +x /usr/local/bin/init-firewall.sh /usr/local/bin/entrypoint.sh
+COPY scripts/save_prompt.sh /usr/local/bin/save_prompt.sh
+COPY scripts/sendslackmsg.sh /usr/local/bin/sendslackmsg.sh
+RUN chmod +x /usr/local/bin/init-firewall.sh /usr/local/bin/entrypoint.sh \
+    /usr/local/bin/save_prompt.sh /usr/local/bin/sendslackmsg.sh
 
 # --- 作業ディレクトリ ---
 RUN mkdir -p /workspace && chown $USERNAME:$USERNAME /workspace

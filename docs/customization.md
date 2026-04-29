@@ -121,6 +121,85 @@ claude-dev start
 
 プロジェクトの `CLAUDE.md` はグローバル設定より優先される（より具体的なパスが優先）。
 
+## Claude Code hooks / 環境変数の設定
+
+Claude Code の **hooks**（`UserPromptSubmit`, `Notification`, `Stop` 等のイベントで任意コマンドを実行する機構）と **環境変数**（`env` フィールド）は、ホストの `~/.claude/settings.json` に記述する。コンテナ内の `/workspace/.claude/settings.json` ではなく、必ず**ホスト側の `~/.claude/settings.json`** に書くこと。
+
+### 仕組み
+
+`claude-dev start` 時、ホストの `~/.claude/settings.json` から `hooks` と `env` のフィールドだけが抽出され、Claude コンテナの `~/.claude/settings.json` にマージされる（`scripts/entrypoint-claude.sh` 内で `jq * $overlay[0]` を使用）。抽出対象は **`hooks` と `env` のみ**。それ以外（`permissions` 等）はコピーされない。
+
+### 組み込み hook スクリプト
+
+`scripts/save_prompt.sh`（プロンプト先頭30文字を `/tmp/claude_prompt_${session_id}.txt` に保存）と `scripts/sendslackmsg.sh`（Slack に通知を送信）はリポジトリで管理され、Claude イメージのビルド時に **`/usr/local/bin/` に焼き込まれる**（`Dockerfile.claude`）。hook の command でフルパスを指定すれば、すべての Claude コンテナで使える。
+
+スクリプトを編集した場合は **イメージの再ビルドが必要**:
+
+```bash
+make build-claude
+claude-dev stop my-project
+cd ~/repos/my-project
+claude-dev start
+```
+
+### ユーザー独自の hook スクリプト
+
+組み込みスクリプトとは別に、ホストの `~/.local/bin/` 配下にスクリプトを置けば `claude-dev start` 時にコンテナの `~/.local/bin/` にコピーされる。再ビルド不要で反映できるため、試作や個人用カスタマイズはこちらが向く。
+
+### 例: Slack 通知 hook
+
+ホストの `~/.claude/settings.json` で hook と環境変数を定義:
+
+```json
+{
+  "env": {
+    "SLACK_BOT_TOKEN": "xoxb-...",
+    "SLACK_CHANNEL": "Cxxxxxxxx"
+  },
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/usr/local/bin/save_prompt.sh"
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/usr/local/bin/sendslackmsg.sh \"🔔 Claude Code が入力待ちです\""
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/usr/local/bin/sendslackmsg.sh \"✅ Claude Code の処理が完了しました\""
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+`SLACK_BOT_TOKEN` は Slack Bot User OAuth Token、`SLACK_CHANNEL` は通知先のチャンネル ID または DM のユーザー ID。
+
+### 注意事項
+
+- **コンテナ起動中の変更は反映されない**: `hooks` や `env` を変更したら `claude-dev stop` → `claude-dev start` で再起動する。
+- **プロジェクトの `<workspace>/.claude/settings.json` に同じ hooks を書かない**: ユーザーレベル（`~/.claude/`）とプロジェクトレベル（`<workspace>/.claude/`）の hooks は両方とも実行されるので、両方に同じ hook を書くと**通知が2回飛ぶ**。
+- **シークレットのハードコード禁止**: `scripts/sendslackmsg.sh` のような git 管理下のスクリプトにトークンを書き込まないこと。`env` フィールドに置き、スクリプトは環境変数経由で受け取る。
+
 ## tmux 設定のカスタマイズ
 
 `scripts/tmux.conf` を編集する。主な設定項目:

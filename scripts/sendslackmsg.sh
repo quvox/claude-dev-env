@@ -22,7 +22,7 @@ fi
 
 PAYLOAD="$(jq -n \
   --arg channel "$CHANNEL" \
-  --arg text "${MSG} ${PROMPT}" \
+  --arg text "${MSG} 「${PROMPT}...」" \
   '{channel: $channel, text: $text}')"
 
 curl -sS -X POST \

@@ -541,7 +541,9 @@ start)
         fi
     fi
 
-    # ホストの ~/.local/bin/ スクリプトをコンテナ用にコピー
+    # ホストの ~/.local/bin/ スクリプト（ユーザー独自 hook 用）をコンテナ用にコピー
+    # 組み込み hook スクリプト (save_prompt.sh / sendslackmsg.sh) はイメージに焼き込み済みのため
+    # ここではコピー対象外。ユーザー独自スクリプトのみ ~/.local/bin/ から運ぶ。
     if [ -d "${HOME}/.local/bin" ] && [ -n "$(ls -A "${HOME}/.local/bin/" 2>/dev/null)" ]; then
         mkdir -p "${PROJECT_DIR}/.claude/host-local-bin"
         cp -a "${HOME}/.local/bin/." "${PROJECT_DIR}/.claude/host-local-bin/"
