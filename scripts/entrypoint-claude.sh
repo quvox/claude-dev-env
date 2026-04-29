@@ -170,6 +170,34 @@ if [ ! -f "$LOCAL_CLAUDE/settings.json" ]; then
     chown "$USERNAME":"$USERNAME" "$LOCAL_CLAUDE/settings.json"
 fi
 
+# --- ホストの hooks 設定をマージ ---
+# claude-dev start 時にコピーされた host-hooks.json があれば settings.json にマージ
+HOST_HOOKS="$LOCAL_CLAUDE/host-hooks.json"
+if [ -f "$HOST_HOOKS" ]; then
+    if jq -e '.hooks' "$HOST_HOOKS" >/dev/null 2>&1; then
+        SETTINGS="$LOCAL_CLAUDE/settings.json"
+        if jq --slurpfile hooks "$HOST_HOOKS" '. * $hooks[0]' "$SETTINGS" > "${SETTINGS}.tmp" 2>/dev/null; then
+            mv "${SETTINGS}.tmp" "$SETTINGS"
+            chown "$USERNAME":"$USERNAME" "$SETTINGS"
+        else
+            rm -f "${SETTINGS}.tmp"
+            echo "⚠️  hooks のマージに失敗しました"
+        fi
+    fi
+    rm -f "$HOST_HOOKS"
+fi
+
+# --- ホストの ~/.local/bin スクリプトを配置 ---
+# claude-dev start 時にコピーされたスクリプトをユーザーの ~/.local/bin/ に配置
+HOST_LOCAL_BIN="$LOCAL_CLAUDE/host-local-bin"
+if [ -d "$HOST_LOCAL_BIN" ] && [ -n "$(ls -A "$HOST_LOCAL_BIN" 2>/dev/null)" ]; then
+    mkdir -p "$USER_HOME/.local/bin"
+    cp -a "$HOST_LOCAL_BIN/." "$USER_HOME/.local/bin/"
+    chown -R "$USERNAME":"$USERNAME" "$USER_HOME/.local/bin"
+    chmod -R +x "$USER_HOME/.local/bin"
+    rm -rf "$HOST_LOCAL_BIN"
+fi
+
 # --- バックグラウンド: 認証ファイルの変更を共有ボリュームに書き戻し ---
 # トークンリフレッシュ等で認証ファイルが更新された場合に他コンテナへ伝播する
 (
@@ -378,7 +406,7 @@ done
 
 # IBus 設定
 gsettings set org.freedesktop.ibus.general preload-engines "['xkb:us::eng', 'mozc-jp']" 2>/dev/null || true
-gsettings set org.freedesktop.ibus.general.hotkey triggers "[]" 2>/dev/null || true
+gsettings set org.freedesktop.ibus.general.hotkey triggers "['<Control><Shift>space']" 2>/dev/null || true
 gsettings set org.freedesktop.ibus.general use-global-engine true 2>/dev/null || true
 
 # noVNC（websockify: HTTP port ${NOVNC_PORT} → VNC port ${VNC_PORT}）
@@ -406,7 +434,7 @@ DESKEOF
     chown "$USERNAME":"$USERNAME" /tmp/start-user-desktop.sh
     su "$USERNAME" -s /bin/bash -c "/tmp/start-user-desktop.sh" &
     # VNC 起動完了メッセージはバックグラウンドで（tmux 起動をブロックしない）
-    (sleep 12 && echo "🖥️  VNC 起動完了 (noVNC: port ${NOVNC_PORT})" && echo "   日本語入力: Ctrl+\\ または F3 で切り替え (IBus-Mozc)") &
+    (sleep 12 && echo "🖥️  VNC 起動完了 (noVNC: port ${NOVNC_PORT})" && echo "   日本語入力: Ctrl+Shift+Space で切り替え (IBus-Mozc)") &
 fi
 
 # --- tmux セッション開始 ---

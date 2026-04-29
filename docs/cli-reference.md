@@ -95,7 +95,7 @@ VNC あり（デフォルト）:
 - noVNC ポート（HTTP/WebSocket）は起動時に 6080〜 から空きを動的に割り当て。VNC 生ポートはホストに公開しない
 - 起動時に noVNC URL が表示される。あとから `claude-dev list` や `claude-dev ports` でも確認可能
 - Claude Code が chrome-devtools MCP サーバー経由で Chrome を操作
-- 日本語入力対応（IBus-Mozc、`Ctrl+\\` または `F3` で切替）
+- 日本語入力対応（IBus-Mozc、`Ctrl+Shift+Space` で切替）
 
 VNC なし（`--no-vnc`）:
 - `claude-dev-claude` イメージを使用（軽量）

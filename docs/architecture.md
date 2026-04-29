@@ -99,7 +99,7 @@ Linux サーバ (SSH でアクセス)
 - **ブラウザ操作**: chrome-devtools MCP サーバー経由で Chrome を操作（Chrome は `--remote-debugging-port=9222` で起動）
 - **ポート**: Xvnc はディスプレイ `:99`（VNC ポート 5999）で起動。noVNC（websockify）が VNC ポート 5999 を WebSocket に変換し、HTTP ポートとしてホストに公開する。VNC 生ポート 5999 はホストに公開しない。noVNC ポートは起動時に 6080〜 の範囲で空きポートを動的に割り当てる
 - **ポート確認**: `claude-dev list` で全セッションの noVNC URL を表示、`claude-dev ports [NAME]` でプロジェクト単位のポートを確認
-- **日本語入力**: `Ctrl+\\` または `F3` で切替（IBus-Mozc）
+- **日本語入力**: `Ctrl+Shift+Space` で切替（IBus-Mozc）
 
 #### VNC なし固有の仕様
 

@@ -48,7 +48,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     # スクリーンショット・動画キャプチャ
     scrot ffmpeg x11-apps \
     # その他
-    unzip xz-utils gnupg locales \
+    unzip zip xz-utils gnupg locales \
     && rm -rf /var/lib/apt/lists/* \
     # --- Docker CLI + Docker Compose plugin ---
     && install -m 0755 -d /etc/apt/keyrings \

@@ -531,6 +531,21 @@ start)
             chown -R '"$(id -u):$(id -g)"' /target/
         '
 
+    # ホストの ~/.claude/settings.json から hooks 設定を抽出してコピー
+    HOST_SETTINGS="${HOME}/.claude/settings.json"
+    if [ -f "$HOST_SETTINGS" ]; then
+        _hooks=$(jq -c '{hooks: .hooks} | with_entries(select(.value != null))' "$HOST_SETTINGS" 2>/dev/null)
+        if [ -n "$_hooks" ] && [ "$_hooks" != "{}" ]; then
+            echo "$_hooks" > "${PROJECT_DIR}/.claude/host-hooks.json"
+        fi
+    fi
+
+    # ホストの ~/.local/bin/ スクリプトをコンテナ用にコピー
+    if [ -d "${HOME}/.local/bin" ] && [ -n "$(ls -A "${HOME}/.local/bin/" 2>/dev/null)" ]; then
+        mkdir -p "${PROJECT_DIR}/.claude/host-local-bin"
+        cp -a "${HOME}/.local/bin/." "${PROJECT_DIR}/.claude/host-local-bin/"
+    fi
+
     # .gitignore に .claude が含まれていなければ追加
     if [ -f "${PROJECT_DIR}/.gitignore" ]; then
         if ! grep -qxF '.claude' "${PROJECT_DIR}/.gitignore" && ! grep -qxF '.claude/' "${PROJECT_DIR}/.gitignore"; then

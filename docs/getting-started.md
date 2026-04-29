@@ -77,7 +77,7 @@ claude-dev start --no-vnc   # Chrome / VNC なし（軽量）
 4. TigerVNC + Google Chrome が起動される
 5. tmux セッションが開始される
 
-noVNC URL が起動時に表示されるので、ブラウザでアクセスして Chrome 画面を確認できる（日本語入力対応、`Ctrl+\\` または `F3` で切替）。noVNC ポートは 6080〜 から空きを動的に割り当てるため、複数プロジェクト間で衝突しない。あとから `claude-dev list` や `claude-dev ports` でポート番号を確認できる。
+noVNC URL が起動時に表示されるので、ブラウザでアクセスして Chrome 画面を確認できる（日本語入力対応、`Ctrl+Shift+Space` で切替）。noVNC ポートは 6080〜 から空きを動的に割り当てるため、複数プロジェクト間で衝突しない。あとから `claude-dev list` や `claude-dev ports` でポート番号を確認できる。
 
 Claude Code は chrome-devtools MCP サーバー経由で Chrome を操作する。
 
