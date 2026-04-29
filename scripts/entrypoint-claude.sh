@@ -170,18 +170,19 @@ if [ ! -f "$LOCAL_CLAUDE/settings.json" ]; then
     chown "$USERNAME":"$USERNAME" "$LOCAL_CLAUDE/settings.json"
 fi
 
-# --- ホストの hooks 設定をマージ ---
+# --- ホストの hooks / env 設定をマージ ---
 # claude-dev start 時にコピーされた host-hooks.json があれば settings.json にマージ
+# （ファイル名は歴史的経緯で host-hooks.json のままだが env も含む）
 HOST_HOOKS="$LOCAL_CLAUDE/host-hooks.json"
 if [ -f "$HOST_HOOKS" ]; then
-    if jq -e '.hooks' "$HOST_HOOKS" >/dev/null 2>&1; then
+    if jq -e '.hooks // .env' "$HOST_HOOKS" >/dev/null 2>&1; then
         SETTINGS="$LOCAL_CLAUDE/settings.json"
-        if jq --slurpfile hooks "$HOST_HOOKS" '. * $hooks[0]' "$SETTINGS" > "${SETTINGS}.tmp" 2>/dev/null; then
+        if jq --slurpfile overlay "$HOST_HOOKS" '. * $overlay[0]' "$SETTINGS" > "${SETTINGS}.tmp" 2>/dev/null; then
             mv "${SETTINGS}.tmp" "$SETTINGS"
             chown "$USERNAME":"$USERNAME" "$SETTINGS"
         else
             rm -f "${SETTINGS}.tmp"
-            echo "⚠️  hooks のマージに失敗しました"
+            echo "⚠️  ホスト設定のマージに失敗しました"
         fi
     fi
     rm -f "$HOST_HOOKS"

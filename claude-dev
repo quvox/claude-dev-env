@@ -531,12 +531,13 @@ start)
             chown -R '"$(id -u):$(id -g)"' /target/
         '
 
-    # ホストの ~/.claude/settings.json から hooks 設定を抽出してコピー
+    # ホストの ~/.claude/settings.json から hooks / env 設定を抽出してコピー
+    # （ファイル名は歴史的経緯で host-hooks.json のままだが env も含む）
     HOST_SETTINGS="${HOME}/.claude/settings.json"
     if [ -f "$HOST_SETTINGS" ]; then
-        _hooks=$(jq -c '{hooks: .hooks} | with_entries(select(.value != null))' "$HOST_SETTINGS" 2>/dev/null)
-        if [ -n "$_hooks" ] && [ "$_hooks" != "{}" ]; then
-            echo "$_hooks" > "${PROJECT_DIR}/.claude/host-hooks.json"
+        _overlay=$(jq -c '{hooks: .hooks, env: .env} | with_entries(select(.value != null))' "$HOST_SETTINGS" 2>/dev/null)
+        if [ -n "$_overlay" ] && [ "$_overlay" != "{}" ]; then
+            echo "$_overlay" > "${PROJECT_DIR}/.claude/host-hooks.json"
         fi
     fi
 
