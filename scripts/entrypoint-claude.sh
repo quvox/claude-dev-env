@@ -190,10 +190,13 @@ fi
 
 # --- ホストの ~/.local/bin スクリプトを配置 ---
 # claude-dev start 時にコピーされたスクリプトをユーザーの ~/.local/bin/ に配置
+# --update=none: イメージに焼き込まれているファイル（claude バイナリの symlink 等）を
+# ホスト側のもので上書きしない。ホスト/イメージ間で claude のバージョンが食い違うと
+# symlink target がコンテナ内に存在せず「claude: command not found」になるため。
 HOST_LOCAL_BIN="$LOCAL_CLAUDE/host-local-bin"
 if [ -d "$HOST_LOCAL_BIN" ] && [ -n "$(ls -A "$HOST_LOCAL_BIN" 2>/dev/null)" ]; then
     mkdir -p "$USER_HOME/.local/bin"
-    cp -a "$HOST_LOCAL_BIN/." "$USER_HOME/.local/bin/"
+    cp -a --update=none "$HOST_LOCAL_BIN/." "$USER_HOME/.local/bin/"
     chown -R "$USERNAME":"$USERNAME" "$USER_HOME/.local/bin"
     chmod -R +x "$USER_HOME/.local/bin"
     rm -rf "$HOST_LOCAL_BIN"
@@ -407,7 +410,7 @@ done
 
 # IBus 設定
 gsettings set org.freedesktop.ibus.general preload-engines "['xkb:us::eng', 'mozc-jp']" 2>/dev/null || true
-gsettings set org.freedesktop.ibus.general.hotkey triggers "['<Control><Shift>space']" 2>/dev/null || true
+gsettings set org.freedesktop.ibus.general.hotkey triggers "['<Control><Shift>space', '<Super>space']" 2>/dev/null || true
 gsettings set org.freedesktop.ibus.general use-global-engine true 2>/dev/null || true
 
 # noVNC（websockify: HTTP port ${NOVNC_PORT} → VNC port ${VNC_PORT}）

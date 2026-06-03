@@ -337,7 +337,7 @@ RUN mkdir -p ${USER_HOME}/.config/openbox \
     <item label="Chrome"><action name="Execute"><execute>google-chrome-stable --no-sandbox --disable-gpu --disable-software-rasterizer --disable-dev-shm-usage --no-first-run --no-default-browser-check</execute></action></item>
     <item label="Terminal"><action name="Execute"><execute>lxterminal</execute></action></item>
     <separator />
-    <item label="Toggle IME (Ctrl+\\ / F3)"><action name="Execute"><execute>toggle-ime</execute></action></item>
+    <item label="Toggle IME (Super+Space / Ctrl+\\ / F3)"><action name="Execute"><execute>toggle-ime</execute></action></item>
     <item label="IBus Setup"><action name="Execute"><execute>ibus-setup</execute></action></item>
   </menu>
 </openbox_menu>
@@ -346,6 +346,9 @@ RUN cat > ${USER_HOME}/.config/openbox/rc.xml << 'RCEOF'
 <?xml version="1.0" encoding="UTF-8"?>
 <openbox_config xmlns="http://openbox.org/3.4/rc">
   <keyboard>
+    <keybind key="W-space">
+      <action name="Execute"><execute>toggle-ime</execute></action>
+    </keybind>
     <keybind key="C-backslash">
       <action name="Execute"><execute>toggle-ime</execute></action>
     </keybind>

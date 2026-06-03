@@ -333,7 +333,7 @@ claude-dev list                # 全セッションの noVNC URL を表示
 claude-dev ports my-project    # プロジェクト単位の詳細
 ```
 
-ローカル PC のブラウザで表示された noVNC URL にアクセスすると、コンテナ内の Google Chrome を操作できる。日本語入力は `Ctrl+\\` または `F3` で切り替え（IBus-Mozc）。
+ローカル PC のブラウザで表示された noVNC URL にアクセスすると、コンテナ内の Google Chrome を操作できる。日本語入力は `Super+Space` で切り替え（IBus-Mozc）。`Ctrl+Shift+Space` / `Ctrl+\\` / `F3` も予備として効くが、ホスト OS / ブラウザに横取りされやすいので `Super+Space` を推奨。
 
 noVNC ポート（HTTP/WebSocket）は起動時に 6080〜 から空きを動的割り当て。VNC 生ポートはホストに公開しない。複数プロジェクトで同時にブラウザを使っても競合しない。
 
