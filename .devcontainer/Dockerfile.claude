@@ -47,6 +47,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     xdg-utils \
     # スクリーンショット・動画キャプチャ
     scrot ffmpeg x11-apps \
+    # KVM / QEMU（ハードウェア仮想化）
+    qemu-system-x86 qemu-utils ovmf cpu-checker bridge-utils \
     # その他
     unzip zip xz-utils gnupg locales \
     && rm -rf /var/lib/apt/lists/* \

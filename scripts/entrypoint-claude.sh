@@ -68,6 +68,26 @@ if [ -d "$USER_HOME/.ssh" ]; then
     # （IdentityFile / IdentitiesOnly 行は除去済み）
 fi
 
+# --- KVM デバイスへのアクセス権 ---
+# claude-dev が --device=/dev/kvm /dev/vhost-net /dev/net/tun を渡している場合、
+# ホスト側のグループ ID（多くは "kvm"）に合わせたグループをコンテナ内に作り、
+# $USERNAME を所属させる。GID はホストごとに違うため実行時に検出する。
+for dev in /dev/kvm /dev/vhost-net; do
+    [ -c "$dev" ] || continue
+    DEV_GID=$(stat -c '%g' "$dev" 2>/dev/null || echo "")
+    [ -z "$DEV_GID" ] && continue
+    # 既に同じ GID のグループがあればそれを利用、なければ作成
+    GRP_NAME=$(getent group "$DEV_GID" | cut -d: -f1)
+    if [ -z "$GRP_NAME" ]; then
+        GRP_NAME="kvm-host-${DEV_GID}"
+        groupadd -g "$DEV_GID" "$GRP_NAME" 2>/dev/null || true
+    fi
+    # $USERNAME をそのグループに追加
+    if [ -n "$GRP_NAME" ] && ! id -nG "$USERNAME" 2>/dev/null | tr ' ' '\n' | grep -qx "$GRP_NAME"; then
+        usermod -aG "$GRP_NAME" "$USERNAME" 2>/dev/null || true
+    fi
+done
+
 # --- SSH_AUTH_SOCK をシェル初期化ファイルに設定 ---
 # Docker の -e で渡された SSH_AUTH_SOCK は su -l でリセットされるため、
 # シェル初期化ファイルに書き出して全シェルで利用可能にする

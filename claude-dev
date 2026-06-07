@@ -596,6 +596,21 @@ start)
         NOVNC_PORT_OPT="-p ${NOVNC_PORT}:6080 -v ${VOL_CHROME}:${CHOME}/.chrome-profile"
     fi
 
+    # KVM / QEMU デバイス（ホストに存在すれば渡す）
+    # /dev/kvm:       CPU 仮想化
+    # /dev/vhost-net: ゲスト VM の高速ネットワーク
+    # /dev/net/tun:   TUN/TAP（QEMU の tap ネット等）
+    KVM_OPTS=""
+    if [ -c /dev/kvm ]; then
+        KVM_OPTS="--device=/dev/kvm"
+    fi
+    if [ -c /dev/vhost-net ]; then
+        KVM_OPTS="${KVM_OPTS} --device=/dev/vhost-net"
+    fi
+    if [ -c /dev/net/tun ]; then
+        KVM_OPTS="${KVM_OPTS} --device=/dev/net/tun"
+    fi
+
     # コンテナ起動
     echo "🚀 起動中... [${NAME}] → ${PROJECT_DIR}"
     docker run -d \
@@ -615,6 +630,7 @@ start)
         $SSH_OPTS \
         $DOCKER_OPTS \
         $NOVNC_PORT_OPT \
+        $KVM_OPTS \
         -e NODE_OPTIONS=--max-old-space-size=4096 \
         -t \
         "$RUN_IMAGE" >/dev/null
