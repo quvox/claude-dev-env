@@ -361,6 +361,15 @@ RUN cat > ${USER_HOME}/.config/openbox/rc.xml << 'RCEOF'
 RCEOF
 RUN chown -R ${USERNAME}:${USERNAME} ${USER_HOME}/.config
 
+# --- computer-use MCP（rmcp-xdotool）---
+# デスクトップ（X ディスプレイ :99）をマウス/キーボードで操作する MCP サーバー。
+# 入力専用（画面取得は scrot を併用）。Rust 製で、ベースに導入済みの xdotool を利用する。
+# ビルド失敗時もイメージ全体は壊さない（非致命的）。entrypoint がバイナリ存在時のみ MCP 登録する。
+RUN su ${USERNAME} -c 'export PATH="$HOME/.cargo/bin:$PATH" && cargo install rmcp-xdotool' \
+    && cp ${USER_HOME}/.cargo/bin/rmcp-xdotool /usr/local/bin/rmcp-xdotool \
+    && chmod 755 /usr/local/bin/rmcp-xdotool \
+    || echo "WARN: rmcp-xdotool のインストールに失敗しました（computer-use MCP は利用不可）"
+
 # --- VNC 環境変数 ---
 ENV DISPLAY=:99
 ENV GTK_IM_MODULE=ibus

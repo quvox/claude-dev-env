@@ -250,6 +250,74 @@ cd ~/repos/my-project
 claude-dev start   # ボリュームが再作成され、デフォルトの .zshrc がコピーされる
 ```
 
+## Linux デスクトップの操作
+
+Web アプリの確認は `chrome-devtools` MCP（Chrome 操作）が標準だが、それ以外の **Linux デスクトップ（GUI）全般**を Claude に操作させたい場合は、用途に応じて次の 2 方式を使う。いずれも VNC ありコンテナ（`claude-dev start`、デフォルト）が前提で、ユーザーは noVNC 画面で操作をリアルタイムに確認できる。
+
+### A. コンテナ内デスクトップを直接操作する（追加導入不要）
+
+VNC ありコンテナには X ディスプレイ `:99` 上で openbox が動いており、`xdotool`（入力）と `scrot`（画面取得）が同梱されている。Claude はシェルからこれらを実行するだけで、`:99` 上の**任意の X アプリ**を操作できる。
+
+```bash
+# 画面取得（Claude は出力ファイルを Read で確認する）
+DISPLAY=:99 scrot /tmp/shot.png
+
+# マウス移動＋クリック
+DISPLAY=:99 xdotool mousemove 400 300 click 1
+
+# キーボード入力・キーコンビネーション
+DISPLAY=:99 xdotool type "hello"
+DISPLAY=:99 xdotool key ctrl+s
+
+# ウィンドウ操作（例: アクティブウィンドウを最大化）
+DISPLAY=:99 xdotool getactivewindow windowsize 100% 100%
+```
+
+「アプリ起動 → 操作 → `scrot` で確認」のループをそのまま回せる。追加の MCP やパッケージは不要。コンテナ内の openbox 上で動く GUI アプリ（エディタ・端末・各種ツール）が対象。
+
+### C. KVM VM のデスクトップを computer-use MCP で操作する
+
+別 OS・フルデスクトップ環境・より強い隔離が必要な場合は、KVM/QEMU でデスクトップ付き VM を起動し、その画面を `:99` に表示して computer-use MCP で操作する（KVM の前提・セキュリティ上の含意は [docs/03_security.md](03_security.md) を参照）。
+
+**1) デスクトップ VM を `:99` に表示して起動する**
+
+QEMU の表示先をコンテナの X ディスプレイ `:99` にすると、ゲストの画面が openbox 上のウィンドウに出る（ユーザーは noVNC で確認できる）。
+
+```bash
+# 例: デスクトップ付き Linux のディスクイメージを GTK 表示で起動
+DISPLAY=:99 qemu-system-x86_64 \
+  -enable-kvm -m 4096 -smp 2 \
+  -drive file=guest.qcow2,if=virtio \
+  -display gtk &
+```
+
+ホストに `/dev/kvm` がある場合のみ `-enable-kvm` が効く（無ければ外す＝低速なソフトウェアエミュレーション）。`/dev/net/tun` が渡されていれば tap ネットワークも利用可能。
+
+**2) computer-use MCP を有効化する**
+
+VNC イメージには入力操作用の MCP サーバー **`rmcp-xdotool`** が焼き込まれており、entrypoint が `/workspace/.mcp.json` に `computer-use` エントリを**定義**する（DISPLAY=`:99`）。ただし**既定では有効化されない**（デスクトップ全体を操作できる強い権限のため、必要なときだけ有効化する）。利用するには次のいずれか:
+
+- Claude Code の `/mcp` で `computer-use` を有効化する
+- `/workspace/.claude/.claude.json` の `projects["/workspace"].enabledMcpjsonServers` に `"computer-use"` を追加する
+
+**3) 操作する**
+
+有効化後、computer-use の MCP ツール（`move_mouse` / `click` / `click_at` / `type_text` / `key_press` / `scroll` / `double_click` 等）で `:99` を操作する。QEMU ウィンドウにフォーカスがある状態で入力すればゲストに渡る。**画面の視認は `scrot`（A と同じ）で取得する**（`rmcp-xdotool` は入力専用のため）。
+
+> 画面取得まで MCP に統合したい場合は、スクリーンショット機能を持つ代替サーバー（例: PyPI の `computer-control-mcp` 等）を `.mcp.json` に追加してもよい。その場合は対象サーバーの依存（PyAutoGUI 等）をコンテナに導入する。
+
+**注意点**
+- `rmcp-xdotool` は `:99` 全体を操作するため、A と同じく X セッション全体が対象。VM 操作時は QEMU ウィンドウを最大化・フォーカスしておく。
+- VNC イメージの再ビルド（`make build-claude-vnc`）で `rmcp-xdotool` が焼き込まれる。ビルドに失敗した場合は computer-use は登録されない（A の `xdotool`/`scrot` は引き続き利用可能）。
+
+### 使い分け
+
+| やりたいこと | 方式 |
+|-------------|------|
+| Web アプリの確認 | `chrome-devtools` MCP（標準） |
+| コンテナ内の任意 GUI アプリ操作 | **A**: `xdotool` + `scrot`（追加導入不要） |
+| 別 OS / フルデスクトップ / 強い隔離 | **C**: KVM VM + computer-use MCP（`rmcp-xdotool`）+ `scrot` |
+
 ## Claude コンテナに追加パッケージをインストールする
 
 ### 一時的（コンテナ再起動で消える）

@@ -356,6 +356,23 @@ if [ "${CLAUDE_DEV_VNC:-}" = "1" ]; then
     fi
     chown "$USERNAME":"$USERNAME" "$MCP_JSON"
 
+    # computer-use MCP（デスクトップ操作）: rmcp-xdotool バイナリがある場合のみ
+    # .mcp.json に定義を用意する。既定では有効化しない（enabledMcpjsonServers に追加しない）。
+    # 利用時に Claude Code の /mcp で有効化するか、enabledMcpjsonServers に追加する。
+    # 画面取得は scrot を併用する（rmcp-xdotool は入力専用）。
+    if command -v rmcp-xdotool >/dev/null 2>&1; then
+        COMPUTER_USE_ENTRY='{"command":"rmcp-xdotool","args":[],"env":{"DISPLAY":":99"}}'
+        if ! jq -e '.mcpServers["computer-use"]' "$MCP_JSON" >/dev/null 2>&1; then
+            if jq --argjson entry "$COMPUTER_USE_ENTRY" '.mcpServers["computer-use"] = $entry' "$MCP_JSON" > "${MCP_JSON}.tmp" 2>/dev/null; then
+                mv "${MCP_JSON}.tmp" "$MCP_JSON"
+                chown "$USERNAME":"$USERNAME" "$MCP_JSON"
+            else
+                rm -f "${MCP_JSON}.tmp"
+                echo "⚠️  .mcp.json への computer-use 追加に失敗しました（不正な JSON？）。スキップします"
+            fi
+        fi
+    fi
+
     # .claude.json: chrome-devtools MCP を有効化
     # .claude.json が存在しない場合は新規作成する
     CLAUDE_JSON="$LOCAL_CLAUDE/.claude.json"
