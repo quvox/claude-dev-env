@@ -11,3 +11,4 @@
   - `claude-dev start` の「認証情報がなければエラーで停止」を削除（実装は認証が無くても起動する）。
   - `ports` / `list` の出力例を実際の出力形式に一致させた。
   - `logout` に Docker Socket Proxy コンテナの停止を追記。
+- `start` の動作説明に KVM デバイス渡し（ホストに `/dev/kvm` 等がある場合のみ `--device` で渡す）を追記。

@@ -93,6 +93,7 @@ Linux サーバ (SSH でアクセス)
 - **ユーザー**: ホストのカレントユーザーと同名 (UID/GID はビルド時にホストと一致。entrypoint でも競合を解消して追従)
 - **git 設定**: ホストの `~/.gitconfig` を読み取り専用でマウント（存在する場合）
 - **SSH**: SSH agent ソケットを転送。秘密鍵ファイルはマウントしない。`~/.ssh/known_hosts` と `~/.ssh/config` は読み取り専用でマウント
+- **ハードウェア仮想化 (KVM/QEMU)**: QEMU 一式（`qemu-system-x86`, `qemu-utils`, `ovmf`, `cpu-checker`, `bridge-utils`）をイメージに同梱。ホストに `/dev/kvm` が存在する場合のみ、`claude-dev start` が `/dev/kvm`・`/dev/vhost-net`・`/dev/net/tun` を `--device` でコンテナに渡し、コンテナ内で KVM アクセラレーション付きの VM を起動できる。該当デバイスが無いホストでは自動的にスキップされる（その場合 QEMU はソフトウェアエミュレーションで動作）。entrypoint がデバイスの GID に合わせたグループを作成してユーザーをアクセス可能にする。詳細は [docs/impl/10_cli.md](impl/10_cli.md) / [docs/impl/31_entrypoint.md](impl/31_entrypoint.md)
 
 #### VNC あり固有の仕様
 
