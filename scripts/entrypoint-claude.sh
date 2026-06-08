@@ -318,6 +318,23 @@ CLAUDE_AUTO_EOF
 CLAUDE_VNC_EOF
     fi
 
+    # KVM が渡されている場合（--kvm 起動）は仮想化に関する指示を追加
+    if [ -c /dev/kvm ]; then
+        cat >> /workspace/CLAUDE.md << 'CLAUDE_KVM_EOF'
+## KVM / 仮想化（重要）
+
+- このコンテナには `/dev/kvm` が渡されており、**KVM ハードウェア仮想化が利用できる**（`qemu-system-x86_64` 同梱）。仮想マシン（別 OS・別カーネル・フルデスクトップ等）が必要な時に使う。通常の開発・テストは Docker コンテナや Chrome 操作で十分なので、必要な時だけ VM を使うこと。
+- VM は KVM 加速で起動する。`-enable-kvm`（または `-accel kvm`）と `-cpu host` を付ける:
+  - 例: `qemu-system-x86_64 -enable-kvm -cpu host -m 4096 -smp 2 -drive file=guest.qcow2,if=virtio -nographic`
+- **GUI/デスクトップの VM** は QEMU の表示をコンテナの X ディスプレイ `:99` に出すと、ユーザーが noVNC で確認できる:
+  - 例: `DISPLAY=:99 qemu-system-x86_64 -enable-kvm -cpu host -m 4096 -drive file=guest.qcow2,if=virtio -display gtk &`
+- **ゲストのデスクトップ操作**は、`scrot`（`DISPLAY=:99 scrot /tmp/shot.png`）で画面を取得し、`xdotool`（`DISPLAY=:99 xdotool ...`）または computer-use MCP（`rmcp-xdotool`。`/mcp` で有効化）で QEMU ウィンドウを操作する。QEMU ウィンドウにフォーカスがある状態で入力するとゲストに渡る。
+- **ネットワーク**: 手軽なのは user モード（`-netdev user,id=n0 -device virtio-net,netdev=n0`）。`/dev/net/tun` が渡っていれば tap も使える。
+- **ディスクイメージ**は `/workspace` 配下に置けばホストと共有される。サイズが大きいので `.gitignore` に追加すること。メモリ/CPU はホスト資源を消費するため過大に確保しない。
+
+CLAUDE_KVM_EOF
+    fi
+
     cat >> /workspace/CLAUDE.md << CLAUDE_DOCKER_EOF
 ## Docker ネットワーク（重要）
 

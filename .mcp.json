@@ -8,6 +8,13 @@
         "--browserUrl",
         "http://localhost:9222"
       ]
+    },
+    "computer-use": {
+      "command": "rmcp-xdotool",
+      "args": [],
+      "env": {
+        "DISPLAY": ":99"
+      }
     }
   }
 }
