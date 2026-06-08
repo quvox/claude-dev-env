@@ -148,14 +148,6 @@ RUN curl -fsSL https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google
     && sudo ln -s ${USER_HOME}/google-cloud-sdk/bin/gsutil /usr/local/bin/gsutil \
     && sudo ln -s ${USER_HOME}/google-cloud-sdk/bin/bq /usr/local/bin/bq
 
-# --- zrt-tools ---
-COPY --chown=$USERNAME:$USERNAME zrt-tools/ /tmp/zrt-tools/
-RUN export PATH="/usr/local/go/bin:${USER_HOME}/go/bin:${PATH}" \
-    && cd /tmp/zrt-tools \
-    && make build \
-    && sudo cp build/zrt /usr/local/bin/ \
-    && rm -rf /tmp/zrt-tools
-
 # --- Claude Code CLI (ネイティブインストーラー) ---
 # 公式ドキュメント: WORKDIR /tmp でインストーラーがファイルシステム全体をスキャンするのを防ぐ
 WORKDIR /tmp

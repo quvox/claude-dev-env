@@ -1,5 +1,7 @@
 # クイックスタートガイド
 
+> **この文書の役割**: 本環境を初めて導入する利用者向けに、前提条件・インストール手順・基本的な使い方を示す導入ガイド。
+
 ## 前提条件
 
 - Linux サーバ（Ubuntu 22.04+ / Debian 12+ 推奨）
@@ -37,8 +39,9 @@ make login
 ### 個別に実行する場合
 
 ```bash
-make build            # 全イメージビルド
-make build-claude     # Claude イメージのみ（ベース + VNC 両方）
+make build            # 全イメージビルド（ベース + VNC + Docker Socket Proxy）
+make build-claude     # Claude ベースイメージのみ
+make build-claude-vnc # Claude VNC イメージ（ベースに続けてビルド）
 make install          # PATH 登録のみ
 ```
 

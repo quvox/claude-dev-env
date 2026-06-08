@@ -1,0 +1,62 @@
+# 実装仕様: scripts/entrypoint-claude.sh
+
+> **この文書の役割**: Claude コンテナの ENTRYPOINT として root で起動し、UID/GID 追従・認証共有・設定生成・VNC/Chrome 起動・tmux セッション開始までを行う初期化スクリプトの実装仕様。
+
+## 要件（なぜ必要か）
+
+`claude-dev start` が `docker run` でコンテナを起動した後、コンテナ内部では以下を解決する必要がある。
+
+- ホストの `/workspace` 所有者と一致する UID/GID でユーザーを動作させ、ファイル所有権の齟齬を防ぐ。
+- 認証ファイルを共有ボリュームと往復させつつ、セッション・設定はプロジェクトローカルに保つ。
+- ホスト由来の hooks/env 設定とユーザー独自スクリプトを取り込む。
+- ファイアウォール・MCP・VNC/Chrome・tmux を起動する。
+
+## カバーするコード
+
+```
+scripts/entrypoint-claude.sh   （ビルド時に /usr/local/bin/entrypoint.sh へ配置）
+```
+
+## 前提環境変数
+
+- `CONTAINER_USER`（Dockerfile の `ENV`、既定 `devuser`）→ `USERNAME`。`USER_HOME=/home/$USERNAME`。
+- `CLAUDE_DEV_VNC=1`（vnc ステージのみ設定）で VNC 経路を有効化。
+- `DOCKER_HOST` / `SSH_AUTH_SOCK`（`docker run -e` 由来）。
+
+## 処理シーケンス（成果物としての順序）
+
+1. **UID/GID 追従**: `/workspace` の所有者 UID/GID を `stat` で取得。コンテナユーザーの現 UID/GID と異なれば `groupmod`/`usermod` で変更する。競合するグループ/ユーザーがいれば一時 GID/UID（9900〜）へ退避してから割り当てる。UID/GID を変更した場合のみ、旧 UID/GID を持つファイルだけを対象に `chown`（全走査回避）。`HOST_UID=0`（root 所有）の場合は変更しない。
+2. **~/.ssh 整備**: ディレクトリの所有権を設定し `chmod 700`。`~/.ssh/config` は CLI 側で IdentityFile 等を除去済みのものがマウントされる前提。
+3. **KVM デバイスのグループ権限**: `/dev/kvm` `/dev/vhost-net` が存在すれば、そのデバイスの GID に一致するグループをコンテナ内に用意（無ければ `kvm-host-<gid>` を作成）し、`$USERNAME` を追加する。
+4. **SSH_AUTH_SOCK の永続化**: `/tmp/ssh-agent.sock` があれば `export SSH_AUTH_SOCK=/tmp/ssh-agent.sock` を `/etc/zsh/zshrc` と `/etc/bash.bashrc` に追記（`su -l` でのリセット対策）。
+5. **DOCKER_HOST の永続化**: `DOCKER_HOST` があれば同様に両 rc へ追記。Docker CLI の `default` コンテキストが環境変数を参照するためカスタム context は不要。
+6. **.zshrc 共有**: `~/.config-shared/`（`VOL_CONFIG`）に `.zshrc` が無ければ、`~/.zshrc.default`（イメージ既定）→ 実体 `~/.zshrc` → 空ファイルの順でコピー元を決めて作成。以後 `~/.zshrc` を共有ファイルへの symlink にする（コンテナ間共有）。
+7. **~/.claude の構成と認証共有**:
+   - `LOCAL_CLAUDE=/workspace/.claude` を確保。`~/.claude` が実ディレクトリなら中身を退避して削除し、`~/.claude → /workspace/.claude` の symlink を張る。
+   - 認証ファイル（`.credentials.json`, `.claude.json`）は CLI が既にコピー済み。ここでは所有権と `chmod 600` を整える。
+   - `~/.claude.json`（ホーム直下）→ `/workspace/.claude/.claude.json` の symlink。
+   - `settings.json` が無ければ `{"permissions":{"defaultMode":"bypassPermissions"},"model":"sonnet"}` を生成（共有しない）。
+8. **ホスト設定のマージ**: `/workspace/.claude/host-hooks.json` があり `.hooks` か `.env` を含むなら、`jq '. * $overlay[0]'` で `settings.json` に深いマージを行い、元ファイルを削除。失敗時は警告。
+9. **ユーザー hook スクリプト配置**: `/workspace/.claude/host-local-bin/` があれば `~/.local/bin/` へ `cp -a --update=none`（イメージ焼き込み済みファイルを上書きしない）し、実行権限を付与して元を削除。
+10. **認証バックグラウンド同期**: 30 秒ごとに `/workspace/.claude/` の認証ファイルを共有ボリュームと `cmp` し、差分があれば書き戻すループをバックグラウンド起動（トークンリフレッシュ伝播）。
+11. **ファイアウォール**: `/usr/local/bin/init-firewall.sh` を実行（失敗は無視、[32_firewall.md](32_firewall.md)）。
+12. **CLAUDE.md への環境情報追記**: マーカー `<!-- claude-dev-auto-start -->`〜`<!-- claude-dev-auto-end -->` で囲んだ範囲を毎回削除→再生成（旧形式セクションも除去）。「注意事項」、VNC 時は「Web アプリの動作確認」、常に「Docker ネットワーク（重要）」（コンテナ名・コンテナ名でのアクセス指示）を書き込む。`/workspace/CLAUDE.md` が無ければ作成。
+13. **MCP 設定（VNC 時のみ）**:
+    - `/workspace/.mcp.json` に `chrome-devtools`（`npx -y chrome-devtools-mcp@latest --browserUrl http://localhost:9222`）エントリを確保（無ければ新規、既存に未定義なら追加）。
+    - `/workspace/.claude/.claude.json` の `projects["/workspace"].enabledMcpjsonServers` に `chrome-devtools` を追加（未登録時のみ。ファイルが無ければ `{}` を作成）。
+14. **VNC / Chrome 起動（VNC 時のみ）**: `/tmp/start-user-desktop.sh` を生成し、ユーザー権限でバックグラウンド起動。内容は順に:
+    - `Xvnc :99 -geometry 1280x800 -depth 24 -SecurityTypes None -rfbport 5999`（X + VNC 一体型、ディスプレイ `:99` / VNC ポート 5999）
+    - `setxkbmap -layout us,jp`、D-Bus セッションバス、`openbox`
+    - `ibus-daemon -xrR` + IBus/Mozc プリロード・ホットキー（`<Control><Shift>space` / `<Super>space`）設定
+    - `websockify --heartbeat 30 --web /usr/share/novnc 6080 localhost:5999`（HTTP 6080 → VNC 5999）
+    - Chrome プロファイルの残存ロック（`SingletonLock` 等）を削除後、`google-chrome-stable ... --remote-debugging-port=9222 --user-data-dir=~/.chrome-profile` を起動
+    - システム D-Bus デーモン起動・GTK immodules キャッシュ更新も事前に実施
+15. **tmux セッション開始**: ユーザー権限で `cd /workspace && tmux -f ~/.tmux.conf new-session -d -s main 'exec zsh -l'`。
+16. `✅ Ready ...` を表示し、`exec tail -f /dev/null` で常駐。
+
+## 不変条件・注意点
+
+- 認証は「起動時コピー + 30 秒ごとの書き戻し」で共有する（symlink を使わない理由は [10_cli.md](10_cli.md) と同じ）。
+- `~/.claude` は `/workspace/.claude` への symlink であり、`settings.json`/`projects/`/`sessions/` はプロジェクトディレクトリに永続化される。
+- `host-hooks.json` という名称は歴史的経緯で、実際には `hooks` と `env` の両方を運ぶ。
+- VNC 関連ポート（VNC 5999・Chrome DevTools 9222）はコンテナ内のみ。ホストへは noVNC の 6080（CLI が動的にホストポートへ割り当て）だけが公開される。

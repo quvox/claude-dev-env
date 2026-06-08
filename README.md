@@ -112,11 +112,12 @@ make status                   # 全体の状態確認
 
 | ドキュメント | 内容 |
 |------------|------|
-| [docs/getting-started.md](docs/getting-started.md) | インストール手順と基本的な使い方 |
-| [docs/architecture.md](docs/architecture.md) | システム設計・コンテナ構成・認証フロー |
-| [docs/security.md](docs/security.md) | 脅威モデルと防御層の詳細 |
-| [docs/cli-reference.md](docs/cli-reference.md) | 全コマンドのリファレンス |
-| [docs/customization.md](docs/customization.md) | ファイアウォール・CLAUDE.md・tmux・hooks/env 等のカスタマイズ |
+| [docs/01_getting-started.md](docs/01_getting-started.md) | インストール手順と基本的な使い方 |
+| [docs/02_architecture.md](docs/02_architecture.md) | システム設計・コンテナ構成・認証フロー |
+| [docs/03_security.md](docs/03_security.md) | 脅威モデルと防御層の詳細 |
+| [docs/04_cli-reference.md](docs/04_cli-reference.md) | 全コマンドのリファレンス |
+| [docs/05_customization.md](docs/05_customization.md) | ファイアウォール・CLAUDE.md・tmux・hooks/env 等のカスタマイズ |
+| [docs/impl/INDEX.md](docs/impl/INDEX.md) | 実装仕様書（コードと 1 対 1 の Single Source of Truth）一覧 |
 
 ## ファイル構成
 

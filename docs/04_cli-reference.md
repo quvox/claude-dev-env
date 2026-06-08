@@ -1,5 +1,7 @@
 # CLI リファレンス
 
+> **この文書の役割**: `claude-dev` CLI の全コマンド・オプションの利用者向けリファレンス。CLI の内部実装仕様は [docs/impl/10_cli.md](impl/10_cli.md) を参照。
+
 ## 概要
 
 操作は **Makefile**（セットアップ・ビルド・管理）と **claude-dev CLI**（日常の開発操作）の 2 系統で提供される。
@@ -12,8 +14,9 @@
 |-----------|------|
 | `make setup` | 初回セットアップ一括実行（env + network + volumes + build + install） |
 | `make login` | OAuth ログイン |
-| `make build` | 全イメージビルド |
-| `make build-claude` | Claude イメージをビルド（ベース + VNC 両方） |
+| `make build` | 全イメージビルド（ベース + VNC + Docker Socket Proxy） |
+| `make build-claude` | Claude ベースイメージのみをビルド（`--target base`） |
+| `make build-claude-vnc` | Claude VNC イメージをビルド（`build-claude` に続けて `--target vnc`） |
 | `make build-docker-proxy` | Docker Socket Proxy イメージをビルド |
 | `make upgrade` | 全イメージを最新版にリビルド（`--no-cache`） |
 | `make status` | イメージ・コンテナ・ボリュームの状態確認 |
@@ -45,7 +48,7 @@ claude-dev setup
 
 #### `claude-dev login`
 
-OAuth 認証を実行する。Claude イメージを使った一時コンテナを起動し、Claude Code を対話的に起動する。`claude-dev-auth` ボリュームが `~/.claude/` に直接マウントされ、認証情報はそのまま永続化される。
+OAuth 認証を実行する。Claude イメージを使った一時コンテナを起動し、Claude Code を対話的に起動する。`claude-dev-auth` ボリュームは `~/.claude-shared/` にマウントされ、起動時に既存の認証ファイル（`.credentials.json`, `.claude.json`）を `~/.claude/` にコピーして使う。`/exit` で終了すると、認証ファイルが `~/.claude-shared/`（= ボリューム）に書き戻されて永続化される。
 
 ログイン完了後、`/exit` で Claude Code を終了する。
 
@@ -57,7 +60,7 @@ claude-dev login
 
 #### `claude-dev logout`
 
-認証情報を削除する。実行中の全プロジェクトコンテナを停止し、`claude-dev-auth` ボリューム内のファイルをすべて削除する。
+認証情報を削除する。実行中の全プロジェクトコンテナと Docker Socket Proxy コンテナ（`claude-dev-docker-proxy`）を停止し、`claude-dev-auth` ボリューム内のファイルをすべて削除する。
 
 ```bash
 claude-dev logout
@@ -82,7 +85,7 @@ claude-dev start --no-vnc   # Chrome / VNC なし（軽量）
 - 同名コンテナが実行中の場合は再接続する
 - 停止中のコンテナがある場合は削除して新規起動
 - イメージが存在しなければ自動ビルド
-- 認証情報がなければエラーで停止
+- 共有ボリュームに認証情報があれば `/workspace/.claude/` にコピーする（無い場合もコンテナは起動する。未ログインなら起動後の `claude` でログインを求められる）
 - Web アプリのポートマッピングは行わない（`claude-dev forward` で必要なときに動的にフォワード）
 - ssh-agent が未起動なら自動起動し、鍵が未登録なら `ssh-add` を実行（`~/.config/claude-dev.yaml` から鍵リストを読み込み）
 - `~/.gitconfig` があればコンテナに共有（読み取り専用）
@@ -181,12 +184,14 @@ claude-dev ports my-project
 
 出力例:
 ```
-📡 my-project:
-  noVNC: http://localhost:6080/vnc.html?autoconnect=true
-  Forwards:
-    host:8100 → my-project:3000
-    host:8101 → my-project:5173
+📡 my-project のポートフォワード:
+   host:8100 → my-project:3000
+   host:8101 → my-project:5173
+
+🖥️  noVNC: http://localhost:6080/vnc.html?autoconnect=true
 ```
+
+フォワードが 1 つもない場合は `   (なし — claude-dev forward <port> で追加)` と表示される。
 
 #### `claude-dev list`
 
@@ -204,14 +209,19 @@ claude-dev list
   STATUS:    running
   WORKSPACE: /home/user/repos/my-project
   noVNC:     http://localhost:6080/vnc.html?autoconnect=true
-  Forwards:  host:8100→3000  host:8101→5173
+  FORWARD:   host:8100 → my-project:3000
+  FORWARD:   host:8101 → my-project:5173
 
   NAME:      api-server
   STATUS:    running
   WORKSPACE: /home/user/repos/api-server
-  (VNC なし)
-  Forwards:  host:8102→8080
+  FORWARD:   host:8102 → api-server:8080
+
+=== Docker Socket Proxy コンテナ ===
+  STATUS:  running
 ```
+
+VNC なしコンテナでは `noVNC:` 行は表示されない（`(VNC なし)` のような行は出力されない）。最後に Docker Socket Proxy コンテナの稼働状態が表示される。
 
 ---
 

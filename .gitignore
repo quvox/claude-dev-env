@@ -1,5 +1,4 @@
 .env
 workspace/
 !workspace/.gitkeep
-zrt-tools/
 .claude

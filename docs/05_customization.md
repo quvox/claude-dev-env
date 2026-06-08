@@ -1,5 +1,7 @@
 # カスタマイズガイド
 
+> **この文書の役割**: ファイアウォール・CLAUDE.md・tmux・hooks/env など、利用者が環境を調整するためのカスタマイズ手順をまとめた利用者向けガイド。
+
 ## ファイアウォールのカスタマイズ
 
 ### ブラックリストにドメインを追加する
@@ -72,7 +74,7 @@ iptables -A OUTPUT -d pypi.org -p tcp --dport 443 -j ACCEPT
 
 ## Claude Code の更新
 
-Claude Code はネイティブインストーラー (`curl -fsSL https://claude.ai/install.sh | sh`) でインストールされる。更新するにはイメージを再ビルドする:
+Claude Code はネイティブインストーラー (`curl -fsSL https://claude.ai/install.sh | bash`) でインストールされる。更新するにはイメージを再ビルドする:
 
 ```bash
 make upgrade
@@ -274,6 +276,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 再ビルド:
 
 ```bash
-make build-claude     # Claude イメージのみ（ベース + VNC 両方）
+make build-claude     # Claude ベースイメージのみ
+make build-claude-vnc # Claude VNC イメージ（ベースに続けてビルド）
 make build            # 全イメージ
 ```
