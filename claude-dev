@@ -480,11 +480,13 @@ start)
     PROJECT_DIR="$(pwd)"
     shift || true
 
-    # --no-vnc フラグ解析
+    # フラグ解析
     USE_VNC=1
+    USE_KVM=0
     while [ $# -gt 0 ]; do
         case "$1" in
             --no-vnc) USE_VNC=0 ;;
+            --kvm) USE_KVM=1 ;;
         esac
         shift
     done
@@ -596,19 +598,24 @@ start)
         NOVNC_PORT_OPT="-p ${NOVNC_PORT}:6080 -v ${VOL_CHROME}:${CHOME}/.chrome-profile"
     fi
 
-    # KVM / QEMU デバイス（ホストに存在すれば渡す）
+    # KVM / QEMU デバイス（--kvm 指定時のみ、ホストに存在すれば渡す）
+    # 通常は Chrome 操作のみで十分なため既定では渡さない。
     # /dev/kvm:       CPU 仮想化
     # /dev/vhost-net: ゲスト VM の高速ネットワーク
     # /dev/net/tun:   TUN/TAP（QEMU の tap ネット等）
     KVM_OPTS=""
-    if [ -c /dev/kvm ]; then
-        KVM_OPTS="--device=/dev/kvm"
-    fi
-    if [ -c /dev/vhost-net ]; then
-        KVM_OPTS="${KVM_OPTS} --device=/dev/vhost-net"
-    fi
-    if [ -c /dev/net/tun ]; then
-        KVM_OPTS="${KVM_OPTS} --device=/dev/net/tun"
+    if [ "$USE_KVM" = "1" ]; then
+        if [ -c /dev/kvm ]; then
+            KVM_OPTS="--device=/dev/kvm"
+        else
+            echo "⚠️  --kvm が指定されましたが、ホストに /dev/kvm がありません（KVM 加速は無効）"
+        fi
+        if [ -c /dev/vhost-net ]; then
+            KVM_OPTS="${KVM_OPTS} --device=/dev/vhost-net"
+        fi
+        if [ -c /dev/net/tun ]; then
+            KVM_OPTS="${KVM_OPTS} --device=/dev/net/tun"
+        fi
     fi
 
     # コンテナ起動
@@ -943,6 +950,7 @@ claude-dev - Claude Code 安全開発環境
 開発:
   claude-dev start               カレントディレクトリで環境を起動（VNC + Chrome 付き）
   claude-dev start --no-vnc      Chrome / VNC なしで起動（軽量）
+  claude-dev start --kvm         KVM/QEMU デバイスを渡して起動（VM を動かす時のみ）
   claude-dev code                新しい tmux ウィンドウで Claude Code を起動
   claude-dev attach [NAME]       既存セッションに接続
   claude-dev stop [NAME]         セッションを停止
@@ -963,6 +971,7 @@ claude-dev - Claude Code 安全開発環境
 
   デフォルトでは VNC + Chrome 付きコンテナが起動します。
   --no-vnc を指定すると Chrome / VNC なしの軽量コンテナで起動します。
+  --kvm を指定すると KVM/QEMU デバイス（/dev/kvm 等）を渡します（VM を動かす時のみ。既定は渡しません）。
   VNC ありの場合、noVNC URL は起動時に表示されます。
   日本語入力は Ctrl+\\ または F3 で切り替え（IBus-Mozc）。
 

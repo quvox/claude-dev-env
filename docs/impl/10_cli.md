@@ -76,8 +76,8 @@ claude-dev      （単一の bash スクリプト）
 ### `logout`
 全 Claude コンテナとプロキシコンテナを停止し、`VOL_AUTH` の中身を空にする（一時コンテナで `rm -rf /auth/* /auth/.*`）。
 
-### `start [--no-vnc]`
-本 CLI の中核。`NAME=container_name`、`PROJECT_DIR=$(pwd)`。`--no-vnc` で `USE_VNC=0`。
+### `start [--no-vnc] [--kvm]`
+本 CLI の中核。`NAME=container_name`、`PROJECT_DIR=$(pwd)`。`--no-vnc` で `USE_VNC=0`、`--kvm` で `USE_KVM=1`（既定 `0`）。
 
 1. 既に稼働中なら attach: noVNC URL を表示し、`tmux has-session -t main` が無ければ作成してから `tmux attach`。
 2. 停止中コンテナがあれば削除。`ensure_infrastructure`。
@@ -91,7 +91,7 @@ claude-dev      （単一の bash スクリプト）
    - `DOCKER_OPTS`: ソケットがあれば `ensure_docker_proxy_container` 後 `DOCKER_HOST=tcp://<proxy>:2375`
    - `SSH_OPTS`: `ensure_ssh_agent` 後、agent ソケットを `/tmp/ssh-agent.sock`（RO）転送 + `SSH_AUTH_SOCK` 設定。`known_hosts` を RO マウント。`~/.ssh/config` は `IdentityFile`/`IdentitiesOnly` 行を `sed` で除去した一時ファイルを RO マウント
    - `NOVNC_PORT_OPT`（VNC 時のみ）: 空き noVNC ポートを `find_available_novnc_port` で確保し `-p <port>:6080` + `VOL_CHROME` を `~/.chrome-profile` にマウント
-   - `KVM_OPTS`: ホストに存在する `/dev/kvm` `/dev/vhost-net` `/dev/net/tun` を `--device` で渡す
+   - `KVM_OPTS`: **`--kvm` 指定時のみ**、ホストに存在する `/dev/kvm` `/dev/vhost-net` `/dev/net/tun` を `--device` で渡す（既定では渡さない。通常は Chrome 操作のみで十分なため、KVM/QEMU が必要なときだけ明示的に有効化する）。デバイス受け渡しはコンテナ作成時にのみ行われるため、稼働中コンテナへ後付けはできず、`stop` → `start --kvm` で再作成する
 9. **コンテナ起動**: `docker run -d` で `--cap-add NET_ADMIN`・`NET_RAW`（FW 用）、`--restart unless-stopped`、`/workspace` マウント、各ボリューム、`tmux.conf`/`CLAUDE.md` を RO マウント、上記オプション群、`NODE_OPTIONS=--max-old-space-size=4096`、`-t` を付与。
 10. tmux 起動を最大 30 秒待ち、noVNC URL を表示して `tmux attach -t main`。
 

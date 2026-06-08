@@ -291,7 +291,7 @@ DISPLAY=:99 qemu-system-x86_64 \
   -display gtk &
 ```
 
-ホストに `/dev/kvm` がある場合のみ `-enable-kvm` が効く（無ければ外す＝低速なソフトウェアエミュレーション）。`/dev/net/tun` が渡されていれば tap ネットワークも利用可能。
+`-enable-kvm` を効かせるには、コンテナを **`claude-dev start --kvm`** で起動して `/dev/kvm` を渡しておく必要がある（既定では渡らない）。ホストに `/dev/kvm` が無い／`--kvm` を付けていない場合は `-enable-kvm` を外す（＝低速なソフトウェアエミュレーション）。`--kvm` で `/dev/net/tun` も渡るため tap ネットワークも利用可能。
 
 **2) computer-use MCP を有効化する**
 

@@ -78,7 +78,10 @@ claude-dev logout
 cd ~/repos/my-project
 claude-dev start            # Chrome + VNC 付き（デフォルト）
 claude-dev start --no-vnc   # Chrome / VNC なし（軽量）
+claude-dev start --kvm      # KVM/QEMU デバイスを渡す（VM を動かす時のみ）
 ```
+
+`--no-vnc` と `--kvm` は併用可能。デバイス受け渡しはコンテナ作成時のみ行われるため、稼働中コンテナに後付けはできない（`stop` → `start --kvm` で再作成する）。
 
 動作:
 - コンテナ名: ディレクトリ名（例: `my-project`）
@@ -91,7 +94,7 @@ claude-dev start --no-vnc   # Chrome / VNC なし（軽量）
 - `~/.gitconfig` があればコンテナに共有（読み取り専用）
 - SSH agent ソケット・`~/.ssh/known_hosts`・`~/.ssh/config` をコンテナに共有（読み取り専用。秘密鍵はマウントしない）
 - Docker Socket Proxy コンテナ（`claude-dev-docker-proxy`）が未起動なら自動起動する
-- ホストに `/dev/kvm`（および `/dev/vhost-net` / `/dev/net/tun`）が存在する場合のみ、それらを `--device` でコンテナに渡す。コンテナ内で KVM アクセラレーション付きの QEMU が使える（無いホストでは自動スキップ。詳細・セキュリティ上の含意は [docs/03_security.md](03_security.md) を参照）
+- `--kvm` 指定時のみ、ホストに存在する `/dev/kvm`（および `/dev/vhost-net` / `/dev/net/tun`）を `--device` でコンテナに渡す。既定では渡さない（通常は Chrome 操作のみで十分）。コンテナ内で VM を動かす時だけ `--kvm` を付ける（詳細・セキュリティ上の含意は [docs/03_security.md](03_security.md) を参照）
 
 VNC あり（デフォルト）:
 - `claude-dev-claude-vnc` イメージを使用
