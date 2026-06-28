@@ -1,3 +1,8 @@
+---
+summary: Docker APIを安全に中継するGo製リバースプロキシの検査ロジック・接続ハイジャック処理・テスト仕様を記述する。
+keywords: [ Docker Socket Proxy, Go, リバースプロキシ, API検査, セキュリティ, hijack, コンテナ ]
+---
+
 # 実装仕様: docker-proxy/（Docker Socket Proxy）
 
 > **この文書の役割**: Claude コンテナから Docker API を安全に利用させるための Go 製リバースプロキシの実装仕様。セキュリティ上の位置づけは `docs/03_security.md`、ビルドは [40_devcontainer.md](40_devcontainer.md) を参照。

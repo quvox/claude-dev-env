@@ -1,3 +1,8 @@
+---
+summary: claude-dev CLI と Makefile の全コマンド・オプションの利用者向けリファレンス。CLIの内部実装仕様は docs/impl/10_cli.md を参照。
+keywords: [ CLI, コマンドリファレンス, Makefile, claude-dev, ポートフォワード, セッション管理, VNC ]
+---
+
 # CLI リファレンス
 
 > **この文書の役割**: `claude-dev` CLI の全コマンド・オプションの利用者向けリファレンス。CLI の内部実装仕様は [docs/impl/10_cli.md](impl/10_cli.md) を参照。

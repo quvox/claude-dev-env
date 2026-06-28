@@ -1,3 +1,8 @@
+---
+summary: Claude コンテナのENTRYPOINTとして起動し、UID/GID追従・認証共有・MCP設定・VNC/Chrome起動・tmuxセッション開始までを行う初期化スクリプトの実装仕様。
+keywords: [ entrypoint, UID/GID, 認証, MCP, VNC, Chrome, tmux ]
+---
+
 # 実装仕様: scripts/entrypoint-claude.sh
 
 > **この文書の役割**: Claude コンテナの ENTRYPOINT として root で起動し、UID/GID 追従・認証共有・設定生成・VNC/Chrome 起動・tmux セッション開始までを行う初期化スクリプトの実装仕様。

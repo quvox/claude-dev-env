@@ -1,3 +1,8 @@
+---
+summary: Claude コンテナ内で適用されるブラックリスト方式ファイアウォールの iptables 構成・適用ルール・カスタマイズ点の実装仕様。
+keywords: [ ファイアウォール, iptables, ipset, ブラックリスト, SMTP, SSH, セキュリティ ]
+---
+
 # 実装仕様: scripts/init-firewall-claude.sh
 
 > **この文書の役割**: Claude コンテナ内で適用されるブラックリスト方式ファイアウォールの実装仕様。脅威モデル上の位置づけは `docs/03_security.md`、カスタマイズ手順は `docs/05_customization.md` を参照。

@@ -1,3 +1,8 @@
+---
+summary: Dockerfile.claude（base/vnc 2ステージ）・Dockerfile.docker-proxy・tmux.conf・.zshrc のビルド仕様を記述する。
+keywords: [ Dockerfile, Docker, VNC, Chrome, マルチステージ, Go, ビルド ]
+---
+
 # 実装仕様: .devcontainer/ Docker イメージ定義
 
 > **この文書の役割**: コンテナイメージのビルド仕様を記述する。`.devcontainer/Dockerfile.claude`（開発環境 base + GUI vnc の 2 ステージ）、`.devcontainer/Dockerfile.docker-proxy`（Go プロキシ）、ビルド入力となる `.devcontainer/tmux.conf` とルートの `.zshrc` を対象とする。

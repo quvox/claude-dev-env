@@ -1,3 +1,8 @@
+---
+summary: scripts/ ディレクトリの構成概要と、Claude Code hookスクリプト（save_prompt.sh / sendslackmsg.sh）および tmux.conf の実装仕様を記述する。
+keywords: [ scripts, hook, Slack通知, tmux, save_prompt, sendslackmsg, 設定 ]
+---
+
 # 実装仕様: scripts/ ディレクトリ概要 と 小スクリプト
 
 > **この文書の役割**: `scripts/` ディレクトリ全体の役割を示す概要であり、かつ小規模スクリプト（Claude Code hook 2 種と tmux 設定）の実装仕様を記述する。大規模なスクリプトは別文書に分離する。
