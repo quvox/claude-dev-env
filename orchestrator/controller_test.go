@@ -94,6 +94,12 @@ type mockGit struct {
 func (g *mockGit) WorktreeAdd(ctx context.Context, repoDir, path, branch, base string) error {
 	return nil
 }
+func (g *mockGit) WorktreeAddExisting(ctx context.Context, repoDir, path, branch string) error {
+	return nil
+}
+func (g *mockGit) BranchExists(ctx context.Context, repoDir, branch string) (bool, error) {
+	return false, nil
+}
 func (g *mockGit) WorktreeRemove(ctx context.Context, repoDir, path string) error { return nil }
 func (g *mockGit) Merge(ctx context.Context, repoDir, branch, strategy string) error {
 	g.mu.Lock()

@@ -23,6 +23,13 @@ type Config struct {
 	WorkerModel     string // worker の claude -p モデル
 	ReviewerVendor  string // claude | codex
 	MergeStrategy   string // merge | rebase
+	// WorkerPermissionMode is the --permission-mode passed to worker/reviewer
+	// `claude -p` calls. Headless workers have no human to answer permission
+	// prompts, so without an explicit non-interactive mode every Write/Bash is
+	// denied and the worker silently does nothing. Defaults to bypassPermissions
+	// (06 §10: container isolation + FW + proxy + instruction constraints bound
+	// the blast radius). Set to "" to pass no flag (rely on ambient settings).
+	WorkerPermissionMode string
 
 	// Environment (not part of the YAML file)
 	SlackBotToken string
@@ -35,13 +42,14 @@ const DefaultSlackChannel = "U5SJG0XEK"
 // DefaultConfig returns the built-in defaults.
 func DefaultConfig() Config {
 	return Config{
-		MaxWorkers:      5,
-		StuckLimit:      3,
-		MaxReviewRounds: 3,
-		WorkerModel:     "sonnet",
-		ReviewerVendor:  "claude",
-		MergeStrategy:   "merge",
-		SlackChannel:    DefaultSlackChannel,
+		MaxWorkers:           5,
+		StuckLimit:           3,
+		MaxReviewRounds:      3,
+		WorkerModel:          "sonnet",
+		ReviewerVendor:       "claude",
+		MergeStrategy:        "merge",
+		WorkerPermissionMode: "bypassPermissions",
+		SlackChannel:         DefaultSlackChannel,
 	}
 }
 
@@ -100,6 +108,8 @@ func applyConfigKV(cfg *Config, kv map[string]string) {
 			if v != "" {
 				cfg.MergeStrategy = v
 			}
+		case "worker_permission_mode":
+			cfg.WorkerPermissionMode = v // "" disables the flag intentionally
 		}
 	}
 }

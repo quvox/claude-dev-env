@@ -124,9 +124,21 @@ tmux session: <project>
 - 実行モードは長寿命の対話セッションを引きずらず、状態から必要分を再構成できる（コンテキスト健全性）
 - クラッシュ後も状態から再開できる
 
+ただし**再開するのは「中断された run」だけ**とする。起動時に永続状態を見て、実行中／介入中（`executing`/`intervening`）で中断された run のみ再開し、完了済み（`done`）・状態なし・不明な状態のときは壁打ちから**新規開始**する（完了済みの run が次回起動を即終了させたり、古い実行状態へ無言で再開して壁打ちを飛ばしたりしない）。利用者が明示的にやり直したいときは `claude-dev orchestrate --fresh` で前回の実行状態（状態・計画・worktree・作業ブランチ）を破棄して壁打ちから始め直せる（具体的な判定・操作は [docs/impl/60_orchestrator.md](impl/60_orchestrator.md)）。
+
 ### 4.4 worker の分離
 
-各 worker は `/workspace` 内の **git worktree** で作業し、ファイル競合を防ぐ（idea-2 FR-6）。worktree は変更の復旧路にもなる（§10 参照）。
+各 worker は `/workspace` 内の **git worktree** で作業し、ファイル競合を防ぐ（idea-2 FR-6）。worktree は変更の復旧路にもなる（§10 参照）。worker の `claude -p` は出力をログへ逐次ストリームし、ダッシュボードの `[d]` でライブ確認できる（§5.2）。
+
+### 4.5 主要な統合点（実装仕様の要点）
+
+設計上の振る舞いを実装する際の主要な接点。詳細・正本は [docs/impl/60_orchestrator.md](impl/60_orchestrator.md)。
+
+- **指示テンプレート**：壁打ち脳・介入脳の役割（介入トリガー方針・サマリ形式・`control.json`/`plan.json` 規約）は、イメージ同梱の `wallbounce.md` / `intervene.md` を対話 `claude` に `--append-system-prompt` で注入して与える。
+- **プロジェクト固有方針 `ORCHESTRATOR.md`**：リポジトリルートに置く任意のコミット対象ファイル（gitignore される `.orchestrator/` 運用状態とは別物）。存在すれば壁打ち/介入の指示と worker/レビュアのプロンプト先頭に前置され、プロジェクト固有の判断基準を与える。
+- **壁打ちの引き渡し（handoff）と終了時の選択**：壁打ち脳は `control.json` に `execute`（実行へ）/`continue_wallbounce`（壁打ち継続）/`abort`（中止）を書いて終了する。`control.json` が無い・不明なときは、安全側としてコントローラが端末で **続ける/実行/終了** を明示確認する（プロンプト依存で勝手に実行しない）。
+- **設定（config）**：並行度や挙動はプロジェクト/ユーザ設定で変えられる（`max_workers`・`stuck_limit`・`max_review_rounds`・`worker_model`・`merge_strategy`・`worker_permission_mode`・`reviewer_vendor`）。既定値と優先順位は 60 の「設定」を参照。
+- **完了検証**：全タスク完了時、`completion`（自然言語の完了基準）に対する **助言的な `claude -p` 検証**を行い、未充足の可能性があれば Slack 通知に添えて人間の最終確認を促す（実行をブロックはしない。不足分の自動タスク化は v1 では行わない）。
 
 ## 5. 画面・プロセス構成（CLI）
 
@@ -169,12 +181,15 @@ tmux session: <project>
 │ [4/8] worker B (claude): レビュー待ち            │
 │ 直近サマリ: … （Slack 送信済 12:04）             │
 │ 仮定ログ 3 / 介入 0                              │
-│ keys: [d]詳細 [p]一時停止 [q]中断                │
+│ keys: [d]worker出力 [p]一時停止 [q]中断(再開可)  │
 └────────────────────────────────────────────────┘
- 人間入力＝ほぼ無し（任意で pause/中断）
+ 人間入力＝ほぼ無し
+ ・[d]：worker のライブ出力（ログ末尾）の表示をトグル
+ ・[p]：新規ディスパッチの一時停止／再開（実行中 worker は継続）
+ ・[q]：中断。worker を止め状態を保存して終了（done にしない）。
+        次回 orchestrate で中断点から再開できる（破壊的でない）
  出力＝この画面（アタッチ時）＋ Slack サマリ（常時・非同期）
- worker の入出力＝ログファイル。この画面には要約だけ
- → ここで tmux を detach して離席してよい。コントローラは回り続ける
+ → 離席するだけなら [q] ではなく tmux を detach する。コントローラは回り続ける
 ```
 
 **③ 介入モード**（前景＝対話 Claude TUI。①と同じ画面に戻る）
@@ -200,9 +215,9 @@ Slack 通知:「<project> 要判断：…。attach してください」
 tmux session: <project>
 └─ window 0: orchestrator   ← 前景がモードで切替（対話TUI ⇄ ステータス）
 ```
-worker の中身を見たい時は、ステータス画面の `[d]詳細` で「選んだ worker のログを一時的に下ペインに tail（見終わったら閉じる）」。常設の worker 表示は持たない。
+worker の中身を見たい時は、ステータス画面で `[d]` を押すと、実行中 worker のライブ出力（ログ末尾）の表示をトグルできる。worker は出力をログへストリーム書き込みするので、完了を待たずに進捗が見える。常設の worker 表示や別ウィンドウは持たない（単一ウィンドウに一本化）。
 
-**オプトイン（Config B）：2 ウィンドウ**（`workers` ウィンドウで全 worker ログを prefix 付きで多重 tail。「ログを横目で見たい」人向け。`Ctrl-_ 1/2` で切替）。worker は増減するため、ペインを動的生成せず**全ログを 1 本のストリームに合流**させて 1 ペインで流す。有効化は `claude-dev orchestrate --workers-window`。
+> 注：初期案にあった「Config B：worker ログ専用ウィンドウ／`--workers-window`」は**廃止**した。ダッシュボードの `[d]` ライブ表示が同じ用途を満たすため、別ウィンドウ機構と当該フラグは設けない。
 
 ### 5.4 起動〜完了の時間軸
 

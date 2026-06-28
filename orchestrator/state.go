@@ -276,6 +276,20 @@ func (s *Store) SaveState(st *State) error {
 	return writeJSONAtomic(s.path("state.json"), st)
 }
 
+// ResetRun discards the run state of a previous session so a new run can start
+// cleanly from wallbounce: it removes state.json, plan.json, control.json and
+// the open-intervention sidecar. Append-only logs (audit/assumptions/
+// interventions JSONL) and summary.md are kept as history. Missing files are
+// not an error.
+func (s *Store) ResetRun() error {
+	for _, name := range []string{"state.json", "plan.json", "control.json", "open_intervention"} {
+		if err := os.Remove(s.path(name)); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+	}
+	return nil
+}
+
 // ---- Plan ----
 
 // LoadPlan reads plan.json. Returns (nil, nil) if it does not exist.

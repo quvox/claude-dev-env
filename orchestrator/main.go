@@ -21,26 +21,46 @@ import (
 
 func main() {
 	var (
-		workspace     = flag.String("workspace", defaultWorkspace(), "project workspace root")
-		workersWindow = flag.Bool("workers-window", false, "enable Config B (workers log window; reserved)")
-		instrDir      = flag.String("instructions", "", "override instruction template dir (dev/test)")
+		workspace = flag.String("workspace", defaultWorkspace(), "project workspace root")
+		instrDir  = flag.String("instructions", "", "override instruction template dir (dev/test)")
+		fresh     = flag.Bool("fresh", false, "discard leftover run state and start a new session from wallbounce")
 	)
 	flag.Parse()
-	_ = workersWindow // wiring reserved; tmux window is created by the CLI layer.
 
 	goal := strings.TrimSpace(strings.Join(flag.Args(), " "))
 
-	if err := run(*workspace, *instrDir, goal); err != nil {
+	if err := run(*workspace, *instrDir, goal, *fresh); err != nil {
 		log.Fatalf("orchestrator: %v", err)
 	}
 }
 
-func run(workspace, instrDir, goal string) error {
+func run(workspace, instrDir, goal string, fresh bool) error {
 	store, err := NewStore(workspace)
 	if err != nil {
 		return fmt.Errorf("init store: %w", err)
 	}
 	cfg := LoadConfig(workspace)
+
+	// Decide whether the leftover state is resumable. Only a genuinely
+	// interrupted run (executing/intervening) is resumed; a finished (done),
+	// absent, or unrecognized state starts fresh from wallbounce. This prevents
+	// two failure modes: (a) a finished run leaving Phase=done so the next launch
+	// exits immediately, and (b) silently skipping wallbounce into a stale
+	// executing run. --fresh forces a clean start even from an interrupted run.
+	prev, _ := store.LoadState()
+	if fresh || !isResumable(prev) {
+		if prev != nil && isResumable(prev) {
+			fmt.Println("🆕 前回の実行状態を破棄して新規セッションを開始します（--fresh）")
+		} else {
+			fmt.Println("🆕 新規セッションを開始します（壁打ちから）")
+		}
+		CleanOrchWorktrees(context.Background(), workspace, store.path("worktrees"))
+		if err := store.ResetRun(); err != nil {
+			return fmt.Errorf("reset run: %w", err)
+		}
+	} else {
+		fmt.Printf("↩️  前回の %s フェーズから再開します\n", prev.Phase)
+	}
 
 	// If a goal is supplied and no plan exists yet, seed a minimal plan so the
 	// wallbounce brain has a starting point (it may overwrite plan.json).
@@ -54,16 +74,17 @@ func run(workspace, instrDir, goal string) error {
 	handoff := &Handoff{Store: store}
 	notifier := NewSlackNotifier(cfg)
 
+	claudeRunner := ExecClaude{PermissionMode: cfg.WorkerPermissionMode}
 	worker := &Worker{
 		Store:     store,
-		Claude:    ExecClaude{},
+		Claude:    claudeRunner,
 		Git:       ExecGit{},
 		Cfg:       cfg,
 		Workspace: workspace,
 	}
 	reviewer := &Reviewer{
 		Store:  store,
-		Claude: ExecClaude{},
+		Claude: claudeRunner,
 		Cfg:    cfg,
 		Worker: worker,
 	}
@@ -81,6 +102,10 @@ func run(workspace, instrDir, goal string) error {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	// Safety net: whatever path we exit by (normal, error, signal), leave the
+	// terminal in a sane canonical state. The dashboard and interactive child
+	// each restore on their own, but a signal can unwind before they do.
+	defer ttyRestoreSane()
 	// Flush state on signal so we can resume next time.
 	sigc := make(chan os.Signal, 1)
 	signal.Notify(sigc, syscall.SIGINT, syscall.SIGTERM)
@@ -112,6 +137,12 @@ func terminalConfirm(prompt string) string {
 	default:
 		return "continue"
 	}
+}
+
+// isResumable reports whether a loaded state represents a genuinely interrupted
+// run that should be resumed rather than restarted from wallbounce.
+func isResumable(st *State) bool {
+	return st != nil && (st.Phase == PhaseExecuting || st.Phase == PhaseIntervene)
 }
 
 func defaultWorkspace() string {

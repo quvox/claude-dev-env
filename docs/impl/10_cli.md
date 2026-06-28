@@ -103,8 +103,8 @@ claude-dev      （単一の bash スクリプト）
 ### `code`
 稼働中コンテナで `tmux new-window -t main "claude"` を実行し attach。未起動ならエラー。
 
-### `orchestrate [<ゴール>] [--workers-window]`
-`code` と同系統で、稼働中コンテナに対し AI オーケストレーターを起動し attach する。未起動ならエラー。引数を走査し、`--workers-window` をフラグとして除いた残りの最初の位置引数を `<ゴール>`（任意）として扱う。稼働中コンテナで `tmux new-window -t main -c /workspace "claude-orchestrator --workspace /workspace [--workers-window] [\"<ゴール>\"]"` を実行（`-c /workspace` で新規ウィンドウの CWD を固定）し、`tmux attach -t main`。ゴールを省略すると壁打ち（検討）から開始し、`--workers-window` で worker ログの多重 tail ウィンドウ（Config B）を有効化する。詳細は [60_orchestrator.md](60_orchestrator.md) 参照。
+### `orchestrate [<ゴール>] [--fresh]`
+`code` と同系統で、稼働中コンテナに対し AI オーケストレーターを起動し attach する。未起動ならエラー。引数を走査し、`--fresh` をフラグとして除いた残りの最初の位置引数を `<ゴール>`（任意）として扱う。稼働中コンテナで `tmux new-window -t main -c /workspace "claude-orchestrator --workspace /workspace [--fresh] [\"<ゴール>\"]"` を実行（`-c /workspace` で新規ウィンドウの CWD を固定）し、`tmux attach -t main`。ゴールを省略すると壁打ち（検討）から開始する。`--fresh` は前回の実行状態を破棄して壁打ちから新規開始するフラグで、そのままバイナリへ受け渡す（再開/新規の判定は `claude-orchestrator` 側、[60_orchestrator.md](60_orchestrator.md) 参照）。worker のライブ出力はダッシュボードの `[d]` で確認する（旧 `--workers-window`／Config B は廃止）。
 
 ### `attach [NAME]`
 NAME（省略時カレント）が稼働中なら `tmux attach -t main`。

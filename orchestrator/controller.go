@@ -2,11 +2,18 @@ package main
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
 	"time"
 )
+
+// errSuspended is returned by the executing loop when the human presses [q]
+// ("中断"). It is NOT an error condition: the run state is left at executing so
+// the next launch resumes. Run translates it into a clean exit.
+var errSuspended = errors.New("suspended by user")
 
 // Controller drives the state machine and run loop.
 type Controller struct {
@@ -67,6 +74,11 @@ func (c *Controller) Run(ctx context.Context) error {
 			}
 		case PhaseExecuting:
 			if err := c.runExecuting(ctx, st); err != nil {
+				if errors.Is(err, errSuspended) {
+					// User interrupted: state is left resumable; exit cleanly so
+					// the next `claude-dev orchestrate` continues from here.
+					return nil
+				}
 				return err
 			}
 		case PhaseIntervene:
@@ -151,7 +163,7 @@ func (c *Controller) runExecuting(ctx context.Context, st *State) error {
 
 	dash := &DashboardState{Goal: plan.Goal}
 	syncDashboard(dash, plan)
-	d := NewDashboard(dash)
+	d := NewDashboard(dash, c.Store)
 	dctx, dcancel := context.WithCancel(ctx)
 	go d.Run(dctx)
 	defer dcancel()
@@ -218,6 +230,9 @@ func (c *Controller) runExecuting(ctx context.Context, st *State) error {
 				}
 			}()
 		}
+		// Reflect newly-running tasks on the dashboard immediately (otherwise the
+		// screen keeps showing "pending" until a worker finishes).
+		syncDashboard(dash, plan)
 		c.planMu.Unlock()
 	}
 
@@ -236,14 +251,19 @@ func (c *Controller) runExecuting(ctx context.Context, st *State) error {
 				dash.Set(func(s *DashboardState) { s.Paused = !s.Paused })
 				continue
 			case KeyQuit:
+				// "中断": stop the workers but DO NOT mark the run done. Leave the
+				// phase at executing and reset in-flight tasks to pending so the
+				// next launch resumes from here (work in worktrees is preserved).
 				runCancel()
 				wg.Wait()
 				c.planMu.Lock()
 				_ = c.Store.SavePlan(plan)
 				c.planMu.Unlock()
-				return c.transition(st, PhaseDone)
+				_ = c.Store.AppendAudit(AuditEntry{Event: "suspended", Detail: map[string]any{"run_id": st.RunID}})
+				return errSuspended
 			case KeyDetail:
-				// Detail tail is a TTY affordance; no-op in this stdlib build.
+				// Toggle the live worker-output detail view.
+				dash.Set(func(s *DashboardState) { s.Detail = !s.Detail })
 				continue
 			}
 		default:
@@ -535,15 +555,39 @@ func (c *Controller) verifyCompletion(ctx context.Context, st *State, plan *Plan
 	if !AllDone(plan) {
 		// Some tasks failed/blocked; we cannot satisfy completion. Finish.
 		c.Notifier.Notify(fmt.Sprintf("[%s] 実行終了（未完了タスクあり）", plan.Goal))
+		_ = c.Store.AppendAudit(AuditEntry{Event: "finished_incomplete"})
 		return c.transition(st, PhaseDone)
 	}
-	// v1: all tasks done == completion satisfied. The natural-language
-	// completion check via claude -p is an extension point (the production
-	// ClaudeRunner can perform it); the plumbing here stays deterministic.
 	c.updateSummary(plan)
-	c.Notifier.Notify(fmt.Sprintf("[%s] 完了。最終確認をお願いします。", plan.Goal))
-	_ = c.Store.AppendAudit(AuditEntry{Event: "completed"})
+	// Advisory natural-language completion check against plan.Completion. It never
+	// blocks completion (a flaky/absent check just finishes the run); when it
+	// finds the criteria unmet it enriches the notification so the human knows to
+	// look. Auto-creating follow-up tasks is intentionally out of scope.
+	satisfied, missing := c.checkCompletion(ctx, plan)
+	if !satisfied {
+		_ = c.Store.AppendAudit(AuditEntry{Event: "completion_unmet", Detail: map[string]any{"missing": missing}})
+		c.Notifier.Notify(fmt.Sprintf("[%s] 全タスク完了。ただし完了基準の未充足の可能性: %s 最終確認をお願いします。",
+			plan.Goal, oneline(missing, 200)))
+	} else {
+		c.Notifier.Notify(fmt.Sprintf("[%s] 完了。最終確認をお願いします。", plan.Goal))
+	}
+	_ = c.Store.AppendAudit(AuditEntry{Event: "completed", Detail: map[string]any{"completion_satisfied": satisfied}})
 	return c.transition(st, PhaseDone)
+}
+
+// checkCompletion runs an advisory claude -p verification of plan.Completion
+// against the completed work. Best-effort and read-only by intent: on empty
+// criteria, any error, or an unparseable answer it returns (true, "") so a flaky
+// check never blocks the run from finishing.
+func (c *Controller) checkCompletion(ctx context.Context, plan *Plan) (bool, string) {
+	if strings.TrimSpace(plan.Completion) == "" || c.Worker == nil || c.Worker.Claude == nil {
+		return true, ""
+	}
+	out, err := c.Worker.Claude.RunPrompt(ctx, c.Worker.Workspace, c.Cfg.WorkerModel, buildCompletionPrompt(plan), "")
+	if err != nil {
+		return true, ""
+	}
+	return parseCompletionVerdict(out)
 }
 
 // ---- helpers ----
@@ -639,6 +683,59 @@ func buildQuestion(t *Task, reason string) string {
 	return b.String()
 }
 
+// buildCompletionPrompt asks an independent claude -p to judge whether the
+// plan's completion criteria are met by the work done, read-only, replying with
+// a single JSON line {"satisfied":bool,"missing":string}.
+func buildCompletionPrompt(plan *Plan) string {
+	var b strings.Builder
+	b.WriteString("You are verifying whether a project's completion criteria are satisfied. ")
+	b.WriteString("DO NOT modify any files; only inspect the repository and answer.\n\n")
+	b.WriteString("# Goal\n")
+	b.WriteString(plan.Goal)
+	b.WriteString("\n\n# Completion criteria\n")
+	b.WriteString(plan.Completion)
+	b.WriteString("\n\n# Completed tasks\n")
+	for i := range plan.Tasks {
+		t := &plan.Tasks[i]
+		summary := ""
+		if t.Result != nil {
+			summary = t.Result.Summary
+		}
+		fmt.Fprintf(&b, "- [%s] %s: %s\n", t.Status, t.Title, oneline(summary, 160))
+	}
+	b.WriteString("\nInspect the working tree as needed, then print a SINGLE JSON object on the final line, nothing after it:\n")
+	b.WriteString(`{"satisfied":bool,"missing":"short description of what is still missing, or empty if satisfied"}`)
+	b.WriteString("\n")
+	return b.String()
+}
+
+// parseCompletionVerdict extracts {"satisfied":bool,"missing":string} from a
+// claude -p (stream-json or json) output. Returns (true,"") when no usable
+// verdict is found, so completion is never blocked by an unparseable answer.
+func parseCompletionVerdict(out []byte) (bool, string) {
+	text := string(out)
+	if inner := resultFromStream(text); inner != "" {
+		text = inner
+	} else if inner := extractFromClaudeEnvelope(text); inner != "" {
+		text = inner
+	}
+	lines := strings.Split(strings.TrimRight(text, "\n"), "\n")
+	for i := len(lines) - 1; i >= 0; i-- {
+		line := strings.TrimSpace(lines[i])
+		if !strings.HasPrefix(line, "{") || !strings.HasSuffix(line, "}") || !strings.Contains(line, "\"satisfied\"") {
+			continue
+		}
+		var v struct {
+			Satisfied bool   `json:"satisfied"`
+			Missing   string `json:"missing"`
+		}
+		if err := json.Unmarshal([]byte(line), &v); err == nil {
+			return v.Satisfied, v.Missing
+		}
+	}
+	return true, ""
+}
+
 func attemptFeedback(t *Task) string {
 	if t.Attempts <= 1 || t.Result == nil {
 		return ""
@@ -653,15 +750,26 @@ func dashPaused(d *DashboardState) bool {
 }
 
 func syncDashboard(d *DashboardState, plan *Plan) {
-	rows := make([]DashTask, 0, len(plan.Tasks))
-	for _, t := range plan.Tasks {
-		row := DashTask{ID: t.ID, Title: t.Title, Vendor: "claude", Status: t.Status}
-		if t.Status == TaskRunning {
-			row.Started = time.Now()
-		}
-		rows = append(rows, row)
-	}
 	d.Set(func(s *DashboardState) {
+		// Preserve the Started timestamp of tasks that are already active so the
+		// elapsed time keeps growing across syncs (instead of resetting to 0).
+		prev := make(map[string]time.Time, len(s.Tasks))
+		for _, r := range s.Tasks {
+			prev[r.ID] = r.Started
+		}
+		rows := make([]DashTask, 0, len(plan.Tasks))
+		for i := range plan.Tasks {
+			t := &plan.Tasks[i]
+			row := DashTask{ID: t.ID, Title: t.Title, Vendor: "claude", Status: t.Status, Attempts: t.Attempts}
+			if t.Status == TaskRunning || t.Status == TaskReview || t.Status == TaskRevise {
+				if ts, ok := prev[t.ID]; ok && !ts.IsZero() {
+					row.Started = ts
+				} else {
+					row.Started = time.Now()
+				}
+			}
+			rows = append(rows, row)
+		}
 		s.Tasks = rows
 		s.Goal = plan.Goal
 	})

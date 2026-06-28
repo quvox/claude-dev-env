@@ -674,8 +674,11 @@ code)
 
 # -----------------------------------------------------------------------------
 # AI オーケストレーターを新しい tmux ウィンドウで起動
-#   claude-dev orchestrate [<ゴール>] [--workers-window]
-#   ゴールは任意（既定は壁打ちから開始）。--workers-window で Config B。
+#   claude-dev orchestrate [<ゴール>] [--fresh]
+#   ゴールは任意（既定は壁打ちから開始）。
+#   --fresh で前回の実行状態（state/plan/control・worktree/orch ブランチ）を
+#   破棄して壁打ちから新規開始する（中断した executing/intervening の再開を上書き）。
+#   worker の実行内容はダッシュボードの [d] キーでライブ表示できる。
 # -----------------------------------------------------------------------------
 orchestrate)
     require_setup
@@ -687,18 +690,18 @@ orchestrate)
     fi
 
     shift  # "orchestrate" を除去
-    _ww=""
+    _fresh=""
     _goal=""
     for a in "$@"; do
         case "$a" in
-            --workers-window) _ww="--workers-window" ;;
+            --fresh) _fresh="--fresh" ;;
             *) if [ -z "$_goal" ]; then _goal="$a"; else _goal="$_goal $a"; fi ;;
         esac
     done
 
     # コンテナ内コマンドを組み立てる（workspace は /workspace 固定）
     _cmd="claude-orchestrator --workspace /workspace"
-    [ -n "$_ww" ] && _cmd="$_cmd $_ww"
+    [ -n "$_fresh" ] && _cmd="$_cmd $_fresh"
     if [ -n "$_goal" ]; then
         _esc=$(printf '%s' "$_goal" | sed 's/"/\\"/g')
         _cmd="$_cmd \"$_esc\""
@@ -988,8 +991,9 @@ claude-dev - Claude Code 安全開発環境
   claude-dev start --no-vnc      Chrome / VNC なしで起動（軽量）
   claude-dev start --kvm         KVM/QEMU デバイスを渡して起動（VM を動かす時のみ）
   claude-dev code                新しい tmux ウィンドウで Claude Code を起動
-  claude-dev orchestrate [<ゴール>] [--workers-window]
+  claude-dev orchestrate [<ゴール>] [--fresh]
                                  AI オーケストレーター（壁打ち→自律実行）を起動
+                                 （--fresh で前回の実行状態を破棄し壁打ちから再開）
   claude-dev attach [NAME]       既存セッションに接続
   claude-dev stop [NAME]         セッションを停止
   claude-dev list                実行中セッション一覧

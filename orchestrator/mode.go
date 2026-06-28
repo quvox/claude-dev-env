@@ -36,15 +36,24 @@ func (m *Mode) instructionPath(name string) string {
 // Wallbounce: launch with the wallbounce instruction.
 // Intervene: fresh start (no --resume) with the intervention question seeded.
 func (m *Mode) RunInteractive(ctx context.Context, args ...string) error {
-	cmd := exec.CommandContext(ctx, "claude", args...)
+	cmd := exec.CommandContext(ctx, claudePath(), args...)
 	cmd.Dir = m.Workspace
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	// Interactive claude is allowed Slack? No: only the controller sends Slack.
-	// We still strip the token so the interactive child cannot post either.
-	cmd.Env = stripEnv(os.Environ(), "SLACK_BOT_TOKEN")
-	return cmd.Run()
+	// We still strip the token so the interactive child cannot post either. PATH
+	// is augmented so a non-interactive launch (tmux `zsh -c`) can still find any
+	// claude-adjacent binaries.
+	cmd.Env = claudeChildEnv()
+	err := cmd.Run()
+	// The interactive `claude` TUI leaves the shared TTY in a non-canonical
+	// ("raw") mode and does not restore it on exit. Restore a sane canonical
+	// state so the controller's subsequent line reads (terminalConfirm) and the
+	// dashboard work; without this, those reads block forever waiting for a
+	// "\n" that raw-mode Enter never delivers.
+	ttyRestoreSane()
+	return err
 }
 
 // WallbounceArgs returns the args for launching the wallbounce brain. The

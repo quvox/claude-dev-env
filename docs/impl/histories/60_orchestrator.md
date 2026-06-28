@@ -2,6 +2,46 @@
 
 > 対応文書: `docs/impl/60_orchestrator.md`
 
+## 2026-06-29（可観測性・中断の再開可能化・完了検証・Config B 廃止／設計↔実装の総点検）
+- 背景：実機運用で「ずっと待機中に見える／`[d]` で何も出ない／`[q]` で worker が消えて復元不能」となり使い物にならなかった。原因はダッシュボード設計と中断セマンティクスの不備。併せて設計↔実装の不整合と未実装機能を総点検した。
+- ダッシュボード（`dashboard.go`）：タスクが running になった時点で `syncDashboard` を呼ぶよう変更し、状態ラベル（待機中/実行中/…）・経過時間・試行回数を表示。`syncDashboard` は running の開始時刻を引き継いで経過時間が伸びるようにした。`[d]` を no-op から「実行中 worker のログ末尾をライブ表示するトグル」に実装（`renderDetail`/`tailFile`）。`NewDashboard` は `Store` を受け取る。
+- 中断の再開可能化（`controller.go`）：`[q]`（KeyQuit）を `PhaseDone` 遷移から **`errSuspended` 返却**へ変更。状態を `executing` のまま保存して終了し、次回起動で中断点から再開する（破壊的でない）。`Run` は `errSuspended` をクリーン終了として扱う。
+- worker 出力のストリーミング（`worker.go`）：`--output-format json`→**`stream-json --verbose`** に変更し、`io.MultiWriter` でログへライブ tee。これで `[d]` が進捗をリアルタイム表示できる。`ParseWorkerResult` を stream-json（result イベントの `result` 抽出）・単一 envelope・bare の 3 形態対応に刷新（`worker_stream_test.go` で実出力サンプルを含め検証）。
+- 完了検証（`controller.go`）：`verifyCompletion` に **助言的な自然言語完了検証** `checkCompletion`/`buildCompletionPrompt`/`parseCompletionVerdict` を実装。`plan.completion` を `claude -p` で検証し未充足の可能性を Slack 通知に添える。ブロックしない（エラー/解析不能は満たした扱い）。`completion` フィールドが収集されるだけで未使用だったギャップを解消。
+- Config B 廃止：`--workers-window` フラグを `main.go`・`claude-dev` から削除。worker 可観測性は `[d]` ライブ表示に一本化（ドキュメントにあるのに動かない罠を除去）。
+- ドキュメント総点検：設計 `06_orchestration.md`（§4.5 主要な統合点を追加：指示テンプレート・`ORCHESTRATOR.md`・handoff の続ける/実行/終了・config キー・完了検証／§5.2・5.3 のキー意味と Config B 廃止）と実装仕様 `60_orchestrator.md`（ダッシュボードキー・worker `stream-json`・完了検証・`blocked` の終端性・`reviewer_vendor` は v1 未使用・**実装状況（v1）節を新設**）を実装に一致させ、設計↔実装の不整合（[d] no-op vs 実機、continue_wallbounce 未記載、config/ORCHESTRATOR.md/intervene.md の設計未言及 等）を解消。`reviewer_vendor: codex`・Slack 双方向・Docker Agent・不足分の自動タスク化は明示的に「未実装（将来フェーズ）」と記載。
+- 検証：`go build`/`go vet`/`go test ./...` 全 pass。stream-json 解析・完了検証解析の単体テスト追加。配布イメージ再ビルド済み。
+
+## 2026-06-29（claude 実行ファイルの解決：非対話 PATH 問題）
+- 不具合：`claude-dev orchestrate` は tmux ウィンドウの非対話シェル（`zsh -c`）でオーケストレーターを起動するが、`claude` のネイティブ導入先 `~/.local/bin` は対話シェルの `.zshrc` でしか PATH に追加されないため、その PATH には `claude` が無い。素朴な `exec.Command("claude", …)` が「executable file not found」で失敗し、壁打ち・介入・worker・レビュアのすべてが起動できなかった（実機の tmux ウィンドウで `claude NOT FOUND` を確認。旧 run の `audit.jsonl` にも `wallbounce_exit`＋"executable file not found" が残っていた）。
+- 修正：新規 `claudebin.go` を追加。`claudePath()`（`exec.LookPath`→無ければ `$HOME/.local/bin/claude` フォールバック）で絶対パス解決し、`claudeChildEnv()`（`SLACK_BOT_TOKEN` 除去＋claude bin ディレクトリを PATH 補完）を子プロセス環境に使う。`mode.go`（対話）と `worker.go`（worker/レビュア）の両方を `exec.Command("claude", …)`→`exec.Command(claudePath(), …)` に変更。
+- 検証（実機 claude・コンテナ）：tmux 相当の制限 PATH（`~/.local/bin` 無し）で `claude NOT on PATH` の状態でも、worker が `PROBE.md`/`SHIP.md` を作成・コミットし作業ブランチへマージ（`dispatch→[review_result→]task_done→completed→run_done`）。対話壁打ち `claude` も TUI（フォルダ信頼プロンプト）まで起動することを確認。`make build-claude-vnc` で再ビルドした**配布イメージの `/usr/local/bin/claude-orchestrator`** でも同結果を確認。
+- 関連文書：`docs/impl/60_orchestrator.md`（モード切替節の注記・ファイルツリー）。レビュー追記を `docs/reviews/2026-06-28_orchestrator-tty-fix.md`。
+
+## 2026-06-28（状態ライフサイクル・worker 権限・worktree 堅牢化）
+- 不具合1（即終了）：完了済み run が `state.json` に Phase=`done` を残すため、次回 `orchestrate` 起動が run loop の `done` 分岐で即 return し「すぐ終了」していた。
+- 不具合2（壁打ち飛ばし）：古い Phase=`executing` 状態が残ると無言で実行モードへ再開し、壁打ちを飛ばして操作不能に見えていた。
+- 不具合3（worker が無言で何もしない）：worker の `claude -p` に `--permission-mode` を渡しておらず、ヘッドレスでは全 Write/Bash が権限拒否されていた（実機 `claude -p` で `permission_denials` を確認）。コンテナの `settings.json`（`bypassPermissions`）に暗黙依存しており、設定が無い環境では実装が一切進まない。
+- 不具合4（worktree 再作成失敗）：worktree ディレクトリのみ消えてブランチ `orch/<id>` が残ると `git worktree add -b` が「branch already exists」で失敗し、再試行→介入ループに陥っていた。
+- 修正：
+  - `main.go`：`isResumable`（Phase=executing/intervening のみ再開）を追加。done/不在/未知は壁打ちから新規開始。`--fresh` フラグで中断 run も強制新規化。再開/新規を標準出力に明示。
+  - `state.go`：`Store.ResetRun()`（state/plan/control・open_intervention を削除。append-only ログは保持）。
+  - `worker.go`：`Worker.PrepareWorktree` を「ディレクトリ既存→再利用／ブランチのみ残存→`WorktreeAddExisting` で再接続／無→`add -b`」に分岐。`CleanOrchWorktrees`（--fresh 時に worktree と `orch/*` ブランチを撤去）。`ExecClaude.PermissionMode` を追加し `--permission-mode` を明示送出。`GitRunner` に `BranchExists`/`WorktreeAddExisting` を追加。
+  - `config.go`：`worker_permission_mode`（既定 `bypassPermissions`）を追加。
+  - `claude-dev`：`orchestrate` に `--fresh` を受け渡し（→ 10_cli.md / 04_cli-reference.md）。
+- 検証（実機 claude）：(a) `--permission-mode bypassPermissions` 付きで実機 worker が FROM_WORKER.md を作成・コミット（`permission_denials:[]`）。(b) Phase=executing を種に実機オーケストレーターを起動し、`dispatch→worker_result→task_done→completed→run_done` で実機 worker＋実機レビュア＋実 git マージが作業ブランチへ統合されることを 30 秒で確認。(c) done 残置→新規 run、`--fresh`→executing 上書き新規、再開メッセージを確認。`go test ./...` 全 pass。
+- 関連文書：`docs/impl/60_orchestrator.md`（再開節・worker §3/§1・config 表/例・ファイルツリー）、`docs/impl/10_cli.md`、`docs/04_cli-reference.md`。レビュー追記を `docs/reviews/2026-06-28_orchestrator-tty-fix.md`。
+
+## 2026-06-28（端末モード不具合の修正）
+- 不具合：壁打ち/介入の対話 `claude`（全画面 TUI）が共有 TTY を非カノニカル（raw）モードのまま残して終了するため、コントローラ復帰後の行バッファ読み取りが永久ブロックしていた。結果として (a) ダッシュボードのキー入力 `d`/`p`/`q` が反応しない、(b) `control.json` 不在時の `terminalConfirm` 確認入力が受け付けられず実行フェーズへ遷移できず worker が全く進まない、という症状が出ていた（raw モードでは Enter が `\n` ではなく `\r` を送り、`ReadString('\n')` が `\n` を待ち続けるため）。
+- 修正：端末モードをコントローラが自前で所有する方針を追加。
+  - 新規 `term.go`：`rawKeyMode()`（`stty -icanon -echo min 0 time 1`）と `ttyRestoreSane()`（`stty sane`）を `stty` 呼び出しのみで実装（外部 Go モジュールを増やさず stdlib のみ方針を維持）。
+  - `mode.go` `RunInteractive`：対話 `claude` 終了直後に `ttyRestoreSane()` を呼び、カノニカル状態へ復元（`terminalConfirm` と次のダッシュボードが正しく動く）。
+  - `dashboard.go` `readKeys`：行バッファ読み（`bufio` + `ReadString('\n')`）を廃し、`rawKeyMode()` で TTY を自前設定して 1 バイトずつ読む（Enter 不要・即時反応）。`VMIN=0/VTIME=1` で無入力時は約 0.1 秒ごとに `(0, io.EOF)` が返るため `ctx` キャンセルを取りこぼさず、stdin にブロックし続ける goroutine も残さない。終了時に復元。
+  - `main.go`：経路によらず端末を健全状態へ戻す `defer ttyRestoreSane()` を追加。
+- 検証：pty 上で実機の対話 `claude` が終了後も `ICANON=False` を残すことを確認。再現テスト（fake `claude` で同条件を再現）で、修正前は `q` を押しても終了しない／確認入力が通らないことを再現し、修正後はキー即時反応（`q` で 0.2 秒以内に終了）・確認入力受理→`executing`→`dispatch`→`task_done`→`completed`→`done` まで通ることを確認。既存単体テストは全て pass。
+- 関連文書：`docs/impl/60_orchestrator.md`（モード切替・ダッシュボード節、ファイルツリー）を更新。レビューを `docs/reviews/2026-06-28_orchestrator-tty-fix.md` に記録。
+
 ## 2026-06-28
 - 新規作成。設計文書 `docs/06_orchestration.md` に基づき、AI オーケストレーター（Go 製コントローラ）の実装仕様を起こした（コード着手前の仕様。実装の正本となる）。
 - 既存 `docker-proxy/` の Go 規約に倣って構成を定義：module `github.com/quvox/claude-dev-env/orchestrator`（go 1.22）、`golang:1.24-alpine` でのマルチステージビルド。独立コンテナではなく claude イメージへ `claude-orchestrator` として焼き込み、プロジェクトコンテナ内で実行する方針を明記。

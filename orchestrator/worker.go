@@ -1,11 +1,14 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 )
 
@@ -24,6 +27,12 @@ type ClaudeRunner interface {
 type GitRunner interface {
 	// WorktreeAdd creates a worktree at path on a new branch from base.
 	WorktreeAdd(ctx context.Context, repoDir, path, branch, base string) error
+	// WorktreeAddExisting attaches a worktree at path to an already-existing
+	// branch (no new branch created). Used to re-attach to a surviving task
+	// branch when only its worktree directory was removed.
+	WorktreeAddExisting(ctx context.Context, repoDir, path, branch string) error
+	// BranchExists reports whether a local branch exists.
+	BranchExists(ctx context.Context, repoDir, branch string) (bool, error)
 	// WorktreeRemove removes a worktree (best effort).
 	WorktreeRemove(ctx context.Context, repoDir, path string) error
 	// Merge integrates branch into the current branch of repoDir using
@@ -85,11 +94,43 @@ func (w *Worker) PrepareWorktree(ctx context.Context, t *Task) error {
 		t.Worktree = rel
 		return nil
 	}
+	// The worktree dir is gone but its branch may have survived (interrupted run,
+	// or a manually pruned worktree). Re-attach to the existing branch instead of
+	// `add -b`, which would fail with "a branch named 'orch/<id>' already exists"
+	// and wedge the task into an endless retry/stuck loop.
+	if exists, _ := w.Git.BranchExists(ctx, w.Workspace, branch); exists {
+		if err := w.Git.WorktreeAddExisting(ctx, w.Workspace, abs, branch); err != nil {
+			return err
+		}
+		t.Worktree = rel
+		return nil
+	}
 	if err := w.Git.WorktreeAdd(ctx, w.Workspace, abs, branch, base); err != nil {
 		return err
 	}
 	t.Worktree = rel
 	return nil
+}
+
+// CleanOrchWorktrees removes every orchestrator task worktree under
+// worktreesDir and deletes the matching orch/* branches from repoDir
+// (best-effort). A fresh run calls this so re-used task IDs (t1, t2, …) do not
+// collide with a previous run's leftover branches/worktrees.
+func CleanOrchWorktrees(ctx context.Context, repoDir, worktreesDir string) {
+	g := ExecGit{}
+	if entries, err := os.ReadDir(worktreesDir); err == nil {
+		for _, e := range entries {
+			_ = g.WorktreeRemove(ctx, repoDir, filepath.Join(worktreesDir, e.Name()))
+		}
+	}
+	_, _ = g.run(ctx, repoDir, "worktree", "prune")
+	out, _ := g.run(ctx, repoDir, "for-each-ref", "--format=%(refname:short)", "refs/heads/orch/")
+	for _, b := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		if b = strings.TrimSpace(b); b != "" {
+			_, _ = g.run(ctx, repoDir, "branch", "-D", b)
+		}
+	}
+	_ = os.RemoveAll(worktreesDir)
 }
 
 // BuildPrompt composes the worker prompt from the task description, prior
@@ -168,36 +209,77 @@ func (w *Worker) Dispatch(ctx context.Context, p *Plan, t *Task, feedback string
 }
 
 // ParseWorkerResult extracts the WorkerResult JSON from raw worker output. It
-// supports two shapes:
-//   - claude -p --output-format json wraps the result; we look for an embedded
-//     object or the last JSON line.
-//   - a bare WorkerResult JSON object.
-//
-// The strategy: scan lines from the end and return the first that decodes into
-// a WorkerResult with at least a recognizable field.
+// supports three shapes:
+//   - stream-json: many event lines; the final {"type":"result","result":…}
+//     event's "result" field holds the assistant's final text, which contains
+//     the WorkerResult JSON.
+//   - --output-format json: a single {"type":"result","result":…} object.
+//   - a bare WorkerResult JSON object/line.
 func ParseWorkerResult(out []byte) (*WorkerResult, error) {
 	text := string(out)
-	// Try claude -p json envelope first: {"type":"result","result":"<text>"...}
-	if r := extractFromClaudeEnvelope(text); r != "" {
-		text = r
+	// stream-json: pull the inner assistant text out of the result event line.
+	if inner := resultFromStream(text); inner != "" {
+		if wr := findWorkerResultJSON(inner); wr != nil {
+			return wr, nil
+		}
 	}
+	// single-object json envelope.
+	if inner := extractFromClaudeEnvelope(text); inner != "" {
+		if wr := findWorkerResultJSON(inner); wr != nil {
+			return wr, nil
+		}
+	}
+	// bare WorkerResult somewhere in the raw text.
+	if wr := findWorkerResultJSON(text); wr != nil {
+		return wr, nil
+	}
+	return nil, fmt.Errorf("no parseable WorkerResult JSON in output")
+}
+
+// findWorkerResultJSON scans lines from the end for a single-line JSON object
+// that looks like a WorkerResult (it must mention "done") and decodes it. The
+// "done" guard avoids matching unrelated JSON (e.g. stream events).
+func findWorkerResultJSON(text string) *WorkerResult {
 	lines := strings.Split(strings.TrimRight(text, "\n"), "\n")
 	for i := len(lines) - 1; i >= 0; i-- {
 		line := strings.TrimSpace(lines[i])
 		if !strings.HasPrefix(line, "{") || !strings.HasSuffix(line, "}") {
 			continue
 		}
+		if !strings.Contains(line, "\"done\"") {
+			continue
+		}
 		var wr WorkerResult
 		if err := json.Unmarshal([]byte(line), &wr); err == nil {
-			return &wr, nil
+			return &wr
 		}
 	}
-	return nil, fmt.Errorf("no parseable WorkerResult JSON in output")
+	return nil
 }
 
-// extractFromClaudeEnvelope, given claude -p --output-format json stdout,
-// returns the inner assistant text (the "result" field) so the embedded
-// WorkerResult can be parsed from it. Returns "" if not an envelope.
+// resultFromStream scans stream-json output for the final result event and
+// returns its "result" field (the assistant's final text). Returns "" if none.
+func resultFromStream(text string) string {
+	lines := strings.Split(strings.TrimRight(text, "\n"), "\n")
+	for i := len(lines) - 1; i >= 0; i-- {
+		line := strings.TrimSpace(lines[i])
+		if !strings.HasPrefix(line, "{") || !strings.Contains(line, "\"type\":\"result\"") {
+			continue
+		}
+		var e struct {
+			Type   string `json:"type"`
+			Result string `json:"result"`
+		}
+		if err := json.Unmarshal([]byte(line), &e); err == nil && e.Type == "result" {
+			return e.Result
+		}
+	}
+	return ""
+}
+
+// extractFromClaudeEnvelope, given a single-object claude -p --output-format
+// json stdout, returns the inner assistant text (the "result" field). Returns
+// "" if the whole text is not such an envelope.
 func extractFromClaudeEnvelope(text string) string {
 	trimmed := strings.TrimSpace(text)
 	if !strings.HasPrefix(trimmed, "{") {
@@ -219,23 +301,46 @@ func extractFromClaudeEnvelope(text string) string {
 // ---- exec-backed implementations (production) ----
 
 // ExecClaude runs the real `claude` binary.
-type ExecClaude struct{}
+type ExecClaude struct {
+	// PermissionMode is passed as --permission-mode when non-empty. Headless
+	// workers cannot answer permission prompts, so this must be a
+	// non-interactive mode (e.g. bypassPermissions) or every edit is denied.
+	PermissionMode string
+}
 
-func (ExecClaude) RunPrompt(ctx context.Context, dir, model, prompt, logPath string) ([]byte, error) {
-	args := []string{"-p", prompt, "--output-format", "json"}
+func (e ExecClaude) RunPrompt(ctx context.Context, dir, model, prompt, logPath string) ([]byte, error) {
+	// stream-json (requires --verbose in -p mode) emits one JSON event per line
+	// as work happens, so the log file grows live and the dashboard detail view
+	// can show what the worker is doing. The final {"type":"result",…} event
+	// carries the worker's WorkerResult JSON, which ParseWorkerResult extracts.
+	args := []string{"-p", prompt, "--output-format", "stream-json", "--verbose"}
 	if model != "" {
 		args = append(args, "--model", model)
 	}
-	cmd := exec.CommandContext(ctx, "claude", args...)
-	cmd.Dir = dir
-	// Explicitly strip SLACK_BOT_TOKEN from the worker environment (technical
-	// control: workers must not be able to send Slack).
-	cmd.Env = stripEnv(os.Environ(), "SLACK_BOT_TOKEN")
-	out, err := cmd.CombinedOutput()
-	if logPath != "" {
-		_ = os.WriteFile(logPath, out, 0o644)
+	if e.PermissionMode != "" {
+		args = append(args, "--permission-mode", e.PermissionMode)
 	}
-	return out, err
+	cmd := exec.CommandContext(ctx, claudePath(), args...)
+	cmd.Dir = dir
+	// Strip SLACK_BOT_TOKEN (technical control: workers must not send Slack) and
+	// ensure the claude bin dir is on PATH so a non-interactive launch can run
+	// claude -p.
+	cmd.Env = claudeChildEnv()
+
+	var buf bytes.Buffer
+	var w io.Writer = &buf
+	if logPath != "" {
+		// Truncate+create the log up front and tee live so the detail view shows
+		// progress as it streams (CombinedOutput would only reveal it at the end).
+		if f, ferr := os.Create(logPath); ferr == nil {
+			defer f.Close()
+			w = io.MultiWriter(&buf, f)
+		}
+	}
+	cmd.Stdout = w
+	cmd.Stderr = w
+	err := cmd.Run()
+	return buf.Bytes(), err
 }
 
 // stripEnv returns env with any entry whose key equals key removed.
@@ -263,6 +368,21 @@ func (ExecGit) run(ctx context.Context, dir string, args ...string) ([]byte, err
 func (g ExecGit) WorktreeAdd(ctx context.Context, repoDir, path, branch, base string) error {
 	_, err := g.run(ctx, repoDir, "worktree", "add", path, "-b", branch, base)
 	return err
+}
+
+func (g ExecGit) WorktreeAddExisting(ctx context.Context, repoDir, path, branch string) error {
+	_, err := g.run(ctx, repoDir, "worktree", "add", path, branch)
+	return err
+}
+
+func (g ExecGit) BranchExists(ctx context.Context, repoDir, branch string) (bool, error) {
+	// `rev-parse --verify --quiet` exits non-zero (no output) when the ref is
+	// absent, so a run error here means "does not exist", not a hard failure.
+	out, err := g.run(ctx, repoDir, "rev-parse", "--verify", "--quiet", "refs/heads/"+branch)
+	if err != nil {
+		return false, nil
+	}
+	return strings.TrimSpace(string(out)) != "", nil
 }
 
 func (g ExecGit) WorktreeRemove(ctx context.Context, repoDir, path string) error {

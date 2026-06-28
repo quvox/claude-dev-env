@@ -16,10 +16,12 @@ keywords: [ オーケストレーター, Go, 制御ループ, 状態ストア, w
 ```
 orchestrator/                      ← 本書が正本（Go コンポーネント）
 ├── go.mod                         module github.com/quvox/claude-dev-env/orchestrator。docker-proxy 同様の独立モジュールで**外部依存なし（stdlib のみ）**。go.work は用いない。`go.mod` の `go 1.22` は最小言語版で、ビルドは golang:1.24-alpine（docker-proxy と同一慣習）
-├── main.go                        エントリ。引数解析・状態ストア初期化・モードブートストラップ
+├── main.go                        エントリ。引数解析（--fresh 等）・再開/新規判定・状態ストア初期化・モードブートストラップ
 ├── controller.go                  状態機械と run loop（中核）
 ├── state.go                       状態ストアの読み書きとスキーマ（JSON/JSONL）
 ├── mode.go                        前景所有とモード切替（対話 claude の exec / ダッシュボード描画）
+├── term.go                        端末モード制御（stty による raw/カノニカル切替・復元）
+├── claudebin.go                   claude 実行ファイルの解決と子プロセス環境（PATH 補完）
 ├── handoff.go                     壁打ち↔実行↔介入の受け渡しプロトコル（control.json）
 ├── worker.go                      worker ディスパッチ（claude -p）・worktree 管理・構造化出力
 ├── review.go                      品質ゲート（レビュー改訂ループ）
@@ -145,7 +147,7 @@ type Intervention struct { ID, TaskID, TriggerReason, Question, Answer, TS strin
 type AuditEntry   struct { TS, Event, TaskID string; Detail map[string]any; Usage *Usage }
 ```
 
-**Task.Status の遷移**：`pending`（依存解決待ちを含む）→ `running`（controller が worker ディスパッチ時に設定）→ `review` →（重大指摘）`revise` → 解消で `done`。先行タスクが `failed` で起動不能なものは `blocked`。行き詰まり（§試行回数とエスカレーション）は介入へ回し、回復不能なら `failed`。
+**Task.Status の遷移**：`pending`（依存解決待ちを含む）→ `running`（controller が worker ディスパッチ時に設定）→ `review` →（重大指摘）`revise` → 解消で `done`。先行タスクが `failed`/`blocked` で起動不能なものは `MarkBlockedByFailedDeps` が `blocked` にする。`blocked` は**その run では終端**（依存が満たせない以上そのまま）で、`done`/`failed`/`blocked` のいずれかになった全タスクは `AllSettled`＝これ以上進めないと判定され、run は `verifyCompletion` で「未完了タスクあり」として `done` へ遷移して終了する。中断後の再開や依存タスクの修正で状況が変われば、次回 run で再評価される。行き詰まり（§試行回数とエスカレーション）は介入へ回す。
 
 ## 制御フロー（状態機械と run loop）
 
@@ -164,7 +166,7 @@ type AuditEntry   struct { TS, Event, TaskID string; Detail map[string]any; Usag
 
 run loop の擬似フロー：
 
-1. 起動時 `state.json` を読む。無ければ新規（Phase=wallbounce, RunID 採番）。既存で Phase=executing なら**再開**（§ 並行性・再開・エラー処理）。再開時は `plan.json` を正本とし、残存する `control.json` は無視して消す。
+1. 起動時、`main.go` が `state.json` を読んで**再開か新規開始かを判定**する（§ 並行性・再開・エラー処理の「再開と新規開始の判定」）：中断された run（Phase=`executing`/`intervening`）のみ再開し、それ以外（不在／`done`／未知 Phase）または `--fresh` 指定時は実行状態を破棄して新規開始する。その後 `controller.go` の run loop は、新規開始なら Phase=wallbounce（RunID 採番）、再開なら永続化済みの Phase（executing/intervening）から動く。再開（executing）時は `plan.json` を正本とし、残存する `control.json` は無視して消す。
 2. **wallbounce**：`mode.RunInteractive()` で対話 `claude` を前景に exec し、終了を待つ。終了後 `control.json` を読む：
    - `execute` かつ `plan.Ready==true` → executing へ
    - `continue_wallbounce` / Ready 未確定 → コントローラが端末で「続ける/実行/終了」を確認（『続ける』→ Phase=wallbounce のまま `mode.RunInteractive()` 再実行／『実行』→ executing／『終了』→ done）
@@ -173,16 +175,23 @@ run loop の擬似フロー：
    `worker 実装 → review → (重大指摘あり) revise → … → done`
    各ステップで `trigger.Evaluate()`（条件1は worker 起動前、条件2/4/5 は実行後）。発火したら loop を止め intervening へ。
 4. **intervening**：該当タスクを保留し、`intervention/<id>/question.md` を書いて Slack でアラート、`mode.RunInteractive()` で対話 `claude`（文脈 seed 済）を**先に起動して待たせる**（06 §6.2）。人間の回答後、`control.json` を読む：`resume` なら解決を `interventions.jsonl` と該当タスクへ反映して executing へ復帰、`abort` なら done へ遷移。
-5. 全タスク `done` → **done**（v1 では全タスク done を完了とみなす）。`completion`（実装仕様ドキュメント由来の自然言語の完了基準）の `claude -p` による最終検証と、未充足時の不足分の新規タスク化は、ClaudeRunner を用いた**拡張点として将来対応（v1 では未実装）**。最終サマリを Slack 送信。
+5. 全タスク `done` → **done**。完了時、`plan.completion`（自然言語の完了基準）が非空なら `claude -p` で**助言的な完了検証**を行う（`checkCompletion`）：完了基準と各タスクの結果サマリを渡し `{"satisfied":bool,"missing":string}` を読み取る。これは**ブロックしない助言**で、エラー・空・解析不能時は満たしたものとして扱い（`parseCompletionVerdict` が `(true,"")` を返す）run を止めない。未充足なら Slack 通知に不足点を添えて人間の最終確認を促す。未充足時の**不足分の自動タスク化**は意図的に範囲外（人間が判断）。`failed`/`blocked` を含み全 `done` でない場合は「未完了タスクあり」で done。最終サマリを Slack 送信。
 
 ## モード切替の実装（前景所有・子プロセス）
 
 `mode.go` がコントローラの「前景の差し替え」を担う（06 §4.2）。
 
-- **対話モード（壁打ち/介入）** `RunInteractive(ctx)`：`exec.Command("claude", args...)` を生成し、`Stdin/Stdout/Stderr = os.Stdin/os.Stdout/os.Stderr`（同一 TTY を共有）。`cmd.Run()` で**子の終了までブロック**する。これによりコントローラのループは自然に停止し、壁打ち/介入中は実行が止まる。
+> **claude の実行ファイル解決（`claudebin.go`）**：オーケストレーターは `claude-dev orchestrate` から tmux ウィンドウの**非対話シェル（`zsh -c`）**で起動される。Claude Code のネイティブ導入先 `~/.local/bin` は**対話シェルの rc（`.zshrc`）でしか PATH に入らない**ため、非対話起動では `claude` が PATH に無く、素朴な `exec.Command("claude", …)` は「executable file not found」で失敗して壁打ち・介入・worker・レビュアの**すべてが動かない**。これを避けるため、対話モードと worker/レビュアの双方で `claudePath()`（`exec.LookPath`→無ければ `$HOME/.local/bin/claude` にフォールバック）で絶対パス解決し、子プロセスの環境は `claudeChildEnv()`（`SLACK_BOT_TOKEN` を除去しつつ claude の bin ディレクトリを PATH に補完）で渡す。
+
+- **対話モード（壁打ち/介入）** `RunInteractive(ctx)`：`exec.Command(claudePath(), args...)` を生成し、`Stdin/Stdout/Stderr = os.Stdin/os.Stdout/os.Stderr`（同一 TTY を共有）。`cmd.Run()` で**子の終了までブロック**する。これによりコントローラのループは自然に停止し、壁打ち/介入中は実行が止まる。**子の対話 `claude`（全画面 TUI）は共有 TTY を非カノニカル（raw）モードに切り替え、終了時にカノニカルへ戻さない**。コントローラは同じ TTY を使うため、`cmd.Run()` 復帰直後に `ttyRestoreSane()`（`term.go`）で**カノニカルな健全状態へ復元**する。これを怠ると、以降の行バッファ読み取り（`terminalConfirm` の確認入力、ダッシュボードのキー入力）が、raw モードでは Enter が `\n` ではなく `\r` を送るため `\n` を待ち続けて**永久にブロック**する。
   - 壁打ち：引数なしの対話起動＋オーケストレーター脳の instruction を投入（§ instruction 注入）。
   - 介入：`--resume` は使わず**フレッシュ起動**し、`intervention/<id>/question.md` と関連状態を初期プロンプト/コンテキストとして渡す（06 §6.2 ノブ1=フレッシュ再構成、ノブ2=先に起動、ノブ3=常駐セッションを使わず controller が毎回新規 exec）。起動後、対話 claude は TTY で人間の入力を待つ（tmux が detach 中なら attach されるまで待機）。コントローラは `cmd.Run()` でその終了までブロックする。
-- **実行モード** `RunDashboard(ctx)`：`dashboard.go` が ANSI で TTY を再描画しつつ、`worker.go` の goroutine 群を監督する。キー入力 `p`（一時停止）/`q`（中断）を処理する。`d`（worker ログ詳細）は tmux/CLI レイヤの affordance（ペイン分割＋tail）で、バイナリ内では受理するが **no-op**（リッチな分割表示は Config B／CLI レイヤの領分。対話 TUI を出すウィンドウは分割しない＝06 §5.3）。
+- **実行モード** `RunDashboard(ctx)`：`dashboard.go` が ANSI で TTY を再描画しつつ、`worker.go` の goroutine 群を監督する。各タスク行は `待機中/実行中/レビュー中/修正中/完了/失敗/ブロック` のラベルと、実行中タスクの経過時間・試行回数を表示する（タスクが running になった時点で `syncDashboard` を呼ぶため「ずっと待機中に見える」ことはない）。キー操作：
+  - **`d`（worker 出力）**：詳細表示をトグルする。ON の間は実行中 worker の出力ログ（`workers/<taskID>.log`）の末尾をライブ表示する（`dashboard.go` の `renderDetail`/`tailFile`）。worker は出力をログへ**ストリーム書き込み**する（§ worker ディスパッチ）ので、完了を待たずに進捗が見える。
+  - **`p`（一時停止）**：新規スケジューリングを止める／再開するトグル（実行中 worker は走り続ける）。
+  - **`q`（中断）**：実行中 worker を停止し、**状態を `executing` のまま保存して終了する（done にしない）**。次回 `claude-dev orchestrate` は中断点から再開する（`controller.go` は `errSuspended` を返し `Run` がクリーン終了。worktree のコミットは保全）。中断は破壊的ではない。
+  
+  キー読み取り（`dashboard.go` の `readKeys`）は **`term.go` の `rawKeyMode()` で TTY を自前で非カノニカル・no-echo（`stty -icanon -echo min 0 time 1`）に設定**し、1 バイトずつ読む（Enter 不要・即時反応）。`VMIN=0/VTIME=1` により無入力時の `os.Stdin.Read` は約 0.1 秒ごとに `(0, io.EOF)` を返すので、`ctx` キャンセルを取りこぼさず、stdin にブロックしたまま残る goroutine も生じない。終了時は `ttyRestoreSane()` でカノニカルへ復元する。`isig` は無効化しないため Ctrl-C は引き続きコントローラのシグナルハンドラへ届く。`main.go` は経路によらず（正常終了・エラー・シグナル）`defer ttyRestoreSane()` で最終的に端末を健全状態へ戻す。これらの端末制御は `stty` 呼び出しのみで実現し、外部 Go モジュールを増やさない（stdlib のみ方針を維持）。
 
 ### instruction 注入
 
@@ -211,9 +220,9 @@ CLAUDE.md に置かない理由：CLAUDE.md は worker を含む Claude Code 全
 
 `worker.go` がタスク 1 件を `claude -p` で実行する。
 
-1. **worktree 準備**：`git worktree add .orchestrator/worktrees/<taskID> -b orch/<taskID>`（ベースは現在の作業ブランチ）。タスクはこの worktree を CWD として走る（ファイル競合防止、06 §4.4）。
+1. **worktree 準備**：`git worktree add .orchestrator/worktrees/<taskID> -b orch/<taskID>`（ベースは現在の作業ブランチ）。タスクはこの worktree を CWD として走る（ファイル競合防止、06 §4.4）。ディレクトリが既存なら再利用、ディレクトリは無いがブランチ `orch/<taskID>` が残っている場合は `git worktree add <path> orch/<taskID>`（`-b` なし）で**再接続**する（`-b` 重複エラーで再試行ループに陥らない）。
 2. **プロンプト構築**：`Task.Description` ＋ 状態ストアから必要文脈（関連 docs/実装仕様の該当箇所、先行タスクの結果サマリ、制約・既決事項）を**過不足なく**注入（NFR-2）。巨大リポジトリ全体は渡さない。
-3. **起動**：`claude -p "<prompt>" --output-format json`、CWD=worktree、出力を `workers/<taskID>.log` へも tee。`--permission-mode` は既存の bypass 前提に従う（コンテナ隔離・FW・proxy が外部被害を抑止、06 §10）。
+3. **起動**：`claude -p "<prompt>" --output-format stream-json --verbose [--model <m>] --permission-mode <mode>`、CWD=worktree。出力は `io.MultiWriter` でバッファと `workers/<taskID>.log` へ**ライブ tee**する。`stream-json`（`-p` では `--verbose` が必須）はイベントを 1 行ずつ逐次出力するため、ログが実行中に伸び、ダッシュボードの `[d]` 詳細表示が worker の進捗をリアルタイムに見せられる（`--output-format json` だと完了まで何も出ずログが空に見える）。**`--permission-mode` は明示的に渡す**（既定 `bypassPermissions`、`config.worker_permission_mode` で変更可・空文字で無指定）。ヘッドレス worker は権限プロンプトに答える人間がいないため、非対話モードを明示しないと全 Write/Bash が拒否され worker が無言で何もしなくなる。bypass の安全性はコンテナ隔離・FW・proxy・instruction 制約で担保（06 §10）。`claude` 実行ファイルは `claudePath()` で解決（PATH→`$HOME/.local/bin/claude`）し、PATH を補完した環境（`claudeChildEnv()`）で起動する。レビュア（`claude -p`）も同じ runner を共有し同モードで起動する（`git diff` 実行に Bash 権限が要るため）。
 4. **結果回収**：stdout の JSON を `WorkerResult` にデコード。`Usage` を `audit.jsonl` に記録。`NeedsHuman` が非 nil なら trigger へ（人間に直接問わせない＝06 §7）。`NeedsHuman.Options` は worker が提示する**候補データ**であり、worker 自身がレンダリングするのではなく、controller が intervening の対話モードで select→submit として人間に提示する（06 §7 と矛盾しない）。`WorkerResult.Assumptions`（軽微な仮定）は controller が `assumptions.jsonl` に追記する。
 5. **取り込み**：worker は worktree 内で実装し**コミットまで行う**。レビュー合格後、**controller** が worktree のコミットを作業ブランチへ統合する（`merge`/`rebase` は `config.merge_strategy`。git 操作は orchestrator ユーザが実行し、worker の bypass とは独立）。コンフリクト・クラッシュ・タイムアウトは当該 Attempt の失敗として次の Attempt へ（§試行回数とエスカレーション）。
 
@@ -261,7 +270,7 @@ CLAUDE.md に置かない理由：CLAUDE.md は worker を含む Claude Code 全
 
 ## ステータス・ダッシュボード
 
-`dashboard.go` は 06 §5.2 ② の画面を描画する：goal、各タスクの `[i/n] worker X (claude): 状態 経過時間`、直近サマリ、仮定/介入カウント、キーヒント。ウィンドウ構成は既定で単一ウィンドウ（Config A）。`--workers-window` 指定時のみ Config B（`workers` ウィンドウに全 worker ログを prefix 付きで多重 tail）を tmux に作る（06 §5.3）。
+`dashboard.go` は 06 §5.2 ② の画面を描画する：goal、各タスクの `[i/n] worker X (claude): 状態ラベル 経過時間 (試行N)`、直近サマリ、仮定/介入カウント・実行中数、キーヒント。worker の実行内容は `[d]` 詳細表示でログ末尾をライブ確認できる（別ウィンドウ＝旧 Config B は廃止し、`[d]` に一本化した）。単一ウィンドウ構成（Config A）のみ。
 
 ## 設定（config / env）
 
@@ -270,6 +279,7 @@ CLAUDE.md に置かない理由：CLAUDE.md は worker を含む Claude Code 全
 ```yaml
 # /workspace/.orchestrator/config.yaml（例）
 max_workers: 5
+worker_permission_mode: bypassPermissions
 stuck_limit: 3
 max_review_rounds: 3
 worker_model: sonnet
@@ -283,15 +293,17 @@ merge_strategy: merge
 | `stuck_limit` | 3 | トリガー 3 の規定回数（06 未決事項の解決） |
 | `max_review_rounds` | 3 | レビュー改訂の最大周回 |
 | `worker_model` | settings.json の既定（`sonnet`） | worker の `claude -p` モデル |
-| `reviewer_vendor` | `claude`（フェーズ 2 で `codex`） | レビュア種別 |
+| `reviewer_vendor` | `claude` | レビュア種別。**v1 では値は読み込むだけで未使用**（常に Claude）。`codex` 連携はフェーズ 2（§実装状況） |
 | `merge_strategy` | `merge` | worktree 取り込み方式 |
+| `worker_permission_mode` | `bypassPermissions` | worker/レビュア `claude -p` の `--permission-mode`（空文字でフラグ無指定＝ambient settings 依存） |
 
 環境変数：`SLACK_BOT_TOKEN` / `SLACK_CHANNEL`（Slack）。`ANTHROPIC_API_KEY` 等は既存どおり（イメージに焼かない、SEC-7）。
 
 ## 並行性・再開・エラー処理
 
 - **並行性**：`executing` で依存解決済みタスクを `max_workers` まで goroutine 起動。各 worker は独立 worktree。共有状態（plan/Store/state）は排他制御し、作業ブランチへの統合（merge）は直列化する。長時間の外部呼び出し中はロックを保持しない（plan のスナップショットに対して実行）。trigger 発火時は新規起動を止め、実行中 worker を ctx キャンセルで停止・待機してから intervening へ遷移する（複数同時発火は abort 優先・次に task ID 昇順で 1 件採用）。
-- **再開**：起動時 `state.json` の Phase=executing なら `plan.json` を読み、`done` 以外のタスクから継続（06 §4.3、状態はファイルに永続）。`done`/`failed`/`blocked` はスキップ。`running`/`review`/`revise` のまま落ちたタスクは、worktree の状態（コミット有無）を点検したうえで `pending` に戻して再ディスパッチする（途中結果があれば次の Attempt の入力に含める）。
+- **再開と新規開始の判定**：起動時に `state.json` を読み、**genuinely 中断された run（Phase=`executing`/`intervening`）のみ再開**する。それ以外（state.json 不在／Phase=`done`／未知の Phase）は**壁打ちから新規開始**する（`main.go` の `isResumable`）。これにより、(a) 完了済みの run が Phase=`done` を残して次回起動が即終了する、(b) 古い `executing` 状態へ無言で再開して壁打ちを飛ばす、という 2 つの失敗を防ぐ。`--fresh` を付けると中断された run でも強制的に新規開始する（`Store.ResetRun()` で state/plan/control・open_intervention を削除し、`CleanOrchWorktrees` で前回の worktree と `orch/*` ブランチを撤去してから壁打ちへ）。新規開始時は標準出力に「🆕 新規セッションを開始します」、再開時は「↩️ 前回の <phase> フェーズから再開します」を表示し、挙動を可視化する。
+- **再開（executing）**：`plan.json` を読み、`done` 以外のタスクから継続（06 §4.3、状態はファイルに永続）。`done`/`failed`/`blocked` はスキップ。`running`/`review`/`revise` のまま落ちたタスクは `pending` に戻して再ディスパッチする（途中結果があれば次の Attempt の入力に含める）。worktree ディレクトリが消えていてもブランチ `orch/<id>` が残っている場合は、`add -b`（ブランチ重複でエラー）ではなく**既存ブランチへ worktree を再接続**して以前のコミットを保全する（`Worker.PrepareWorktree` が `BranchExists`→`WorktreeAddExisting` で処理）。
 - **エラー**：worker クラッシュ/タイムアウトは `Attempts++` で再試行、上限超過で trigger 3。Slack 失敗は無視。コントローラ自身の panic は state を flush してから終了し、次回再開できるようにする。
 
 ## ビルドと配置
@@ -314,8 +326,8 @@ docker-proxy と同方式のマルチステージで `claude-orchestrator` を b
 
 ## CLI 連携（claude-dev orchestrate）
 
-正本は [10_cli.md](10_cli.md)。契約のみ：既存 `cmd_code`（`tmux new-window -t main "claude"`）と同系統で、`claude-dev orchestrate [<ゴール>] [--workers-window]` は実行中コンテナに対し
-`docker exec -it -u <user> <name> tmux new-window -t main "claude-orchestrator …"` → `tmux attach` する。コンテナ起動は従来どおり `claude-dev start`。ゴール引数は任意（既定は壁打ちから開始、06 §5.1）。`--workers-window` は Config B（worker ログの多重 tail ウィンドウ）を有効化する（既定は Config A＝単一ウィンドウ。06 §5.3）。
+正本は [10_cli.md](10_cli.md)。契約のみ：既存 `cmd_code`（`tmux new-window -t main "claude"`）と同系統で、`claude-dev orchestrate [<ゴール>] [--fresh]` は実行中コンテナに対し
+`docker exec -it -u <user> <name> tmux new-window -t main "claude-orchestrator …"` → `tmux attach` する。コンテナ起動は従来どおり `claude-dev start`。ゴール引数は任意（既定は壁打ちから開始、06 §5.1）。`--fresh` はそのままバイナリへ渡す（前回の実行状態を破棄して壁打ちから新規開始）。単一ウィンドウ構成のみ（worker 出力はダッシュボードの `[d]` で確認）。
 
 ## テスト方針
 
@@ -340,6 +352,27 @@ docker-proxy と同方式のマルチステージで `claude-orchestrator` を b
 | オーケストレーター用 LLM 選定 | worker/reviewer は config（既定 `sonnet`）。壁打ち脳は対話 `claude` の設定に従う |
 
 > 上記は実装着手のために置いた決定であり、レビューで変更しうる。異論があれば指摘されたい。
+
+## 実装状況（v1）
+
+本書が記述する成果物の実装状況を明示する（「ドキュメントにあるのに動かない」を無くすため）。
+
+**実装済み（コードで動作する）**：
+- 外部制御ループと状態機械（wallbounce / executing / intervening / done）、状態ストア一式（state/plan/control/summary/assumptions/interventions/audit、intervention/<id>/、workers/<id>.log、worktrees/<id>/）。
+- 再開と新規開始の判定（中断 run のみ再開、done/不在/未知は新規）、`--fresh`、`CleanOrchWorktrees`。
+- 端末モード制御（`term.go`：raw/カノニカル復元、Ctrl-C 維持）、`claude` 実行ファイル解決と PATH 補完（`claudebin.go`）。
+- 壁打ち/介入の対話 `claude` 起動（instruction 注入・`ORCHESTRATOR.md` 前置）、handoff（control.json）、`control.json` 不在時の端末確認（続ける/実行/終了）。
+- worker 並行ディスパッチ（`max_workers`）、worktree 生成/再接続、`claude -p`（`stream-json --verbose`・`--permission-mode`・ライブ tee）、結果解析、作業ブランチ統合（merge/rebase）。
+- 品質ゲート（review→revise、`max_review_rounds`）、介入トリガー 5 条件、Slack 通知（要判断/完了/未完了/サマリ、コントローラ一本化）。
+- ダッシュボード：状態ラベル・経過時間・試行回数の表示、`[d]` ライブ worker 出力、`[p]` 一時停止、`[q]` 中断（再開可）。
+- 完了時の助言的な自然言語完了検証（`checkCompletion`、ブロックしない）。
+
+**未実装（明示的に将来フェーズ／意図的に範囲外）**：
+- `reviewer_vendor: codex`（別ベンダーレビュー）— **フェーズ 2**。v1 は値を読み込むのみで常に Claude を使用。
+- Slack 双方向（interactive ボタンによる軽微選択）— **フェーズ 2 以降**。
+- Docker Agent / MCP 連携 — **フェーズ 3（必要なら）**。
+- 完了基準未充足時の**不足分の自動タスク化**（現状は助言通知のみ。人間が判断）。
+- 旧「Config B（worker ログ専用 tmux ウィンドウ）／`--workers-window`」は**廃止**（`[d]` ライブ表示に一本化）。`--workers-window` フラグは存在しない。
 
 ## 関連して更新した既存文書
 

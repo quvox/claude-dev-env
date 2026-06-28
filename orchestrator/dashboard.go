@@ -1,9 +1,9 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"sync"
@@ -20,15 +20,17 @@ type DashboardState struct {
 	AssumptionsN   int
 	InterventionsN int
 	Paused         bool
+	Detail         bool // when true, render live worker output tails ([d] toggles)
 }
 
 // DashTask is a per-task row.
 type DashTask struct {
-	ID      string
-	Title   string
-	Vendor  string
-	Status  string
-	Started time.Time
+	ID       string
+	Title    string
+	Vendor   string
+	Status   string
+	Attempts int
+	Started  time.Time
 }
 
 // KeyEvent is a dashboard key command emitted to the controller.
@@ -53,12 +55,13 @@ func (d *DashboardState) Set(fn func(*DashboardState)) {
 type Dashboard struct {
 	State *DashboardState
 	Keys  chan KeyEvent
+	Store *Store // for reading live worker logs in detail view
 	tty   bool
 }
 
 // NewDashboard builds a dashboard. headless (non-TTY) is auto-detected.
-func NewDashboard(st *DashboardState) *Dashboard {
-	return &Dashboard{State: st, Keys: make(chan KeyEvent, 4), tty: isTTY()}
+func NewDashboard(st *DashboardState, store *Store) *Dashboard {
+	return &Dashboard{State: st, Keys: make(chan KeyEvent, 4), Store: store, tty: isTTY()}
 }
 
 // Run renders periodically until ctx is cancelled. On a non-TTY it still loops
@@ -102,50 +105,137 @@ func (d *Dashboard) render() {
 			done++
 		}
 	}
+	running := make([]DashTask, 0, len(s.Tasks))
 	for i, t := range s.Tasks {
 		elapsed := ""
-		if !t.Started.IsZero() && (t.Status == TaskRunning || t.Status == TaskReview || t.Status == TaskRevise) {
+		active := t.Status == TaskRunning || t.Status == TaskReview || t.Status == TaskRevise
+		if active && !t.Started.IsZero() {
 			elapsed = formatDuration(time.Since(t.Started))
+		}
+		if active {
+			running = append(running, t)
 		}
 		vendor := t.Vendor
 		if vendor == "" {
 			vendor = "claude"
 		}
-		fmt.Fprintf(&b, "[%d/%d] worker %s (%s): %s %s\n",
-			i+1, n, oneline(t.Title, 28), vendor, t.Status, elapsed)
+		att := ""
+		if t.Attempts > 1 {
+			att = fmt.Sprintf(" (試行%d)", t.Attempts)
+		}
+		fmt.Fprintf(&b, "[%d/%d] worker %s (%s): %s %s%s\n",
+			i+1, n, oneline(t.Title, 28), vendor, statusLabel(t.Status), elapsed, att)
 	}
 	fmt.Fprintf(&b, "直近サマリ: %s", oneline(s.LastSummary, 50))
 	if s.LastSummaryTS != "" {
 		fmt.Fprintf(&b, " （Slack 送信済 %s）", s.LastSummaryTS)
 	}
 	b.WriteString("\n")
-	fmt.Fprintf(&b, "仮定ログ %d / 介入 %d  （done %d/%d）\n",
-		s.AssumptionsN, s.InterventionsN, done, n)
-	b.WriteString("keys: [d]詳細 [p]一時停止 [q]中断\n")
+	fmt.Fprintf(&b, "仮定ログ %d / 介入 %d  （done %d/%d, 実行中 %d）\n",
+		s.AssumptionsN, s.InterventionsN, done, n, len(running))
+	if s.Detail {
+		d.renderDetail(&b, running)
+		b.WriteString("keys: [d]一覧に戻る [p]一時停止 [q]中断(状態を保存し再開可)\n")
+	} else {
+		b.WriteString("keys: [d]worker出力を見る [p]一時停止 [q]中断(状態を保存し再開可)\n")
+	}
 	_, _ = os.Stdout.WriteString(b.String())
 }
 
-// readKeys reads single characters from stdin and emits KeyEvents. It is only
-// started on a TTY. It is line-buffered (no raw mode) to keep stdlib-only and
-// robust; the user presses the key + Enter.
+// renderDetail appends the tail of each running worker's live output log so the
+// human can see what the workers are actually doing.
+func (d *Dashboard) renderDetail(b *strings.Builder, running []DashTask) {
+	b.WriteString("──── worker 出力（末尾） ────\n")
+	if len(running) == 0 {
+		b.WriteString("（実行中の worker はありません）\n")
+		return
+	}
+	if d.Store == nil {
+		b.WriteString("（ログを参照できません）\n")
+		return
+	}
+	// Budget the visible lines across running workers so the screen stays stable.
+	per := 8
+	if len(running) > 2 {
+		per = 4
+	}
+	for _, t := range running {
+		fmt.Fprintf(b, "▸ %s [%s]\n", oneline(t.Title, 40), t.ID)
+		tail := tailFile(d.Store.WorkerLogPath(t.ID), per)
+		if tail == "" {
+			b.WriteString("  …まだ出力がありません（起動直後/思考中）\n")
+			continue
+		}
+		for _, ln := range strings.Split(tail, "\n") {
+			fmt.Fprintf(b, "  %s\n", oneline(ln, 110))
+		}
+	}
+}
+
+// statusLabel maps an internal status to a short human label.
+func statusLabel(status string) string {
+	switch status {
+	case TaskPending:
+		return "待機中"
+	case TaskRunning:
+		return "実行中"
+	case TaskReview:
+		return "レビュー中"
+	case TaskRevise:
+		return "修正中"
+	case TaskDone:
+		return "完了"
+	case TaskFailed:
+		return "失敗"
+	case TaskBlocked:
+		return "ブロック"
+	default:
+		return status
+	}
+}
+
+// readKeys reads single keypresses from stdin and emits KeyEvents. It is only
+// started on a TTY. It owns terminal mode for its lifetime: it switches the TTY
+// into a non-canonical, no-echo mode (rawKeyMode) so a key registers the moment
+// it is pressed — no Enter required — and restores a sane canonical state on
+// exit. This is essential because the interactive `claude` child leaves the
+// shared TTY in raw mode; a line-buffered reader here would wait forever for a
+// "\n" that raw-mode Enter never sends. The VMIN=0/VTIME=1 timeout makes idle
+// reads return (0, io.EOF) every ~0.1s, so context cancellation is honoured
+// promptly and no goroutine is left blocked on stdin across phases.
 func (d *Dashboard) readKeys(ctx context.Context) {
-	r := bufio.NewReader(os.Stdin)
+	restore, ok := rawKeyMode()
+	if !ok {
+		// Could not enter raw mode (no stty / not a TTY): fall back to leaving
+		// the terminal canonical. Without a per-key read we cannot reliably
+		// process keys, so just honour cancellation and return.
+		<-ctx.Done()
+		return
+	}
+	defer restore()
+
+	buf := make([]byte, 1)
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		default:
 		}
-		line, err := r.ReadString('\n')
-		if err != nil {
-			return
+		n, err := os.Stdin.Read(buf)
+		if n == 0 {
+			// VTIME timeout surfaces as (0, io.EOF) on a quiet terminal; loop so
+			// we re-check ctx. A genuine, non-EOF error means stdin is gone.
+			if err != nil && err != io.EOF {
+				return
+			}
+			continue
 		}
-		switch strings.TrimSpace(line) {
-		case "d":
+		switch buf[0] {
+		case 'd':
 			d.emit(KeyDetail)
-		case "p":
+		case 'p':
 			d.emit(KeyPause)
-		case "q":
+		case 'q':
 			d.emit(KeyQuit)
 		}
 	}
@@ -156,6 +246,25 @@ func (d *Dashboard) emit(k KeyEvent) {
 	case d.Keys <- k:
 	default:
 	}
+}
+
+// tailFile returns the last n non-empty lines of the file at path (best effort;
+// empty string if the file is missing/unreadable/empty). It reads the whole
+// file, which is fine for the modest worker logs shown here.
+func tailFile(path string, n int) string {
+	data, err := os.ReadFile(path)
+	if err != nil || len(data) == 0 {
+		return ""
+	}
+	lines := strings.Split(strings.TrimRight(string(data), "\n"), "\n")
+	out := make([]string, 0, n)
+	for i := len(lines) - 1; i >= 0 && len(out) < n; i-- {
+		if strings.TrimSpace(lines[i]) == "" {
+			continue
+		}
+		out = append([]string{lines[i]}, out...)
+	}
+	return strings.Join(out, "\n")
 }
 
 // oneline collapses whitespace and truncates s to max runes.
