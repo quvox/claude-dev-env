@@ -103,8 +103,24 @@ iptables -A OUTPUT -p tcp --dport 587 -j REJECT
 iptables -A OUTPUT -p tcp --dport 22 -d 10.0.0.0/8 -j ACCEPT
 iptables -A OUTPUT -p tcp --dport 22 -d 172.16.0.0/12 -j ACCEPT
 iptables -A OUTPUT -p tcp --dport 22 -d 192.168.0.0/16 -j ACCEPT
+# GitHub SSH を許可（git+ssh でのpush/pull用）
+# GitHub Meta API で公開されている IP レンジを動的に取得
+# https://api.github.com/meta の "git" フィールドに SSH 用 CIDR がある
+GH_CIDRS=$(curl -sf --connect-timeout 5 https://api.github.com/meta 2>/dev/null \
+    | jq -r '.git[]? // empty' 2>/dev/null)
+if [ -n "$GH_CIDRS" ]; then
+    for cidr in $GH_CIDRS; do
+        iptables -A OUTPUT -p tcp --dport 22 -d "$cidr" -j ACCEPT
+    done
+else
+    # フォールバック: API 取得失敗時は dig で解決
+    for gh_ip in $(dig +short A github.com 2>/dev/null); do
+        if [[ "$gh_ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            iptables -A OUTPUT -p tcp --dport 22 -d "$gh_ip" -j ACCEPT
+        fi
+    done
+fi
 # それ以外の外部 SSH はブロック
-# ※ GitHub SSH (git@github.com) もブロックされます。HTTPS を使ってください
 iptables -A OUTPUT -p tcp --dport 22 -j REJECT
 
 # =============================================================================

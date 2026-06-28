@@ -8,24 +8,25 @@
 # ブラックリスト方式ファイアウォール
 # 認証情報はボリュームマウントで管理
 # =============================================================================
-FROM ubuntu:24.04
+FROM ubuntu:24.04 AS base
 
 ENV DEBIAN_FRONTEND=noninteractive
 
 # --- ユーザー名・パスを先に定義（全体で参照する）---
+# USERNAME はビルド時に --build-arg で上書き可能（デフォルト: devuser）
 ARG USERNAME=devuser
 ARG USER_UID=1500
 ARG USER_GID=1500
-ENV USER_HOME=/home/devuser
+ENV USER_HOME=/home/${USERNAME}
 
 # --- システムパッケージ ---
 RUN apt-get update && apt-get install -y --no-install-recommends \
     # ファイアウォール
     iptables ipset dnsutils \
     # シェル・ターミナル
-    zsh tmux vim \
+    zsh tmux vim less \
     # VCS
-    git git-lfs \
+    git git-lfs git-secrets openssh-client \
     # ネットワーク
     curl wget jq ca-certificates \
     iproute2 net-tools iputils-ping \
@@ -37,44 +38,64 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 python3-pip python3-venv python3-dev \
     # サンドボックス（Claude Code 推奨）
     bubblewrap socat \
-    # Chromium / Playwright 依存パッケージ
-    chromium-browser \
+    # Chromium / Playwright 依存パッケージ（chromium-browser は Ubuntu 24.04 で snap 専用のため除外）
     fonts-liberation fonts-noto-cjk fonts-noto-color-emoji \
     libasound2t64 libatk-bridge2.0-0 libatk1.0-0 libcairo2 libcups2 \
     libdbus-1-3 libdrm2 libgbm1 libglib2.0-0 libgtk-3-0 libnspr4 \
     libnss3 libpango-1.0-0 libx11-6 libxcomposite1 libxdamage1 \
     libxext6 libxfixes3 libxrandr2 libxshmfence1 libxkbcommon0 \
     xdg-utils \
+    # スクリーンショット・動画キャプチャ
+    scrot ffmpeg x11-apps \
+    # KVM / QEMU（ハードウェア仮想化）
+    qemu-system-x86 qemu-utils ovmf cpu-checker bridge-utils \
     # その他
-    unzip xz-utils gnupg locales \
+    unzip zip xz-utils gnupg locales \
+    && rm -rf /var/lib/apt/lists/* \
+    # --- Docker CLI + Docker Compose plugin ---
+    && install -m 0755 -d /etc/apt/keyrings \
+    && curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc \
+    && chmod a+r /etc/apt/keyrings/docker.asc \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" > /etc/apt/sources.list.d/docker.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends docker-ce-cli docker-compose-plugin \
     && rm -rf /var/lib/apt/lists/*
 
-# --- Playwright のブラウザパスを環境変数で設定 ---
-ENV CHROME_PATH=/usr/bin/chromium-browser
-ENV PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium-browser
-ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
+# --- Chromium: Playwright 経由でインストール（後段）---
+# 環境変数はラッパースクリプト作成時に /etc/zsh/zshrc 等で設定する
 
-# --- ロケール設定 ---
+# --- ロケール・タイムゾーン設定 ---
 RUN locale-gen en_US.UTF-8
 ENV LANG=en_US.UTF-8
 ENV LC_ALL=en_US.UTF-8
+RUN ln -sf /usr/share/zoneinfo/Asia/Tokyo /etc/localtime \
+    && echo "Asia/Tokyo" > /etc/timezone
+ENV TZ=Asia/Tokyo
 
 # --- 非root ユーザー作成 ---
-RUN groupadd --gid $USER_GID $USERNAME \
+# GID/UID が既存のグループ/ユーザーと競合する場合は退避してから作成
+RUN existing_group=$(getent group $USER_GID | cut -d: -f1); \
+    if [ -n "$existing_group" ] && [ "$existing_group" != "$USERNAME" ]; then \
+        groupmod -g 9999 "$existing_group"; \
+    fi; \
+    existing_user=$(getent passwd $USER_UID | cut -d: -f1); \
+    if [ -n "$existing_user" ] && [ "$existing_user" != "$USERNAME" ]; then \
+        usermod -u 9999 "$existing_user"; \
+    fi; \
+    groupadd --gid $USER_GID $USERNAME \
     && useradd --uid $USER_UID --gid $USER_GID -m -s /bin/zsh $USERNAME \
     && echo "$USERNAME ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/$USERNAME \
     && chmod 0440 /etc/sudoers.d/$USERNAME \
-    && mkdir -p $USER_HOME/.claude \
     && mkdir -p $USER_HOME/.command_history \
     && chown -R $USERNAME:$USERNAME $USER_HOME
 
 # =============================================================================
-# 言語ランタイム（devuser でインストール）
+# 言語ランタイム（非 root ユーザーでインストール）
 # =============================================================================
 USER $USERNAME
 
 # --- fnm (Node.js バージョン管理) ---
-# /home/devuser/.local/share/fnm に絶対パスでインストール
+# ${USER_HOME}/.local/share/fnm に絶対パスでインストール
 RUN curl -fsSL https://fnm.vercel.app/install | bash -s -- \
         --install-dir "${USER_HOME}/.local/share/fnm" --skip-shell \
     && export PATH="${USER_HOME}/.local/share/fnm:$PATH" \
@@ -85,7 +106,7 @@ RUN curl -fsSL https://fnm.vercel.app/install | bash -s -- \
     && fnm use 24
 
 # --- Go ---
-ARG GO_VERSION=1.24.1
+ARG GO_VERSION=1.26.1
 RUN curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-$(dpkg --print-architecture).tar.gz" \
     | sudo tar -C /usr/local -xz
 
@@ -93,36 +114,44 @@ RUN curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-$(dpkg --print-architect
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
     | sh -s -- -y --default-toolchain stable --profile minimal
 
-# --- シェル初期化: .zshrc / .bashrc に PATH と fnm を設定 ---
-# ここで全ランタイムの PATH を一箇所にまとめる
-RUN { \
-        echo ''; \
-        echo '# --- claude-dev: PATH ---'; \
-        echo 'export PATH="${HOME}/.local/share/fnm:${PATH}"'; \
-        echo 'eval "$(fnm env --use-on-cd --shell zsh)"'; \
-        echo 'export PATH="${HOME}/.local/bin:${HOME}/.cargo/bin:/usr/local/go/bin:${HOME}/go/bin:${PATH}"'; \
-    } >> ${USER_HOME}/.zshrc \
-    && { \
-        echo ''; \
-        echo '# --- claude-dev: PATH ---'; \
-        echo 'export PATH="${HOME}/.local/share/fnm:${PATH}"'; \
-        echo 'eval "$(fnm env --use-on-cd --shell bash)"'; \
-        echo 'export PATH="${HOME}/.local/bin:${HOME}/.cargo/bin:/usr/local/go/bin:${HOME}/go/bin:${PATH}"'; \
-    } >> ${USER_HOME}/.bashrc
-
 # --- pnpm ---
 RUN export PATH="${USER_HOME}/.local/share/fnm:$PATH" \
     && eval "$($USER_HOME/.local/share/fnm/fnm env)" \
     && corepack enable \
     && corepack prepare pnpm@latest --activate
 
-# --- Playwright（システムの Chromium を使用）---
+# --- Playwright + Chromium インストール ---
+# Ubuntu 24.04 では chromium-browser パッケージが snap 専用のため、
+# Playwright 経由で Chromium をインストールする
 RUN export PATH="${USER_HOME}/.local/share/fnm:$PATH" \
     && eval "$($USER_HOME/.local/share/fnm/fnm env)" \
-    && npx -y playwright@latest install-deps 2>/dev/null || true
+    && npx -y playwright@latest install --with-deps chromium
+
+# --- AWS CLI v2 ---
+RUN curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-$(uname -m).zip" -o /tmp/awscliv2.zip \
+    && unzip -q /tmp/awscliv2.zip -d /tmp \
+    && sudo /tmp/aws/install \
+    && rm -rf /tmp/aws /tmp/awscliv2.zip
+
+# --- Terraform ---
+RUN curl -fsSL https://releases.hashicorp.com/terraform/index.json \
+    | jq -r '.versions | to_entries | map(select(.value.builds[]?.os == "linux")) | last | .key' \
+    | xargs -I{} curl -fsSL "https://releases.hashicorp.com/terraform/{}/terraform_{}_linux_$(dpkg --print-architecture).zip" -o /tmp/terraform.zip \
+    && sudo unzip -q /tmp/terraform.zip -d /usr/local/bin \
+    && rm /tmp/terraform.zip
+
+# --- Google Cloud CLI ---
+RUN curl -fsSL https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-cli-linux-$(uname -m).tar.gz \
+    | tar -xz -C ${USER_HOME} \
+    && ${USER_HOME}/google-cloud-sdk/install.sh --quiet --path-update=false \
+    && sudo ln -s ${USER_HOME}/google-cloud-sdk/bin/gcloud /usr/local/bin/gcloud \
+    && sudo ln -s ${USER_HOME}/google-cloud-sdk/bin/gsutil /usr/local/bin/gsutil \
+    && sudo ln -s ${USER_HOME}/google-cloud-sdk/bin/bq /usr/local/bin/bq
 
 # --- Claude Code CLI (ネイティブインストーラー) ---
+# CLAUDE_CACHE_BUST を変えることでこのレイヤー以降だけキャッシュを無効化できる
 # 公式ドキュメント: WORKDIR /tmp でインストーラーがファイルシステム全体をスキャンするのを防ぐ
+ARG CLAUDE_CACHE_BUST=none
 WORKDIR /tmp
 RUN curl -fsSL https://claude.ai/install.sh | bash
 WORKDIR /workspace
@@ -132,23 +161,225 @@ WORKDIR /workspace
 # =============================================================================
 USER root
 
+# --- Playwright Chromium ラッパー + 環境変数（ヘッドレステスト用）---
+RUN CHROMIUM_PATH=$(find ${USER_HOME}/.cache/ms-playwright -name "chrome" \( -path "*/chrome-linux/chrome" -o -path "*/chrome-linux64/chrome" \) 2>/dev/null | head -1) \
+    && if [ -n "$CHROMIUM_PATH" ]; then \
+        { echo '#!/bin/bash'; \
+          echo 'export DBUS_SESSION_BUS_ADDRESS=disabled:'; \
+          printf '"%s" --no-sandbox --disable-gpu --disable-software-rasterizer --disable-dev-shm-usage --headless "$@" 2> >(grep -v -E "dbus|DEPRECATED_ENDPOINT" >&2)\n' "$CHROMIUM_PATH"; \
+        } > /usr/local/bin/chromium-browser \
+        && chmod +x /usr/local/bin/chromium-browser \
+        && ln -sf /usr/local/bin/chromium-browser /usr/local/bin/chromium \
+        && ln -sf /usr/local/bin/chromium-browser /usr/local/bin/chrome \
+        && { \
+            echo ""; \
+            echo "# --- claude-dev: Playwright Chromium ---"; \
+            echo "export CHROME_PATH=\"${CHROMIUM_PATH}\""; \
+            echo "export PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=\"${CHROMIUM_PATH}\""; \
+            echo "export PUPPETEER_EXECUTABLE_PATH=\"${CHROMIUM_PATH}\""; \
+        } >> /etc/zsh/zshrc \
+        && { \
+            echo ""; \
+            echo "# --- claude-dev: Playwright Chromium ---"; \
+            echo "export CHROME_PATH=\"${CHROMIUM_PATH}\""; \
+            echo "export PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=\"${CHROMIUM_PATH}\""; \
+            echo "export PUPPETEER_EXECUTABLE_PATH=\"${CHROMIUM_PATH}\""; \
+        } >> /etc/bash.bashrc; \
+    fi
+
+
+# --- シェル初期化: PATH と fnm を設定 ---
+# システム側（/etc/zsh/zshrc, /etc/bash.bashrc）に配置し、
+# ~/.zshrc はユーザーカスタマイズ用としてボリュームで共有する
+RUN mkdir -p /etc/zsh && { \
+        echo ''; \
+        echo '# --- claude-dev: PATH ---'; \
+        echo 'export PATH="${HOME}/.local/share/fnm:${PATH}"'; \
+        echo 'eval "$(fnm env --use-on-cd --shell zsh 2>/dev/null)"'; \
+        echo 'export PATH="${HOME}/.local/bin:${HOME}/.cargo/bin:/usr/local/go/bin:${HOME}/go/bin:${PATH}"'; \
+    } >> /etc/zsh/zshrc \
+    && { \
+        echo ''; \
+        echo '# --- claude-dev: PATH ---'; \
+        echo 'export PATH="${HOME}/.local/share/fnm:${PATH}"'; \
+        echo 'eval "$(fnm env --use-on-cd --shell bash 2>/dev/null)"'; \
+        echo 'export PATH="${HOME}/.local/bin:${HOME}/.cargo/bin:/usr/local/go/bin:${HOME}/go/bin:${PATH}"'; \
+    } >> /etc/bash.bashrc
+
+# --- デフォルト .zshrc ---
+COPY .zshrc $USER_HOME/.zshrc.default
+RUN chown $USERNAME:$USERNAME $USER_HOME/.zshrc.default
+
+# --- tmux 設定 ---
+COPY .devcontainer/tmux.conf /etc/tmux.conf
+
 # --- スクリプト設置 ---
 COPY scripts/init-firewall-claude.sh /usr/local/bin/init-firewall.sh
 COPY scripts/entrypoint-claude.sh /usr/local/bin/entrypoint.sh
-RUN chmod +x /usr/local/bin/init-firewall.sh /usr/local/bin/entrypoint.sh
+COPY scripts/save_prompt.sh /usr/local/bin/save_prompt.sh
+COPY scripts/sendslackmsg.sh /usr/local/bin/sendslackmsg.sh
+RUN chmod +x /usr/local/bin/init-firewall.sh /usr/local/bin/entrypoint.sh \
+    /usr/local/bin/save_prompt.sh /usr/local/bin/sendslackmsg.sh
 
 # --- 作業ディレクトリ ---
 RUN mkdir -p /workspace && chown $USERNAME:$USERNAME /workspace
 WORKDIR /workspace
 
-# --- Claude Code 設定 ---
-RUN mkdir -p $USER_HOME/.claude \
-    && echo '{"permissions":{"defaultMode":"bypassPermissions"}}' \
-       > $USER_HOME/.claude/settings.json \
-    && chown -R $USERNAME:$USERNAME $USER_HOME/.claude
-
 # --- デフォルトシェル ---
 ENV SHELL=/bin/zsh
 
-# root で起動し、entrypoint が UID/GID 調整後に devuser へ切り替える
+# USERNAME を環境変数として保存（entrypoint で参照）
+ENV CONTAINER_USER=${USERNAME}
+
+# root で起動し、entrypoint が UID/GID 調整後にユーザーへ切り替える
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+
+# =============================================================================
+# VNC ステージ: Chrome + noVNC + 日本語入力
+# =============================================================================
+# claude-dev-claude-vnc イメージ
+# base レイヤーを共有し、GUI / ブラウザ関連のみ追加
+# =============================================================================
+FROM base AS vnc
+
+USER root
+
+# --- ja_JP.UTF-8 ロケール追加 ---
+RUN sed -i 's/# ja_JP.UTF-8/ja_JP.UTF-8/' /etc/locale.gen && locale-gen
+
+# --- VNC / GUI / 日本語入力パッケージ ---
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    # VNC / ディスプレイ（TigerVNC: X サーバー内蔵 VNC）
+    tigervnc-standalone-server python3-websockify openbox \
+    # ターミナル / キー操作
+    lxterminal xterm xclip x11-xserver-utils xdotool \
+    # 日本語入力（IBus + Mozc）
+    ibus ibus-mozc ibus-gtk ibus-gtk3 ibus-gtk4 \
+    mozc-utils-gui dbus-x11 im-config \
+    # gsettings / dconf バックエンド
+    libglib2.0-bin dconf-cli dconf-gsettings-backend dbus-user-session \
+    # Chrome 追加依存
+    libxss1 libatspi2.0-0 \
+    # フォント追加
+    fonts-noto-cjk-extra fonts-dejavu-core \
+    && rm -rf /var/lib/apt/lists/*
+
+# --- Google Chrome（安定版）---
+# APT リポジトリ経由でインストール（deb 直接ダウンロードより安定）
+RUN curl -fsSL https://dl.google.com/linux/linux_signing_key.pub \
+        | gpg --dearmor -o /usr/share/keyrings/google-chrome.gpg \
+    && echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome.gpg] http://dl.google.com/linux/chrome/deb/ stable main" \
+        > /etc/apt/sources.list.d/google-chrome.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends google-chrome-stable \
+    && rm -rf /var/lib/apt/lists/*
+
+# --- noVNC v1.6.0 ---
+RUN curl -fsSL https://github.com/novnc/noVNC/archive/refs/tags/v1.6.0.tar.gz -o /tmp/novnc.tar.gz \
+    && rm -rf /usr/share/novnc \
+    && mkdir -p /usr/share/novnc \
+    && tar -xzf /tmp/novnc.tar.gz -C /usr/share/novnc --strip-components=1 \
+    && rm -f /tmp/novnc.tar.gz \
+    && ln -sf vnc.html /usr/share/novnc/index.html
+
+# --- GTK IM モジュールキャッシュ更新 ---
+RUN find /usr/lib -name "gtk-query-immodules-2.0" -exec {} --update-cache \; 2>/dev/null || true \
+    && find /usr/lib -name "gtk-query-immodules-3.0" -exec {} --update-cache \; 2>/dev/null || true \
+    && find /usr/lib -name "gio-querymodules" -exec sh -c 'for d in /usr/lib/*/gtk-4.0/*/; do [ -d "$d" ] && {} "$d"; done' \; 2>/dev/null || true
+
+# --- D-Bus machine-id ---
+RUN dbus-uuidgen > /var/lib/dbus/machine-id 2>/dev/null || true
+
+# --- im-config で IBus をデフォルト入力メソッドに登録 ---
+RUN su ${USERNAME} -c "im-config -n ibus" 2>/dev/null || true
+
+# --- IME トグルスクリプト ---
+RUN cat > /usr/local/bin/toggle-ime << 'TOGGLEEOF'
+#!/bin/bash
+if [ -z "$DBUS_SESSION_BUS_ADDRESS" ]; then
+    IBUS_PID=$(pgrep -u "$(whoami)" -f ibus-daemon 2>/dev/null | head -1)
+    if [ -n "$IBUS_PID" ] && [ -r "/proc/$IBUS_PID/environ" ]; then
+        DBUS_SESSION_BUS_ADDRESS=$(tr '\0' '\n' < "/proc/$IBUS_PID/environ" 2>/dev/null | grep '^DBUS_SESSION_BUS_ADDRESS=' | cut -d= -f2-)
+        export DBUS_SESSION_BUS_ADDRESS
+    fi
+    if [ -z "$DBUS_SESSION_BUS_ADDRESS" ]; then
+        OB_PID=$(pgrep -u "$(whoami)" -f openbox 2>/dev/null | head -1)
+        if [ -n "$OB_PID" ] && [ -r "/proc/$OB_PID/environ" ]; then
+            DBUS_SESSION_BUS_ADDRESS=$(tr '\0' '\n' < "/proc/$OB_PID/environ" 2>/dev/null | grep '^DBUS_SESSION_BUS_ADDRESS=' | cut -d= -f2-)
+            export DBUS_SESSION_BUS_ADDRESS
+        fi
+    fi
+fi
+[ -z "$DISPLAY" ] && export DISPLAY=:99
+FOCUSED_WIN=$(xdotool getactivewindow 2>/dev/null)
+current=$(ibus engine 2>/dev/null)
+if [ "$current" = "mozc-jp" ]; then
+    ibus engine xkb:us::eng
+else
+    ibus engine mozc-jp
+    sleep 0.3
+    [ -n "$FOCUSED_WIN" ] && xdotool windowfocus --sync "$FOCUSED_WIN" 2>/dev/null
+    xdotool key --clearmodifiers Zenkaku_Hankaku 2>/dev/null || true
+fi
+TOGGLEEOF
+RUN chmod +x /usr/local/bin/toggle-ime
+
+# --- openbox 設定（右クリックメニュー + Ctrl+\ キーバインド）---
+RUN mkdir -p ${USER_HOME}/.config/openbox \
+    && cat > ${USER_HOME}/.config/openbox/menu.xml << 'MENU_EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<openbox_menu xmlns="http://openbox.org/3.4/menu">
+  <menu id="root-menu" label="Menu">
+    <item label="Chrome"><action name="Execute"><execute>google-chrome-stable --no-sandbox --disable-gpu --disable-software-rasterizer --disable-dev-shm-usage --no-first-run --no-default-browser-check</execute></action></item>
+    <item label="Terminal"><action name="Execute"><execute>lxterminal</execute></action></item>
+    <separator />
+    <item label="Toggle IME (Super+Space / Ctrl+\\ / F3)"><action name="Execute"><execute>toggle-ime</execute></action></item>
+    <item label="IBus Setup"><action name="Execute"><execute>ibus-setup</execute></action></item>
+  </menu>
+</openbox_menu>
+MENU_EOF
+RUN cat > ${USER_HOME}/.config/openbox/rc.xml << 'RCEOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<openbox_config xmlns="http://openbox.org/3.4/rc">
+  <keyboard>
+    <keybind key="W-space">
+      <action name="Execute"><execute>toggle-ime</execute></action>
+    </keybind>
+    <keybind key="C-backslash">
+      <action name="Execute"><execute>toggle-ime</execute></action>
+    </keybind>
+    <keybind key="F3">
+      <action name="Execute"><execute>toggle-ime</execute></action>
+    </keybind>
+  </keyboard>
+  <mouse>
+    <context name="Root">
+      <mousebind button="Right" action="Press">
+        <action name="ShowMenu"><menu>root-menu</menu></action>
+      </mousebind>
+    </context>
+  </mouse>
+</openbox_config>
+RCEOF
+RUN chown -R ${USERNAME}:${USERNAME} ${USER_HOME}/.config
+
+# --- computer-use MCP（rmcp-xdotool）---
+# デスクトップ（X ディスプレイ :99）をマウス/キーボードで操作する MCP サーバー。
+# 入力専用（画面取得は scrot を併用）。Rust 製で、ベースに導入済みの xdotool を利用する。
+# ビルド失敗時もイメージ全体は壊さない（非致命的）。entrypoint がバイナリ存在時のみ MCP 登録する。
+RUN su ${USERNAME} -c "export HOME=${USER_HOME} CARGO_HOME=${USER_HOME}/.cargo PATH=${USER_HOME}/.cargo/bin:\$PATH && cargo install rmcp-xdotool" \
+    && cp ${USER_HOME}/.cargo/bin/rmcp-xdotool /usr/local/bin/rmcp-xdotool \
+    && chmod 755 /usr/local/bin/rmcp-xdotool \
+    || echo "WARN: rmcp-xdotool のインストールに失敗しました（computer-use MCP は利用不可）"
+
+# --- VNC 環境変数 ---
+ENV DISPLAY=:99
+ENV GTK_IM_MODULE=ibus
+ENV QT_IM_MODULE=ibus
+ENV XMODIFIERS=@im=ibus
+ENV IBUS_ENABLE_SYNC_MODE=1
+ENV CLAUDE_DEV_VNC=1
+
+EXPOSE 6080
+
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

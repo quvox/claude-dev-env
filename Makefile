@@ -1,7 +1,7 @@
 # =============================================================================
 # Claude Code 安全開発環境 - Makefile
 # =============================================================================
-# make setup    初回セットアップ（ビルド + Samba 起動 + PATH 登録）
+# make setup    初回セットアップ（ビルド + PATH 登録）
 # make login    OAuth ログイン
 # make status   状態確認
 # make upgrade  Claude Code 更新
@@ -15,49 +15,44 @@ BASE_DIR := $(shell cd "$(dir $(lastword $(MAKEFILE_LIST)))" && pwd)
 CLI := $(BASE_DIR)/claude-dev
 INSTALL_PATH := /usr/local/bin/claude-dev
 
-# .env があれば読み込む
--include $(BASE_DIR)/.env
-
-SAMBA_SHARE_DIR ?= $(HOME)
-SAMBA_USER ?= claude
-SAMBA_PASSWORD ?= claude
-SAMBA_PORT ?= 445
-
 # --- Docker リソース名 ---
 IMG_CLAUDE := claude-dev-claude
-IMG_SAMBA := claude-dev-samba
+IMG_CLAUDE_VNC := claude-dev-claude-vnc
+IMG_DOCKER_PROXY := claude-dev-docker-proxy
+DOCKER_PROXY_CONTAINER := claude-dev-docker-proxy
+CUSER := $(shell whoami)
 NETWORK := claude-dev-net
 VOL_AUTH := claude-dev-auth
 VOL_HISTORY := claude-dev-history
+VOL_CONFIG := claude-dev-config
+VOL_CHROME := claude-dev-chrome-data
+
 
 # =============================================================================
 # メインターゲット
 # =============================================================================
 
 .PHONY: help setup install login build network volumes \
-        start-services stop-services upgrade status clean uninstall \
-        build-claude build-samba
+        upgrade update-claude status clean uninstall build-claude build-claude-vnc build-docker-proxy
 
 ## デフォルト: ヘルプ表示
 help:
 	@echo "Claude Code 安全開発環境"
 	@echo ""
 	@echo "セットアップ:"
-	@echo "  make setup        初回セットアップ（ビルド + Samba 起動 + PATH 登録）"
+	@echo "  make setup        初回セットアップ（ビルド + PATH 登録）"
 	@echo "  make login        OAuth ログイン"
 	@echo ""
 	@echo "ビルド:"
-	@echo "  make build        全イメージをビルド"
-	@echo "  make build-claude Claude イメージのみビルド"
-	@echo "  make build-samba  Samba イメージのみビルド"
-	@echo ""
-	@echo "サービス管理:"
-	@echo "  make start-services  Samba 起動"
-	@echo "  make stop-services   Samba 停止"
-	@echo "  make status          状態確認"
+	@echo "  make build              全イメージをビルド"
+	@echo "  make build-claude       Claude ベースイメージをビルド"
+	@echo "  make build-claude-vnc   Claude VNC イメージをビルド"
+	@echo "  make build-docker-proxy Docker Socket Proxy イメージをビルド"
 	@echo ""
 	@echo "メンテナンス:"
-	@echo "  make upgrade      Claude Code を最新版に更新"
+	@echo "  make update-claude  Claude Code のみ高速更新（Go/Rust 等はキャッシュ利用）"
+	@echo "  make upgrade        全イメージを完全再ビルドで更新（--no-cache）"
+	@echo "  make status         状態確認"
 	@echo "  make clean        全リセット（コンテナ・ボリューム・イメージ削除）"
 	@echo "  make uninstall    CLI のシンボリックリンクを削除"
 	@echo ""
@@ -69,7 +64,7 @@ help:
 # =============================================================================
 
 ## 初回セットアップ（すべて実行）
-setup: env network volumes build start-services install
+setup: env network volumes build install
 	@echo ""
 	@echo "============================================"
 	@echo "✅ セットアップ完了！"
@@ -122,52 +117,45 @@ network:
 volumes:
 	@docker volume create $(VOL_AUTH) >/dev/null 2>&1 || true
 	@docker volume create $(VOL_HISTORY) >/dev/null 2>&1 || true
-	@echo "✅ ボリューム: $(VOL_AUTH), $(VOL_HISTORY)"
+	@docker volume create $(VOL_CONFIG) >/dev/null 2>&1 || true
+	@docker volume create $(VOL_CHROME) >/dev/null 2>&1 || true
+	@echo "✅ ボリューム: $(VOL_AUTH), $(VOL_HISTORY), $(VOL_CONFIG), $(VOL_CHROME)"
 
 # =============================================================================
 # ビルド
 # =============================================================================
 
 ## 全イメージビルド
-build: build-claude build-samba
+build: build-claude build-claude-vnc build-docker-proxy
 
-## Claude Code イメージ
+## Claude ベースイメージ
 build-claude:
-	@echo "📦 Claude イメージをビルド中..."
+	@echo "📦 Claude ベースイメージをビルド中..."
 	@docker build -t $(IMG_CLAUDE) \
+		--target base \
+		--build-arg USERNAME=$(CUSER) \
+		--build-arg USER_UID=$$(id -u) \
+		--build-arg USER_GID=$$(id -g) \
 		-f $(BASE_DIR)/.devcontainer/Dockerfile.claude $(BASE_DIR)
 	@echo "✅ $(IMG_CLAUDE)"
 
-## Samba イメージ
-build-samba:
-	@echo "📦 Samba イメージをビルド中..."
-	@docker build -t $(IMG_SAMBA) \
-		-f $(BASE_DIR)/.devcontainer/Dockerfile.samba $(BASE_DIR)
-	@echo "✅ $(IMG_SAMBA)"
+## Claude VNC イメージ
+build-claude-vnc: build-claude
+	@echo "📦 Claude VNC イメージをビルド中..."
+	@docker build -t $(IMG_CLAUDE_VNC) \
+		--target vnc \
+		--build-arg USERNAME=$(CUSER) \
+		--build-arg USER_UID=$$(id -u) \
+		--build-arg USER_GID=$$(id -g) \
+		-f $(BASE_DIR)/.devcontainer/Dockerfile.claude $(BASE_DIR)
+	@echo "✅ $(IMG_CLAUDE_VNC)"
 
-# =============================================================================
-# Samba サービス
-# =============================================================================
-
-## Samba 起動
-start-services:
-	@echo "🔄 Samba を起動中..."
-	@docker rm -f claude-samba 2>/dev/null || true
-	@docker run -d \
-		--name claude-samba \
-		--hostname claude-samba \
-		--restart unless-stopped \
-		-v "$(SAMBA_SHARE_DIR):/workspace" \
-		-p "$(SAMBA_PORT):445" \
-		-e "SAMBA_USER=$(SAMBA_USER)" \
-		-e "SAMBA_PASSWORD=$(SAMBA_PASSWORD)" \
-		$(IMG_SAMBA) >/dev/null
-	@echo "✅ samba (smb://<server>:$(SAMBA_PORT)/workspace)"
-
-## Samba 停止
-stop-services:
-	@docker rm -f claude-samba 2>/dev/null || true
-	@echo "✅ Samba 停止"
+## Docker Socket Proxy イメージ
+build-docker-proxy:
+	@echo "📦 Docker Socket Proxy イメージをビルド中..."
+	@docker build -t $(IMG_DOCKER_PROXY) \
+		-f $(BASE_DIR)/.devcontainer/Dockerfile.docker-proxy $(BASE_DIR)
+	@echo "✅ $(IMG_DOCKER_PROXY)"
 
 # =============================================================================
 # 認証
@@ -181,32 +169,70 @@ login:
 # メンテナンス
 # =============================================================================
 
-## Claude Code を最新版に更新
-upgrade:
-	@echo "📦 Claude Code を最新版に更新中..."
-	@docker build --no-cache -t $(IMG_CLAUDE) \
+## Claude Code のみ高速更新（Go/Rust/Playwright 等はキャッシュ利用）
+update-claude:
+	@echo "📦 Claude Code を更新中（キャッシュ利用で高速ビルド）..."
+	@docker build -t $(IMG_CLAUDE) \
+		--target base \
+		--build-arg USERNAME=$(CUSER) \
+		--build-arg USER_UID=$$(id -u) \
+		--build-arg USER_GID=$$(id -g) \
+		--build-arg CLAUDE_CACHE_BUST=$$(date +%s) \
 		-f $(BASE_DIR)/.devcontainer/Dockerfile.claude $(BASE_DIR)
+	@echo "✅ Claude ベースイメージ更新完了"
 	@echo ""
-	@echo "✅ イメージ更新完了"
+	@echo "📦 Claude VNC イメージを更新中..."
+	@docker build -t $(IMG_CLAUDE_VNC) \
+		--target vnc \
+		--build-arg USERNAME=$(CUSER) \
+		--build-arg USER_UID=$$(id -u) \
+		--build-arg USER_GID=$$(id -g) \
+		--build-arg CLAUDE_CACHE_BUST=$$(date +%s) \
+		-f $(BASE_DIR)/.devcontainer/Dockerfile.claude $(BASE_DIR)
+	@echo "✅ Claude VNC イメージ更新完了"
+	@echo ""
+	@echo "   実行中のコンテナは claude-dev stop → claude-dev start で反映"
+
+## 全イメージを最新版に更新
+upgrade:
+	@echo "📦 Claude ベースイメージを更新中..."
+	@docker build --no-cache -t $(IMG_CLAUDE) \
+		--target base \
+		--build-arg USERNAME=$(CUSER) \
+		--build-arg USER_UID=$$(id -u) \
+		--build-arg USER_GID=$$(id -g) \
+		-f $(BASE_DIR)/.devcontainer/Dockerfile.claude $(BASE_DIR)
+	@echo "✅ Claude ベースイメージ更新完了"
+	@echo ""
+	@echo "📦 Claude VNC イメージを更新中..."
+	@docker build --no-cache -t $(IMG_CLAUDE_VNC) \
+		--target vnc \
+		--build-arg USERNAME=$(CUSER) \
+		--build-arg USER_UID=$$(id -u) \
+		--build-arg USER_GID=$$(id -g) \
+		-f $(BASE_DIR)/.devcontainer/Dockerfile.claude $(BASE_DIR)
+	@echo "✅ Claude VNC イメージ更新完了"
+	@echo ""
+	@echo "📦 Docker Socket Proxy イメージを更新中..."
+	@docker build --no-cache -t $(IMG_DOCKER_PROXY) \
+		-f $(BASE_DIR)/.devcontainer/Dockerfile.docker-proxy $(BASE_DIR)
+	@echo "✅ Docker Socket Proxy イメージ更新完了"
+	@echo ""
 	@echo "   実行中のコンテナは claude-dev stop → claude-dev start で反映"
 
 ## 状態確認
 status:
 	@echo "=== Docker イメージ ==="
 	@docker images --format "table {{.Repository}}\t{{.Tag}}\t{{.Size}}" \
-		--filter "reference=$(IMG_CLAUDE)" \
-		--filter "reference=$(IMG_SAMBA)" 2>/dev/null || true
+		--filter "reference=$(IMG_CLAUDE)" --filter "reference=$(IMG_CLAUDE_VNC)" --filter "reference=$(IMG_DOCKER_PROXY)" 2>/dev/null || true
 	@echo ""
 	@echo "=== 実行中の Claude Code セッション ==="
-	@docker ps --filter "ancestor=$(IMG_CLAUDE)" \
-		--format "table {{.Names}}\t{{.Status}}" 2>/dev/null || true
+	@docker ps --filter "ancestor=$(IMG_CLAUDE)" --filter "ancestor=$(IMG_CLAUDE_VNC)" \
+		--format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" 2>/dev/null || true
 	@echo ""
-	@echo "=== Samba ==="
-	@if docker ps -q -f "name=^claude-samba$$" 2>/dev/null | grep -q .; then \
-		echo "  ✅ claude-samba"; \
-	else \
-		echo "  ❌ claude-samba (停止)"; \
-	fi
+	@echo "=== Docker Socket Proxy コンテナ ==="
+	@docker ps --filter "name=^$(DOCKER_PROXY_CONTAINER)$$" \
+		--format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" 2>/dev/null || true
 	@echo ""
 	@echo "=== ボリューム ==="
 	@docker volume ls --filter "name=claude-dev" --format "table {{.Name}}\t{{.Driver}}" 2>/dev/null || true
@@ -215,19 +241,19 @@ status:
 clean:
 	@echo "⚠️  以下を全て削除します:"
 	@echo "   - 全 Claude Code コンテナ"
-	@echo "   - Samba"
+	@echo "   - Chrome/VNC コンテナ"
 	@echo "   - 認証情報・履歴ボリューム"
 	@echo "   - Docker イメージ"
 	@echo ""
 	@read -p "実行しますか？ (y/N) " ans && [ "$$ans" = "y" ] || { echo "キャンセル"; exit 1; }
 	@# プロジェクトコンテナ停止
-	@docker ps -a --filter "ancestor=$(IMG_CLAUDE)" -q | xargs -r docker rm -f 2>/dev/null || true
-	@# Samba 停止
-	@docker rm -f claude-samba 2>/dev/null || true
+	@docker ps -a --filter "ancestor=$(IMG_CLAUDE)" --filter "ancestor=$(IMG_CLAUDE_VNC)" -q | xargs -r docker rm -f 2>/dev/null || true
+	@# Docker Socket Proxy コンテナ停止
+	@docker rm -f $(DOCKER_PROXY_CONTAINER) 2>/dev/null || true
 	@# ボリューム削除
-	@docker volume rm -f $(VOL_AUTH) $(VOL_HISTORY) 2>/dev/null || true
+	@docker volume rm -f $(VOL_AUTH) $(VOL_HISTORY) $(VOL_CONFIG) $(VOL_CHROME) 2>/dev/null || true
 	@# ネットワーク削除
 	@docker network rm $(NETWORK) 2>/dev/null || true
 	@# イメージ削除
-	@docker rmi -f $(IMG_CLAUDE) $(IMG_SAMBA) 2>/dev/null || true
+	@docker rmi -f $(IMG_CLAUDE) $(IMG_CLAUDE_VNC) $(IMG_DOCKER_PROXY) 2>/dev/null || true
 	@echo "✅ 全リセット完了"

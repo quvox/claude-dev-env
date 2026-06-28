@@ -19,30 +19,164 @@ if [ -f "$CONFIG_FILE" ]; then
     set +a
 fi
 
-SAMBA_SHARE_DIR="${SAMBA_SHARE_DIR:-$HOME}"
-SAMBA_USER="${SAMBA_USER:-claude}"
-SAMBA_PASSWORD="${SAMBA_PASSWORD:-claude}"
-SAMBA_PORT="${SAMBA_PORT:-445}"
-
 # --- 定数 ---
 NETWORK="claude-dev-net"
+NOVNC_BASE_PORT=6080   # noVNC ポート開始番号
+FWD_PORT_BASE=8100     # ポートフォワード用開始番号
 VOL_AUTH="claude-dev-auth"
 VOL_HISTORY="claude-dev-history"
+VOL_CONFIG="claude-dev-config"
+VOL_CHROME="claude-dev-chrome-data"
 IMG_CLAUDE="claude-dev-claude"
-IMG_SAMBA="claude-dev-samba"
+IMG_CLAUDE_VNC="claude-dev-claude-vnc"
+IMG_DOCKER_PROXY="claude-dev-docker-proxy"
+DOCKER_PROXY_CONTAINER="claude-dev-docker-proxy"
+
+# --- コンテナ内ユーザー名（ホストのカレントユーザーに合わせる）---
+CUSER="$(whoami)"
+CHOME="/home/${CUSER}"
 
 # =============================================================================
 # ヘルパー関数
 # =============================================================================
+
+# --- ユーザー設定ファイル ---
+USER_CONFIG="${HOME}/.config/claude-dev.yaml"
+
+# ~/.config/claude-dev.yaml から ssh_keys のリストを読み取る
+# YAML が存在しなければ ~/.ssh/ の鍵ファイルを列挙して自動生成する
+load_ssh_keys_from_config() {
+    local config="$USER_CONFIG"
+
+    # 設定ファイルがなければ自動生成
+    if [ ! -f "$config" ]; then
+        local found_keys=()
+        for f in ~/.ssh/id_*; do
+            case "$f" in *.pub) continue ;; esac
+            [ -f "$f" ] && found_keys+=("$f")
+        done
+
+        mkdir -p "$(dirname "$config")"
+        {
+            echo "# claude-dev 設定ファイル"
+            echo "# ssh-agent に登録する SSH 鍵を指定してください"
+            echo "# 不要な鍵はコメントアウトまたは削除してください"
+            echo "ssh_keys:"
+            if [ ${#found_keys[@]} -eq 0 ]; then
+                echo "  # 鍵が見つかりませんでした。以下の形式で追加してください:"
+                echo '  # - ~/.ssh/id_ed25519'
+            else
+                for k in "${found_keys[@]}"; do
+                    echo "  - $k"
+                done
+            fi
+        } > "$config"
+        echo "📝 設定ファイルを作成しました: $config"
+    fi
+
+    # ssh_keys セクションからパスを読み取る
+    SSH_KEY_LIST=()
+    local in_section=0
+    while IFS= read -r line; do
+        # コメント行・空行をスキップ
+        case "$line" in
+            \#*|"") continue ;;
+        esac
+        # ssh_keys: セクション開始
+        if [[ "$line" =~ ^ssh_keys: ]]; then
+            in_section=1
+            continue
+        fi
+        # 別のトップレベルキーに到達したら終了
+        if [[ $in_section -eq 1 && "$line" =~ ^[a-zA-Z_] ]]; then
+            break
+        fi
+        # リストアイテムを読み取る
+        if [[ $in_section -eq 1 && "$line" =~ ^[[:space:]]*-[[:space:]]+(.*) ]]; then
+            local val="${BASH_REMATCH[1]}"
+            # コメント部分を除去
+            val="${val%%#*}"
+            # 前後の空白を除去
+            val="$(echo "$val" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+            # ~ をホームディレクトリに展開
+            val="${val/#\~/$HOME}"
+            [ -n "$val" ] && SSH_KEY_LIST+=("$val")
+        fi
+    done < "$config"
+}
+
+# ssh-agent が動いていなければ起動し、鍵が未登録なら ssh-add する
+ensure_ssh_agent() {
+    # agent が動いていなければ起動
+    if [ -z "${SSH_AUTH_SOCK:-}" ] || [ ! -S "${SSH_AUTH_SOCK:-}" ]; then
+        eval "$(ssh-agent -s)" >/dev/null
+        echo "🔑 ssh-agent を起動しました"
+    fi
+
+    # 鍵が既に登録されていれば何もしない
+    if ssh-add -l >/dev/null 2>&1; then
+        return 0
+    fi
+
+    # 設定ファイルから鍵リストを読み込む
+    load_ssh_keys_from_config
+
+    if [ ${#SSH_KEY_LIST[@]} -eq 0 ]; then
+        echo "⚠️  SSH 鍵が設定されていません。$USER_CONFIG を編集してください"
+        return 0
+    fi
+
+    # 存在しない鍵を警告しつつ、有効な鍵だけ処理する
+    local keys=()
+    for key in "${SSH_KEY_LIST[@]}"; do
+        if [ -f "$key" ]; then
+            keys+=("$key")
+        else
+            echo "⚠️  ${key}: ファイルが見つかりません（スキップ）"
+        fi
+    done
+
+    if [ ${#keys[@]} -eq 0 ]; then
+        echo "⚠️  有効な SSH 鍵がありません。$USER_CONFIG を確認してください"
+        return 0
+    fi
+
+    # まずパスフレーズなしの鍵を自動追加
+    local added=0
+    local need_passphrase=()
+    for key in "${keys[@]}"; do
+        if SSH_ASKPASS=/bin/false SSH_ASKPASS_REQUIRE=force ssh-add "$key" 2>/dev/null; then
+            added=1
+        else
+            need_passphrase+=("$key")
+        fi
+    done
+
+    # パスフレーズ付きの鍵は対話的に追加を試みる
+    if [ ${#need_passphrase[@]} -gt 0 ]; then
+        echo "🔑 パスフレーズ付きの SSH 鍵があります。パスフレーズを入力してください。"
+        for key in "${need_passphrase[@]}"; do
+            if ssh-add "$key"; then
+                added=1
+            else
+                echo "⚠️  ${key}: 追加できませんでした（スキップ）"
+            fi
+        done
+    fi
+
+    if [ "$added" -eq 0 ]; then
+        echo "⚠️  SSH 鍵を追加できませんでした。手動で ssh-add を実行してから再度 claude-dev start してください"
+    fi
+}
 
 # プロジェクト名（カレントディレクトリから導出）
 project_name() {
     basename "$(pwd)" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9._-]/-/g'
 }
 
-# コンテナ名
+# コンテナ名（= ディレクトリ名）
 container_name() {
-    echo "claude-$(project_name)"
+    project_name
 }
 
 # イメージが存在するか
@@ -60,11 +194,51 @@ container_exists() {
     docker ps -aq -f "name=^${1}$" 2>/dev/null | grep -q .
 }
 
+# 使用可能な noVNC ポートを探す
+find_available_novnc_port() {
+    local port=$NOVNC_BASE_PORT
+    while [ $port -lt $((NOVNC_BASE_PORT + 100)) ]; do
+        if ! docker ps --format '{{.Ports}}' 2>/dev/null | grep -q "0.0.0.0:${port}->"; then
+            echo "$port"
+            return
+        fi
+        port=$((port + 1))
+    done
+    echo "$NOVNC_BASE_PORT"
+}
+
+# 使用可能なホストポートを探す
+find_available_host_port() {
+    local port=$FWD_PORT_BASE
+    local max=$((FWD_PORT_BASE + 900))
+    while [ $port -lt $max ]; do
+        if ! docker ps --format '{{.Ports}}' 2>/dev/null | grep -q "0.0.0.0:${port}->"; then
+            echo "$port"
+            return
+        fi
+        port=$((port + 1))
+    done
+    echo "$FWD_PORT_BASE"
+}
+
 # セットアップ済みか確認（イメージがなければ自動ビルド）
 require_setup() {
     if ! image_exists "$IMG_CLAUDE"; then
-        echo "📦 Claude イメージが見つかりません。ビルドします..."
+        echo "📦 Claude ベースイメージが見つかりません。ビルドします..."
         docker build -t "$IMG_CLAUDE" \
+            --target base \
+            --build-arg USERNAME="$CUSER" \
+            --build-arg USER_UID="$(id -u)" \
+            --build-arg USER_GID="$(id -g)" \
+            -f "${BASE_DIR}/.devcontainer/Dockerfile.claude" "$BASE_DIR"
+    fi
+    if ! image_exists "$IMG_CLAUDE_VNC"; then
+        echo "📦 Claude VNC イメージが見つかりません。ビルドします..."
+        docker build -t "$IMG_CLAUDE_VNC" \
+            --target vnc \
+            --build-arg USERNAME="$CUSER" \
+            --build-arg USER_UID="$(id -u)" \
+            --build-arg USER_GID="$(id -g)" \
             -f "${BASE_DIR}/.devcontainer/Dockerfile.claude" "$BASE_DIR"
     fi
 }
@@ -74,6 +248,64 @@ ensure_infrastructure() {
     docker network create "$NETWORK" 2>/dev/null || true
     docker volume create "$VOL_AUTH" >/dev/null 2>&1 || true
     docker volume create "$VOL_HISTORY" >/dev/null 2>&1 || true
+    docker volume create "$VOL_CONFIG" >/dev/null 2>&1 || true
+    docker volume create "$VOL_CHROME" >/dev/null 2>&1 || true  # Chrome プロファイル
+}
+
+# 指定コンテナの noVNC URL を取得
+get_novnc_url() {
+    local port
+    port=$(docker port "$1" 6080 2>/dev/null | head -1 | sed 's/.*://')
+    if [ -n "$port" ]; then
+        echo "http://localhost:${port}/vnc.html?autoconnect=true"
+    fi
+}
+
+# Claude コンテナが 0 なら Docker Proxy コンテナを停止
+stop_proxy_if_idle() {
+    local count
+    count=$(docker ps --filter "ancestor=$IMG_CLAUDE" --filter "ancestor=$IMG_CLAUDE_VNC" -q 2>/dev/null | wc -l)
+    if [ "$count" -eq 0 ]; then
+        if is_running "$DOCKER_PROXY_CONTAINER"; then
+            docker rm -f "$DOCKER_PROXY_CONTAINER" >/dev/null
+            echo "🐳 Docker Socket Proxy コンテナを停止しました（Claude コンテナなし）"
+        fi
+    fi
+}
+
+# Docker Socket Proxy 共有コンテナを起動（未起動の場合のみ）
+ensure_docker_proxy_container() {
+    # Docker ソケットがなければスキップ
+    if [ ! -S /var/run/docker.sock ]; then
+        return 0
+    fi
+
+    # イメージがなければビルド
+    if ! image_exists "$IMG_DOCKER_PROXY"; then
+        echo "📦 Docker Socket Proxy イメージが見つかりません。ビルドします..."
+        docker build -t "$IMG_DOCKER_PROXY" \
+            -f "${BASE_DIR}/.devcontainer/Dockerfile.docker-proxy" "$BASE_DIR"
+    fi
+
+    # 既に実行中なら何もしない
+    if is_running "$DOCKER_PROXY_CONTAINER"; then
+        return 0
+    fi
+
+    # 停止中のコンテナがあれば削除
+    if container_exists "$DOCKER_PROXY_CONTAINER"; then
+        docker rm -f "$DOCKER_PROXY_CONTAINER" >/dev/null
+    fi
+
+    docker run -d \
+        --name "$DOCKER_PROXY_CONTAINER" \
+        --hostname "$DOCKER_PROXY_CONTAINER" \
+        --network "$NETWORK" \
+        --restart unless-stopped \
+        -v /var/run/docker.sock:/var/run/docker.sock:ro \
+        "$IMG_DOCKER_PROXY" >/dev/null
+
+    echo "🐳 Docker Socket Proxy コンテナ起動"
 }
 
 # =============================================================================
@@ -103,31 +335,38 @@ setup)
     # ボリューム
     docker volume create "$VOL_AUTH" >/dev/null 2>&1 || true
     docker volume create "$VOL_HISTORY" >/dev/null 2>&1 || true
-    echo "✅ ボリューム: $VOL_AUTH, $VOL_HISTORY"
+    docker volume create "$VOL_CONFIG" >/dev/null 2>&1 || true
+    docker volume create "$VOL_CHROME" >/dev/null 2>&1 || true
+    echo "✅ ボリューム: $VOL_AUTH, $VOL_HISTORY, $VOL_CONFIG, $VOL_CHROME"
 
-    # イメージビルド
+    # Claude ベースイメージビルド
     echo ""
-    echo "📦 Docker イメージをビルド中..."
+    echo "📦 Claude ベースイメージをビルド中... (user: $CUSER)"
     docker build -t "$IMG_CLAUDE" \
+        --target base \
+        --build-arg USERNAME="$CUSER" \
+        --build-arg USER_UID="$(id -u)" \
+        --build-arg USER_GID="$(id -g)" \
         -f "${BASE_DIR}/.devcontainer/Dockerfile.claude" "$BASE_DIR"
-    docker build -t "$IMG_SAMBA" \
-        -f "${BASE_DIR}/.devcontainer/Dockerfile.samba" "$BASE_DIR"
-    echo "✅ イメージビルド完了"
+    echo "✅ Claude ベースイメージビルド完了"
 
-    # Samba 起動
+    # Claude VNC イメージビルド
     echo ""
-    echo "🔄 Samba を起動中..."
-    docker rm -f claude-samba 2>/dev/null || true
-    docker run -d \
-        --name claude-samba \
-        --hostname claude-samba \
-        --restart unless-stopped \
-        -v "${SAMBA_SHARE_DIR}:/workspace" \
-        -p "${SAMBA_PORT}:445" \
-        -e "SAMBA_USER=${SAMBA_USER}" \
-        -e "SAMBA_PASSWORD=${SAMBA_PASSWORD}" \
-        "$IMG_SAMBA" >/dev/null
-    echo "✅ samba 起動 (smb://<server>:${SAMBA_PORT}/workspace)"
+    echo "📦 Claude VNC イメージをビルド中..."
+    docker build -t "$IMG_CLAUDE_VNC" \
+        --target vnc \
+        --build-arg USERNAME="$CUSER" \
+        --build-arg USER_UID="$(id -u)" \
+        --build-arg USER_GID="$(id -g)" \
+        -f "${BASE_DIR}/.devcontainer/Dockerfile.claude" "$BASE_DIR"
+    echo "✅ Claude VNC イメージビルド完了"
+
+    # Docker Socket Proxy イメージビルド
+    echo ""
+    echo "📦 Docker Socket Proxy イメージをビルド中..."
+    docker build -t "$IMG_DOCKER_PROXY" \
+        -f "${BASE_DIR}/.devcontainer/Dockerfile.docker-proxy" "$BASE_DIR"
+    echo "✅ Docker Socket Proxy イメージビルド完了"
 
     echo ""
     echo "============================================"
@@ -156,33 +395,54 @@ login)
     echo "Claude Code が起動します。ログインを完了してから /exit で終了してください。"
     echo ""
 
-    # claude-dev-auth ボリュームを ~/.claude にマウント
-    # Claude Code は ~/.claude.json と ~/.claude/ の両方を使うため、
-    # entrypoint で ~/.claude.json → ~/.claude/.claude.json のシンボリックリンクを作成する代わりに
-    # ここでは login 用に直接両方をマウントする
-    #
-    # 方式: ボリュームを /home/devuser/.claude にマウントし、
-    #        .claude.json は ~/.claude/ 内に保存、ホームに symlink
+    # claude-dev-auth ボリュームを ~/.claude-shared にマウント
+    # 認証ファイル（.credentials.json, .claude.json）だけを共有ボリュームに永続化
+    # settings.json は共有しない（コンテナごとに独立管理）
     docker run --rm -it \
         --network "$NETWORK" \
         --entrypoint bash \
-        --user devuser \
         -e "TERM=${TERM:-xterm-256color}" \
         -e "LANG=en_US.UTF-8" \
-        -v "${VOL_AUTH}:/home/devuser/.claude" \
+        -e "CUSER=$CUSER" \
+        -e "CHOME=$CHOME" \
+        -v "${VOL_AUTH}:${CHOME}/.claude-shared" \
         "$IMG_CLAUDE" \
-        -l -c '
-            # ~/.claude.json がボリューム内にあれば symlink
-            if [ -f ~/.claude/.claude.json ]; then
-                ln -sf ~/.claude/.claude.json ~/.claude.json
-            fi
+        -c '
+            chown -R "$CUSER":"$CUSER" "$CHOME/.claude-shared" 2>/dev/null || true
+            mkdir -p "$CHOME/.claude"
+            chown "$CUSER":"$CUSER" "$CHOME/.claude"
 
-            claude || true
+            su "$CUSER" -s /bin/bash -l -c "
+                # 共有ボリュームに認証情報があれば ~/.claude/ にコピー
+                for f in .credentials.json .claude.json; do
+                    if [ -f ~/.claude-shared/\$f ]; then
+                        cp ~/.claude-shared/\$f ~/.claude/\$f
+                    fi
+                done
+                # settings.json はローカルに作成（共有しない）
+                if [ ! -f ~/.claude/settings.json ]; then
+                    echo '{\"permissions\":{\"defaultMode\":\"bypassPermissions\"},\"model\":\"sonnet\"}' > ~/.claude/settings.json
+                fi
+                # ~/.claude.json（ホーム直下）へのリンク
+                if [ -f ~/.claude/.claude.json ]; then
+                    ln -sf ~/.claude/.claude.json ~/.claude.json
+                fi
 
-            # login 後: ~/.claude.json をボリューム内にコピーして永続化
-            if [ -f ~/.claude.json ] && [ ! -L ~/.claude.json ]; then
-                cp ~/.claude.json ~/.claude/.claude.json
-            fi
+                claude || true
+
+                # login 後: 認証ファイルを共有ボリュームに永続化
+                for f in .credentials.json .claude.json; do
+                    src=~/.claude/\$f
+                    dst=~/.claude-shared/\$f
+                    if [ -f \"\$src\" ]; then
+                        cp \"\$src\" \"\$dst\"
+                    fi
+                done
+                # ホーム直下の .claude.json も確認
+                if [ -f ~/.claude.json ] && [ ! -L ~/.claude.json ]; then
+                    cp ~/.claude.json ~/.claude-shared/.claude.json
+                fi
+            "
         '
 
     echo "✅ ログイン処理完了"
@@ -194,10 +454,14 @@ login)
 logout)
     require_setup
     echo "🗑️  認証情報を削除中..."
-    # auth ボリューム（= ~/.claude/）をクリア
+    # auth ボリューム（= ~/.claude-shared/）をクリア
     # 実行中のコンテナがあるとボリュームが使用中なので先に停止
     echo "   実行中のコンテナを停止中..."
-    docker ps -a --filter "ancestor=$IMG_CLAUDE" -q | xargs -r docker rm -f 2>/dev/null || true
+    docker ps -a --filter "ancestor=$IMG_CLAUDE" --filter "ancestor=$IMG_CLAUDE_VNC" -q | xargs -r docker rm -f 2>/dev/null || true
+    # Docker Socket Proxy コンテナも停止
+    if container_exists "$DOCKER_PROXY_CONTAINER"; then
+        docker rm -f "$DOCKER_PROXY_CONTAINER" >/dev/null 2>&1 || true
+    fi
     # ボリュームを空にする
     docker run --rm --entrypoint bash \
         -v "${VOL_AUTH}:/auth" \
@@ -208,37 +472,36 @@ logout)
     ;;
 
 # -----------------------------------------------------------------------------
-# トークン手動設定
-# -----------------------------------------------------------------------------
-set-token)
-    require_setup
-    if [ -z "$2" ]; then
-        echo "使い方: claude-dev set-token YOUR_TOKEN"
-        exit 1
-    fi
-    # auth ボリュームに直接書き込み
-    docker run --rm \
-        -v "${VOL_AUTH}:/auth" \
-        alpine sh -c "echo '$2' > /auth/token"
-    echo "✅ トークン設定完了"
-    ;;
-
-# -----------------------------------------------------------------------------
 # プロジェクト開始（カレントディレクトリ）
 # -----------------------------------------------------------------------------
 start)
     require_setup
     NAME=$(container_name)
     PROJECT_DIR="$(pwd)"
+    shift || true
+
+    # フラグ解析
+    USE_VNC=1
+    USE_KVM=0
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --no-vnc) USE_VNC=0 ;;
+            --kvm) USE_KVM=1 ;;
+        esac
+        shift
+    done
 
     # 既に実行中 → attach（tmux セッションがなければ再作成）
     if is_running "$NAME"; then
         echo "✅ ${NAME} は実行中。接続します..."
-        if ! docker exec -u devuser "$NAME" tmux has-session -t main 2>/dev/null; then
-            docker exec -u devuser "$NAME" tmux new-session -d -s main 2>/dev/null || true
+        ensure_infrastructure
+        _url=$(get_novnc_url "$NAME")
+        [ -n "$_url" ] && echo "🖥️  noVNC: $_url"
+        if ! docker exec -u "$CUSER" "$NAME" tmux has-session -t main 2>/dev/null; then
+            docker exec -u "$CUSER" "$NAME" tmux new-session -d -s main 2>/dev/null || true
             sleep 0.5
         fi
-        docker exec -it -u devuser "$NAME" tmux attach -t main
+        docker exec -it -u "$CUSER" "$NAME" tmux attach -t main
         exit 0
     fi
 
@@ -250,6 +513,111 @@ start)
     # インフラ確認
     ensure_infrastructure
 
+    # イメージ選択
+    if [ "$USE_VNC" = "1" ]; then
+        RUN_IMAGE="$IMG_CLAUDE_VNC"
+    else
+        RUN_IMAGE="$IMG_CLAUDE"
+    fi
+
+    # 認証ファイルを共有ボリュームから /workspace/.claude/ にコピー
+    mkdir -p "${PROJECT_DIR}/.claude"
+    docker run --rm \
+        --entrypoint bash \
+        -v "${VOL_AUTH}:/auth:ro" \
+        -v "${PROJECT_DIR}/.claude:/target" \
+        "$IMG_CLAUDE" -c '
+            for f in .credentials.json .claude.json; do
+                [ -f "/auth/$f" ] && cp "/auth/$f" "/target/$f"
+            done
+            chown -R '"$(id -u):$(id -g)"' /target/
+        '
+
+    # ホストの ~/.claude/settings.json から hooks / env 設定を抽出してコピー
+    # （ファイル名は歴史的経緯で host-hooks.json のままだが env も含む）
+    HOST_SETTINGS="${HOME}/.claude/settings.json"
+    if [ -f "$HOST_SETTINGS" ]; then
+        _overlay=$(jq -c '{hooks: .hooks, env: .env} | with_entries(select(.value != null))' "$HOST_SETTINGS" 2>/dev/null)
+        if [ -n "$_overlay" ] && [ "$_overlay" != "{}" ]; then
+            echo "$_overlay" > "${PROJECT_DIR}/.claude/host-hooks.json"
+        fi
+    fi
+
+    # ホストの ~/.local/bin/ スクリプト（ユーザー独自 hook 用）をコンテナ用にコピー
+    # 組み込み hook スクリプト (save_prompt.sh / sendslackmsg.sh) はイメージに焼き込み済みのため
+    # ここではコピー対象外。ユーザー独自スクリプトのみ ~/.local/bin/ から運ぶ。
+    if [ -d "${HOME}/.local/bin" ] && [ -n "$(ls -A "${HOME}/.local/bin/" 2>/dev/null)" ]; then
+        mkdir -p "${PROJECT_DIR}/.claude/host-local-bin"
+        cp -a "${HOME}/.local/bin/." "${PROJECT_DIR}/.claude/host-local-bin/"
+    fi
+
+    # .gitignore に .claude が含まれていなければ追加
+    if [ -f "${PROJECT_DIR}/.gitignore" ]; then
+        if ! grep -qxF '.claude' "${PROJECT_DIR}/.gitignore" && ! grep -qxF '.claude/' "${PROJECT_DIR}/.gitignore"; then
+            echo '.claude' >> "${PROJECT_DIR}/.gitignore"
+        fi
+    elif [ -d "${PROJECT_DIR}/.git" ]; then
+        echo '.claude' > "${PROJECT_DIR}/.gitignore"
+    fi
+
+    # ~/.gitconfig があればマウント（読み取り専用）
+    GITCONFIG_OPT=""
+    if [ -f "${HOME}/.gitconfig" ]; then
+        GITCONFIG_OPT="-v ${HOME}/.gitconfig:${CHOME}/.gitconfig:ro"
+    fi
+
+    # Docker Socket Proxy 経由で Docker API を利用（生ソケットはマウントしない）
+    DOCKER_OPTS=""
+    if [ -S /var/run/docker.sock ]; then
+        ensure_docker_proxy_container
+        DOCKER_OPTS="-e DOCKER_HOST=tcp://${DOCKER_PROXY_CONTAINER}:2375"
+    fi
+
+    # SSH agent 準備 & ソケット転送（秘密鍵ファイルはマウントしない）
+    ensure_ssh_agent
+    SSH_OPTS=""
+    if [ -n "${SSH_AUTH_SOCK:-}" ] && [ -S "$SSH_AUTH_SOCK" ]; then
+        SSH_OPTS="-v ${SSH_AUTH_SOCK}:/tmp/ssh-agent.sock:ro -e SSH_AUTH_SOCK=/tmp/ssh-agent.sock"
+    fi
+    # ~/.ssh/known_hosts（読み取り専用、秘密情報なし）
+    if [ -f "${HOME}/.ssh/known_hosts" ]; then
+        SSH_OPTS="${SSH_OPTS} -v ${HOME}/.ssh/known_hosts:${CHOME}/.ssh/known_hosts:ro"
+    fi
+    # ~/.ssh/config（エージェント転送用に加工してマウント）
+    # IdentityFile / IdentitiesOnly はコンテナ内に鍵ファイルがないため除去
+    if [ -f "${HOME}/.ssh/config" ]; then
+        _ssh_config_tmp=$(mktemp /tmp/claude-dev-ssh-config.XXXXXX)
+        sed -E '/^[[:space:]]*(IdentityFile|IdentitiesOnly)/d' "${HOME}/.ssh/config" > "$_ssh_config_tmp"
+        SSH_OPTS="${SSH_OPTS} -v ${_ssh_config_tmp}:${CHOME}/.ssh/config:ro"
+    fi
+
+    # noVNC ポート割り当て（VNC ありの場合のみ）
+    NOVNC_PORT_OPT=""
+    if [ "$USE_VNC" = "1" ]; then
+        NOVNC_PORT=$(find_available_novnc_port)
+        NOVNC_PORT_OPT="-p ${NOVNC_PORT}:6080 -v ${VOL_CHROME}:${CHOME}/.chrome-profile"
+    fi
+
+    # KVM / QEMU デバイス（--kvm 指定時のみ、ホストに存在すれば渡す）
+    # 通常は Chrome 操作のみで十分なため既定では渡さない。
+    # /dev/kvm:       CPU 仮想化
+    # /dev/vhost-net: ゲスト VM の高速ネットワーク
+    # /dev/net/tun:   TUN/TAP（QEMU の tap ネット等）
+    KVM_OPTS=""
+    if [ "$USE_KVM" = "1" ]; then
+        if [ -c /dev/kvm ]; then
+            KVM_OPTS="--device=/dev/kvm"
+        else
+            echo "⚠️  --kvm が指定されましたが、ホストに /dev/kvm がありません（KVM 加速は無効）"
+        fi
+        if [ -c /dev/vhost-net ]; then
+            KVM_OPTS="${KVM_OPTS} --device=/dev/vhost-net"
+        fi
+        if [ -c /dev/net/tun ]; then
+            KVM_OPTS="${KVM_OPTS} --device=/dev/net/tun"
+        fi
+    fi
+
     # コンテナ起動
     echo "🚀 起動中... [${NAME}] → ${PROJECT_DIR}"
     docker run -d \
@@ -260,24 +628,32 @@ start)
         --cap-add NET_RAW \
         --restart unless-stopped \
         -v "${PROJECT_DIR}:/workspace" \
-        -v "${VOL_HISTORY}:/home/devuser/.command_history" \
-        -v "${VOL_AUTH}:/home/devuser/.claude" \
-        -v "${BASE_DIR}/scripts/tmux.conf:/home/devuser/.tmux.conf:ro" \
-        -v "${BASE_DIR}/CLAUDE.md:/home/devuser/CLAUDE.md:ro" \
+        -v "${VOL_HISTORY}:${CHOME}/.command_history" \
+        -v "${VOL_AUTH}:${CHOME}/.claude-shared" \
+        -v "${VOL_CONFIG}:${CHOME}/.config-shared" \
+        -v "${BASE_DIR}/scripts/tmux.conf:${CHOME}/.tmux.conf:ro" \
+        -v "${BASE_DIR}/CLAUDE.md:${CHOME}/CLAUDE.md:ro" \
+        $GITCONFIG_OPT \
+        $SSH_OPTS \
+        $DOCKER_OPTS \
+        $NOVNC_PORT_OPT \
+        $KVM_OPTS \
         -e NODE_OPTIONS=--max-old-space-size=4096 \
         -t \
-        "$IMG_CLAUDE" >/dev/null
+        "$RUN_IMAGE" >/dev/null
 
     # tmux 起動を待つ
-    for i in $(seq 1 10); do
-        if docker exec -u devuser "$NAME" tmux has-session -t main 2>/dev/null; then
+    for i in $(seq 1 30); do
+        if docker exec -u "$CUSER" "$NAME" tmux has-session -t main 2>/dev/null; then
             break
         fi
-        sleep 0.5
+        sleep 1
     done
 
-    echo "✅ 起動完了（Ctrl-B D で切断、claude-dev start で再接続）"
-    docker exec -it -u devuser "$NAME" tmux attach -t main
+    echo "✅ 起動完了（Ctrl-_ D で切断、claude-dev start で再接続）"
+    _url=$(get_novnc_url "$NAME")
+    [ -n "$_url" ] && echo "🖥️  noVNC: $_url"
+    docker exec -it -u "$CUSER" "$NAME" tmux attach -t main
     ;;
 
 # -----------------------------------------------------------------------------
@@ -292,8 +668,8 @@ code)
         exit 1
     fi
 
-    docker exec -it -u devuser "$NAME" tmux new-window -t main "claude"
-    docker exec -it -u devuser "$NAME" tmux attach -t main
+    docker exec -it -u "$CUSER" "$NAME" tmux new-window -t main "claude"
+    docker exec -it -u "$CUSER" "$NAME" tmux attach -t main
     ;;
 
 # -----------------------------------------------------------------------------
@@ -303,7 +679,7 @@ attach)
     require_setup
     if [ -n "$2" ]; then
         # 名前指定
-        NAME="claude-${2}"
+        NAME="${2}"
     else
         NAME=$(container_name)
     fi
@@ -314,7 +690,7 @@ attach)
         exit 1
     fi
 
-    docker exec -it -u devuser "$NAME" tmux attach -t main
+    docker exec -it -u "$CUSER" "$NAME" tmux attach -t main
     ;;
 
 # -----------------------------------------------------------------------------
@@ -322,16 +698,122 @@ attach)
 # -----------------------------------------------------------------------------
 stop)
     if [ -n "$2" ]; then
-        NAME="claude-${2}"
+        NAME="${2}"
     else
         NAME=$(container_name)
     fi
 
     if container_exists "$NAME"; then
+        # フォワードコンテナも停止
+        docker ps -a --filter "name=^fwd-${NAME}-" -q | xargs -r docker rm -f 2>/dev/null || true
         docker rm -f "$NAME" >/dev/null
         echo "✅ ${NAME} を停止しました"
     else
         echo "ℹ️  ${NAME} は存在しません"
+    fi
+
+    # Claude コンテナが残っていなければ Docker Proxy も停止
+    stop_proxy_if_idle
+    ;;
+
+# -----------------------------------------------------------------------------
+# ポートフォワード（動的追加）
+# -----------------------------------------------------------------------------
+forward)
+    if [ -z "$2" ]; then
+        echo "使い方: claude-dev forward <container-port> [NAME]"
+        echo "例:     claude-dev forward 3000"
+        exit 1
+    fi
+    CPORT="$2"
+    if [ -n "$3" ]; then
+        NAME="$3"
+    else
+        NAME=$(container_name)
+    fi
+
+    if ! is_running "$NAME"; then
+        echo "❌ ${NAME} は起動していません"
+        exit 1
+    fi
+
+    # 既にフォワード済みか確認
+    FWD_NAME="fwd-${NAME}-${CPORT}"
+    if is_running "$FWD_NAME"; then
+        _hport=$(docker port "$FWD_NAME" "$CPORT" 2>/dev/null | head -1 | sed 's/.*://')
+        echo "ℹ️  既にフォワード済み: host:${_hport} → ${NAME}:${CPORT}"
+        exit 0
+    fi
+    if container_exists "$FWD_NAME"; then
+        docker rm -f "$FWD_NAME" >/dev/null
+    fi
+
+    HPORT=$(find_available_host_port)
+    docker run -d --rm \
+        --name "$FWD_NAME" \
+        --network "$NETWORK" \
+        -p "${HPORT}:${CPORT}" \
+        --entrypoint socat \
+        "$IMG_CLAUDE" \
+        "TCP-LISTEN:${CPORT},fork,reuseaddr" "TCP:${NAME}:${CPORT}" >/dev/null
+
+    echo "✅ host:${HPORT} → ${NAME}:${CPORT}"
+    echo "   SSH: ssh -O forward -L ${HPORT}:localhost:${HPORT} <server>"
+    ;;
+
+# -----------------------------------------------------------------------------
+# ポートフォワード解除
+# -----------------------------------------------------------------------------
+unforward)
+    if [ -z "$2" ]; then
+        echo "使い方: claude-dev unforward <container-port> [NAME]"
+        exit 1
+    fi
+    CPORT="$2"
+    if [ -n "$3" ]; then
+        NAME="$3"
+    else
+        NAME=$(container_name)
+    fi
+    FWD_NAME="fwd-${NAME}-${CPORT}"
+    if container_exists "$FWD_NAME"; then
+        docker rm -f "$FWD_NAME" >/dev/null
+        echo "✅ ${NAME}:${CPORT} のフォワードを解除しました"
+    else
+        echo "ℹ️  ${NAME}:${CPORT} のフォワードはありません"
+    fi
+    ;;
+
+# -----------------------------------------------------------------------------
+# ポートフォワード一覧
+# -----------------------------------------------------------------------------
+ports)
+    if [ -n "$2" ]; then
+        NAME="${2}"
+    else
+        NAME=$(container_name)
+    fi
+
+    if ! is_running "$NAME"; then
+        echo "❌ ${NAME} は起動していません"
+        exit 1
+    fi
+
+    echo "📡 ${NAME} のポートフォワード:"
+    _has_fwd=0
+    for cid in $(docker ps --filter "name=^fwd-${NAME}-" -q 2>/dev/null); do
+        _has_fwd=1
+        _fwd_name=$(docker inspect --format '{{.Name}}' "$cid" | sed 's|^/||')
+        _cport="${_fwd_name##*-}"
+        _hport=$(docker port "$_fwd_name" "$_cport" 2>/dev/null | head -1 | sed 's/.*://')
+        [ -n "$_hport" ] && echo "   host:${_hport} → ${NAME}:${_cport}"
+    done
+    [ $_has_fwd -eq 0 ] && echo "   (なし — claude-dev forward <port> で追加)"
+
+    _url=$(get_novnc_url "$NAME")
+    if [ -n "$_url" ]; then
+        echo ""
+        echo "🖥️  noVNC: $_url"
     fi
     ;;
 
@@ -340,68 +822,73 @@ stop)
 # -----------------------------------------------------------------------------
 list)
     echo "=== 実行中の Claude Code セッション ==="
-    docker ps --filter "ancestor=$IMG_CLAUDE" \
-        --format "table {{.Names}}\t{{.Status}}\t{{.Mounts}}" 2>/dev/null || true
-    echo ""
-    echo "=== 共有サービス ==="
-    for svc in claude-samba; do
-        if is_running "$svc"; then
-            echo "  ✅ ${svc}"
-        else
-            echo "  ❌ ${svc} (停止中)"
-        fi
+    _has_containers=0
+    for cid in $(docker ps --filter "ancestor=$IMG_CLAUDE" --filter "ancestor=$IMG_CLAUDE_VNC" -q 2>/dev/null); do
+        _has_containers=1
+        cname=$(docker inspect --format '{{.Name}}' "$cid" | sed 's|^/||')
+        _name="${cname}"
+        _status=$(docker inspect --format '{{.State.Status}}' "$cid")
+        _workspace=$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/workspace"}}{{.Source}}{{end}}{{end}}' "$cid")
+        _novnc_url=$(get_novnc_url "$cname")
+        echo ""
+        echo "  NAME:      ${_name}"
+        echo "  STATUS:    ${_status}"
+        echo "  WORKSPACE: ${_workspace}"
+        [ -n "$_novnc_url" ] && echo "  noVNC:     ${_novnc_url}"
+        # フォワードコンテナを列挙
+        for _fid in $(docker ps --filter "name=^fwd-${cname}-" -q 2>/dev/null); do
+            _fn=$(docker inspect --format '{{.Name}}' "$_fid" | sed 's|^/||')
+            _cp="${_fn##*-}"
+            _hp=$(docker port "$_fn" "$_cp" 2>/dev/null | head -1 | sed 's/.*://')
+            [ -n "$_hp" ] && echo "  FORWARD:   host:${_hp} → ${cname}:${_cp}"
+        done
     done
+    if [ $_has_containers -eq 0 ]; then
+        echo "  (実行中のセッションはありません)"
+    fi
+
+    # Docker Socket Proxy コンテナの状態
+    echo ""
+    echo "=== Docker Socket Proxy コンテナ ==="
+    if is_running "$DOCKER_PROXY_CONTAINER"; then
+        echo "  STATUS:  running"
+    else
+        echo "  STATUS:  stopped（claude-dev start で自動起動）"
+    fi
+
     ;;
 
 # -----------------------------------------------------------------------------
 # Claude Code アップグレード
 # -----------------------------------------------------------------------------
 upgrade)
-    echo "📦 Claude Code を最新版に更新中..."
+    echo "📦 Claude ベースイメージを更新中..."
     docker build --no-cache -t "$IMG_CLAUDE" \
+        --target base \
+        --build-arg USERNAME="$CUSER" \
+        --build-arg USER_UID="$(id -u)" \
+        --build-arg USER_GID="$(id -g)" \
         -f "${BASE_DIR}/.devcontainer/Dockerfile.claude" "$BASE_DIR"
-    echo ""
-    echo "✅ イメージ更新完了"
-    echo "   実行中のコンテナは stop → start で反映されます"
-    ;;
+    echo "✅ Claude ベースイメージ更新完了"
 
-# -----------------------------------------------------------------------------
-# 共有サービス管理
-# -----------------------------------------------------------------------------
-services)
-    case "${2:-status}" in
-        start)
-            if ! is_running "claude-samba"; then
-                if ! image_exists "$IMG_SAMBA"; then
-                    echo "📦 Samba イメージをビルド中..."
-                    docker build -t "$IMG_SAMBA" \
-                        -f "${BASE_DIR}/.devcontainer/Dockerfile.samba" "$BASE_DIR"
-                fi
-                docker rm -f claude-samba 2>/dev/null || true
-                docker run -d \
-                    --name claude-samba \
-                    --hostname claude-samba \
-                    --restart unless-stopped \
-                    -v "${SAMBA_SHARE_DIR}:/workspace" \
-                    -p "${SAMBA_PORT}:445" \
-                    -e "SAMBA_USER=${SAMBA_USER}" \
-                    -e "SAMBA_PASSWORD=${SAMBA_PASSWORD}" \
-                    "$IMG_SAMBA" >/dev/null
-            fi
-            echo "✅ Samba 起動"
-            ;;
-        stop)
-            docker rm -f claude-samba 2>/dev/null || true
-            echo "✅ Samba 停止"
-            ;;
-        status|*)
-            if is_running "claude-samba"; then
-                echo "✅ claude-samba: 実行中"
-            else
-                echo "❌ claude-samba: 停止"
-            fi
-            ;;
-    esac
+    echo ""
+    echo "📦 Claude VNC イメージを更新中..."
+    docker build --no-cache -t "$IMG_CLAUDE_VNC" \
+        --target vnc \
+        --build-arg USERNAME="$CUSER" \
+        --build-arg USER_UID="$(id -u)" \
+        --build-arg USER_GID="$(id -g)" \
+        -f "${BASE_DIR}/.devcontainer/Dockerfile.claude" "$BASE_DIR"
+    echo "✅ Claude VNC イメージ更新完了"
+
+    echo ""
+    echo "📦 Docker Socket Proxy イメージを更新中..."
+    docker build --no-cache -t "$IMG_DOCKER_PROXY" \
+        -f "${BASE_DIR}/.devcontainer/Dockerfile.docker-proxy" "$BASE_DIR"
+    echo "✅ Docker Socket Proxy イメージ更新完了"
+
+    echo ""
+    echo "   実行中のコンテナは stop → start で反映されます"
     ;;
 
 # -----------------------------------------------------------------------------
@@ -422,7 +909,7 @@ firewall)
 reset)
     echo "⚠️  以下を全て削除します:"
     echo "   - 全 Claude Code コンテナ"
-    echo "   - Samba"
+    echo "   - Docker Socket Proxy コンテナ"
     echo "   - 認証情報・履歴ボリューム"
     echo "   - Docker イメージ"
     echo ""
@@ -433,16 +920,17 @@ reset)
         exit 0
     fi
 
-    # プロジェクトコンテナ停止
-    docker ps -a --filter "ancestor=$IMG_CLAUDE" -q | xargs -r docker rm -f 2>/dev/null || true
-    # 共有サービス停止
-    docker rm -f claude-samba 2>/dev/null || true
+    # プロジェクトコンテナ + フォワードコンテナ停止
+    docker ps -a --filter "ancestor=$IMG_CLAUDE" --filter "ancestor=$IMG_CLAUDE_VNC" -q | xargs -r docker rm -f 2>/dev/null || true
+    docker ps -a --filter "name=^fwd-" -q | xargs -r docker rm -f 2>/dev/null || true
+    # Docker Socket Proxy コンテナ停止
+    docker rm -f "$DOCKER_PROXY_CONTAINER" 2>/dev/null || true
     # ボリューム削除
-    docker volume rm -f "$VOL_AUTH" "$VOL_HISTORY" 2>/dev/null || true
+    docker volume rm -f "$VOL_AUTH" "$VOL_HISTORY" "$VOL_CONFIG" "$VOL_CHROME" 2>/dev/null || true
     # ネットワーク削除
     docker network rm "$NETWORK" 2>/dev/null || true
     # イメージ削除
-    docker rmi -f "$IMG_CLAUDE" "$IMG_SAMBA" 2>/dev/null || true
+    docker rmi -f "$IMG_CLAUDE" "$IMG_CLAUDE_VNC" "$IMG_DOCKER_PROXY" 2>/dev/null || true
 
     echo "✅ 全リセット完了"
     ;;
@@ -455,27 +943,49 @@ help|*)
 claude-dev - Claude Code 安全開発環境
 
 セットアップ（初回のみ）:
-  claude-dev setup             イメージビルド + 共有サービス起動
-  claude-dev login             OAuth ログイン
+  claude-dev setup               イメージビルド + インフラ構築
+  claude-dev login               OAuth ログイン
+  claude-dev logout              認証情報を削除
 
 開発:
-  claude-dev start             カレントディレクトリで Claude Code 環境を起動
-  claude-dev code              新しい tmux ウィンドウで Claude Code を起動
-  claude-dev attach [NAME]     既存セッションに接続
-  claude-dev stop [NAME]       セッションを停止
-  claude-dev list              実行中セッション一覧
+  claude-dev start               カレントディレクトリで環境を起動（VNC + Chrome 付き）
+  claude-dev start --no-vnc      Chrome / VNC なしで起動（軽量）
+  claude-dev start --kvm         KVM/QEMU デバイスを渡して起動（VM を動かす時のみ）
+  claude-dev code                新しい tmux ウィンドウで Claude Code を起動
+  claude-dev attach [NAME]       既存セッションに接続
+  claude-dev stop [NAME]         セッションを停止
+  claude-dev list                実行中セッション一覧
+
+ポートフォワード:
+  claude-dev forward <PORT> [NAME]    ポートを動的に追加
+  claude-dev unforward <PORT> [NAME]  ポートフォワード解除
+  claude-dev ports [NAME]             ポートフォワード一覧
 
 メンテナンス:
-  claude-dev upgrade [VER]     Claude Code を更新（デフォルト: latest）
-  claude-dev set-token TOKEN   認証トークンを手動設定
-  claude-dev logout            認証情報を削除
-  claude-dev firewall          ファイアウォールルール確認
-  claude-dev services [start|stop|status]  共有サービス管理
-  claude-dev reset             全削除
+  claude-dev upgrade             全イメージを更新（--no-cache 再ビルド）
+  claude-dev firewall            ファイアウォールルール確認
+  claude-dev reset               全削除（コンテナ・ボリューム・イメージ）
 
 使い方:
-  cd ~/repos/my-project
-  claude-dev start
+  cd ~/repos/my-project && claude-dev start
+
+  デフォルトでは VNC + Chrome 付きコンテナが起動します。
+  --no-vnc を指定すると Chrome / VNC なしの軽量コンテナで起動します。
+  --kvm を指定すると KVM/QEMU デバイス（/dev/kvm 等）を渡します（VM を動かす時のみ。既定は渡しません）。
+  VNC ありの場合、noVNC URL は起動時に表示されます。
+  日本語入力は Ctrl+\\ または F3 で切り替え（IBus-Mozc）。
+
+[NAME] について:
+  NAME はプロジェクトのディレクトリ名です。
+  省略するとカレントディレクトリから自動判定します。
+  claude-dev list で実行中セッションの NAME を確認できます。
+
+Web アプリへのリモートアクセス:
+  1. claude-dev start           → コンテナ起動
+  2. claude-dev forward 3000    → ポートフォワードを動的追加
+  3. クライアント PC で SSH トンネル:
+     ssh -O forward -L <host-port>:localhost:<host-port> <server>
+  4. ブラウザで http://localhost:<host-port> にアクセス
 EOF
     ;;
 esac
