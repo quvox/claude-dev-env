@@ -4,3 +4,6 @@
 
 ## 2026-06-08
 - 新規作成。`Makefile` の変数・全ターゲット・マルチステージビルド構成・CLI との関係を記述。zrt-tools 削除後の最終状態（`build-claude` の `sync-zrt-tools` 依存なし）を反映。
+
+## 2026-06-28
+- AI オーケストレーター実装に伴い `build-orchestrator` ターゲット（`cd orchestrator && go build/vet/test`。ローカル build/test 用、イメージ用バイナリは base ビルドに同梱）をターゲット表に追記。詳細は 60_orchestrator.md。

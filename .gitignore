@@ -2,3 +2,6 @@
 workspace/
 !workspace/.gitkeep
 .claude
+
+# orchestrator のローカルビルド生成物（イメージ用は Dockerfile でビルド）
+/orchestrator/orchestrator

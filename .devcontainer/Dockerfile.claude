@@ -8,6 +8,16 @@
 # ブラックリスト方式ファイアウォール
 # 認証情報はボリュームマウントで管理
 # =============================================================================
+# =============================================================================
+# orchestrator ビルドステージ（AI オーケストレーター / Go・stdlib のみ）
+# =============================================================================
+FROM golang:1.24-alpine AS orch-builder
+WORKDIR /app
+COPY orchestrator/go.mod ./
+RUN go mod download
+COPY orchestrator/*.go ./
+RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /claude-orchestrator .
+
 FROM ubuntu:24.04 AS base
 
 ENV DEBIAN_FRONTEND=noninteractive
@@ -220,6 +230,11 @@ COPY scripts/save_prompt.sh /usr/local/bin/save_prompt.sh
 COPY scripts/sendslackmsg.sh /usr/local/bin/sendslackmsg.sh
 RUN chmod +x /usr/local/bin/init-firewall.sh /usr/local/bin/entrypoint.sh \
     /usr/local/bin/save_prompt.sh /usr/local/bin/sendslackmsg.sh
+
+# --- orchestrator バイナリ + instruction テンプレート ---
+COPY --from=orch-builder /claude-orchestrator /usr/local/bin/claude-orchestrator
+COPY orchestrator/instructions/ /usr/local/share/claude-orchestrator/
+RUN chmod +x /usr/local/bin/claude-orchestrator
 
 # --- 作業ディレクトリ ---
 RUN mkdir -p /workspace && chown $USERNAME:$USERNAME /workspace

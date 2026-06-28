@@ -33,7 +33,7 @@ VOL_CHROME := claude-dev-chrome-data
 # =============================================================================
 
 .PHONY: help setup install login build network volumes \
-        upgrade update-claude status clean uninstall build-claude build-claude-vnc build-docker-proxy
+        upgrade update-claude status clean uninstall build-claude build-claude-vnc build-docker-proxy build-orchestrator
 
 ## デフォルト: ヘルプ表示
 help:
@@ -48,6 +48,7 @@ help:
 	@echo "  make build-claude       Claude ベースイメージをビルド"
 	@echo "  make build-claude-vnc   Claude VNC イメージをビルド"
 	@echo "  make build-docker-proxy Docker Socket Proxy イメージをビルド"
+	@echo "  make build-orchestrator orchestrator をローカルビルド/テスト（イメージ用は build-claude に同梱）"
 	@echo ""
 	@echo "メンテナンス:"
 	@echo "  make update-claude  Claude Code のみ高速更新（Go/Rust 等はキャッシュ利用）"
@@ -156,6 +157,12 @@ build-docker-proxy:
 	@docker build -t $(IMG_DOCKER_PROXY) \
 		-f $(BASE_DIR)/.devcontainer/Dockerfile.docker-proxy $(BASE_DIR)
 	@echo "✅ $(IMG_DOCKER_PROXY)"
+
+## orchestrator（ローカル build/test。イメージ用は build-claude に同梱される）
+build-orchestrator:
+	@echo "🔧 orchestrator をローカルビルド/テスト中..."
+	@cd $(BASE_DIR)/orchestrator && go build ./... && go vet ./... && go test ./...
+	@echo "✅ orchestrator (local build/test)"
 
 # =============================================================================
 # 認証

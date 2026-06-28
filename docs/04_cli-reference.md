@@ -1,6 +1,6 @@
 ---
 summary: claude-dev CLI と Makefile の全コマンド・オプションの利用者向けリファレンス。CLIの内部実装仕様は docs/impl/10_cli.md を参照。
-keywords: [ CLI, コマンドリファレンス, Makefile, claude-dev, ポートフォワード, セッション管理, VNC ]
+keywords: [ CLI, コマンドリファレンス, claude-dev, orchestrate, ポートフォワード, セッション管理, VNC ]
 ---
 
 # CLI リファレンス
@@ -124,6 +124,22 @@ claude-dev code
 ```
 
 前提: `claude-dev start` でコンテナが起動済みであること。
+
+#### `claude-dev orchestrate [<ゴール>] [--workers-window]`
+
+実行中のコンテナで、新しい tmux ウィンドウに AI オーケストレーターを起動する。オーケストレーターはまず人間との壁打ち（検討）で仕様を固め、合意後に自律実行（worker への委譲・統合・レビュー）へ移る。人間は壁打ちと例外対応（介入）だけに関与する。
+
+```bash
+cd ~/repos/my-project
+claude-dev orchestrate                       # 壁打ちから開始
+claude-dev orchestrate "ユーザー認証を実装"   # ゴールを与えて開始
+claude-dev orchestrate --workers-window       # worker ログ用ウィンドウを併設
+```
+
+- ゴール引数は任意。省略すると壁打ちから開始する。
+- `--workers-window` を付けると、全 worker のログをまとめて表示するウィンドウ（Config B）を tmux に作る（既定は単一ウィンドウ）。
+- 前提: `claude-dev start` でコンテナが起動済みであること。
+- 詳細・設計は [docs/06_orchestration.md](06_orchestration.md) を参照。
 
 #### `claude-dev attach [NAME]`
 

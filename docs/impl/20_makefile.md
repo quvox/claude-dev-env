@@ -1,6 +1,6 @@
 ---
-summary: セットアップ・ビルド・メンテナンスを担う Makefile のターゲット仕様とマルチステージビルド構成を記述する。
-keywords: [ Makefile, ビルド, セットアップ, マルチステージ, Docker, イメージ, インストール ]
+summary: セットアップ・ビルド・メンテナンスを担う Makefile のターゲット仕様（claude/VNC/docker-proxy イメージ・orchestrator のローカルビルド）とマルチステージビルド構成を記述する。
+keywords: [ Makefile, ビルド, セットアップ, マルチステージ, Docker, インストール, orchestrator ]
 ---
 
 # 実装仕様: Makefile
@@ -40,6 +40,7 @@ Makefile
 | `build-claude` | — | `Dockerfile.claude` の `--target base` を `IMG_CLAUDE` としてビルド（`USERNAME`/`USER_UID`/`USER_GID` を build-arg で付与） |
 | `build-claude-vnc` | `build-claude` | `--target vnc` を `IMG_CLAUDE_VNC` としてビルド |
 | `build-docker-proxy` | — | `Dockerfile.docker-proxy` を `IMG_DOCKER_PROXY` としてビルド |
+| `build-orchestrator` | — | `cd orchestrator && go build ./... && go vet ./... && go test ./...`。オーケストレーターのローカル build/test 用（イメージ用バイナリは `build-claude` の base ビルドに同梱されるため独立イメージは作らない）。詳細は [60_orchestrator.md](60_orchestrator.md) 参照 |
 | `login` | — | `$(CLI) login` に委譲 |
 | `upgrade` | — | 3 イメージを `--no-cache` で再ビルド。反映は `stop`→`start` を案内 |
 | `status` | — | イメージ一覧・稼働中 Claude セッション・プロキシコンテナ・ボリュームを表示 |

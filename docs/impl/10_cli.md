@@ -1,6 +1,6 @@
 ---
 summary: ホスト側の claude-dev シェルスクリプトの実装仕様。ヘルパー関数・サブコマンド・コンテナ起動引数などの成果物仕様を記述する。
-keywords: [ CLI, claude-dev, bash, ヘルパー関数, コンテナ起動, ポートフォワード, VNC ]
+keywords: [ CLI, claude-dev, bash, ヘルパー関数, コンテナ起動, ポートフォワード, orchestrate ]
 ---
 
 # 実装仕様: claude-dev CLI
@@ -102,6 +102,9 @@ claude-dev      （単一の bash スクリプト）
 
 ### `code`
 稼働中コンテナで `tmux new-window -t main "claude"` を実行し attach。未起動ならエラー。
+
+### `orchestrate [<ゴール>] [--workers-window]`
+`code` と同系統で、稼働中コンテナに対し AI オーケストレーターを起動し attach する。未起動ならエラー。引数を走査し、`--workers-window` をフラグとして除いた残りの最初の位置引数を `<ゴール>`（任意）として扱う。稼働中コンテナで `tmux new-window -t main -c /workspace "claude-orchestrator --workspace /workspace [--workers-window] [\"<ゴール>\"]"` を実行（`-c /workspace` で新規ウィンドウの CWD を固定）し、`tmux attach -t main`。ゴールを省略すると壁打ち（検討）から開始し、`--workers-window` で worker ログの多重 tail ウィンドウ（Config B）を有効化する。詳細は [60_orchestrator.md](60_orchestrator.md) 参照。
 
 ### `attach [NAME]`
 NAME（省略時カレント）が稼働中なら `tmux attach -t main`。

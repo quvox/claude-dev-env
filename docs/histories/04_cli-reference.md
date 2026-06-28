@@ -12,3 +12,6 @@
   - `ports` / `list` の出力例を実際の出力形式に一致させた。
   - `logout` に Docker Socket Proxy コンテナの停止を追記。
 - `start` の動作説明に KVM デバイス渡しを追記。その後、KVM を `--kvm` オプトインに変更したのに合わせ、`start` のオプション例と動作説明を「`--kvm` 指定時のみデバイスを渡す／既定では渡さない／稼働中コンテナへの後付け不可」に更新。
+
+## 2026-06-28
+- AI オーケストレーター実装に伴い、開発コマンドに `claude-dev orchestrate [<ゴール>] [--workers-window]` の利用者向け説明を追記（壁打ち→自律実行、ゴール任意、`--workers-window` で worker ログ用ウィンドウを併設）。設計の参照先として 06_orchestration.md を案内。
