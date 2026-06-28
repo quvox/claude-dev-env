@@ -33,7 +33,7 @@ VOL_CHROME := claude-dev-chrome-data
 # =============================================================================
 
 .PHONY: help setup install login build network volumes \
-        upgrade status clean uninstall build-claude build-claude-vnc build-docker-proxy
+        upgrade update-claude status clean uninstall build-claude build-claude-vnc build-docker-proxy
 
 ## デフォルト: ヘルプ表示
 help:
@@ -50,8 +50,9 @@ help:
 	@echo "  make build-docker-proxy Docker Socket Proxy イメージをビルド"
 	@echo ""
 	@echo "メンテナンス:"
-	@echo "  make upgrade      全イメージを最新版に更新"
-	@echo "  make status       状態確認"
+	@echo "  make update-claude  Claude Code のみ高速更新（Go/Rust 等はキャッシュ利用）"
+	@echo "  make upgrade        全イメージを完全再ビルドで更新（--no-cache）"
+	@echo "  make status         状態確認"
 	@echo "  make clean        全リセット（コンテナ・ボリューム・イメージ削除）"
 	@echo "  make uninstall    CLI のシンボリックリンクを削除"
 	@echo ""
@@ -167,6 +168,30 @@ login:
 # =============================================================================
 # メンテナンス
 # =============================================================================
+
+## Claude Code のみ高速更新（Go/Rust/Playwright 等はキャッシュ利用）
+update-claude:
+	@echo "📦 Claude Code を更新中（キャッシュ利用で高速ビルド）..."
+	@docker build -t $(IMG_CLAUDE) \
+		--target base \
+		--build-arg USERNAME=$(CUSER) \
+		--build-arg USER_UID=$$(id -u) \
+		--build-arg USER_GID=$$(id -g) \
+		--build-arg CLAUDE_CACHE_BUST=$$(date +%s) \
+		-f $(BASE_DIR)/.devcontainer/Dockerfile.claude $(BASE_DIR)
+	@echo "✅ Claude ベースイメージ更新完了"
+	@echo ""
+	@echo "📦 Claude VNC イメージを更新中..."
+	@docker build -t $(IMG_CLAUDE_VNC) \
+		--target vnc \
+		--build-arg USERNAME=$(CUSER) \
+		--build-arg USER_UID=$$(id -u) \
+		--build-arg USER_GID=$$(id -g) \
+		--build-arg CLAUDE_CACHE_BUST=$$(date +%s) \
+		-f $(BASE_DIR)/.devcontainer/Dockerfile.claude $(BASE_DIR)
+	@echo "✅ Claude VNC イメージ更新完了"
+	@echo ""
+	@echo "   実行中のコンテナは claude-dev stop → claude-dev start で反映"
 
 ## 全イメージを最新版に更新
 upgrade:

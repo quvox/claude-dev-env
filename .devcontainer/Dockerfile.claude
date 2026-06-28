@@ -149,7 +149,9 @@ RUN curl -fsSL https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google
     && sudo ln -s ${USER_HOME}/google-cloud-sdk/bin/bq /usr/local/bin/bq
 
 # --- Claude Code CLI (ネイティブインストーラー) ---
+# CLAUDE_CACHE_BUST を変えることでこのレイヤー以降だけキャッシュを無効化できる
 # 公式ドキュメント: WORKDIR /tmp でインストーラーがファイルシステム全体をスキャンするのを防ぐ
+ARG CLAUDE_CACHE_BUST=none
 WORKDIR /tmp
 RUN curl -fsSL https://claude.ai/install.sh | bash
 WORKDIR /workspace
