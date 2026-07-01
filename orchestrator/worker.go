@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,17 +11,41 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
+// newSessionID returns a random RFC 4122 v4 UUID string for a claude -p
+// --session-id. stdlib only (crypto/rand); no external uuid dependency.
+func newSessionID() string {
+	var b [16]byte
+	_, _ = rand.Read(b[:])
+	b[6] = (b[6] & 0x0f) | 0x40 // version 4
+	b[8] = (b[8] & 0x3f) | 0x80 // variant 10
+	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
+}
+
 // ---- External-process interfaces (mockable in tests) ----
+
+// RunOpts carries optional per-invocation controls for a claude -p run.
+type RunOpts struct {
+	// SessionID, when set, is passed as --session-id (fresh session with a
+	// caller-chosen id) unless Resume is true, in which case it is passed as
+	// --resume (continue an interrupted session). Empty means neither flag.
+	SessionID string
+	Resume    bool
+	// GraceSeconds, when >0, sends SIGINT (not SIGKILL) to the child on ctx
+	// cancellation and waits up to that long before force-killing, so the worker
+	// can commit its work-in-progress on suspend.
+	GraceSeconds int
+}
 
 // ClaudeRunner runs a headless `claude -p` worker and returns its raw stdout.
 // Implementations must not require a TTY (workers are background children).
 type ClaudeRunner interface {
 	// RunPrompt executes claude -p with the given prompt and model, with CWD
 	// set to dir, returning combined stdout. logPath, if non-empty, receives a
-	// tee of the raw output.
-	RunPrompt(ctx context.Context, dir, model, prompt, logPath string) ([]byte, error)
+	// tee of the raw output. opts carries session/grace controls.
+	RunPrompt(ctx context.Context, dir, model, prompt, logPath string, opts RunOpts) ([]byte, error)
 }
 
 // GitRunner abstracts the git operations the orchestrator performs.
@@ -77,6 +102,8 @@ critical_decision|ambiguity|policy_branch|prerequisite_broken:
 - ambiguity: requirement is unclear and guessing is risky
 - policy_branch: a choice that affects the whole and you lack info to decide
 - prerequisite_broken: an initial assumption no longer holds
+Commit your work to THIS worktree incrementally at meaningful checkpoints (not
+only at the very end) so an interruption preserves committed progress.
 Do NOT perform irreversible operations (push/deploy/delete/external send).`
 
 // PrepareWorktree creates the git worktree for a task and records its relative
@@ -149,6 +176,11 @@ func (w *Worker) BuildPrompt(p *Plan, t *Task, feedback string) string {
 	b.WriteString("\n")
 	b.WriteString(t.Description)
 	b.WriteString("\n")
+	if strings.TrimSpace(t.Completion) != "" {
+		b.WriteString("\n# This task's completion criteria (scope-limited; deliver exactly this)\n")
+		b.WriteString(t.Completion)
+		b.WriteString("\n")
+	}
 	// Prior task summaries (dependencies) for context.
 	if deps := dependencySummaries(p, t); deps != "" {
 		b.WriteString("\n# Context from prerequisite tasks\n")
@@ -189,7 +221,8 @@ func (w *Worker) Dispatch(ctx context.Context, p *Plan, t *Task, feedback string
 	prompt := w.BuildPrompt(p, t, feedback)
 	dir := w.Store.WorktreeAbs(t.ID)
 	logPath := w.Store.WorkerLogPath(t.ID)
-	out, err := w.Claude.RunPrompt(ctx, dir, w.Cfg.WorkerModel, prompt, logPath)
+	opts := RunOpts{SessionID: t.SessionID, Resume: t.ResumeSession, GraceSeconds: w.Cfg.WorkerGraceSeconds}
+	out, err := w.Claude.RunPrompt(ctx, dir, w.Cfg.WorkerModel, prompt, logPath, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -308,7 +341,7 @@ type ExecClaude struct {
 	PermissionMode string
 }
 
-func (e ExecClaude) RunPrompt(ctx context.Context, dir, model, prompt, logPath string) ([]byte, error) {
+func (e ExecClaude) RunPrompt(ctx context.Context, dir, model, prompt, logPath string, opts RunOpts) ([]byte, error) {
 	// stream-json (requires --verbose in -p mode) emits one JSON event per line
 	// as work happens, so the log file grows live and the dashboard detail view
 	// can show what the worker is doing. The final {"type":"result",…} event
@@ -320,8 +353,24 @@ func (e ExecClaude) RunPrompt(ctx context.Context, dir, model, prompt, logPath s
 	if e.PermissionMode != "" {
 		args = append(args, "--permission-mode", e.PermissionMode)
 	}
+	// Session continuity: --resume continues an interrupted session; otherwise
+	// --session-id starts a fresh session with a caller-chosen id so a later
+	// interruption can resume it (docs/impl/60 §worker ディスパッチ).
+	if opts.SessionID != "" {
+		if opts.Resume {
+			args = append(args, "--resume", opts.SessionID)
+		} else {
+			args = append(args, "--session-id", opts.SessionID)
+		}
+	}
 	cmd := exec.CommandContext(ctx, claudePath(), args...)
 	cmd.Dir = dir
+	// On suspend, give the worker a grace window to commit WIP: send SIGINT
+	// (not the default SIGKILL) and wait up to GraceSeconds before force-killing.
+	if opts.GraceSeconds > 0 {
+		cmd.Cancel = func() error { return cmd.Process.Signal(os.Interrupt) }
+		cmd.WaitDelay = time.Duration(opts.GraceSeconds) * time.Second
+	}
 	// Strip SLACK_BOT_TOKEN (technical control: workers must not send Slack) and
 	// ensure the claude bin dir is on PATH so a non-interactive launch can run
 	// claude -p.

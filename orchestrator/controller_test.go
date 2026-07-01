@@ -26,9 +26,13 @@ type mockClaude struct {
 	workerFn  func(taskID string) WorkerResult // optional per-task override
 	reviewFn  func(taskID string) ReviewResult // optional per-task override
 	dispatchN int32
+	// resumeByTask/sessionByTask record the RunOpts of the LAST worker dispatch
+	// per task so tests can assert --resume / --session-id behavior.
+	resumeByTask  map[string]bool
+	sessionByTask map[string]string
 }
 
-func (m *mockClaude) RunPrompt(ctx context.Context, dir, model, prompt, logPath string) ([]byte, error) {
+func (m *mockClaude) RunPrompt(ctx context.Context, dir, model, prompt, logPath string, opts RunOpts) ([]byte, error) {
 	isReview := strings.Contains(prompt, "independent code reviewer")
 	taskID := taskIDFromDir(dir)
 
@@ -40,6 +44,12 @@ func (m *mockClaude) RunPrompt(ctx context.Context, dir, model, prompt, logPath 
 			m.maxSeen = m.inflight
 		}
 		m.order = append(m.order, taskID)
+		if m.resumeByTask == nil {
+			m.resumeByTask = map[string]bool{}
+			m.sessionByTask = map[string]string{}
+		}
+		m.resumeByTask[taskID] = opts.Resume
+		m.sessionByTask[taskID] = opts.SessionID
 		m.mu.Unlock()
 		defer func() {
 			m.mu.Lock()
@@ -238,9 +248,23 @@ func TestExecuting_DependencyOrder(t *testing.T) {
 	}
 }
 
-// TestExecuting_TriggerFiresIntervening verifies a worker NeedsHuman ambiguity
-// fires a trigger and the controller enters intervening.
-func TestExecuting_TriggerFiresIntervening(t *testing.T) {
+// waitFor polls cond until true or the timeout elapses (test helper).
+func waitFor(t *testing.T, timeout time.Duration, cond func() bool) bool {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if cond() {
+			return true
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	return cond()
+}
+
+// TestExecuting_TriggerParksTaskPeersContinue verifies a worker NeedsHuman
+// ambiguity parks ONLY that task as waiting_human (queued as a per-task
+// intervention) while its peers keep running to completion (no stop-the-world).
+func TestExecuting_TriggerParksTaskPeersContinue(t *testing.T) {
 	cfg := testCfg()
 	cfg.MaxWorkers = 3
 	mc := &mockClaude{
@@ -265,24 +289,42 @@ func TestExecuting_TriggerFiresIntervening(t *testing.T) {
 	st := &State{Phase: PhaseExecuting, RunID: "r"}
 	_ = store.SaveState(st)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	if err := ctrl.runExecuting(ctx, st); err != nil {
-		t.Fatal(err)
+	// runExecuting does NOT return on an intervention (per-task model): it keeps
+	// running until the human resolves via [i] or the run is suspended. Run it
+	// async, wait until t2 is parked and its peers are done, then suspend.
+	ctx, cancel := context.WithCancel(context.Background())
+	errc := make(chan error, 1)
+	go func() { errc <- ctrl.runExecuting(ctx, st) }()
+
+	ok := waitFor(t, 3*time.Second, func() bool {
+		out, _ := store.LoadPlan()
+		return ctrl.openInterventionCount() >= 1 &&
+			findTask(out, "t1").Status == TaskDone &&
+			findTask(out, "t3").Status == TaskDone
+	})
+	cancel()
+	<-errc
+	if !ok {
+		t.Fatalf("expected t2 parked (open intervention) and peers t1/t3 done: %+v", taskStatuses(mustPlan(store)))
 	}
 
-	got, _ := store.LoadState()
-	if got.Phase != PhaseIntervene {
-		t.Fatalf("expected phase intervening, got %s", got.Phase)
+	out, _ := store.LoadPlan()
+	if findTask(out, "t2").Status != TaskWaitingHuman {
+		t.Fatalf("t2 should be waiting_human, got %s", findTask(out, "t2").Status)
 	}
-	// An open intervention id should be recorded.
-	if id, _ := store.ReadAtomicSidecar("open_intervention"); id == "" {
-		t.Fatalf("expected open_intervention sidecar set")
+	q := store.LoadOpenInterventions()
+	if len(q.Items) != 1 || q.Items[0].TaskID != "t2" {
+		t.Fatalf("expected one open intervention for t2, got %+v", q.Items)
+	}
+	// Phase must stay executing (no top-level intervening state anymore).
+	if got, _ := store.LoadState(); got.Phase != PhaseExecuting {
+		t.Fatalf("phase should remain executing, got %s", got.Phase)
 	}
 }
 
 // TestExecuting_Trigger1Irreversible verifies an irreversible task fires the
-// pre-dispatch gate WITHOUT being dispatched, and stays pending (not blocked).
+// pre-dispatch gate WITHOUT being dispatched, is parked waiting_human (not
+// blocked), and does not stop the run's phase.
 func TestExecuting_Trigger1Irreversible(t *testing.T) {
 	cfg := testCfg()
 	cfg.MaxWorkers = 2
@@ -297,35 +339,39 @@ func TestExecuting_Trigger1Irreversible(t *testing.T) {
 	st := &State{Phase: PhaseExecuting, RunID: "r"}
 	_ = store.SaveState(st)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	if err := ctrl.runExecuting(ctx, st); err != nil {
-		t.Fatal(err)
+	ctx, cancel := context.WithCancel(context.Background())
+	errc := make(chan error, 1)
+	go func() { errc <- ctrl.runExecuting(ctx, st) }()
+	ok := waitFor(t, 3*time.Second, func() bool { return ctrl.openInterventionCount() >= 1 })
+	cancel()
+	<-errc
+	if !ok {
+		t.Fatalf("expected pre-dispatch gate to open an intervention")
 	}
 
-	got, _ := store.LoadState()
-	if got.Phase != PhaseIntervene {
-		t.Fatalf("expected intervening, got %s", got.Phase)
-	}
 	out, _ := store.LoadPlan()
 	tk := findTask(out, "t1")
+	if tk.Status != TaskWaitingHuman {
+		t.Fatalf("irreversible task should be waiting_human, got %s", tk.Status)
+	}
 	if tk.Status == TaskBlocked {
-		t.Fatalf("irreversible task must NOT be blocked (so it can dispatch after approval)")
+		t.Fatalf("irreversible task must NOT be blocked")
 	}
 	if atomic.LoadInt32(&mc.dispatchN) != 0 {
 		t.Fatalf("irreversible task must not be dispatched pre-approval, dispatchN=%d", mc.dispatchN)
 	}
 }
 
-// TestIntervene_ResumeApprovesIrreversible verifies the full path:
-// trigger1 -> intervening -> resume (approve) -> executing -> dispatch.
-func TestIntervene_ResumeApprovesIrreversible(t *testing.T) {
+// TestIntervene_ResolveApprovesIrreversible verifies the full path:
+// trigger1 -> waiting_human -> resolveInterventions (approve) -> pending ->
+// re-dispatch -> done. resolveInterventions tolerates a failing RunInteractive
+// (no real claude in tests) and reconciles from the pre-written answer.md.
+func TestIntervene_ResolveApprovesIrreversible(t *testing.T) {
 	cfg := testCfg()
 	cfg.MaxWorkers = 1
 	mc := &mockClaude{}
 	mg := &mockGit{}
 	ctrl, store := newTestController(t, cfg, mc, mg)
-	// Inject an interactive mode mock: writes answer + resume control on "run".
 	ctrl.Mode = &Mode{Store: store, Workspace: store.Root + "/.."}
 	ctrl.Handoff = &Handoff{Store: store}
 
@@ -336,43 +382,51 @@ func TestIntervene_ResumeApprovesIrreversible(t *testing.T) {
 	st := &State{Phase: PhaseExecuting, RunID: "r"}
 	_ = store.SaveState(st)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	// Phase 1: execute -> should enter intervening.
-	if err := ctrl.runExecuting(ctx, st); err != nil {
-		t.Fatal(err)
+	// Phase 1: run until t1 is parked waiting_human.
+	ctx, cancel := context.WithCancel(context.Background())
+	errc := make(chan error, 1)
+	go func() { errc <- ctrl.runExecuting(ctx, st) }()
+	if !waitFor(t, 3*time.Second, func() bool { return ctrl.openInterventionCount() >= 1 }) {
+		cancel()
+		<-errc
+		t.Fatal("t1 was not parked as an intervention")
 	}
-	if st.Phase != PhaseIntervene {
-		t.Fatalf("expected intervening, got %s", st.Phase)
-	}
+	cancel()
+	<-errc
 
-	// Simulate the human/interactive claude: write answer + resume control.
-	id, _ := store.ReadAtomicSidecar("open_intervention")
+	// Simulate the human: write the answer for the open intervention + resume.
+	q := store.LoadOpenInterventions()
+	if len(q.Items) != 1 {
+		t.Fatalf("expected one open intervention, got %d", len(q.Items))
+	}
+	id := q.Items[0].ID
 	_ = store.WriteAtomicSidecar("intervention/"+id+"/answer.md", "approved")
-	// Stub RunInteractive by directly invoking the resume handling: we call
-	// runIntervene but first place a resume control so Consume returns resume.
 	_ = store.SaveControl(&Control{Request: ReqResume, InterventionID: id})
-	// runIntervene exec's claude; replace with a no-op by using a Mode whose
-	// RunInteractive is short-circuited. Since we cannot exec claude here, drive
-	// the resume logic directly:
-	if err := driveResume(ctrl, st, id); err != nil {
+
+	plan, _ = store.LoadPlan()
+	aborted, err := ctrl.resolveInterventions(context.Background(), st, plan)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if st.Phase != PhaseExecuting {
-		t.Fatalf("expected executing after resume, got %s", st.Phase)
+	if aborted {
+		t.Fatal("did not expect abort")
 	}
 	out, _ := store.LoadPlan()
 	tk := findTask(out, "t1")
 	if !tk.IrrevApproved {
-		t.Fatalf("task should be marked IrrevApproved after resume")
+		t.Fatalf("task should be IrrevApproved after resolve")
 	}
 	if tk.Status != TaskPending {
 		t.Fatalf("task should be pending for re-dispatch, got %s", tk.Status)
 	}
+	if len(store.LoadOpenInterventions().Items) != 0 {
+		t.Fatalf("intervention queue should be empty after resolve")
+	}
 
-	// Phase 2: execute again -> now the approved task should dispatch & finish.
-	if err := ctrl.runExecuting(ctx, st); err != nil {
+	// Phase 2: execute again -> approved task dispatches once and finishes.
+	ctx2, cancel2 := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel2()
+	if err := ctrl.runExecuting(ctx2, st); err != nil {
 		t.Fatal(err)
 	}
 	if atomic.LoadInt32(&mc.dispatchN) != 1 {
@@ -384,31 +438,87 @@ func TestIntervene_ResumeApprovesIrreversible(t *testing.T) {
 	}
 }
 
-// driveResume reproduces runIntervene's post-RunInteractive logic without
-// exec'ing the real claude (which is unavailable in tests).
-func driveResume(c *Controller, st *State, id string) error {
-	ctrl, err := c.Handoff.Consume()
-	if err != nil {
-		return err
+// TestResume_UsesResumeFlagAfterCrash verifies that a task left "running" with a
+// SessionID (a hard crash mid-attempt) is re-dispatched with --resume on the
+// SAME session and WITHOUT bumping Attempts — i.e. no white-slate redo. This is
+// the NormalizeForResume -> scheduleTick -> snapshot path; a regression here
+// (clearing ResumeSession before the worker snapshot) silently drops --resume.
+func TestResume_UsesResumeFlagAfterCrash(t *testing.T) {
+	cfg := testCfg()
+	cfg.MaxWorkers = 1
+	mc := &mockClaude{}
+	mg := &mockGit{}
+	ctrl, store := newTestController(t, cfg, mc, mg)
+
+	plan := &Plan{Goal: "g", Ready: true, Tasks: []Task{
+		// Crashed mid-attempt: still "running" with a session id, attempts=1.
+		{ID: "t1", Status: TaskRunning, SessionID: "S1", Attempts: 1},
+	}}
+	_ = store.SavePlan(plan)
+	st := &State{Phase: PhaseExecuting, RunID: "r"}
+	_ = store.SaveState(st)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := ctrl.runExecuting(ctx, st); err != nil {
+		t.Fatal(err)
 	}
-	if ctrl != nil && ctrl.Request == ReqAbort {
-		return c.transition(st, PhaseDone)
+
+	out, _ := store.LoadPlan()
+	tk := findTask(out, "t1")
+	if tk.Status != TaskDone {
+		t.Fatalf("t1 should be done, got %s", tk.Status)
 	}
-	answer, _ := c.Store.ReadAnswer(id)
-	if id != "" {
-		_ = c.Store.AppendIntervention(Intervention{ID: id, TaskID: st.CurrentTask, Answer: answer})
+	if tk.Attempts != 1 {
+		t.Fatalf("resume must NOT bump Attempts (same attempt), got %d", tk.Attempts)
 	}
-	_ = c.Store.RemoveSidecar("open_intervention")
-	if plan, _ := c.Store.LoadPlan(); plan != nil {
-		if t := findTask(plan, st.CurrentTask); t != nil && t.Status != TaskDone {
-			if t.Irreversible {
-				t.IrrevApproved = true
-			}
-			t.Status = TaskPending
-			_ = c.Store.SavePlan(plan)
-		}
+	mc.mu.Lock()
+	resumed := mc.resumeByTask["t1"]
+	sess := mc.sessionByTask["t1"]
+	mc.mu.Unlock()
+	if !resumed {
+		t.Fatalf("resumed attempt must dispatch with --resume (Resume=true)")
 	}
-	return c.transition(st, PhaseExecuting)
+	if sess != "S1" {
+		t.Fatalf("resume must reuse the crashed session id S1, got %q", sess)
+	}
+}
+
+// TestFreshDispatch_NewSession verifies a fresh pending task (no session) is
+// dispatched with a NEW session id (not --resume).
+func TestFreshDispatch_NewSession(t *testing.T) {
+	cfg := testCfg()
+	cfg.MaxWorkers = 1
+	mc := &mockClaude{}
+	ctrl, store := newTestController(t, cfg, mc, &mockGit{})
+	plan := &Plan{Goal: "g", Ready: true, Tasks: []Task{{ID: "t1", Status: TaskPending}}}
+	_ = store.SavePlan(plan)
+	st := &State{Phase: PhaseExecuting, RunID: "r"}
+	_ = store.SaveState(st)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := ctrl.runExecuting(ctx, st); err != nil {
+		t.Fatal(err)
+	}
+	mc.mu.Lock()
+	resumed := mc.resumeByTask["t1"]
+	sess := mc.sessionByTask["t1"]
+	mc.mu.Unlock()
+	if resumed {
+		t.Fatalf("fresh task must NOT use --resume")
+	}
+	if sess == "" {
+		t.Fatalf("fresh task must get a generated session id")
+	}
+}
+
+// mustPlan loads the plan or returns an empty one (for error messages).
+func mustPlan(s *Store) *Plan {
+	p, _ := s.LoadPlan()
+	if p == nil {
+		return &Plan{}
+	}
+	return p
 }
 
 // TestRunGate_ReviseDispatchErrorPreservesStuck verifies that a Dispatch error
@@ -432,14 +542,17 @@ func TestRunGate_ReviseDispatchErrorPreservesStuck(t *testing.T) {
 
 	plan := &Plan{Tasks: []Task{{ID: "t1", Status: TaskReview, Attempts: 1}}}
 	tk := &plan.Tasks[0]
-	passed, lastSevere, err := rv.RunGate(context.Background(), plan, tk)
+	outcome, err := rv.RunGate(context.Background(), plan, tk)
 	if err != nil {
 		t.Fatalf("RunGate should not bubble dispatch error, got %v", err)
 	}
-	if passed {
+	if outcome.Passed {
 		t.Fatalf("expected not passed")
 	}
-	if lastSevere == "" {
+	if outcome.FormatError {
+		t.Fatalf("a severe-content finding is not a format error")
+	}
+	if outcome.LastSevere == "" {
 		t.Fatalf("lastSevere must be preserved across revise dispatch error")
 	}
 }
@@ -448,9 +561,9 @@ func TestRunGate_ReviseDispatchErrorPreservesStuck(t *testing.T) {
 // delegates review calls to the embedded reviewer mock.
 type errOnWorkerClaude struct{ review *mockClaude }
 
-func (e *errOnWorkerClaude) RunPrompt(ctx context.Context, dir, model, prompt, logPath string) ([]byte, error) {
+func (e *errOnWorkerClaude) RunPrompt(ctx context.Context, dir, model, prompt, logPath string, opts RunOpts) ([]byte, error) {
 	if strings.Contains(prompt, "independent code reviewer") {
-		return e.review.RunPrompt(ctx, dir, model, prompt, logPath)
+		return e.review.RunPrompt(ctx, dir, model, prompt, logPath, opts)
 	}
 	return nil, context.DeadlineExceeded // simulate worker crash/timeout
 }

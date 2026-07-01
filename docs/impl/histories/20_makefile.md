@@ -7,3 +7,6 @@
 
 ## 2026-06-28
 - AI オーケストレーター実装に伴い `build-orchestrator` ターゲット（`cd orchestrator && go build/vet/test`。ローカル build/test 用、イメージ用バイナリは base ビルドに同梱）をターゲット表に追記。詳細は 60_orchestrator.md。
+
+## 2026-06-29
+- 自己検証用サンプルの scaffold ターゲット `orch-sample`（`FORCE=1`/`SEED=1`）・`orch-sample-clean` をターゲット仕様に追加（[70_sample-project.md] / [docs/07_self-verification.md]）。

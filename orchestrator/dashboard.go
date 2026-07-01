@@ -12,15 +12,16 @@ import (
 
 // DashboardState is a snapshot the controller publishes for rendering.
 type DashboardState struct {
-	mu             sync.Mutex
-	Goal           string
-	Tasks          []DashTask
-	LastSummary    string
-	LastSummaryTS  string
-	AssumptionsN   int
-	InterventionsN int
-	Paused         bool
-	Detail         bool // when true, render live worker output tails ([d] toggles)
+	mu                sync.Mutex
+	Goal              string
+	Tasks             []DashTask
+	LastSummary       string
+	LastSummaryTS     string
+	AssumptionsN      int
+	InterventionsN    int
+	InterventionsOpen int // unresolved per-task interventions (open.json)
+	Paused            bool
+	Detail            bool // when true, render live worker output tails ([d] toggles)
 }
 
 // DashTask is a per-task row.
@@ -37,10 +38,11 @@ type DashTask struct {
 type KeyEvent int
 
 const (
-	KeyNone   KeyEvent = iota
-	KeyDetail          // d
-	KeyPause           // p
-	KeyQuit            // q
+	KeyNone      KeyEvent = iota
+	KeyDetail             // d
+	KeyPause              // p
+	KeyQuit               // q
+	KeyIntervene          // i
 )
 
 // Set replaces the snapshot fields under lock.
@@ -131,13 +133,17 @@ func (d *Dashboard) render() {
 		fmt.Fprintf(&b, " （Slack 送信済 %s）", s.LastSummaryTS)
 	}
 	b.WriteString("\n")
-	fmt.Fprintf(&b, "仮定ログ %d / 介入 %d  （done %d/%d, 実行中 %d）\n",
-		s.AssumptionsN, s.InterventionsN, done, n, len(running))
+	fmt.Fprintf(&b, "仮定ログ %d / 要判断 %d 件  （done %d/%d, 実行中 %d）\n",
+		s.AssumptionsN, s.InterventionsOpen, done, n, len(running))
+	ihint := ""
+	if s.InterventionsOpen > 0 {
+		ihint = " [i]介入対応"
+	}
 	if s.Detail {
 		d.renderDetail(&b, running)
-		b.WriteString("keys: [d]一覧に戻る [p]一時停止 [q]中断(状態を保存し再開可)\n")
+		fmt.Fprintf(&b, "keys: [d]一覧に戻る [p]一時停止%s [q]中断(状態を保存し再開可)\n", ihint)
 	} else {
-		b.WriteString("keys: [d]worker出力を見る [p]一時停止 [q]中断(状態を保存し再開可)\n")
+		fmt.Fprintf(&b, "keys: [d]worker出力を見る [p]一時停止%s [q]中断(状態を保存し再開可)\n", ihint)
 	}
 	_, _ = os.Stdout.WriteString(b.String())
 }
@@ -183,6 +189,8 @@ func statusLabel(status string) string {
 		return "レビュー中"
 	case TaskRevise:
 		return "修正中"
+	case TaskWaitingHuman:
+		return "⏸ 要判断"
 	case TaskDone:
 		return "完了"
 	case TaskFailed:
@@ -235,6 +243,8 @@ func (d *Dashboard) readKeys(ctx context.Context) {
 			d.emit(KeyDetail)
 		case 'p':
 			d.emit(KeyPause)
+		case 'i':
+			d.emit(KeyIntervene)
 		case 'q':
 			d.emit(KeyQuit)
 		}

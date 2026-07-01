@@ -33,7 +33,8 @@ VOL_CHROME := claude-dev-chrome-data
 # =============================================================================
 
 .PHONY: help setup install login build network volumes \
-        upgrade update-claude status clean uninstall build-claude build-claude-vnc build-docker-proxy build-orchestrator
+        upgrade update-claude status clean uninstall build-claude build-claude-vnc build-docker-proxy build-orchestrator \
+        orch-sample orch-sample-clean
 
 ## デフォルト: ヘルプ表示
 help:
@@ -159,10 +160,20 @@ build-docker-proxy:
 	@echo "✅ $(IMG_DOCKER_PROXY)"
 
 ## orchestrator（ローカル build/test。イメージ用は build-claude に同梱される）
+## go build ./... はバイナリを残さないため -o で明示（自己検証の高速ループが直接起動する）
 build-orchestrator:
 	@echo "🔧 orchestrator をローカルビルド/テスト中..."
-	@cd $(BASE_DIR)/orchestrator && go build ./... && go vet ./... && go test ./...
-	@echo "✅ orchestrator (local build/test)"
+	@cd $(BASE_DIR)/orchestrator && go build -o orchestrator . && go vet ./... && go test ./...
+	@echo "✅ orchestrator (local build/test) -> orchestrator/orchestrator"
+
+## 自己検証用サンプルサブプロジェクトの scaffold（examples/orch-sample -> workspace/orch-sample）
+## FORCE=1 で再生成、SEED=1 で決定論検証用 seed plan を配置（docs/07_self-verification.md）
+orch-sample:
+	@$(BASE_DIR)/scripts/orch-sample.sh $(if $(FORCE),--force,) $(if $(SEED),--seed,)
+
+## 自己検証用サンプルの作業コピーを削除
+orch-sample-clean:
+	@rm -rf $(BASE_DIR)/workspace/orch-sample && echo "🧹 removed workspace/orch-sample"
 
 # =============================================================================
 # 認証

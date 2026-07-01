@@ -40,7 +40,9 @@ Makefile
 | `build-claude` | — | `Dockerfile.claude` の `--target base` を `IMG_CLAUDE` としてビルド（`USERNAME`/`USER_UID`/`USER_GID` を build-arg で付与） |
 | `build-claude-vnc` | `build-claude` | `--target vnc` を `IMG_CLAUDE_VNC` としてビルド |
 | `build-docker-proxy` | — | `Dockerfile.docker-proxy` を `IMG_DOCKER_PROXY` としてビルド |
-| `build-orchestrator` | — | `cd orchestrator && go build ./... && go vet ./... && go test ./...`。オーケストレーターのローカル build/test 用（イメージ用バイナリは `build-claude` の base ビルドに同梱されるため独立イメージは作らない）。詳細は [60_orchestrator.md](60_orchestrator.md) 参照 |
+| `build-orchestrator` | — | `cd orchestrator && go build -o orchestrator . && go vet ./... && go test ./...`。ローカル build/test 用に**実行ファイル `orchestrator/orchestrator` を生成**する（`go build ./...` はバイナリを残さないため `-o` で明示。自己検証の高速ループはこのバイナリを直接起動する。[70_sample-project.md](70_sample-project.md)）。イメージ用バイナリは `build-claude` の base ビルドに同梱されるため独立イメージは作らない。詳細は [60_orchestrator.md](60_orchestrator.md) 参照 |
+| `orch-sample` | — | `scripts/orch-sample.sh` を呼び、`examples/orch-sample/` テンプレートを使い捨て作業コピー `workspace/orch-sample/`（独立 git リポジトリ）へ scaffold する。`FORCE=1` で再生成、`SEED=1` で決定論検証用 seed plan を配置。自己検証用（[70_sample-project.md](70_sample-project.md) / [docs/07_self-verification.md](../07_self-verification.md)） |
+| `orch-sample-clean` | — | `workspace/orch-sample/` を削除する |
 | `login` | — | `$(CLI) login` に委譲 |
 | `upgrade` | — | 3 イメージを `--no-cache` で再ビルド。反映は `stop`→`start` を案内 |
 | `status` | — | イメージ一覧・稼働中 Claude セッション・プロキシコンテナ・ボリュームを表示 |

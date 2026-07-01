@@ -26,23 +26,24 @@ func LoadProjectPolicy(workspace string) string {
 	return "# プロジェクト固有の判断基準（ORCHESTRATOR.md）\n" + body + "\n\n"
 }
 
-// Phase constants for the state machine.
+// Phase constants for the state machine. The former top-level "intervening"
+// phase is abolished: interventions are handled per-task inside "executing".
 const (
 	PhaseWallbounce = "wallbounce"
 	PhaseExecuting  = "executing"
-	PhaseIntervene  = "intervening"
 	PhaseDone       = "done"
 )
 
 // Task.Status constants.
 const (
-	TaskPending = "pending"
-	TaskRunning = "running"
-	TaskReview  = "review"
-	TaskRevise  = "revise"
-	TaskBlocked = "blocked"
-	TaskDone    = "done"
-	TaskFailed  = "failed"
+	TaskPending      = "pending"
+	TaskRunning      = "running"
+	TaskReview       = "review"
+	TaskRevise       = "revise"
+	TaskWaitingHuman = "waiting_human" // parked awaiting a human decision (per-task intervention)
+	TaskBlocked      = "blocked"
+	TaskDone         = "done"
+	TaskFailed       = "failed"
 )
 
 // Control.Request constants (handoff requests from the interactive claude).
@@ -71,9 +72,9 @@ const (
 
 // State is the content of state.json.
 type State struct {
-	Phase       string `json:"phase"` // wallbounce|executing|intervening|done
+	Phase       string `json:"phase"` // wallbounce|executing|done（intervening は廃止）
 	RunID       string `json:"run_id"`
-	CurrentTask string `json:"current_task"` // 実行中タスクID（任意）
+	CurrentTask string `json:"current_task"` // 最後に着手したタスクID（情報用・並行実行のため一意でない）
 	StartedAt   string `json:"started_at"`   // RFC3339
 	UpdatedAt   string `json:"updated_at"`
 }
@@ -88,9 +89,13 @@ type Plan struct {
 
 // Task is one unit of work in the plan.
 type Task struct {
-	ID           string   `json:"id"`
-	Title        string   `json:"title"`
-	Description  string   `json:"description"`
+	ID          string `json:"id"`
+	Title       string `json:"title"`
+	Description string `json:"description"`
+	// Completion is the task-specific acceptance criterion. Reviews are scored
+	// against THIS only (never the plan goal); an empty Completion is rejected by
+	// plan lint before executing (docs/impl/60 §品質ゲート 8.1).
+	Completion   string   `json:"completion"`
 	Deps         []string `json:"deps"`
 	Status       string   `json:"status"`
 	Attempts     int      `json:"attempts"`
@@ -99,8 +104,25 @@ type Task struct {
 	// IrrevApproved records that a human approved this irreversible task during
 	// an intervention. Once true the pre-dispatch trigger1 no longer fires, so
 	// the task can finally be dispatched (prevents infinite re-fire on resume).
-	IrrevApproved bool          `json:"irrev_approved,omitempty"`
-	Result        *WorkerResult `json:"result,omitempty"`
+	IrrevApproved bool `json:"irrev_approved,omitempty"`
+	// SessionID is the claude -p session id for the CURRENT attempt. A fresh
+	// attempt generates a new id (passed via --session-id); an interrupted
+	// same-attempt resume reuses it (via --resume) so the worker continues
+	// instead of starting from scratch.
+	SessionID string `json:"session_id,omitempty"`
+	// ResumeSession is set by NormalizeForResume when a running/review/revise
+	// task is reset to pending after an interruption. It tells the scheduler to
+	// re-dispatch the SAME attempt (--resume, no Attempts++) rather than start a
+	// new attempt. Cleared once the resuming dispatch is launched.
+	ResumeSession bool `json:"resume_session,omitempty"`
+	// OpenInterventionID is non-empty only while the task is waiting_human; it
+	// links to the open intervention queue entry.
+	OpenInterventionID string `json:"open_intervention_id,omitempty"`
+	// ReviewFormatErrors counts consecutive unparseable reviewer outputs (format
+	// violations). Reset on a content-based verdict. At the configured limit the
+	// task escalates as a review_gate_defect WITHOUT re-running the worker.
+	ReviewFormatErrors int           `json:"review_format_errors,omitempty"`
+	Result             *WorkerResult `json:"result,omitempty"`
 }
 
 // WorkerResult is the structured output a worker (claude -p) must emit.
@@ -149,6 +171,20 @@ type Intervention struct {
 	Question      string `json:"question"`
 	Answer        string `json:"answer"`
 	TS            string `json:"ts"`
+}
+
+// OpenInterventions is the content of intervention/open.json: the queue of
+// unresolved human-decision requests. Multiple may be open at once (per-task).
+type OpenInterventions struct {
+	Items []OpenIntervention `json:"items"`
+}
+
+// OpenIntervention is one queued, unresolved intervention.
+type OpenIntervention struct {
+	ID            string `json:"id"`
+	TaskID        string `json:"task_id"`
+	TriggerReason string `json:"trigger_reason"`
+	OpenedAt      string `json:"opened_at"`
 }
 
 // AuditEntry is one line of audit.jsonl.
@@ -282,12 +318,61 @@ func (s *Store) SaveState(st *State) error {
 // interventions JSONL) and summary.md are kept as history. Missing files are
 // not an error.
 func (s *Store) ResetRun() error {
-	for _, name := range []string{"state.json", "plan.json", "control.json", "open_intervention"} {
+	for _, name := range []string{"state.json", "plan.json", "control.json"} {
 		if err := os.Remove(s.path(name)); err != nil && !os.IsNotExist(err) {
 			return err
 		}
 	}
+	// Clear the per-task intervention queue too (new-model side-channel).
+	if err := os.Remove(s.path("intervention", "open.json")); err != nil && !os.IsNotExist(err) {
+		return err
+	}
 	return nil
+}
+
+// ---- intervention queue (intervention/open.json) ----
+
+// LoadOpenInterventions reads the intervention queue. Returns an empty (non-nil)
+// set if the file is absent or unreadable.
+func (s *Store) LoadOpenInterventions() *OpenInterventions {
+	var q OpenInterventions
+	if err := readJSON(s.path("intervention", "open.json"), &q); err != nil {
+		return &OpenInterventions{}
+	}
+	return &q
+}
+
+// SaveOpenInterventions writes the intervention queue atomically.
+func (s *Store) SaveOpenInterventions(q *OpenInterventions) error {
+	return writeJSONAtomic(s.path("intervention", "open.json"), q)
+}
+
+// AddOpenIntervention appends an entry to the queue (idempotent on ID).
+func (s *Store) AddOpenIntervention(oi OpenIntervention) error {
+	if oi.OpenedAt == "" {
+		oi.OpenedAt = nowRFC3339()
+	}
+	q := s.LoadOpenInterventions()
+	for _, it := range q.Items {
+		if it.ID == oi.ID {
+			return nil
+		}
+	}
+	q.Items = append(q.Items, oi)
+	return s.SaveOpenInterventions(q)
+}
+
+// RemoveOpenIntervention drops the entry with the given ID from the queue.
+func (s *Store) RemoveOpenIntervention(id string) error {
+	q := s.LoadOpenInterventions()
+	out := q.Items[:0]
+	for _, it := range q.Items {
+		if it.ID != id {
+			out = append(out, it)
+		}
+	}
+	q.Items = out
+	return s.SaveOpenInterventions(q)
 }
 
 // ---- Plan ----

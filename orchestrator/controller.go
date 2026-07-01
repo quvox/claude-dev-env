@@ -37,13 +37,6 @@ type Controller struct {
 	mergeMu sync.Mutex
 }
 
-// fired records a trigger that one task raised during concurrent execution.
-type fired struct {
-	taskID string
-	reason string
-	abort  bool
-}
-
 // Run executes the full lifecycle starting from the persisted (or fresh) state.
 func (c *Controller) Run(ctx context.Context) error {
 	st, err := c.Store.LoadState()
@@ -75,14 +68,10 @@ func (c *Controller) Run(ctx context.Context) error {
 		case PhaseExecuting:
 			if err := c.runExecuting(ctx, st); err != nil {
 				if errors.Is(err, errSuspended) {
-					// User interrupted: state is left resumable; exit cleanly so
-					// the next `claude-dev orchestrate` continues from here.
+					// User interrupted (Ctrl-C / [q]): state is left resumable; exit
+					// cleanly so the next `claude-dev orchestrate` continues from here.
 					return nil
 				}
-				return err
-			}
-		case PhaseIntervene:
-			if err := c.runIntervene(ctx, st); err != nil {
 				return err
 			}
 		case PhaseDone:
@@ -112,6 +101,14 @@ func (c *Controller) runWallbounce(ctx context.Context, st *State) error {
 		switch ctrl.Request {
 		case ReqExecute:
 			if plan != nil && plan.Ready {
+				if missing := lintPlan(plan); missing != "" {
+					// Plan not lint-clean: every task must have a task-specific
+					// completion (docs/06 §8.1). Do not execute; send the brain back
+					// to wallbounce with the reason.
+					_ = c.Store.AppendAudit(AuditEntry{Event: "plan_lint_failed", Detail: map[string]any{"missing": missing}})
+					c.Notifier.Notify(fmt.Sprintf("[%s] 実行不可: 各タスクに completion が必要です（%s）。壁打ちで補ってください。", plan.Goal, oneline(missing, 160)))
+					return nil // stay in wallbounce
+				}
 				return c.transition(st, PhaseExecuting)
 			}
 			// execute requested but plan not ready: fall through to confirm.
@@ -154,8 +151,10 @@ func (c *Controller) runExecuting(ctx context.Context, st *State) error {
 		return c.transition(st, PhaseDone)
 	}
 
-	// Normalize stale in-flight statuses on (re)entry: tasks left running/
-	// review/revise are reset to pending for re-dispatch.
+	// Normalize stale in-flight statuses on (re)entry: running/review/revise are
+	// reset to pending (and flagged to resume their session). done/failed/blocked
+	// and waiting_human are preserved (completed work is never redone; parked
+	// interventions stay parked).
 	c.planMu.Lock()
 	NormalizeForResume(plan)
 	_ = c.Store.SavePlan(plan)
@@ -163,34 +162,45 @@ func (c *Controller) runExecuting(ctx context.Context, st *State) error {
 
 	dash := &DashboardState{Goal: plan.Goal}
 	syncDashboard(dash, plan)
-	d := NewDashboard(dash, c.Store)
-	dctx, dcancel := context.WithCancel(ctx)
-	go d.Run(dctx)
-	defer dcancel()
+	c.refreshInterventionCount(dash)
 
-	// runCtx bounds the worker goroutines. Cancelling it (on a trigger fire or
-	// quit) stops new scheduling and signals in-flight goroutines to stop.
-	runCtx, runCancel := context.WithCancel(ctx)
-	defer runCancel()
+	// workerCtx bounds the worker goroutines. It is cancelled only on suspend/
+	// quit/abort — NEVER on an intervention. Interventions are per-task and must
+	// not stop peer workers (the central fix).
+	workerCtx, workerCancel := context.WithCancel(ctx)
+	defer workerCancel()
 
 	var (
 		wg       sync.WaitGroup
-		firedMu  sync.Mutex
-		fires    []fired // collected triggers (deterministically reduced to one)
 		inflight = map[string]bool{}
 	)
 
-	recordFire := func(f fired) {
-		firedMu.Lock()
-		fires = append(fires, f)
-		firedMu.Unlock()
-		runCancel() // stop scheduling and signal peers to wind down
+	// Dashboard lifecycle: it owns the TTY (raw key mode) during executing, but
+	// must yield the terminal while an interactive resolve session is foreground.
+	var (
+		d       *Dashboard
+		dcancel context.CancelFunc
+	)
+	startDash := func() {
+		d = NewDashboard(dash, c.Store)
+		var dctx context.Context
+		dctx, dcancel = context.WithCancel(ctx)
+		go d.Run(dctx)
 	}
+	stopDash := func() {
+		if dcancel != nil {
+			dcancel()
+			dcancel = nil
+		}
+		ttyRestoreSane()
+	}
+	startDash()
+	defer stopDash()
 
 	scheduleTick := func() {
+		var notifies []string
 		c.planMu.Lock()
 		ready := ReadyTasks(plan, len(plan.Tasks))
-		launched := 0
 		for _, t := range ready {
 			if len(inflight) >= c.Cfg.MaxWorkers {
 				break
@@ -198,80 +208,102 @@ func (c *Controller) runExecuting(ctx context.Context, st *State) error {
 			if inflight[t.ID] {
 				continue
 			}
-			// Condition 1: pre-dispatch gate for irreversible tasks. Evaluated
-			// before reserving a slot so the worker never runs an unapproved
-			// irreversible task. The task stays pending (NOT blocked) so it can
-			// be dispatched after the intervention approves it.
+			// Condition 1 (pre-dispatch): irreversible tasks are parked as
+			// waiting_human and queued as a per-task intervention. Keep scheduling
+			// the OTHER ready tasks (do not stop peers).
 			if f, r := Evaluate(TriggerContext{Phase: PhasePreDispatch, Task: t, Plan: plan, State: st, Config: c.Cfg}); f {
-				recordFire(fired{taskID: t.ID, reason: r})
-				break
+				if msg := c.openInterventionLocked(plan, t, r); msg != "" {
+					notifies = append(notifies, msg)
+				}
+				continue
 			}
-			// Reserve the slot: mark running and increment Attempts (new Attempt)
-			// under the lock so the cap and Attempts counting are race-free.
-			t.Attempts++
+			// Reserve the slot. A resume continues the SAME attempt/session; a
+			// fresh dispatch is a NEW attempt with a new session id. In the resume
+			// case ResumeSession is left TRUE here so the plan snapshot taken in
+			// runTaskPipeline carries it to the worker (--resume); it is cleared
+			// there right after snapshotting so a later retry starts a new attempt.
+			if t.ResumeSession && t.SessionID != "" {
+				// same attempt: keep SessionID + ResumeSession, do NOT ++Attempts
+			} else {
+				t.Attempts++
+				t.SessionID = newSessionID()
+				t.ResumeSession = false
+			}
 			t.Status = TaskRunning
 			inflight[t.ID] = true
 			taskID := t.ID
 			attempt := t.Attempts
 			_ = c.Store.SavePlan(plan)
 			_ = c.Store.AppendAudit(AuditEntry{Event: "dispatch", TaskID: taskID, Detail: map[string]any{"attempt": attempt}})
-			launched++
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				f := c.runTaskPipeline(runCtx, st, plan, taskID)
+				c.runTaskPipeline(workerCtx, st, plan, taskID)
 				c.planMu.Lock()
 				delete(inflight, taskID)
 				_ = c.Store.SavePlan(plan)
 				syncDashboard(dash, plan)
 				c.planMu.Unlock()
-				if f != nil {
-					recordFire(*f)
-				}
 			}()
 		}
-		// Reflect newly-running tasks on the dashboard immediately (otherwise the
-		// screen keeps showing "pending" until a worker finishes).
 		syncDashboard(dash, plan)
 		c.planMu.Unlock()
+		for _, m := range notifies {
+			c.Notifier.Notify(m)
+		}
+		c.refreshInterventionCount(dash)
+	}
+
+	// suspend stops workers (giving them their grace window to commit) and leaves
+	// the run resumable. Used for both Ctrl-C and [q].
+	suspend := func() error {
+		workerCancel()
+		wg.Wait()
+		c.planMu.Lock()
+		_ = c.Store.SavePlan(plan)
+		c.planMu.Unlock()
+		_ = c.Store.AppendAudit(AuditEntry{Event: "suspended", Detail: map[string]any{"run_id": st.RunID}})
+		return errSuspended
 	}
 
 	for {
 		select {
 		case <-ctx.Done():
-			runCancel()
-			wg.Wait()
-			c.planMu.Lock()
-			_ = c.Store.SavePlan(plan)
-			c.planMu.Unlock()
-			return ctx.Err()
+			// Signal (Ctrl-C) or parent cancel: clean, resumable suspend (same as
+			// [q]). Workers get their RunOpts grace window before force-kill.
+			return suspend()
 		case k := <-d.Keys:
 			switch k {
 			case KeyPause:
 				dash.Set(func(s *DashboardState) { s.Paused = !s.Paused })
 				continue
-			case KeyQuit:
-				// "中断": stop the workers but DO NOT mark the run done. Leave the
-				// phase at executing and reset in-flight tasks to pending so the
-				// next launch resumes from here (work in worktrees is preserved).
-				runCancel()
-				wg.Wait()
-				c.planMu.Lock()
-				_ = c.Store.SavePlan(plan)
-				c.planMu.Unlock()
-				_ = c.Store.AppendAudit(AuditEntry{Event: "suspended", Detail: map[string]any{"run_id": st.RunID}})
-				return errSuspended
 			case KeyDetail:
-				// Toggle the live worker-output detail view.
 				dash.Set(func(s *DashboardState) { s.Detail = !s.Detail })
+				continue
+			case KeyQuit:
+				return suspend()
+			case KeyIntervene:
+				if c.openInterventionCount() == 0 {
+					continue
+				}
+				// Resolve interventions on demand. Peers keep running as background
+				// processes while the interactive session holds the foreground.
+				stopDash()
+				aborted, rerr := c.resolveInterventions(ctx, st, plan)
+				if rerr != nil {
+					workerCancel()
+					wg.Wait()
+					return rerr
+				}
+				if aborted {
+					workerCancel()
+					wg.Wait()
+					return c.transition(st, PhaseDone)
+				}
+				startDash()
 				continue
 			}
 		default:
-		}
-
-		// A fire has been recorded: stop scheduling, drain, and handle it.
-		if runCtx.Err() != nil {
-			break
 		}
 
 		if dashPaused(dash) {
@@ -281,7 +313,6 @@ func (c *Controller) runExecuting(ctx context.Context, st *State) error {
 
 		scheduleTick()
 
-		// Determine whether we can make further progress.
 		c.planMu.Lock()
 		anyInflight := len(inflight) > 0
 		ready := ReadyTasks(plan, len(plan.Tasks))
@@ -291,69 +322,38 @@ func (c *Controller) runExecuting(ctx context.Context, st *State) error {
 			settled := AllSettled(plan)
 			c.planMu.Unlock()
 			if settled {
-				break
+				break // no dispatchable work and no parked interventions -> complete
 			}
-			time.Sleep(20 * time.Millisecond)
+			// Nothing to dispatch but not settled: waiting_human tasks remain
+			// (AllSettled is false while any task is waiting_human). Idle-wait for
+			// the human to press [i] (or [q]).
+			time.Sleep(50 * time.Millisecond)
 			continue
 		}
 		c.planMu.Unlock()
 		time.Sleep(20 * time.Millisecond)
 	}
 
-	// Stop scheduling and wait for all in-flight goroutines to wind down.
-	runCancel()
+	// All tasks settled with no open interventions: verify completion.
+	workerCancel()
 	wg.Wait()
 	c.planMu.Lock()
 	_ = c.Store.SavePlan(plan)
 	syncDashboard(dash, plan)
 	c.planMu.Unlock()
-	dcancel()
+	stopDash()
 
-	// If any trigger fired, deterministically pick one (task ID ascending) and
-	// open the intervention (or abort).
-	if f := reduceFires(fires); f != nil {
-		if f.abort {
-			return c.transition(st, PhaseDone)
-		}
-		c.planMu.Lock()
-		t := findTask(plan, f.taskID)
-		c.planMu.Unlock()
-		return c.fireIntervention(st, plan, t, f.reason)
-	}
-
-	// All tasks settled with no trigger: verify completion criteria.
 	return c.verifyCompletion(ctx, st, plan)
 }
 
-// reduceFires deterministically selects a single fired trigger: an abort takes
-// precedence, otherwise the lowest task ID.
-func reduceFires(fires []fired) *fired {
-	var chosen *fired
-	for i := range fires {
-		f := fires[i]
-		if f.abort {
-			return &f
-		}
-		if chosen == nil || f.taskID < chosen.taskID {
-			c := f
-			chosen = &c
-		}
-	}
-	return chosen
-}
-
-// runTaskPipeline runs worker -> review -> revise for one task identified by
-// taskID. It returns a *fired when an intervention must open (nil otherwise).
-//
-// Concurrency contract: the task is already marked TaskRunning with Attempts
-// incremented by the scheduler under planMu. This function takes planMu only
-// for short state mutations; long external calls (Dispatch/RunGate) run against
-// an immutable plan snapshot so they do not race with peer goroutines.
-func (c *Controller) runTaskPipeline(ctx context.Context, st *State, plan *Plan, taskID string) *fired {
-	// Honour cancellation promptly (peer fired, or quit/abort).
+// runTaskPipeline runs worker -> review -> revise for one task. A fired trigger
+// parks the task as waiting_human via the intervention queue and returns; peers
+// are never stopped. On cancellation the task is reset to pending (with its
+// session preserved for --resume).
+func (c *Controller) runTaskPipeline(ctx context.Context, st *State, plan *Plan, taskID string) {
 	if ctx.Err() != nil {
 		c.resetToPending(plan, taskID)
-		return nil
+		return
 	}
 
 	c.planMu.Lock()
@@ -363,9 +363,14 @@ func (c *Controller) runTaskPipeline(ctx context.Context, st *State, plan *Plan,
 	t := findTask(plan, taskID)
 	if t == nil {
 		c.planMu.Unlock()
-		return nil
+		return
 	}
 	feedback := attemptFeedback(t)
+	// The snapshot above carries ResumeSession for this dispatch (so the worker
+	// runs --resume). Consume it on the live task now so that if THIS attempt
+	// fails and is retried, the retry starts a fresh session/new attempt.
+	t.ResumeSession = false
+	_ = c.Store.SavePlan(plan)
 	c.planMu.Unlock()
 
 	snapTask := findTask(snap, taskID)
@@ -374,18 +379,20 @@ func (c *Controller) runTaskPipeline(ctx context.Context, st *State, plan *Plan,
 	if err != nil {
 		if ctx.Err() != nil {
 			c.resetToPending(plan, taskID)
-			return nil
+			return
 		}
 		c.planMu.Lock()
 		_ = c.Store.AppendAudit(AuditEntry{Event: "dispatch_error", TaskID: taskID, Detail: map[string]any{"err": err.Error()}})
 		t := findTask(plan, taskID)
-		if f := c.evalStuck(t); f != nil {
+		if reason, stuck := c.evalStuck(t); stuck {
+			msg := c.openInterventionLocked(plan, t, reason)
 			c.planMu.Unlock()
-			return f
+			c.notify(msg)
+			return
 		}
 		t.Status = TaskPending // retry as a new Attempt next scheduling tick
 		c.planMu.Unlock()
-		return nil
+		return
 	}
 
 	// Record assumptions and result under the lock.
@@ -401,45 +408,64 @@ func (c *Controller) runTaskPipeline(ctx context.Context, st *State, plan *Plan,
 	c.planMu.Lock()
 	t = findTask(plan, taskID)
 	if f, r := Evaluate(TriggerContext{Phase: PhasePostDispatch, Task: t, Plan: plan, State: st, Result: res, Config: c.Cfg}); f {
+		msg := c.openInterventionLocked(plan, t, r)
 		c.planMu.Unlock()
-		return &fired{taskID: taskID, reason: r}
+		c.notify(msg)
+		return
 	}
 	c.planMu.Unlock()
 
 	if !res.Done {
 		c.planMu.Lock()
 		t = findTask(plan, taskID)
-		t.Status = TaskPending
-		if f := c.evalStuck(t); f != nil {
+		if reason, stuck := c.evalStuck(t); stuck {
+			msg := c.openInterventionLocked(plan, t, reason)
 			c.planMu.Unlock()
-			return f
+			c.notify(msg)
+			return
 		}
+		t.Status = TaskPending
 		c.planMu.Unlock()
-		return nil
+		return
 	}
 
 	// Quality gate: review/revise loop within this Attempt (against snapshot).
-	passed, _, rerr := c.Reviewer.RunGate(ctx, snap, snapTask)
+	outcome, rerr := c.Reviewer.RunGate(ctx, snap, snapTask)
 	if rerr != nil {
 		if ctx.Err() != nil {
 			c.resetToPending(plan, taskID)
-			return nil
+			return
 		}
 		c.planMu.Lock()
 		_ = c.Store.AppendAudit(AuditEntry{Event: "review_error", TaskID: taskID, Detail: map[string]any{"err": rerr.Error()}})
 		findTask(plan, taskID).Status = TaskPending
 		c.planMu.Unlock()
-		return nil
+		return
 	}
-	// Mirror any revise-produced result back to the live task.
+
+	// Reviewer format defect (unparseable output N times): escalate as a gate
+	// defect WITHOUT re-running the worker (the implementation is already done).
+	if outcome.FormatError {
+		c.planMu.Lock()
+		t = findTask(plan, taskID)
+		t.ReviewFormatErrors = outcome.FormatErrorCount
+		msg := c.openInterventionLocked(plan, t, TriggerReviewGateDefect)
+		c.planMu.Unlock()
+		c.notify(msg)
+		return
+	}
+
+	// Mirror any revise-produced result back to the live task; clear the format
+	// error run (a content verdict was obtained).
 	c.planMu.Lock()
 	t = findTask(plan, taskID)
 	if snapTask.Result != nil {
 		t.Result = snapTask.Result
 	}
+	t.ReviewFormatErrors = 0
 	c.planMu.Unlock()
 
-	if passed {
+	if outcome.Passed {
 		// Integrate the worktree commits into the working branch. Serialize all
 		// merges to avoid concurrent merge conflicts on the working branch.
 		c.mergeMu.Lock()
@@ -451,43 +477,57 @@ func (c *Controller) runTaskPipeline(ctx context.Context, st *State, plan *Plan,
 			_ = c.Store.AppendAudit(AuditEntry{Event: "merge_error", TaskID: taskID, Detail: map[string]any{"err": ierr.Error()}})
 			t.Status = TaskPending // retry as a new Attempt
 			c.planMu.Unlock()
-			return nil
+			return
 		}
 		t.Status = TaskDone
+		t.SessionID = "" // attempt complete; no session to resume
+		t.ResumeSession = false
 		_ = c.Store.AppendAudit(AuditEntry{Event: "task_done", TaskID: taskID})
 		c.updateSummaryLocked(plan)
 		c.planMu.Unlock()
-		return nil
+		return
 	}
 
 	// Severe findings remain after max_review_rounds: stuck (condition 3b).
 	c.planMu.Lock()
 	t = findTask(plan, taskID)
 	if f, r := Evaluate(TriggerContext{Phase: PhasePostDispatch, Task: t, Plan: plan, State: st, Config: c.Cfg, StuckThisAttempt: true}); f {
+		msg := c.openInterventionLocked(plan, t, r)
 		c.planMu.Unlock()
-		return &fired{taskID: taskID, reason: r}
+		c.notify(msg)
+		return
 	}
 	t.Status = TaskPending
 	c.planMu.Unlock()
-	return nil
+}
+
+// notify sends a Slack message if non-empty (helper to keep callers terse).
+func (c *Controller) notify(msg string) {
+	if msg != "" {
+		c.Notifier.Notify(msg)
+	}
 }
 
 // evalStuck evaluates only the stuck (condition 3) trigger for a task. Caller
-// must hold planMu. Returns a *fired when stuck.
-func (c *Controller) evalStuck(t *Task) *fired {
+// must hold planMu. Returns (reason, true) when stuck.
+func (c *Controller) evalStuck(t *Task) (string, bool) {
 	if f, r := Evaluate(TriggerContext{Phase: PhasePostDispatch, Task: t, State: &State{}, Plan: &Plan{}, Config: c.Cfg}); f {
-		return &fired{taskID: t.ID, reason: r}
+		return r, true
 	}
-	return nil
+	return "", false
 }
 
-// resetToPending marks a task pending under the lock (used on cancellation so
-// the task is re-dispatched after the intervention resolves / on resume).
+// resetToPending marks a task pending under the lock (used on cancellation).
+// It preserves the session and flags a resume so the interrupted attempt
+// continues via --resume on the next dispatch (no work redone).
 func (c *Controller) resetToPending(plan *Plan, taskID string) {
 	c.planMu.Lock()
 	defer c.planMu.Unlock()
-	if t := findTask(plan, taskID); t != nil && t.Status != TaskDone {
+	if t := findTask(plan, taskID); t != nil && t.Status != TaskDone && t.Status != TaskWaitingHuman {
 		t.Status = TaskPending
+		if t.SessionID != "" {
+			t.ResumeSession = true
+		}
 	}
 	_ = c.Store.SavePlan(plan)
 }
@@ -499,54 +539,100 @@ func (c *Controller) integrate(ctx context.Context, taskID string) error {
 	return c.Worker.Git.Merge(ctx, c.Worker.Workspace, branch, c.Cfg.MergeStrategy)
 }
 
-// fireIntervention transitions to intervening, writing the question and
-// alerting Slack.
-func (c *Controller) fireIntervention(st *State, plan *Plan, t *Task, reason string) error {
+// openInterventionLocked parks a task as waiting_human and enqueues a per-task
+// intervention (question.md + open.json + audit). Caller MUST hold planMu.
+// Returns a Slack notification string to send AFTER releasing the lock (so
+// network I/O never happens under planMu). Idempotent for an already-parked task.
+func (c *Controller) openInterventionLocked(plan *Plan, t *Task, reason string) string {
+	if t.Status == TaskWaitingHuman && t.OpenInterventionID != "" {
+		return ""
+	}
 	id := newInterventionID()
 	q := buildQuestion(t, reason)
 	_ = c.Store.WriteQuestion(id, q)
 	_ = c.Store.AppendIntervention(Intervention{ID: id, TaskID: t.ID, TriggerReason: reason, Question: q})
-	c.Notifier.Notify(fmt.Sprintf("[%s] 要判断: %s。attach してください。", plan.Goal, oneline(q, 80)))
-	st.CurrentTask = t.ID
-	// Stash the open intervention id in state via a sentinel file.
-	_ = c.Store.WriteAtomicSidecar("open_intervention", id)
-	return c.transition(st, PhaseIntervene)
+	_ = c.Store.AddOpenIntervention(OpenIntervention{ID: id, TaskID: t.ID, TriggerReason: reason})
+	t.Status = TaskWaitingHuman
+	t.OpenInterventionID = id
+	_ = c.Store.SavePlan(plan)
+	_ = c.Store.AppendAudit(AuditEntry{Event: "intervention_open", TaskID: t.ID, Detail: map[string]any{"id": id, "reason": reason}})
+	n := len(c.Store.LoadOpenInterventions().Items)
+	return fmt.Sprintf("[%s] 要判断 %d 件: %s。attach し [i] で対応してください（実行は継続中）。", plan.Goal, n, oneline(q, 80))
 }
 
-// ---- intervening ----
+// openInterventionCount returns the number of unresolved interventions.
+func (c *Controller) openInterventionCount() int {
+	return len(c.Store.LoadOpenInterventions().Items)
+}
 
-func (c *Controller) runIntervene(ctx context.Context, st *State) error {
-	id, _ := c.Store.ReadAtomicSidecar("open_intervention")
-	if err := c.Mode.RunInteractive(ctx, c.Mode.InterveneArgs(id)...); err != nil {
-		_ = c.Store.AppendAudit(AuditEntry{Event: "intervene_exit", Detail: map[string]any{"err": err.Error()}})
+// refreshInterventionCount publishes the open-intervention count to the dashboard.
+func (c *Controller) refreshInterventionCount(dash *DashboardState) {
+	n := c.openInterventionCount()
+	dash.Set(func(s *DashboardState) { s.InterventionsOpen = n })
+}
+
+// ---- interventions (resolution) ----
+
+// resolveInterventions launches the interactive brain to answer the open queue,
+// then reconciles: each intervention that now has an answer is recorded and its
+// task returned to pending for re-dispatch. Returns aborted=true if the human
+// requested abort. It does NOT stop peer workers (they run in the background
+// while the interactive session holds the foreground).
+func (c *Controller) resolveInterventions(ctx context.Context, st *State, plan *Plan) (aborted bool, err error) {
+	q := c.Store.LoadOpenInterventions()
+	if len(q.Items) == 0 {
+		return false, nil
 	}
-	ctrl, err := c.Handoff.Consume()
-	if err != nil {
-		return err
+	ids := make([]string, 0, len(q.Items))
+	for _, it := range q.Items {
+		ids = append(ids, it.ID)
+	}
+	if rerr := c.Mode.RunInteractive(ctx, c.Mode.ResolveArgs(ids)...); rerr != nil {
+		_ = c.Store.AppendAudit(AuditEntry{Event: "intervene_exit", Detail: map[string]any{"err": rerr.Error()}})
+	}
+	ctrl, cerr := c.Handoff.Consume()
+	if cerr != nil {
+		return false, cerr
 	}
 	if ctrl != nil && ctrl.Request == ReqAbort {
-		return c.transition(st, PhaseDone)
+		return true, nil
 	}
-	// resume (or any non-abort): record answer and return to executing.
-	answer, _ := c.Store.ReadAnswer(id)
-	if id != "" {
-		_ = c.Store.AppendIntervention(Intervention{ID: id, TaskID: st.CurrentTask, Answer: answer})
-	}
-	_ = c.Store.RemoveSidecar("open_intervention")
-	// Reset the paused task so it is re-dispatched with the new guidance.
-	if plan, _ := c.Store.LoadPlan(); plan != nil {
-		if t := findTask(plan, st.CurrentTask); t != nil && t.Status != TaskDone {
-			// If this was an irreversible task gated by trigger1, the human has
-			// now approved it: mark it approved so the pre-dispatch gate does not
-			// re-fire and the task can finally be dispatched.
+	// Reconcile answered interventions.
+	c.planMu.Lock()
+	defer c.planMu.Unlock()
+	for _, it := range q.Items {
+		ans, _ := c.Store.ReadAnswer(it.ID)
+		if strings.TrimSpace(ans) == "" {
+			continue // still unanswered: leave it open
+		}
+		_ = c.Store.AppendIntervention(Intervention{ID: it.ID, TaskID: it.TaskID, Answer: ans})
+		_ = c.Store.RemoveOpenIntervention(it.ID)
+		if t := findTask(plan, it.TaskID); t != nil && t.Status != TaskDone {
 			if t.Irreversible {
-				t.IrrevApproved = true
+				t.IrrevApproved = true // approved: pre-dispatch trigger1 won't re-fire
 			}
 			t.Status = TaskPending
-			_ = c.Store.SavePlan(plan)
+			t.OpenInterventionID = ""
+			// Re-approach with the human's guidance as a fresh attempt.
+			t.SessionID = ""
+			t.ResumeSession = false
+		}
+		_ = c.Store.AppendAudit(AuditEntry{Event: "intervention_resolved", TaskID: it.TaskID, Detail: map[string]any{"id": it.ID}})
+	}
+	_ = c.Store.SavePlan(plan)
+	return false, nil
+}
+
+// lintPlan returns a comma-joined list of task IDs missing a task-specific
+// completion criterion (empty string == lint clean). docs/06 §8.1.
+func lintPlan(plan *Plan) string {
+	var missing []string
+	for i := range plan.Tasks {
+		if strings.TrimSpace(plan.Tasks[i].Completion) == "" {
+			missing = append(missing, plan.Tasks[i].ID)
 		}
 	}
-	return c.transition(st, PhaseExecuting)
+	return strings.Join(missing, ", ")
 }
 
 // ---- completion ----
@@ -583,7 +669,7 @@ func (c *Controller) checkCompletion(ctx context.Context, plan *Plan) (bool, str
 	if strings.TrimSpace(plan.Completion) == "" || c.Worker == nil || c.Worker.Claude == nil {
 		return true, ""
 	}
-	out, err := c.Worker.Claude.RunPrompt(ctx, c.Worker.Workspace, c.Cfg.WorkerModel, buildCompletionPrompt(plan), "")
+	out, err := c.Worker.Claude.RunPrompt(ctx, c.Worker.Workspace, c.Cfg.WorkerModel, buildCompletionPrompt(plan), "", RunOpts{})
 	if err != nil {
 		return true, ""
 	}
@@ -666,6 +752,16 @@ func buildQuestion(t *Task, reason string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "# 要判断: %s\n\n", t.Title)
 	fmt.Fprintf(&b, "トリガー: %s\n\n", reason)
+	if strings.TrimSpace(t.Completion) != "" {
+		fmt.Fprintf(&b, "このタスクの完了基準:\n%s\n\n", t.Completion)
+	}
+	if reason == TriggerReviewGateDefect {
+		// The implementation is likely finished; only the gate malfunctioned.
+		// Seed a first-pass artifact-existence check (docs/06 §8.2).
+		b.WriteString("レビュー結果が繰り返し解析不能でした（ゲート不具合。実装は完了している可能性が高い）。\n")
+		b.WriteString("まず成果物が上記の完了基準を満たすかを一次確認し、満たしていれば done として受理、\n")
+		b.WriteString("そうでなければ具体的な指摘を answer.md に記してください。\n\n")
+	}
 	if t.Result != nil && t.Result.NeedsHuman != nil {
 		nh := t.Result.NeedsHuman
 		fmt.Fprintf(&b, "%s\n", nh.Question)
@@ -784,8 +880,14 @@ func findTask(plan *Plan, id string) *Task {
 	return nil
 }
 
-func newRunID() string          { return "run-" + time.Now().UTC().Format("20060102-150405") }
-func newInterventionID() string { return "iv-" + time.Now().UTC().Format("20060102-150405") }
+func newRunID() string { return "run-" + time.Now().UTC().Format("20060102-150405") }
+
+// newInterventionID includes a random suffix so concurrent interventions opened
+// within the same second get distinct ids (and distinct question dirs / queue
+// entries).
+func newInterventionID() string {
+	return "iv-" + time.Now().UTC().Format("20060102-150405") + "-" + newSessionID()[:8]
+}
 
 // ---- plan scheduling (pure functions, unit-tested in plan_test.go) ----
 
@@ -884,12 +986,18 @@ func AllSettled(plan *Plan) bool {
 
 // NormalizeForResume resets in-flight statuses (running/review/revise) to
 // pending so they are re-dispatched after a crash/resume. done/failed/blocked
-// are preserved.
+// and waiting_human are preserved. When such a task still has a SessionID, its
+// ResumeSession flag is set so the re-dispatch continues the SAME attempt via
+// --resume (no white-slate redo) — this covers a hard crash where the graceful
+// resetToPending path did not run.
 func NormalizeForResume(plan *Plan) {
 	for i := range plan.Tasks {
 		switch plan.Tasks[i].Status {
 		case TaskRunning, TaskReview, TaskRevise:
 			plan.Tasks[i].Status = TaskPending
+			if plan.Tasks[i].SessionID != "" {
+				plan.Tasks[i].ResumeSession = true
+			}
 		case "":
 			plan.Tasks[i].Status = TaskPending
 		}

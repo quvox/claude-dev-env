@@ -14,3 +14,6 @@
 
 ## 2026-06-28
 - AI オーケストレーター実装に伴い `orchestrate [<ゴール>] [--workers-window]` サブコマンドを追記。`code` と同系統で、稼働中コンテナの新規 tmux ウィンドウ（`-c /workspace`）に `claude-orchestrator` を起動し attach する。引数処理（`--workers-window` フラグ除去後の位置引数をゴールとして扱う）を含む。詳細仕様の正本は 60_orchestrator.md。
+
+## 2026-06-29
+- `orchestrate` の説明に、オーケストレーター本体バイナリが自己検証用に受け付けるフラグ（`--instructions`・`--start-executing`）への注記を追加。`claude-dev orchestrate` 自体はこれらを公開しない旨を明記。

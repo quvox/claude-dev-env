@@ -170,9 +170,9 @@ docs/の下に、開発に必要な要件定義や設計ドキュメントを配
 
 ## Docker ネットワーク（重要）
 
-- このシェルは Docker コンテナ `ai_rule_manager` 内で動作している
+- このシェルは Docker コンテナ `claude-dev-env` 内で動作している
 - `localhost` / `127.0.0.1` では他のコンテナにアクセスできない。必ず**コンテナ名**を使うこと
-  - 例: `curl http://localhost:8000` → `curl http://ai_rule_manager:8000`
+  - 例: `curl http://localhost:8000` → `curl http://claude-dev-env:8000`
 - 自コンテナ内のサーバーへのアクセスは `localhost` で可
 - `docker ps` でコンテナ名を確認できる
 - 全コンテナは Docker ネットワーク `claude-dev-net` に接続されている

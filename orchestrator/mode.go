@@ -2,9 +2,11 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 )
 
 // instructionDir is where image-baked interactive instructions live.
@@ -68,19 +70,29 @@ func (m *Mode) WallbounceArgs() []string {
 	return args
 }
 
-// InterveneArgs returns the args for launching the intervention brain. It seeds
-// the question and the intervention instruction as an initial prompt/system
-// prompt. Uses a fresh start (no --resume) per 06 §6.2 ノブ1. The project
-// policy (ORCHESTRATOR.md, if any) is prepended to the front of the instruction.
-func (m *Mode) InterveneArgs(interventionID string) []string {
+// ResolveArgs returns the args for launching the intervention brain to resolve
+// the open intervention queue. It seeds the intervention instruction (system
+// prompt) plus ALL open questions (batched) as the initial prompt, so the human
+// can answer them one by one in a single fresh session. Uses a fresh start (no
+// --resume) per 06 §6.2. The project policy (ORCHESTRATOR.md, if any) is
+// prepended to the instruction.
+func (m *Mode) ResolveArgs(ids []string) []string {
 	args := []string{}
 	instr := LoadProjectPolicy(m.Workspace) + readFileOr(m.instructionPath("intervene.md"), "")
 	if instr != "" {
 		args = append(args, "--append-system-prompt", instr)
 	}
-	q, _ := m.Store.ReadQuestion(interventionID)
-	if q != "" {
-		args = append(args, q)
+	var b strings.Builder
+	if len(ids) > 1 {
+		fmt.Fprintf(&b, "未解決の要判断が %d 件あります。各件に順番に回答してください。\n\n", len(ids))
+	}
+	for _, id := range ids {
+		if q, _ := m.Store.ReadQuestion(id); q != "" {
+			fmt.Fprintf(&b, "===== 介入 %s =====\n%s\n\n", id, q)
+		}
+	}
+	if s := b.String(); s != "" {
+		args = append(args, s)
 	}
 	return args
 }

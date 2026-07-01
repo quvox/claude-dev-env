@@ -7,6 +7,10 @@ const (
 	TriggerStuck        = "stuck"         // condition 3 (controller-detected)
 	TriggerPolicyBranch = "policy_branch" // condition 4 (post-dispatch)
 	TriggerPrerequisite = "prerequisite"  // condition 5 (post-dispatch)
+	// TriggerReviewGateDefect is not one of the 5 conditions: it marks a task
+	// escalated because the reviewer output could not be parsed repeatedly
+	// (a gate malfunction, not a content failure). docs/impl/60 §品質ゲート 8.2.
+	TriggerReviewGateDefect = "review_gate_defect"
 )
 
 // TriggerPhase distinguishes the evaluation point.

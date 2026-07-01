@@ -17,12 +17,20 @@ import (
 //  2. ~/.config/claude-dev.yaml  (the `orchestrator:` section)
 //  3. <workspace>/.orchestrator/config.yaml
 type Config struct {
-	MaxWorkers      int    // 並行 worker 数
-	StuckLimit      int    // トリガー3 の規定回数（Attempt 総数の上限）
-	MaxReviewRounds int    // Attempt 内のレビュー反復上限
-	WorkerModel     string // worker の claude -p モデル
-	ReviewerVendor  string // claude | codex
-	MergeStrategy   string // merge | rebase
+	MaxWorkers      int // 並行 worker 数
+	StuckLimit      int // トリガー3 の規定回数（Attempt 総数の上限）
+	MaxReviewRounds int // Attempt 内のレビュー反復上限
+	// ReviewFormatErrorLimit is the number of consecutive unparseable reviewer
+	// outputs after which the task escalates as a review_gate_defect (without
+	// re-running the worker). docs/impl/60 §品質ゲート 8.2.
+	ReviewFormatErrorLimit int
+	// WorkerGraceSeconds is how long an in-flight worker is given to commit its
+	// work-in-progress when the run is suspended (Ctrl-C/[q]) before it is hard
+	// killed. docs/impl/60 §並行性・再開・エラー処理.
+	WorkerGraceSeconds int
+	WorkerModel        string // worker の claude -p モデル
+	ReviewerVendor     string // claude | codex
+	MergeStrategy      string // merge | rebase
 	// WorkerPermissionMode is the --permission-mode passed to worker/reviewer
 	// `claude -p` calls. Headless workers have no human to answer permission
 	// prompts, so without an explicit non-interactive mode every Write/Bash is
@@ -42,14 +50,16 @@ const DefaultSlackChannel = "U5SJG0XEK"
 // DefaultConfig returns the built-in defaults.
 func DefaultConfig() Config {
 	return Config{
-		MaxWorkers:           5,
-		StuckLimit:           3,
-		MaxReviewRounds:      3,
-		WorkerModel:          "sonnet",
-		ReviewerVendor:       "claude",
-		MergeStrategy:        "merge",
-		WorkerPermissionMode: "bypassPermissions",
-		SlackChannel:         DefaultSlackChannel,
+		MaxWorkers:             5,
+		StuckLimit:             3,
+		MaxReviewRounds:        3,
+		ReviewFormatErrorLimit: 2,
+		WorkerGraceSeconds:     10,
+		WorkerModel:            "sonnet",
+		ReviewerVendor:         "claude",
+		MergeStrategy:          "merge",
+		WorkerPermissionMode:   "bypassPermissions",
+		SlackChannel:           DefaultSlackChannel,
 	}
 }
 
@@ -95,6 +105,14 @@ func applyConfigKV(cfg *Config, kv map[string]string) {
 		case "max_review_rounds":
 			if n, err := strconv.Atoi(v); err == nil && n > 0 {
 				cfg.MaxReviewRounds = n
+			}
+		case "review_format_error_limit":
+			if n, err := strconv.Atoi(v); err == nil && n > 0 {
+				cfg.ReviewFormatErrorLimit = n
+			}
+		case "worker_grace_seconds":
+			if n, err := strconv.Atoi(v); err == nil && n >= 0 {
+				cfg.WorkerGraceSeconds = n
 			}
 		case "worker_model":
 			if v != "" {

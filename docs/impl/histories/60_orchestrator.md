@@ -89,3 +89,40 @@
 - 仕様 §instruction 注入に「判断基準の所在（CLAUDE.md に置かない理由を含む）」節を追加。共通＝instructions/*.md・worker guide、定量＝config、プロジェクト固有＝ルートの `ORCHESTRATOR.md`（任意）と整理。
 - プロジェクト固有 policy ローダを実装：`state.go` の `LoadProjectPolicy(workspace)` が `<workspace>/ORCHESTRATOR.md`（任意・コミット対象。`.orchestrator/` 運用状態とは別）を読み、存在すれば見出し付きで返す（無ければ no-op）。mode.go（壁打ち/介入の `--append-system-prompt`）・worker.go（`BuildPrompt`）・review.go（`buildReviewPrompt`）の各プロンプト先頭に prepend。`policy_test.go` で present/absent/empty と各プロンプトへの反映を検証。build/vet/test/`-race`/gofmt 緑。
 - 開発方法論（上流→下流の開発フロー、各段階の整合性確認、ユースケースに基づく動作確認、レビュー〔4 観点〕結果を `docs/reviews/` に残す）を、オーケストレーターの判断基準として `orchestrator/instructions/wallbounce.md` に追記（CLAUDE.md の「開発フロー／動作確認／レビュー」と整合）。仕様 §instruction 注入の「判断基準の所在」にも反映。
+
+## 2026-06-29（実機検証で判明した構造的不具合の是正：実装仕様改訂）
+- 実機運用で判明した不具合（介入で全 worker 停止／中断後のやり直し／レビュー誤採点・パース失敗）を是正する設計を実装仕様へ反映（実装は「実装状況」の「設計確定・実装待ち」）。
+- スキーマ：State.Phase から `intervening` を削除（wallbounce/executing/done）。Task に `Completion`（必須・タスク固有完了基準）・`SessionID`（`--resume` 用）・`OpenInterventionID`・`ReviewFormatErrors` を追加。新ステータス `waiting_human`。介入キュー `intervention/open.json`（`OpenInterventions`/`OpenIntervention`）を導入し、単一 `open_intervention` サイドカー＋最上位 `intervening` 状態を廃止。control.json の intervention_id を任意化（複数解決時は answer.md 有無で再照合）。
+- 制御フロー：状態機械図と run loop を改訂。トリガー発火は当該タスクのみ作用（全 worker を束ねる `runCtx` の `runCancel()` 廃止）、peer 継続、`[i]` オンデマンド介入対応、`waiting_human` が残る間は run を終了しない。
+- worker ディスパッチ：`session_id` 捕捉と `--resume`（同一 Attempt 再開）／新 Attempt はセッション破棄、中間コミット方針を追記。
+- 品質ゲート：タスク固有 `completion` のみで採点（フォールバック禁止）・構造化出力・フォーマット違反と内容不合格の分離（`review_format_error_limit`・`review_gate_defect`）・レビュー専用リトライ。
+- 並行性・再開・エラー処理：トリガー発火＝タスク単位保留（peer 不停止）、再開で done を再実行しない正規化・`waiting_human` 保持・`--resume` 再開、Ctrl-C をクリーン中断化。
+- 設定：`review_format_error_limit`（既定 2）・`worker_grace_seconds`（既定 10）を追加。
+- CLI：自己検証用バイナリフラグ `--start-executing`（ready な seed plan で壁打ちを飛ばす検証専用 affordance）を明記。`--workspace`/`--instructions` を整理。
+- 自己検証：[70_sample-project.md] / [docs/07_self-verification.md] への参照と、テスト方針へのシナリオ（peer 継続・done 再実行なし・waiting_human 保持・SessionID 再開・フォーマット違反で再実作業しない）を追加。
+
+## 2026-07-01（実装：タスク単位介入・作業保全・品質ゲート是正・自己検証サンプル）
+- 06/60 の設計改訂を Go 実装に反映。`go build`/`vet`/`test`（`-race` 含む）緑・gofmt 済み。
+- 介入のタスク単位化：`recordFire`/全 worker `runCancel()`/最上位 `intervening` 状態/`open_intervention` サイドカーを廃止。`waiting_human` 状態＋`intervention/open.json` キュー（`state.go`）、`openInterventionLocked`/`resolveInterventions`（`controller.go`）、ダッシュボード `[i]`＋要判断件数（`dashboard.go`）。peer は継続。
+- 作業保全：`Task.SessionID`/`ResumeSession` と `RunOpts`（`--session-id`/`--resume`）、`NormalizeForResume` が running/review/revise→pending＋resume フラグ・done/waiting_human は保持。Ctrl-C を `main.go` で `context.Canceled` はクリーン終了に、`runExecuting` の `ctx.Done()` を `errSuspended` 化。worker grace は `exec.Cmd.Cancel`(SIGINT)+`WaitDelay`（`worker_grace_seconds`）。中間コミット指示を `workerResultGuide` に追記。
+- 品質ゲート：`Task.Completion` で採点（`review.go` buildReviewPrompt、プランゴールへのフォールバック廃止）、`RunGate` が `GateOutcome`（Passed/FormatError/LastSevere）を返し、フォーマット違反は worker 再ディスパッチせずレビューのみ再試行→`review_format_error_limit` 到達で `review_gate_defect` 介入。`runWallbounce` に `lintPlan`（completion 必須）。config に `review_format_error_limit`/`worker_grace_seconds`。
+- 検証 affordance：`--start-executing`（`main.go`。ready な seed plan で壁打ちを飛ばす。ResetRun でシード plan を消さないよう分岐）。
+- テスト：`controller_test.go` を per-task 介入モデルに更新（peer 継続・trigger1 waiting_human・resolve 承認）、`RunGate` の新シグネチャ、mock `RunPrompt(..., RunOpts)`。`policy_test.go` は `ResolveArgs` に更新。
+- 自己検証サンプル：`examples/orch-sample/`（mathkit＋seed plan、t-announce/t-release を irreversible）、`scripts/orch-sample.sh`（冪等 scaffold）、Makefile `orch-sample`/`orch-sample-clean`、`build-orchestrator` を `-o orchestrator` 化。
+- 未了：実 `claude -p` を用いた S1〜S5 の実機 E2E 検証（docs/07）。
+
+## 2026-07-01（実機 E2E で発見した 2 件の不具合を修正）
+- 自己検証サンプルに対する実機 E2E（docs/reviews/2026-07-01_orchestrator-e2e.md）で 2 件の不具合を発見・修正。単体テストは緑のまま。
+- 相対 `--workspace` での worktree パス二重ネスト（git worktree add exit 128 → stuck）を修正：`main.go` で `filepath.Abs` 正規化。制御フロー節に手順 0 として追記。
+- `ParseReviewResult` が stream-json を解釈できずレビュー全滅（→ review_gate_defect）だったのを修正：`ParseWorkerResult` と同型化（`resultFromStream`→envelope→bare、`findReviewResultJSON`）。§worker ディスパッチ 4 に追記。
+- E2E で S1（peer 継続）・S2/S3（中断再開で done を再実行しない・SIGTERM クリーン中断）・S4（タスク固有 completion 採点）・S5（open.json 同時 4 件）・フォーマット違反時の worker 非再実行を実挙動で確認。結果は docs/reviews/2026-07-01_orchestrator-e2e.md。
+
+## 2026-07-01（仕様↔実装 徹底整合性確認と是正）
+- 5 領域の独立監査（状態/制御フロー/worker・review・trigger・config/mode・dashboard・main・slack/サンプル）を実施。
+- 【実装バグ修正・高】`NormalizeForResume` が running/review/revise→pending 時に `ResumeSession` を立てておらず、ハードクラッシュ後の再開で SessionID があっても `--resume` されず白紙やり直しになる不具合を修正（SessionID 非空なら ResumeSession=true）。graceful 中断（[q]/Ctrl-C）は resetToPending が永続化するため元々問題なし。
+- 【実装整理・低】`ResetRun` から廃止済みサイドカー `open_intervention` の削除対象を除去。`main.go` の doc コメント2箇所から廃止済み `intervening` を除去。
+- 【仕様是正】§並行性の「トリガー発火＝タスク単位の保留」を実態に整合：トリガーは pre-dispatch か worker 完了後に評価されるため走行中 worker の個別 kill は不要（per-task 中断 context は持たない）。`worker_grace_seconds` は中断経路のみに適用、と明記。06 §6.2 も同旨に修正。
+- 【仕様是正】トリガー表の条件4「計画上のマーク」・条件5「依存結果との矛盾検出」を v1 未実装（フェーズ2以降）と明記（実装は NeedsHuman 駆動のみ）。
+- 【仕様補完】Task スキーマに `ResumeSession` を追記。
+- 70：カバーするコードのツリーに実在ファイル（stats/strings/geometry.py スタブ・pytest.ini・.gitignore）を追加、「テストだけ」を「テストとスタブ」に修正。
+- 再ビルド・`go test`（-race 含む）緑・gofmt 済み。

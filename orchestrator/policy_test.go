@@ -110,9 +110,9 @@ func TestModeArgs_IncludePolicyWhenPresent(t *testing.T) {
 	if !argsContainPolicy(wbArgs) {
 		t.Fatalf("wallbounce args should include policy: %v", wbArgs)
 	}
-	// Seed a question so InterveneArgs has the instruction assembled.
+	// Seed a question so ResolveArgs has the instruction assembled.
 	_ = store.WriteQuestion("iv1", "詰まりました")
-	ivArgs := m.InterveneArgs("iv1")
+	ivArgs := m.ResolveArgs([]string{"iv1"})
 	if !argsContainPolicy(ivArgs) {
 		t.Fatalf("intervene args should include policy: %v", ivArgs)
 	}
