@@ -46,7 +46,7 @@ Linux サーバ (SSH でアクセス)
 │                                               │
 │  ─── 開発ツール ───                             │
 │  Node.js 24/22 (fnm) + pnpm + Claude Code    │
-│  Python3 + venv, Go, Rust                     │
+│  Python3 + venv/pyenv, Go, Rust               │
 │  git, zsh, tmux, vim, make, gcc, curl, wget   │
 │  iptables ファイアウォール                      │
 │                                               │
@@ -76,7 +76,7 @@ Linux サーバ (SSH でアクセス)
 │                                               │
 │  ─── 開発ツール ───                             │
 │  Node.js 24/22 (fnm) + pnpm + Claude Code    │
-│  Python3 + venv, Go, Rust                     │
+│  Python3 + venv/pyenv, Go, Rust               │
 │  git, zsh, tmux, vim, make, gcc, curl, wget   │
 │  iptables ファイアウォール                      │
 │                                               │
@@ -92,7 +92,7 @@ Linux サーバ (SSH でアクセス)
 #### 共通仕様
 
 - **ベース**: `ubuntu:24.04`
-- **言語**: Node.js 24/22 (fnm), Python3 (venv), Go, Rust
+- **言語**: Node.js 24/22 (fnm), Python3 (venv / pyenv), Go, Rust
 - **ツール**: git, zsh, tmux, vim, make, gcc, curl, wget, pnpm
 - **Docker**: 生ソケットはマウントしない。`DOCKER_HOST=tcp://claude-dev-docker-proxy:2375` 経由で制限付き Docker API を利用
 - **ユーザー**: ホストのカレントユーザーと同名 (UID/GID はビルド時にホストと一致。entrypoint でも競合を解消して追従)

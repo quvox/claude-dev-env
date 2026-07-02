@@ -46,6 +46,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     sudo procps \
     # Python 3
     python3 python3-pip python3-venv python3-dev \
+    # pyenv で CPython をソースビルドするための依存（実行時に別バージョンを追加ビルドする際にも必要なので残す）
+    libssl-dev zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev \
+    libncursesw5-dev tk-dev libxml2-dev libxmlsec1-dev libffi-dev liblzma-dev \
     # サンドボックス（Claude Code 推奨）
     bubblewrap socat \
     # Chromium / Playwright 依存パッケージ（chromium-browser は Ubuntu 24.04 で snap 専用のため除外）
@@ -123,6 +126,21 @@ RUN curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-$(dpkg --print-architect
 # --- Rust (rustup) ---
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
     | sh -s -- -y --default-toolchain stable --profile minimal
+
+# --- pyenv (Python バージョン管理) ---
+# ${USER_HOME}/.pyenv に配置。既定の CPython を1つソースビルドして global に設定し、
+# インストール直後から `python`/`pyenv` が使える状態にする。追加バージョンは実行時に
+# `pyenv install <ver>` でビルドできる（ビルド依存は apt で導入済み）。
+ARG PYTHON_VERSION=3.13
+RUN git clone --depth 1 https://github.com/pyenv/pyenv.git ${USER_HOME}/.pyenv
+# シム高速化用の C 拡張（任意。失敗してもビルドは継続する）
+RUN cd ${USER_HOME}/.pyenv && src/configure && make -C src || echo "pyenv native ext build skipped"
+RUN export PYENV_ROOT="${USER_HOME}/.pyenv" \
+    && export PATH="${PYENV_ROOT}/bin:${PATH}" \
+    && PYV="$(pyenv latest -k ${PYTHON_VERSION})" \
+    && echo "pyenv: installing CPython ${PYV}" \
+    && pyenv install "${PYV}" \
+    && pyenv global "${PYV}"
 
 # --- pnpm ---
 RUN export PATH="${USER_HOME}/.local/share/fnm:$PATH" \
@@ -207,6 +225,10 @@ RUN mkdir -p /etc/zsh && { \
         echo 'export PATH="${HOME}/.local/share/fnm:${PATH}"'; \
         echo 'eval "$(fnm env --use-on-cd --shell zsh 2>/dev/null)"'; \
         echo 'export PATH="${HOME}/.local/bin:${HOME}/.cargo/bin:/usr/local/go/bin:${HOME}/go/bin:${PATH}"'; \
+        echo '# pyenv (Python バージョン管理)'; \
+        echo 'export PYENV_ROOT="${HOME}/.pyenv"'; \
+        echo 'export PATH="${PYENV_ROOT}/bin:${PATH}"'; \
+        echo 'command -v pyenv >/dev/null 2>&1 && eval "$(pyenv init - zsh 2>/dev/null)"'; \
     } >> /etc/zsh/zshrc \
     && { \
         echo ''; \
@@ -214,6 +236,10 @@ RUN mkdir -p /etc/zsh && { \
         echo 'export PATH="${HOME}/.local/share/fnm:${PATH}"'; \
         echo 'eval "$(fnm env --use-on-cd --shell bash 2>/dev/null)"'; \
         echo 'export PATH="${HOME}/.local/bin:${HOME}/.cargo/bin:/usr/local/go/bin:${HOME}/go/bin:${PATH}"'; \
+        echo '# pyenv (Python バージョン管理)'; \
+        echo 'export PYENV_ROOT="${HOME}/.pyenv"'; \
+        echo 'export PATH="${PYENV_ROOT}/bin:${PATH}"'; \
+        echo 'command -v pyenv >/dev/null 2>&1 && eval "$(pyenv init - bash 2>/dev/null)"'; \
     } >> /etc/bash.bashrc
 
 # --- デフォルト .zshrc ---

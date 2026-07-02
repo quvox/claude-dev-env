@@ -6,6 +6,14 @@ alias hibernate="sudo systemctl hibernate"
 
 export PATH="$HOME/.local/bin:$PATH"
 
+# pyenv (Python バージョン管理)
+# システムの /etc/zsh/zshrc が先に初期化済みなら（shims が PATH にあれば）二重初期化を避ける。
+export PYENV_ROOT="$HOME/.pyenv"
+if [[ ":$PATH:" != *":$PYENV_ROOT/shims:"* ]]; then
+  [ -d "$PYENV_ROOT/bin" ] && export PATH="$PYENV_ROOT/bin:$PATH"
+  command -v pyenv >/dev/null 2>&1 && eval "$(pyenv init - zsh 2>/dev/null)"
+fi
+
 export SSH_AUTH_SOCK
 
 

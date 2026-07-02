@@ -244,7 +244,7 @@ echo 'alias ll="ls -la"' >> ~/.zshrc
 source ~/.zshrc
 ```
 
-PATH やランタイム初期化（fnm, Go, Rust 等）はシステム側 (`/etc/zsh/zshrc`) に配置されており、`~/.zshrc` を編集しても壊れない。
+PATH やランタイム初期化（fnm, Go, Rust, pyenv 等）はシステム側 (`/etc/zsh/zshrc`) に配置されており、`~/.zshrc` を編集しても壊れない（pyenv は `~/.zshrc.default` にも二重初期化ガード付きで入っている）。
 
 **注意:** `~/.zshrc` のリセットが必要な場合は、`claude-dev-config` ボリュームを削除してコンテナを再起動する:
 

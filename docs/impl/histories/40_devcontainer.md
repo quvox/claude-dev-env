@@ -9,3 +9,8 @@
 
 ## 2026-06-28
 - AI オーケストレーター実装に伴い、`base` の前に Go ビルドステージ `orch-builder`（`FROM golang:1.24-alpine`）を追加した旨を追記（`orchestrator/` を stdlib のみでビルド、`go.sum` 不要）。`base` 内で `claude-orchestrator` バイナリと `orchestrator/instructions/` を COPY する旨も追記。詳細は 60_orchestrator.md。
+
+## 2026-07-01（pyenv 追加）
+- Dockerfile.claude に pyenv を追加。apt に CPython ソースビルド依存（libssl-dev/zlib1g-dev/libbz2-dev/libreadline-dev/libsqlite3-dev/libncursesw5-dev/tk-dev/libxml2-dev/libxmlsec1-dev/libffi-dev/liblzma-dev）を追加（実行時の追加バージョンビルド用に保持）。
+- 言語ランタイム節（USER 権限）で `~/.pyenv` に git clone、ARG `PYTHON_VERSION`（既定 3.13）の最新パッチを `pyenv latest -k` で解決してソースビルドし `pyenv global` に設定。C 拡張ビルドはベストエフォート。
+- システム rc（/etc/zsh/zshrc・/etc/bash.bashrc）の PATH ブロックに pyenv 初期化（PYENV_ROOT・bin を PATH・`pyenv init -`）を追加。ルート `.zshrc`（~/.zshrc.default）にも二重初期化ガード付きで pyenv 初期化を追加（利用者要望）。
