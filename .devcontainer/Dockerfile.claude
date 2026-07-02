@@ -60,8 +60,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     xdg-utils \
     # スクリーンショット・動画キャプチャ
     scrot ffmpeg x11-apps \
-    # KVM / QEMU（ハードウェア仮想化）
+    # KVM / QEMU（ハードウェア仮想化）＋ VM モード（virtiofs 共有・cloud-init provision）
     qemu-system-x86 qemu-utils ovmf cpu-checker bridge-utils \
+    virtiofsd cloud-image-utils \
     # その他
     unzip zip xz-utils gnupg locales \
     && rm -rf /var/lib/apt/lists/* \
@@ -254,8 +255,13 @@ COPY scripts/init-firewall-claude.sh /usr/local/bin/init-firewall.sh
 COPY scripts/entrypoint-claude.sh /usr/local/bin/entrypoint.sh
 COPY scripts/save_prompt.sh /usr/local/bin/save_prompt.sh
 COPY scripts/sendslackmsg.sh /usr/local/bin/sendslackmsg.sh
+# --- VM モード（QEMU + virtiofs）スクリプト ---
+COPY scripts/vm-up.sh /usr/local/bin/vm-up.sh
+COPY scripts/vm /usr/local/bin/vm
+COPY scripts/VM_DEV.md.tmpl /usr/local/share/claude-dev/VM_DEV.md.tmpl
 RUN chmod +x /usr/local/bin/init-firewall.sh /usr/local/bin/entrypoint.sh \
-    /usr/local/bin/save_prompt.sh /usr/local/bin/sendslackmsg.sh
+    /usr/local/bin/save_prompt.sh /usr/local/bin/sendslackmsg.sh \
+    /usr/local/bin/vm-up.sh /usr/local/bin/vm
 
 # --- orchestrator バイナリ + instruction テンプレート ---
 COPY --from=orch-builder /claude-orchestrator /usr/local/bin/claude-orchestrator

@@ -258,6 +258,35 @@ fi
 # --- ファイアウォール設定 ---
 /usr/local/bin/init-firewall.sh 2>/dev/null || true
 
+# --- VM モード起動（--vm / CLAUDE_DEV_VM=1）---
+# ゲスト VM（QEMU+virtiofs）を起動し dockerd 準備完了を待つ（docs/impl/80 §5）。
+# 成功時のみ DOCKER_HOST をゲストへ向け、VM_DEV.md を生成。失敗時は proxy 既定を維持。
+if [ "${CLAUDE_DEV_VM:-}" = "1" ]; then
+    echo "🖥️  VM モード: ゲスト VM を起動中（初回は provision に数分かかります）…"
+    if su "$USERNAME" -c '/usr/local/bin/vm-up.sh'; then
+        mkdir -p /etc/claude-dev
+        echo "export DOCKER_HOST='tcp://127.0.0.1:2375'" > /etc/claude-dev/vm.env
+        for rc in /etc/zsh/zshrc /etc/bash.bashrc; do
+            if [ -f "$rc" ] && ! grep -q '/etc/claude-dev/vm.env' "$rc"; then
+                {
+                    echo ''
+                    echo '# --- claude-dev: VM モード DOCKER_HOST（ゲストの dockerd） ---'
+                    echo '[ -f /etc/claude-dev/vm.env ] && . /etc/claude-dev/vm.env'
+                } >> "$rc"
+            fi
+        done
+        if [ -f /usr/local/share/claude-dev/VM_DEV.md.tmpl ]; then
+            sed -e 's#@DOCKER_HOST@#tcp://127.0.0.1:2375#g' \
+                -e "s#@VM_PORTS@#${VM_PORTS:-（Docker API のみ）}#g" \
+                /usr/local/share/claude-dev/VM_DEV.md.tmpl > /workspace/VM_DEV.md
+            chown "$USERNAME":"$USERNAME" /workspace/VM_DEV.md 2>/dev/null || true
+        fi
+        echo "✅ VM モード有効。制御情報は /workspace/VM_DEV.md（docker はゲスト VM を指します）"
+    else
+        echo "⚠️  VM の起動に失敗。VM 無しで継続します（docker は既定の proxy 経路のまま）。'vm logs' で調査可。"
+    fi
+fi
+
 # --- CLAUDE.md にコンテナ環境情報を書き込み ---
 # マーカー（<!-- claude-dev-auto-start/end -->）で囲んだ範囲を毎回削除→再書き込みする。
 # これにより entrypoint の更新が次回起動時に必ず反映される。
@@ -318,8 +347,10 @@ CLAUDE_AUTO_EOF
 CLAUDE_VNC_EOF
     fi
 
-    # KVM が渡されている場合（--kvm 起動）は仮想化に関する指示を追加
-    if [ -c /dev/kvm ]; then
+    # KVM が渡されている場合（--kvm 起動）は仮想化に関する指示を追加。
+    # ただし VM モード（--vm / CLAUDE_DEV_VM=1）では CLAUDE.md への追記を抑止し、
+    # KVM/VM 情報は /workspace/VM_DEV.md へ集約する（docs/impl/80 §5, docs/08 §3.6）。
+    if [ -c /dev/kvm ] && [ "${CLAUDE_DEV_VM:-}" != "1" ]; then
         cat >> /workspace/CLAUDE.md << 'CLAUDE_KVM_EOF'
 ## KVM / 仮想化（重要）
 

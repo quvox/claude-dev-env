@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+# =============================================================================
+# vm — VM モードのコンテナ内ヘルパー（docs/impl/80_vm-mode.md §7）。
+# サブコマンド: status / shell / restart / down / logs
+# =============================================================================
+set -euo pipefail
+
+VM_HOME="${HOME}/.claude-dev-vm"
+LOG_DIR="${VM_HOME}/logs"
+RUN_DIR="/run/vm"
+QMP_SOCK="${RUN_DIR}/qmp.sock"
+PIDFILE="${RUN_DIR}/qemu.pid"
+SSH_KEY="${VM_HOME}/id_vm"
+DOCKER_TCP="tcp://127.0.0.1:2375"
+
+qemu_pid() { [ -f "${PIDFILE}" ] && cat "${PIDFILE}" 2>/dev/null || true; }
+qemu_running() { local p; p="$(qemu_pid)"; [ -n "$p" ] && kill -0 "$p" 2>/dev/null; }
+
+cmd="${1:-status}"
+case "$cmd" in
+    status)
+        if qemu_running; then echo "QEMU: running (pid $(qemu_pid))"; else echo "QEMU: not running"; fi
+        pgrep -f 'virtiofsd' >/dev/null 2>&1 && echo "virtiofsd: running" || echo "virtiofsd: not running"
+        if docker -H "${DOCKER_TCP}" info >/dev/null 2>&1; then
+            echo "guest dockerd: reachable (${DOCKER_TCP})"
+        else
+            echo "guest dockerd: NOT reachable"
+        fi
+        ;;
+    shell)
+        shift || true
+        exec ssh -p 2222 -i "${SSH_KEY}" \
+            -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+            dev@127.0.0.1 "$@"
+        ;;
+    restart)
+        "$0" down || true
+        exec /usr/local/bin/vm-up.sh
+        ;;
+    down)
+        if [ -S "${QMP_SOCK}" ] && command -v socat >/dev/null 2>&1; then
+            # QMP でグレースフルに停止
+            printf '{"execute":"qmp_capabilities"}\n{"execute":"system_powerdown"}\n' \
+                | socat - "UNIX-CONNECT:${QMP_SOCK}" >/dev/null 2>&1 || true
+            for _ in $(seq 1 15); do qemu_running || break; sleep 1; done
+        fi
+        if qemu_running; then kill "$(qemu_pid)" 2>/dev/null || true; fi
+        pkill -f 'virtiofsd' 2>/dev/null || true
+        echo "VM stopped"
+        ;;
+    logs)
+        tail -n "${2:-100}" "${LOG_DIR}/vm-up.log" "${LOG_DIR}/qemu-serial.log" "${LOG_DIR}/virtiofsd.log" 2>/dev/null
+        ;;
+    *)
+        echo "usage: vm {status|shell|restart|down|logs}" >&2; exit 2 ;;
+esac

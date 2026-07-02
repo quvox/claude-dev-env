@@ -1,0 +1,39 @@
+<!-- このファイルは claude-dev の VM モードが自動生成します。編集不要。
+     コミットしたくなければ各自 .gitignore に追加してください。 -->
+# VM_DEV.md — VM モードの制御情報（エージェント向け）
+
+このプロジェクトは **VM モード**で動作しています。Docker はこのコンテナ内で起動した
+**ゲスト VM の中の dockerd** で動きます（層構成: ホスト → claude コンテナ → ゲスト VM → VM 内 Docker）。
+`docker` / `docker compose` は普段どおり使えますが、以下を意識してください。
+
+## Docker の向き先
+- `DOCKER_HOST=@DOCKER_HOST@`（ゲスト VM の dockerd）。`docker`/`docker compose` はゲストを対象に動く。
+- 既定の DooD（socket proxy 経由のホスト daemon）を使いたい時だけ、そのコマンドで
+  `DOCKER_HOST=tcp://claude-dev-docker-proxy:2375 docker …` と一時上書きする。
+
+## bind mount（重要）
+- **bind mount の source は `/workspace` 配下のみ**。`/workspace` は virtiofs でゲストに
+  **同一パス**で共有されており、`-v /workspace/app:/app` のように書けばゲスト内で成立し、
+  claude 側での編集も**ライブ反映**される。
+- `/workspace` の外（`/home/...` 等）はゲストから見えないので bind できない。
+
+## ポート
+- ゲスト内サービスの公開ポートは、このコンテナの `127.0.0.1:<port>` に転送される
+  （公開したポート: @VM_PORTS@）。
+- noVNC ブラウザやホストから見るには `claude-dev forward` を併用する。
+
+## VM 操作（vm ヘルパー）
+- `vm status` — QEMU / virtiofsd / ゲスト dockerd の状態
+- `vm shell`  — ゲストに入る（ssh。`vm shell -- <cmd>` で単発実行）
+- `vm restart` / `vm down` — 再起動 / 停止
+- `vm logs`   — vm-up / QEMU シリアル / virtiofsd のログ
+
+## ssh-agent
+- 既定は **claude コンテナ側で SSH/git を行う**（ここには host の ssh-agent が転送済み）。
+  ゲストに agent は出していない。
+- ゲスト内でも agent が必要な場合（`docker build --ssh` 等）は VM_DEV の方式 B
+  （socat 転送）を参照（docs/08_vm-mode.md §3.4）。
+
+## トラブルシュート
+- `docker` が繋がらない → `vm status` で dockerd 到達性を確認、`vm logs` を参照。
+- 共有が見えない → ゲストで `mount | grep virtiofs`（`/workspace` が virtiofs でマウントされているか）。

@@ -95,6 +95,32 @@ claude-dev upgrade            # Claude Code + Chrome + Docker Proxy 更新
 make status                   # 全体の状態確認
 ```
 
+## VM モード（Docker を多用する開発）
+
+bind mount や docker compose を使う「Docker 中心のシステム」を開発する場合、既定構成（Docker Socket Proxy 経由）ではホスト bind mount が使えない。**VM モード**は、コンテナ内に KVM のゲスト VM を立て、その中で**ネイティブ Docker**（bind mount・compose・privileged 可）を動かすことでこれを解決する。
+
+```bash
+cd ~/repos/docker-heavy-project
+claude-dev start --vm          # ゲスト VM を起動（--kvm を含意。ホストに /dev/kvm が必要）
+
+# 起動後は普段どおり docker を使うだけ（透過）。裏でゲスト VM の dockerd を指している。
+docker compose up              # bind mount もそのまま効く（/workspace 配下のコードは即反映）
+
+# アプリのポートも転送したい場合（起動時に環境変数で指定）
+VM_PORTS=3000,8080 claude-dev start --vm
+
+# VM の操作（コンテナ内ヘルパー）
+vm status                      # QEMU / dockerd / virtiofs の状態
+vm shell                       # ゲストに入る（ssh）
+vm logs                        # 起動・ゲストのログ
+```
+
+- **仕組み**: ホスト → claude コンテナ → ゲスト VM → VM 内 Docker の層構成。コードは virtiofs で `/workspace` を**同一パス共有**（ホストでの編集がゲスト内 Docker に**ライブ反映**）。`docker` は `DOCKER_HOST` でゲストの daemon を指すため、操作は普段どおり。
+- **前提**: ホストに `/dev/kvm`（ベアメタル or ネスト仮想化有効なクラウド）。無い場合は `--vm` は中止する。既存環境から使うにはイメージ再ビルド（`make build-claude` / `claude-dev upgrade`）が必要。
+- **初回**: ゲストイメージのダウンロードと provision に数分かかる（以降のブートは短い）。
+- **注意点**: bind mount の source は `/workspace` 配下のみ有効。ゲスト内サービスは `claude-dev forward` で公開する。詳細は起動時に生成される `/workspace/VM_DEV.md`、設計は [docs/08_vm-mode.md](docs/08_vm-mode.md) を参照。
+- 既定は従来の軽量コンテナ。VM モードは Docker を多用する案件のときだけ使う（重い・`/dev/kvm` 必須）。
+
 ## セキュリティ
 
 多層防御で Claude Code の暴走リスクを軽減する。
@@ -117,6 +143,7 @@ make status                   # 全体の状態確認
 | [docs/03_security.md](docs/03_security.md) | 脅威モデルと防御層の詳細 |
 | [docs/04_cli-reference.md](docs/04_cli-reference.md) | 全コマンドのリファレンス |
 | [docs/05_customization.md](docs/05_customization.md) | ファイアウォール・CLAUDE.md・tmux・hooks/env 等のカスタマイズ |
+| [docs/08_vm-mode.md](docs/08_vm-mode.md) | VM モード（QEMU+virtiofs でゲスト VM 内のネイティブ Docker を使う）の設計 |
 | [docs/impl/INDEX.md](docs/impl/INDEX.md) | 実装仕様書（コードと 1 対 1 の Single Source of Truth）一覧 |
 
 ## ファイル構成
@@ -134,6 +161,8 @@ claude-dev-env/
 ├── scripts/
 │   ├── init-firewall-claude.sh        ブラックリスト FW
 │   ├── entrypoint-claude.sh           Claude コンテナ起動スクリプト
+│   ├── vm-up.sh / vm                  VM モード: ゲスト VM 起動・操作ヘルパー
+│   ├── VM_DEV.md.tmpl                 VM モードのエージェント向け情報テンプレート
 │   └── tmux.conf                      tmux 設定（prefix: Ctrl-_）
 └── docs/                              ドキュメント
 ```

@@ -55,7 +55,7 @@ VM モードは既存の「素の QEMU が叩ける」状態を、**管理され
 - compose の相対 bind も、`/workspace` 配下で実行すれば同様に成立。
 
 ### 3.2 ゲスト Docker への接続（R3）
-- ゲストで `dockerd` を **127.0.0.1:2375**（ゲスト内ローカル TCP）＋ **unix socket** で待受（unix socket は `docker build --ssh` 等ゲスト内直操作用）。
+- ゲストで `dockerd` を **`0.0.0.0:2375`（ゲスト内 TCP）＋ unix socket（`-H fd://`）** で待受（tcp を 0.0.0.0 にするのは、QEMU user-mode hostfwd がゲストの SLIRP IP 宛に転送し 127.0.0.1 では届かないため。露出は claude コンテナの hostfwd 経由のみ＝実質コンテナ内限定）。unix socket は `docker build --ssh` 等ゲスト内直操作用。
 - QEMU user-mode ネットの **hostfwd** で claude コンテナの `127.0.0.1:2375` → ゲスト `:2375` に転送。
 - claude 側は `DOCKER_HOST=tcp://127.0.0.1:2375` を設定 → 既存のエージェント/worker がそのままゲスト daemon を操作。
 - アプリのサービスポートも hostfwd で claude 側 `127.0.0.1:<port>` に露出（設定可能）。noVNC ブラウザからの確認はポートフォワード（既存 `claude-dev forward`）と組み合わせる。

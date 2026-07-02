@@ -483,13 +483,20 @@ start)
     # フラグ解析
     USE_VNC=1
     USE_KVM=0
+    USE_VM=0
     while [ $# -gt 0 ]; do
         case "$1" in
             --no-vnc) USE_VNC=0 ;;
             --kvm) USE_KVM=1 ;;
+            --vm) USE_VM=1; USE_KVM=1 ;;   # VM モード（--kvm を含意）
         esac
         shift
     done
+    # VM モードは /dev/kvm 必須（TCG では実用にならないため中止。docs/impl/80 §2）
+    if [ "$USE_VM" = "1" ] && [ ! -c /dev/kvm ]; then
+        echo "❌ --vm はホストに /dev/kvm が必要です（見つかりません）。中止します。"
+        exit 1
+    fi
 
     # 既に実行中 → attach（tmux セッションがなければ再作成）
     if is_running "$NAME"; then
@@ -618,6 +625,17 @@ start)
         fi
     fi
 
+    # VM モード（--vm）: ゲスト VM 用の永続ボリューム・環境変数を渡す（docs/impl/80 §2）
+    # ゲスト qcow2/キャッシュはプロジェクトごとの名前付きボリュームに保持（同時起動時の競合回避）。
+    VM_OPTS=""
+    if [ "$USE_VM" = "1" ]; then
+        VM_OPTS="-e CLAUDE_DEV_VM=1 -v claude-dev-vm-${NAME}:${CHOME}/.claude-dev-vm"
+        for _v in VM_PORTS VM_MEM VM_SMP VM_DISK; do
+            eval "_val=\${$_v:-}"
+            [ -n "$_val" ] && VM_OPTS="$VM_OPTS -e $_v=$_val"
+        done
+    fi
+
     # コンテナ起動
     echo "🚀 起動中... [${NAME}] → ${PROJECT_DIR}"
     docker run -d \
@@ -638,6 +656,7 @@ start)
         $DOCKER_OPTS \
         $NOVNC_PORT_OPT \
         $KVM_OPTS \
+        $VM_OPTS \
         -e NODE_OPTIONS=--max-old-space-size=4096 \
         -t \
         "$RUN_IMAGE" >/dev/null
@@ -668,7 +687,12 @@ code)
         exit 1
     fi
 
-    docker exec -it -u "$CUSER" "$NAME" tmux new-window -t main "claude"
+    # VM モード時は VM_DEV.md への導線を --append-system-prompt で注入（CLAUDE.md 非侵襲）
+    _claude_cmd="claude"
+    if [ "$(docker exec "$NAME" printenv CLAUDE_DEV_VM 2>/dev/null)" = "1" ]; then
+        _claude_cmd='claude --append-system-prompt "VM モード有効。docker はゲスト VM の daemon を指し、bind mount の source は /workspace 配下のみ有効。制御情報は /workspace/VM_DEV.md を参照。"'
+    fi
+    docker exec -it -u "$CUSER" "$NAME" tmux new-window -t main "$_claude_cmd"
     docker exec -it -u "$CUSER" "$NAME" tmux attach -t main
     ;;
 
