@@ -81,8 +81,10 @@ claude-dev      （単一の bash スクリプト）
 ### `logout`
 全 Claude コンテナとプロキシコンテナを停止し、`VOL_AUTH` の中身を空にする（一時コンテナで `rm -rf /auth/* /auth/.*`）。
 
-### `start [--no-vnc] [--kvm]`
+### `start [--no-vnc] [--kvm] [--vm]`
 本 CLI の中核。`NAME=container_name`、`PROJECT_DIR=$(pwd)`。`--no-vnc` で `USE_VNC=0`、`--kvm` で `USE_KVM=1`（既定 `0`）。
+
+> **`--vm`（VM モード。設計確定・未実装。正本: [80_vm-mode.md](80_vm-mode.md) / [docs/08_vm-mode.md](../08_vm-mode.md)）**: `--kvm` を含意し、`CLAUDE_DEV_VM=1` とゲスト qcow2 キャッシュ用ボリューム・アプリポート（`VM_PORTS`）をコンテナへ渡す。コンテナ内でゲスト VM（QEMU+virtiofs）を起動し、その中のネイティブ Docker を `DOCKER_HOST` 経由で使う。`/dev/kvm` がホストに無ければ警告して中止。VM 制御用の `vm` ヘルパー（`status`/`shell`/`restart`/`down`/`logs`）はコンテナ内コマンドとして提供する。
 
 1. 既に稼働中なら attach: noVNC URL を表示し、`tmux has-session -t main` が無ければ作成してから `tmux attach`。
 2. 停止中コンテナがあれば削除。`ensure_infrastructure`。

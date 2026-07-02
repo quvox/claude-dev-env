@@ -16,6 +16,7 @@
 | [docs/05_customization.md](docs/05_customization.md) | ファイアウォール・CLAUDE.md・tmux・hooks/envなど、利用者が環境を調整するためのカスタマイズ手順をまとめた利用者向けガイド。 | カスタマイズ, ファイアウォール, hooks, Slack通知, tmux, KVM, デスクトップ操作 |
 | [docs/06_orchestration.md](docs/06_orchestration.md) | プロジェクトごとに AI オーケストレーターを 1 体立て、人間は壁打ちと例外対応だけに関与して実行を自律・並列化する仕組みの設計文書。方式選択（自作の外部制御ループ）・2 モード構成・画面/プロセス像・介入設計を定める。 | オーケストレーター, 壁打ち, 自律実行, 外部制御ループ, 介入トリガー, マルチエージェント, tmux |
 | [docs/07_self-verification.md](docs/07_self-verification.md) | 本オーケストレーター自身を、リポジトリ同梱の小さなサンプルサブプロジェクトに対して実際に動かし、ユースケースに沿って検証・改善するための設計文書。実プロジェクトを犠牲にせず高速・再現可能にオーケストレーターの不具合を発見/修正する開発ループを定める。 | 自己検証, ドッグフーディング, サンプルプロジェクト, 再現性, 介入, 中断再開, 動作確認 |
+| [docs/08_vm-mode.md](docs/08_vm-mode.md) | Docker を多用する開発のために、claude コンテナ内で QEMU/KVM のゲスト VM を起動し、その中でネイティブ Docker を動かす「VM モード」の設計文書。virtiofs で /workspace を同一パス共有してライブ編集を保ち、ゲストの dockerd を DOCKER_HOST で claude 側エージェントから使う。bind mount・privileged 等を VM 境界に隔離して安全に許す。 | VMモード, QEMU, KVM, virtiofs, Docker, 隔離, DOCKER_HOST |
 | [docs/MODIFICATION.md](docs/MODIFICATION.md) | オーケストレーター方針 追記提案（MODIFICATION） |  |
 | [docs/impl/00_overview.md](docs/impl/00_overview.md) | リポジトリの実装全体を俯瞰し、コンポーネントの責務・制御フロー・Dockerリソース命名・ルート設定ファイルの役割・設計上の不変条件を示す。 | 実装仕様, コンポーネント構成, 制御フロー, Dockerリソース, 不変条件, 設計概要, CLI |
 | [docs/impl/10_cli.md](docs/impl/10_cli.md) | ホスト側の claude-dev シェルスクリプトの実装仕様。ヘルパー関数・サブコマンド・コンテナ起動引数などの成果物仕様を記述する。 | CLI, claude-dev, bash, ヘルパー関数, コンテナ起動, ポートフォワード, orchestrate |
@@ -27,6 +28,8 @@
 | [docs/impl/50_docker-proxy.md](docs/impl/50_docker-proxy.md) | Docker APIを安全に中継するGo製リバースプロキシの検査ロジック・接続ハイジャック処理・テスト仕様を記述する。 | Docker Socket Proxy, Go, リバースプロキシ, API検査, セキュリティ, hijack, コンテナ |
 | [docs/impl/60_orchestrator.md](docs/impl/60_orchestrator.md) | AI オーケストレーター（Go 製コントローラ）の実装仕様。外部制御ループ・状態ストア・モード切替・worker 並行ディスパッチ・品質ゲート・介入・判断基準・Slack 通知・ビルド配置を定める。設計の意図は docs/06_orchestration.md を参照。 | オーケストレーター, Go, 制御ループ, 状態ストア, worker, 介入, 並行実行 |
 | [docs/impl/70_sample-project.md](docs/impl/70_sample-project.md) | オーケストレーター自己検証用のサンプルサブプロジェクト（テンプレート examples/orch-sample/）と、それを使い捨て作業コピーへ展開する scaffold（Makefile/スクリプト）、決定論的に介入・並行・中断再開を踏ませる seed plan、検証用 CLI affordance の実装仕様。 | サンプルプロジェクト, scaffold, seed plan, 自己検証, Makefile, orchestrate, テンプレート |
+| [docs/impl/80_vm-mode.md](docs/impl/80_vm-mode.md) | VM モード（QEMU+KVM でゲスト VM を起動し virtiofs で /workspace を同一パス共有、ゲスト内 dockerd を DOCKER_HOST で使う）の実装仕様。Dockerfile への virtiofsd/cloud-image-utils 追加、Ubuntu cloud image の provision、起動スクリプト、claude-dev の --vm/vm、VM_DEV.md 生成の成果物仕様を定める。 | VMモード, QEMU, virtiofs, cloud-init, DOCKER_HOST, hostfwd, VM_DEV |
 | [docs/reviews/2026-06-28_orchestrator-tty-fix.md](docs/reviews/2026-06-28_orchestrator-tty-fix.md) | レビュー: オーケストレーター 端末モード不具合の修正 |  |
+| [docs/reviews/2026-07-01_orchestrator-e2e.md](docs/reviews/2026-07-01_orchestrator-e2e.md) | オーケストレーター 実機 E2E 動作確認（自己検証サンプル） |  |
 
-_計 20 件_
+_計 23 件_

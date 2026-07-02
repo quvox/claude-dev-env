@@ -99,6 +99,7 @@ Linux サーバ (SSH でアクセス)
 - **git 設定**: ホストの `~/.gitconfig` を読み取り専用でマウント（存在する場合）
 - **SSH**: SSH agent ソケットを転送。秘密鍵ファイルはマウントしない。`~/.ssh/known_hosts` と `~/.ssh/config` は読み取り専用でマウント
 - **ハードウェア仮想化 (KVM/QEMU)**: QEMU 一式（`qemu-system-x86`, `qemu-utils`, `ovmf`, `cpu-checker`, `bridge-utils`）をイメージに同梱。通常は Chrome 操作のみで十分なため、KVM デバイスは**既定では渡さない**。`claude-dev start --kvm` を指定したとき**のみ**、ホストに存在する `/dev/kvm`・`/dev/vhost-net`・`/dev/net/tun` を `--device` でコンテナに渡し、コンテナ内で KVM アクセラレーション付きの VM を起動できる（ホストに `/dev/kvm` が無ければ警告し、QEMU はソフトウェアエミュレーションで動作）。`--kvm` 指定時は entrypoint がデバイスの GID に合わせたグループを作成してユーザーをアクセス可能にする。詳細は [docs/impl/10_cli.md](impl/10_cli.md) / [docs/impl/31_entrypoint.md](impl/31_entrypoint.md)
+- **VM モード（オプトイン。設計確定・未実装）**: Docker を多用するシステム開発向けに `claude-dev start --vm` でゲスト VM（QEMU+virtiofs）を起動し、その中で**ネイティブ Docker**（bind mount・compose・privileged 可）を動かす層構成（ホスト → claude コンテナ → ゲスト VM → VM 内 Docker）。コードは virtiofs で `/workspace` を同一パス共有（ライブ反映）、Docker 接続は `DOCKER_HOST`。claude コンテナは privileged 化しない。既定は従来の軽量コンテナ（DooD+proxy）で、VM モードは重い Docker 案件のときだけ使う。設計は [docs/08_vm-mode.md](08_vm-mode.md)、実装仕様は [docs/impl/80_vm-mode.md](impl/80_vm-mode.md)
 
 #### VNC あり固有の仕様
 
