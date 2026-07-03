@@ -17,3 +17,9 @@
 
 ## 2026-06-29
 - `orchestrate` の説明に、オーケストレーター本体バイナリが自己検証用に受け付けるフラグ（`--instructions`・`--start-executing`）への注記を追加。`claude-dev orchestrate` 自体はこれらを公開しない旨を明記。
+
+## 2026-07-04（proxy へ CLAUDE_DEV_ALLOW_WORKSPACE_BINDS を付与）
+- ensure_docker_proxy_container の docker run に `-e CLAUDE_DEV_ALLOW_WORKSPACE_BINDS=${CLAUDE_DEV_ALLOW_WORKSPACE_BINDS:-1}` を追加（/workspace 配下 bind 許可。既定有効。正本 50/03）。共有・常駐のため設定変更は proxy 作り直しが必要な旨を明記。
+
+## 2026-07-04（整合性確認による調整）
+- 実装仕様内の徹底整合確認を受け、`--vm` 説明の `vm` ヘルパー列挙に欠落していた `portsync` を追加（status に health 表示含む旨も明記）。80_vm-mode.md の列挙と一致させた。

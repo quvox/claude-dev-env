@@ -45,3 +45,6 @@
 - `vm-up.sh`: `start_healthd()` を追加し dockerd 準備後に portsync と併せ常駐起動（pgrep で多重起動防止）。`scripts/vm`: `status` に health 表示を追加。`tmux.conf`: status-right に `@vm_health` を条件表示。`Dockerfile.claude`: vm-healthd.sh を COPY＋chmod。
 - カバーするコード・実装状況・関連文書（60/30/40）を更新。
 - 検証: `bash -n` 緑。稼働中 VM（別プロジェクト）の実 QEMU に対しワンショット実行し、-smp からの上限解決（200%）・CPU 算出・WARN/OK 分岐・health ファイル生成を確認。**要イメージ再ビルドで全 VM に反映**（tmux.conf は RO マウントのため再 start で反映）。
+
+## 2026-07-04（整合性確認による調整）
+- 徹底整合確認を受けた微修正。要件の「proxy が bind 全面拒否」を /workspace 配下は書換許可（03 §5）へ実態修正。§2 の VMModePreamble 参照の節名ずれを訂正（state.go）。health ファイルの STATE 取り得る値に OFF を追記。§7.2 のダッシュボード鮮度(既定120秒)の正本が dashboard.go 側である旨を明示。tmux チップが短縮表記で「可能性」文言は MSG/flash/バナーが担う旨を注記。

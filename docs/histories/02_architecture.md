@@ -12,3 +12,6 @@
 
 ## 2026-07-01
 - 開発ツールの言語一覧に pyenv を追記（Python3 venv/pyenv）。
+
+## 2026-07-04（proxy の /workspace 配下 bind 許可を反映）
+- Docker Socket Proxy のセキュリティ説明を更新。ホストバインドは原則拒否だが、呼び出し元の /workspace 配下は実ホストパスへ書き換えて許可する（既定有効・CLAUDE_DEV_ALLOW_WORKSPACE_BINDS で切替）旨と §5 への参照を追記（正本 03_security.md §5 / impl 50）。ASCII 図の `-v /:/host` 拒否例は /workspace 外のため引き続き正。

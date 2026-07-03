@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # =============================================================================
 # vm — VM モードのコンテナ内ヘルパー（docs/impl/80_vm-mode.md §7）。
-# サブコマンド: status / shell / restart / down / logs
+# サブコマンド: status / shell / restart / down / rebuild / portsync / logs
 # =============================================================================
 set -euo pipefail
 

@@ -9,7 +9,7 @@ keywords: [ VMモード, QEMU, KVM, virtiofs, Docker, 隔離, DOCKER_HOST ]
 
 ## 1. 背景と要件（なぜ必要か）
 
-既定構成では claude コンテナは `DOCKER_HOST` → **Docker Socket Proxy** → ホスト daemon（DooD＝兄弟コンテナ）で Docker を使う。proxy はセキュリティのため **ホスト bind mount・privileged・device・host network を全面拒否**する（[docs/03_security.md](03_security.md)）。このため「bind mount を使う Docker 中心のシステム開発」ができない（DooD のパス不一致に加え、proxy が bind を拒否）。
+既定構成では claude コンテナは `DOCKER_HOST` → **Docker Socket Proxy** → ホスト daemon（DooD＝兄弟コンテナ）で Docker を使う。proxy はセキュリティのため **privileged・device・host network を拒否し、ホスト bind mount も原則拒否**する（例外として `/workspace` 配下の bind は proxy が実ホストパスへ書き換えて許可する＝[docs/03_security.md](03_security.md) §5）。このため **privileged や `/workspace` 外の bind を含む** Docker 中心のシステム開発は DooD 経路では成立しない（proxy が拒否・DooD のパス不一致）。
 
 VM モードは、**ハードウェア仮想化（KVM）の境界の中でネイティブ Docker を動かす**ことでこれを解決する。VM 内では bind mount も privileged も compose も制限なく使え、その影響は VM に封じ込められるため、**claude コンテナを privileged 化せず**（＝既存の隔離・proxy・firewall を壊さず）に Docker 中心開発を可能にする。
 
@@ -64,7 +64,7 @@ VM モードは既存の「素の QEMU が叩ける」状態を、**管理され
 
 ### 3.3 ゲストイメージ（Ubuntu cloud image を provision）
 - 公式 Ubuntu cloud image（qcow2）をベースに、**cloud-init（seed）または provision スクリプトで Docker と virtiofs 自動マウント・dockerd TCP 待受・スワップ確保を投入**して初回ビルド。
-- **スワップを必ず確保する（既定 2G のスワップファイル）**。cloud image は既定でスワップを持たず、ゲスト RAM が埋まると（スワップ無しでは）カーネルのページ回収が空回りしてゲスト全体が stall する（＝「異常に遅い」の主因）。スワップがあれば RAM 超過が致命的スラッシングにならず緩やかに劣化する。RAM 既定は 8192M（§4）。
+- **スワップを必ず確保する（既定 2G のスワップファイル）**。cloud image は既定でスワップを持たず、ゲスト RAM が埋まると（スワップ無しでは）カーネルのページ回収が空回りしてゲスト全体が stall する（＝「異常に遅い」の主因）。スワップがあれば RAM 超過が致命的スラッシングにならず緩やかに劣化する。RAM 既定は 8192M（既定値の正本は実装仕様 [docs/impl/80_vm-mode.md](impl/80_vm-mode.md) §4）。
 - ビルド成果物（qcow2）は**名前付きボリュームにキャッシュ/永続化**（コンテナ作り直しで消えない）。
 - Ubuntu の標準カーネルは `virtiofs`（`CONFIG_VIRTIO_FS`）対応のため追加カーネルビルドは不要。
 

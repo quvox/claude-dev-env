@@ -61,7 +61,7 @@ claude-dev      （単一の bash スクリプト）
 | `ensure_infrastructure` | ネットワークと 4 ボリュームを冪等に作成。 |
 | `get_novnc_url <name>` | `docker port <name> 6080` のホストポートから `http://localhost:<port>/vnc.html?autoconnect=true` を組み立てて返す（VNC なしなら空）。 |
 | `stop_proxy_if_idle` | 稼働中の Claude コンテナ数が 0 なら `DOCKER_PROXY_CONTAINER` を `rm -f`。 |
-| `ensure_docker_proxy_container` | ホストに `/var/run/docker.sock` がある場合のみ動作。イメージ未ビルドならビルドし、未起動ならプロキシコンテナを `claude-dev-net` 上に `--restart unless-stopped`・ソケットを RO マウントして起動。 |
+| `ensure_docker_proxy_container` | ホストに `/var/run/docker.sock` がある場合のみ動作。イメージ未ビルドならビルドし、未起動ならプロキシコンテナを `claude-dev-net` 上に `--restart unless-stopped`・ソケットを RO マウント・`-e CLAUDE_DEV_ALLOW_WORKSPACE_BINDS=${CLAUDE_DEV_ALLOW_WORKSPACE_BINDS:-1}`（`/workspace` 配下 bind 許可。既定有効。正本 [50_docker-proxy.md](50_docker-proxy.md) / [../03_security.md](../03_security.md)）付きで起動。無効化や設定変更は proxy を作り直す必要がある（共有・常駐のため）。 |
 
 ## サブコマンド仕様
 
@@ -84,7 +84,7 @@ claude-dev      （単一の bash スクリプト）
 ### `start [--no-vnc] [--kvm] [--vm] [--vm-fresh]`
 本 CLI の中核。`NAME=container_name`、`PROJECT_DIR=$(pwd)`。`--no-vnc` で `USE_VNC=0`、`--kvm` で `USE_KVM=1`（既定 `0`）。
 
-> **`--vm`（VM モード。実装済み・要イメージ再ビルド反映。正本: [80_vm-mode.md](80_vm-mode.md) / [docs/08_vm-mode.md](../08_vm-mode.md)）**: `--kvm` を含意し、`CLAUDE_DEV_VM=1` とゲスト qcow2 キャッシュ用ボリューム・アプリポート（`VM_PORTS`）をコンテナへ渡す。コンテナ内でゲスト VM（QEMU+virtiofs）を起動し、その中のネイティブ Docker を `DOCKER_HOST` 経由で使う。`/dev/kvm` がホストに無ければ警告して中止。VM 制御用の `vm` ヘルパー（`status`/`shell`/`restart`/`down`/`rebuild`/`logs`）はコンテナ内コマンドとして提供する。**`--vm-fresh`**（`--vm` 含意）はコンテナ作成前にゲスト用ボリューム `claude-dev-vm-<name>` を破棄して再 provision する（稼働中コンテナには効かず、`stop` 後に実行するか稼働中は `vm rebuild` を使う）。
+> **`--vm`（VM モード。実装済み・要イメージ再ビルド反映。正本: [80_vm-mode.md](80_vm-mode.md) / [docs/08_vm-mode.md](../08_vm-mode.md)）**: `--kvm` を含意し、`CLAUDE_DEV_VM=1` とゲスト qcow2 キャッシュ用ボリューム・アプリポート（`VM_PORTS`）をコンテナへ渡す。コンテナ内でゲスト VM（QEMU+virtiofs）を起動し、その中のネイティブ Docker を `DOCKER_HOST` 経由で使う。`/dev/kvm` がホストに無ければ警告して中止。VM 制御用の `vm` ヘルパー（`status`〔health 表示含む〕/`shell`/`restart`/`down`/`rebuild`/`portsync`/`logs`）はコンテナ内コマンドとして提供する。**`--vm-fresh`**（`--vm` 含意）はコンテナ作成前にゲスト用ボリューム `claude-dev-vm-<name>` を破棄して再 provision する（稼働中コンテナには効かず、`stop` 後に実行するか稼働中は `vm rebuild` を使う）。
 
 1. 既に稼働中なら attach: noVNC URL を表示し、`tmux has-session -t main` が無ければ作成してから `tmux attach`。
 2. 停止中コンテナがあれば削除。`ensure_infrastructure`。

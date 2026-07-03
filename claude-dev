@@ -297,11 +297,14 @@ ensure_docker_proxy_container() {
         docker rm -f "$DOCKER_PROXY_CONTAINER" >/dev/null
     fi
 
+    # /workspace 配下 bind の許可（既定有効・docs/03 §5 / docs/impl/50）。
+    # 無効化は host 環境で CLAUDE_DEV_ALLOW_WORKSPACE_BINDS=0 を設定し proxy を作り直す。
     docker run -d \
         --name "$DOCKER_PROXY_CONTAINER" \
         --hostname "$DOCKER_PROXY_CONTAINER" \
         --network "$NETWORK" \
         --restart unless-stopped \
+        -e "CLAUDE_DEV_ALLOW_WORKSPACE_BINDS=${CLAUDE_DEV_ALLOW_WORKSPACE_BINDS:-1}" \
         -v /var/run/docker.sock:/var/run/docker.sock:ro \
         "$IMG_DOCKER_PROXY" >/dev/null
 
