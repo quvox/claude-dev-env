@@ -263,6 +263,10 @@ fi
 # 成功時のみ DOCKER_HOST をゲストへ向け、VM_DEV.md を生成。失敗時は proxy 既定を維持。
 if [ "${CLAUDE_DEV_VM:-}" = "1" ]; then
     echo "🖥️  VM モード: ゲスト VM を起動中（初回は provision に数分かかります）…"
+    # vm-up.sh は $USERNAME 権限で走るため、root 所有のマウント点/実行時ディレクトリを
+    # 事前に $USERNAME 所有で用意する（docker ボリューム `~/.claude-dev-vm` と /run/vm は
+    # 既定で root:root。これを直さないと vm-up.sh の mkdir が Permission denied で失敗する）。
+    install -d -o "$USERNAME" -g "$USERNAME" "$USER_HOME/.claude-dev-vm" /run/vm
     if su "$USERNAME" -c '/usr/local/bin/vm-up.sh'; then
         mkdir -p /etc/claude-dev
         echo "export DOCKER_HOST='tcp://127.0.0.1:2375'" > /etc/claude-dev/vm.env

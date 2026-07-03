@@ -23,3 +23,11 @@
 - orchestrator を VM モードで透過利用できるよう配線: `claude-dev orchestrate` が起動前に `/etc/claude-dev/vm.env` を source し、ゲスト DOCKER_HOST を orchestrator（および claudeChildEnv 経由で worker）へ引き継ぐ（非対話起動は rc を読まないため）。VM 未起動時は proxy にフォールバック。
 - 発見導線2 を実装: `state.go` の `VMModePreamble()`（CLAUDE_DEV_VM=1 で定型ポインタを返す）を mode.go(WallbounceArgs/ResolveArgs)・worker.go(BuildPrompt)・review.go(buildReviewPrompt) の先頭に LoadProjectPolicy と並べて前置。worker/reviewer/壁打ち/介入が「docker はゲスト・bind は /workspace 配下・詳細 VM_DEV.md」を認識。CLAUDE.md 非侵襲。
 - 80/60/10_cli/08 を更新。単体テスト（VMModePreamble の off/on とプロンプト前置）追加・緑。DOCKER_HOST 継承をシェルで確認。実機の orchestrator×VM 通し E2E は要イメージ再ビルドで次段階。
+
+## 2026-07-03（実運用修正: 権限/再provision/uid制約/ポート自動転送）
+- entrypoint: `su $USERNAME` で走る vm-up.sh の前に、root 所有のマウント点/実行時ディレクトリ（`$USER_HOME/.claude-dev-vm`・`/run/vm`）を `install -d -o $USERNAME` で先に用意（未対応だと mkdir が Permission denied で VM 起動失敗）。
+- `--vm-fresh`（claude-dev）/`vm rebuild`（vm）を追加。`VM_FRESH=1` で走行中 VM 停止＋overlay/seed 破棄→再 provision。`--vm-fresh` は起動時にゲスト用ボリュームも破棄。
+- start --vm の待ち時間を延長（VM は 420s、通常 30s）＋進捗表示＋タイムアウト時の案内（無言 attach 失敗を回避）。所要時間メッセージを表示。
+- 既知の uid 制約を明記（80 §5・08）: virtiofsd は uid1000 で動くため、ゲスト内コンテナが bind mount を別 uid へ chown する処理（mysql/grafana 等）は `operation not permitted`。root 化は逆に生成物が管理不能になる両刃のため、bind mount にコンテナ管理データを置くスタックは非対応（named volume 化で回避）。root-virtiofsd 案は撤回。
+- **ポート自動転送を実装**: `scripts/vm-portsync.sh`（新規）がゲスト docker の公開ポートを検出し QMP `hostfwd_add n0 tcp:127.0.0.1:P-:P` で claude 側 localhost へ同期。vm-up.sh がゲスト dockerd 準備完了後に `--loop`（既定5秒間隔・多重起動防止）で常駐起動。一発同期は `vm portsync`。`/run/vm/portsync.forwarded`（`<qemu_pid>:<port>`）で重複防止・VM 再起動で自然リセット。`VM_PORTS` 手動指定なしで公開ポートが自動到達。Dockerfile に COPY 追加、VM_DEV.md.tmpl のポート節を自動転送前提に更新。
+- 実機検証: 一発同期で新規ポート即到達、常駐ループが後付けコンテナのポートを数秒で自動フォワード（いずれも稼働中コンテナへ hot-copy して確認）。恒久反映は要 `make build`。

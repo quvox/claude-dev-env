@@ -81,10 +81,10 @@ claude-dev      （単一の bash スクリプト）
 ### `logout`
 全 Claude コンテナとプロキシコンテナを停止し、`VOL_AUTH` の中身を空にする（一時コンテナで `rm -rf /auth/* /auth/.*`）。
 
-### `start [--no-vnc] [--kvm] [--vm]`
+### `start [--no-vnc] [--kvm] [--vm] [--vm-fresh]`
 本 CLI の中核。`NAME=container_name`、`PROJECT_DIR=$(pwd)`。`--no-vnc` で `USE_VNC=0`、`--kvm` で `USE_KVM=1`（既定 `0`）。
 
-> **`--vm`（VM モード。設計確定・未実装。正本: [80_vm-mode.md](80_vm-mode.md) / [docs/08_vm-mode.md](../08_vm-mode.md)）**: `--kvm` を含意し、`CLAUDE_DEV_VM=1` とゲスト qcow2 キャッシュ用ボリューム・アプリポート（`VM_PORTS`）をコンテナへ渡す。コンテナ内でゲスト VM（QEMU+virtiofs）を起動し、その中のネイティブ Docker を `DOCKER_HOST` 経由で使う。`/dev/kvm` がホストに無ければ警告して中止。VM 制御用の `vm` ヘルパー（`status`/`shell`/`restart`/`down`/`logs`）はコンテナ内コマンドとして提供する。
+> **`--vm`（VM モード。実装済み・要イメージ再ビルド反映。正本: [80_vm-mode.md](80_vm-mode.md) / [docs/08_vm-mode.md](../08_vm-mode.md)）**: `--kvm` を含意し、`CLAUDE_DEV_VM=1` とゲスト qcow2 キャッシュ用ボリューム・アプリポート（`VM_PORTS`）をコンテナへ渡す。コンテナ内でゲスト VM（QEMU+virtiofs）を起動し、その中のネイティブ Docker を `DOCKER_HOST` 経由で使う。`/dev/kvm` がホストに無ければ警告して中止。VM 制御用の `vm` ヘルパー（`status`/`shell`/`restart`/`down`/`rebuild`/`logs`）はコンテナ内コマンドとして提供する。**`--vm-fresh`**（`--vm` 含意）はコンテナ作成前にゲスト用ボリューム `claude-dev-vm-<name>` を破棄して再 provision する（稼働中コンテナには効かず、`stop` 後に実行するか稼働中は `vm rebuild` を使う）。
 
 1. 既に稼働中なら attach: noVNC URL を表示し、`tmux has-session -t main` が無ければ作成してから `tmux attach`。
 2. 停止中コンテナがあれば削除。`ensure_infrastructure`。
@@ -99,8 +99,8 @@ claude-dev      （単一の bash スクリプト）
    - `SSH_OPTS`: `ensure_ssh_agent` 後、agent ソケットを `/tmp/ssh-agent.sock`（RO）転送 + `SSH_AUTH_SOCK` 設定。`known_hosts` を RO マウント。`~/.ssh/config` は `IdentityFile`/`IdentitiesOnly` 行を `sed` で除去した一時ファイルを RO マウント
    - `NOVNC_PORT_OPT`（VNC 時のみ）: 空き noVNC ポートを `find_available_novnc_port` で確保し `-p <port>:6080` + `VOL_CHROME` を `~/.chrome-profile` にマウント
    - `KVM_OPTS`: **`--kvm` 指定時のみ**、ホストに存在する `/dev/kvm` `/dev/vhost-net` `/dev/net/tun` を `--device` で渡す（既定では渡さない。通常は Chrome 操作のみで十分なため、KVM/QEMU が必要なときだけ明示的に有効化する）。デバイス受け渡しはコンテナ作成時にのみ行われるため、稼働中コンテナへ後付けはできず、`stop` → `start --kvm` で再作成する
-9. **コンテナ起動**: `docker run -d` で `--cap-add NET_ADMIN`・`NET_RAW`（FW 用）、`--restart unless-stopped`、`/workspace` マウント、各ボリューム、`tmux.conf`/`CLAUDE.md` を RO マウント、上記オプション群、`NODE_OPTIONS=--max-old-space-size=4096`、`-t` を付与。
-10. tmux 起動を最大 30 秒待ち、noVNC URL を表示して `tmux attach -t main`。
+9. **コンテナ起動**: VM モード（`USE_VM=1`）のときは `docker run` の前に「VM モードで起動する／通常より時間がかかる（初回は cloud image 取得＋provision で数分）」旨を表示する。`docker run -d` で `--cap-add NET_ADMIN`・`NET_RAW`（FW 用）、`--restart unless-stopped`、`/workspace` マウント、各ボリューム、`tmux.conf`/`CLAUDE.md` を RO マウント、上記オプション群、`NODE_OPTIONS=--max-old-space-size=4096`、`-t` を付与。
+10. tmux 起動を待つ。待ち時間の上限は通常 30 秒、**VM モードは 420 秒**（ゲスト VM の provision/ブート中は entrypoint が tmux 起動前でブロックするため）。VM モードでは 15 秒ごとに「…VM 起動待ち (Ns / 最大 Ms)」を表示する。準備できたら noVNC URL を表示して `tmux attach -t main`。上限を超えても tmux が未起動の場合は**無言で attach 失敗して終了せず**、VM モードなら「provision 継続中。コンテナは起動したまま。再実行 or `vm logs`/`vm status` で確認、準備完了後に再接続される」旨を、通常時は「タイムアウトしたので再実行を」旨を案内して `exit 0` する（コンテナは `docker run -d`＋`--restart unless-stopped` で稼働継続するため、次回 `start` の稼働中 attach 経路で接続できる）。
 
 ### `code`
 稼働中コンテナで `tmux new-window -t main "claude"` を実行し attach。未起動ならエラー。

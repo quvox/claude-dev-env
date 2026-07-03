@@ -37,6 +37,15 @@ case "$cmd" in
         "$0" down || true
         exec /usr/local/bin/vm-up.sh
         ;;
+    rebuild)
+        # ゲストを白紙 provision やり直し（overlay/seed 破棄）。cloud image は残す。
+        echo "VM を再 provision します（overlay/seed を破棄）…"
+        exec env VM_FRESH=1 /usr/local/bin/vm-up.sh
+        ;;
+    portsync)
+        # ゲスト公開ポートを 127.0.0.1 へ即時同期（常駐ループとは別に一発実行したい時用）
+        exec /usr/local/bin/vm-portsync.sh
+        ;;
     down)
         if [ -S "${QMP_SOCK}" ] && command -v socat >/dev/null 2>&1; then
             # QMP でグレースフルに停止
@@ -52,5 +61,5 @@ case "$cmd" in
         tail -n "${2:-100}" "${LOG_DIR}/vm-up.log" "${LOG_DIR}/qemu-serial.log" "${LOG_DIR}/virtiofsd.log" 2>/dev/null
         ;;
     *)
-        echo "usage: vm {status|shell|restart|down|logs}" >&2; exit 2 ;;
+        echo "usage: vm {status|shell|restart|down|rebuild|portsync|logs}" >&2; exit 2 ;;
 esac

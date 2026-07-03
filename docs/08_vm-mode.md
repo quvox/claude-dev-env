@@ -51,6 +51,7 @@ VM モードは既存の「素の QEMU が叩ける」状態を、**管理され
 
 ### 3.1 コード共有（R2 の要）＝ virtiofs 同一パス
 - `virtiofsd` が claude コンテナの `/workspace` を共有し、ゲストは**同じ `/workspace` にマウント**する。
+  - **既知の制約（uid）**: virtiofsd は uid 1000 で動くため、ゲスト内コンテナが bind mount 先を別 uid へ `chown` する処理（mysql/grafana 等がデータディレクトリを chown）は `operation not permitted` で失敗する。**bind mount でコンテナ管理データ（DB 等）を置くスタックは VM モードでは完全動作しない**（名前付きボリューム化で回避）。詳細と背景は [docs/impl/80_vm-mode.md](impl/80_vm-mode.md)。
 - これにより、ゲスト内で `docker run -v /workspace/app:/app` としても、bind source `/workspace/app` は**ゲスト FS 上に存在**し（virtiofs 経由で claude/ホストの実体と同一）、**bind mount が成立しつつホスト側編集がライブ反映**される（DooD のパス不一致・proxy 制約の両方を回避）。
 - compose の相対 bind も、`/workspace` 配下で実行すれば同様に成立。
 
@@ -59,7 +60,7 @@ VM モードは既存の「素の QEMU が叩ける」状態を、**管理され
 - QEMU user-mode ネットの **hostfwd** で claude コンテナの `127.0.0.1:2375` → ゲスト `:2375` に転送。
 - claude 側は `DOCKER_HOST=tcp://127.0.0.1:2375` を設定 → 既存のエージェント/worker がそのままゲスト daemon を操作。
 - **orchestrator（`claude-dev orchestrate`）**: 対話 TUI と違い**非対話コマンド**として起動されるため rc（vm.env）を自動では読まない。`claude-dev orchestrate` が起動前に `/etc/claude-dev/vm.env` を source して**ゲスト `DOCKER_HOST` を明示的に引き継ぐ**。worker（`claude -p`）は orchestrator の環境（`claudeChildEnv`）を継ぐため、worker の `docker` もゲストを指す。worktree は `/workspace/.orchestrator/worktrees/…`＝`/workspace` 配下なので virtiofs 共有され、worker の bind mount（同一パス）も成立する。
-- アプリのサービスポートも hostfwd で claude 側 `127.0.0.1:<port>` に露出（設定可能）。noVNC ブラウザからの確認はポートフォワード（既存 `claude-dev forward`）と組み合わせる。
+- アプリのサービスポートは **自動で** hostfwd され claude 側 `127.0.0.1:<port>` に露出する。常駐の port 同期（`vm-portsync.sh --loop`）がゲストの公開ポートを定期検出し QMP（`human-monitor-command` 経由の `hostfwd_add`）で張るため、`docker compose up` 等で公開すれば追加設定なしに `127.0.0.1:<port>` へ到達できる（`VM_PORTS` による起動時固定指定も併用可）。noVNC ブラウザからの確認はポートフォワード（既存 `claude-dev forward`）と組み合わせる。
 
 ### 3.3 ゲストイメージ（Ubuntu cloud image を provision）
 - 公式 Ubuntu cloud image（qcow2）をベースに、**cloud-init（seed）または provision スクリプトで Docker と virtiofs 自動マウント・dockerd TCP 待受を投入**して初回ビルド。
@@ -83,8 +84,8 @@ VM を扱うために agent（Claude/orchestrator/worker）が知るべき情報
 - **内容（VM を意識した制御に必要な全情報）**:
   - `DOCKER_HOST` の値（ゲスト daemon を指す）と、`docker`/`compose` はゲストに向く旨。
   - **bind mount の source は `/workspace` 配下のみ**（virtiofs 共有範囲。同一パスなので `-v /workspace/...:/...` が成立・ライブ反映）。
-  - ポート: ゲストのサービスは claude 側 `127.0.0.1:<hostfwd>` で見え、外部公開は `claude-dev forward` を併用。
-  - `vm` ヘルパー（`vm status`/`vm shell`/`vm restart`/`vm down`/`vm logs`）。
+  - ポート: ゲストのサービスは claude 側 `127.0.0.1:<port>` で自動的に見える（port 同期の常駐が hostfwd を自動追加。即時反映は `vm portsync`）。外部公開は `claude-dev forward` を併用。
+  - `vm` ヘルパー（`vm status`/`vm shell`/`vm restart`/`vm down`/`vm rebuild`/`vm portsync`/`vm logs`）。
   - ssh-agent: 既定 A（SSH/git は claude 側）／B オプトイン手順（§3.4）。
   - トラブルシュート（dockerd 未起動時の確認、virtiofs マウント確認、ログの場所）。
 - **発見（CLAUDE.md 非侵襲の導線）**:
@@ -95,9 +96,10 @@ VM を扱うために agent（Claude/orchestrator/worker）が知るべき情報
 ## 4. ライフサイクル
 
 - **有効化**: `claude-dev start --vm`（`--kvm` を含意）。VM モードを示すフラグ/環境変数を渡す。**ホストに `/dev/kvm` が無い場合は警告して起動を中止**（TCG エミュレーションでは Docker ビルドに実用にならないため）。
-- **起動**: entrypoint もしくは専用スクリプトが、(1) キャッシュされたゲスト qcow2 が無ければ cloud image から provision、(2) virtiofsd 起動（`/workspace` 共有）、(3) QEMU 起動、(4) ゲスト dockerd の準備完了を待ち、(5) `DOCKER_HOST` を対話シェルへ設定。
+- **起動**: entrypoint もしくは専用スクリプトが、(1) キャッシュされたゲスト qcow2 が無ければ cloud image から provision、(2) virtiofsd 起動（`/workspace` 共有）、(3) QEMU 起動、(4) ゲスト dockerd の準備完了を待ち、(5) `DOCKER_HOST` を対話シェルへ設定し、ポート自動同期（`vm-portsync --loop`）を常駐起動。
 - **操作補助**: ゲストへ入るための補助（`vm shell`＝ssh/シリアル）と、状態確認・停止・ログ（`vm status`/`vm down`/`vm logs`）。
 - **永続化**: ゲスト qcow2 とゲスト内の Docker データはボリュームで保持。`/workspace` は virtiofs 共有（ホスト実体）なのでコードは常にホスト側が正本。
+- **リセット（白紙 provision やり直し）**: 2 経路。(a) `claude-dev start --vm --vm-fresh` … コンテナ作成前にゲスト用ボリューム（`claude-dev-vm-<name>`）を破棄し、新コンテナ初回ブートで再 provision（稼働中コンテナには使えず、`stop` 後に実行）。(b) `vm rebuild`（稼働中コンテナ内ヘルパー）… VM を停止し overlay/seed を削除して再 provision（コンテナは作り直さない）。**キャッシュの扱いが異なる**：(a) はボリュームごと破棄するため **cloud image DL キャッシュも消え再取得する**（完全リセット）。(b) は overlay/seed のみ削除し **cloud image キャッシュは残す**（再ダウンロード回避）。
 - **既定との併存**: `--vm` 無しなら従来どおり DooD + proxy。VM モード時も、VM を使わない Docker 操作を proxy 経由で行う余地は残す（運用で使い分け）。
 
 ## 5. セキュリティ考慮
@@ -111,8 +113,8 @@ VM を扱うために agent（Claude/orchestrator/worker）が知るべき情報
 - **確定済み**:
   - `VM_DEV.md` は `/workspace/VM_DEV.md` に自動生成、`.gitignore` は非改変。
   - **provision は「初回起動時の遅延 provision＋ボリュームキャッシュ」方式**（ビルド時前倒しはしない。§3.3/§4 の通り）。
-  - **アプリポートは環境変数 `VM_PORTS` による明示指定**（動的自動割当はしない）。
-  - **ゲスト既定値（RAM/CPU/ディスク）や具体パラメータの正本は実装仕様 [docs/impl/80_vm-mode.md](impl/80_vm-mode.md)**（例: RAM 4096 / SMP 2 / disk 20G。config・環境変数で上書き可）。
+  - **アプリポートは自動フォワード**：常駐の `vm-portsync`（§3.3）がゲストの公開ポートを検出し、**同一番号で** hostfwd を自動追加する。`VM_PORTS` は起動時に固定で開くための明示指定として併用可。ホスト側ポート番号を別番号へ動的に自動割当することはしない（ゲストと同番号で mirror）。
+  - **ゲスト既定値（RAM/CPU/ディスク）や具体パラメータの正本は実装仕様 [docs/impl/80_vm-mode.md](impl/80_vm-mode.md)**（例: RAM 4096M / SMP 2 / disk 20G。**環境変数で上書き可・config ファイルは設けない**。RAM は単位付き必須）。
 - **未決**: ssh-agent 方式 B（ゲストへの agent 転送）の具体配線（socat/hostfwd ポート・自動化するか手動手順に留めるか）、virtiofs の小ファイル大量時の性能チューニング（cache mode 等）、orchestrator worktree（`.orchestrator/worktrees`）を VM 内 Docker とどう併用するか。
 
 ## 7. 関連ドキュメント

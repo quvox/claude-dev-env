@@ -38,8 +38,26 @@ log() { echo "[vm-up] $*" | tee -a "${LOG_DIR}/vm-up.log" >&2; }
 
 dockerd_ready() { docker -H "${DOCKER_TCP}" info >/dev/null 2>&1; }
 
-# 既に起動済み（dockerd 到達可能）なら冪等に終了
-if dockerd_ready; then log "guest dockerd already reachable"; exit 0; fi
+# ゲスト公開ポートを 127.0.0.1 へ自動 hostfwd する常駐同期を起動（多重起動は避ける）
+start_portsync() {
+    [ -x /usr/local/bin/vm-portsync.sh ] || return 0
+    pgrep -f 'vm-portsync.sh --loop' >/dev/null 2>&1 && return 0
+    setsid /usr/local/bin/vm-portsync.sh --loop >/dev/null 2>&1 &
+    log "started port auto-forward (vm-portsync --loop)"
+}
+
+# VM_FRESH=1: 白紙 provision やり直し。走行中 VM を停止し overlay/seed を削除
+# （cloud image DL キャッシュは残す）→ 以降の初回判定で再 provision される。
+if [ "${VM_FRESH:-}" = "1" ]; then
+    log "VM_FRESH=1: tearing down VM and removing guest disk for re-provision"
+    [ -f "${PIDFILE}" ] && kill "$(cat "${PIDFILE}" 2>/dev/null)" 2>/dev/null || true
+    pkill -f "virtiofsd.*${VFS_SOCK}" 2>/dev/null || true
+    sleep 1
+    rm -f "${GUEST_OVERLAY}" "${SEED_ISO}"
+elif dockerd_ready; then
+    # 既に起動済み（dockerd 到達可能）なら冪等に終了
+    log "guest dockerd already reachable"; start_portsync; exit 0
+fi
 
 # --- 前提チェック ---
 [ -c /dev/kvm ] || { log "FATAL: /dev/kvm not present"; exit 1; }
@@ -136,7 +154,7 @@ qemu-system-x86_64 \
 # --- ゲスト dockerd 準備待ち（同期ポーリング） ---
 log "waiting for guest dockerd (up to ${WAIT_SECS}s)…"
 for _ in $(seq 1 "${WAIT_SECS}"); do
-    if dockerd_ready; then log "guest dockerd is ready"; exit 0; fi
+    if dockerd_ready; then log "guest dockerd is ready"; start_portsync; exit 0; fi
     sleep 1
 done
 log "FATAL: guest dockerd did not become ready in ${WAIT_SECS}s (see ${LOG_DIR})"

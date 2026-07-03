@@ -64,7 +64,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     qemu-system-x86 qemu-utils ovmf cpu-checker bridge-utils \
     virtiofsd cloud-image-utils \
     # その他
-    unzip zip xz-utils gnupg locales \
+    unzip zip xz-utils gnupg locales rsync \
     && rm -rf /var/lib/apt/lists/* \
     # --- Docker CLI + Docker Compose plugin ---
     && install -m 0755 -d /etc/apt/keyrings \
@@ -258,10 +258,11 @@ COPY scripts/sendslackmsg.sh /usr/local/bin/sendslackmsg.sh
 # --- VM モード（QEMU + virtiofs）スクリプト ---
 COPY scripts/vm-up.sh /usr/local/bin/vm-up.sh
 COPY scripts/vm /usr/local/bin/vm
+COPY scripts/vm-portsync.sh /usr/local/bin/vm-portsync.sh
 COPY scripts/VM_DEV.md.tmpl /usr/local/share/claude-dev/VM_DEV.md.tmpl
 RUN chmod +x /usr/local/bin/init-firewall.sh /usr/local/bin/entrypoint.sh \
     /usr/local/bin/save_prompt.sh /usr/local/bin/sendslackmsg.sh \
-    /usr/local/bin/vm-up.sh /usr/local/bin/vm
+    /usr/local/bin/vm-up.sh /usr/local/bin/vm /usr/local/bin/vm-portsync.sh
 
 # --- orchestrator バイナリ + instruction テンプレート ---
 COPY --from=orch-builder /claude-orchestrator /usr/local/bin/claude-orchestrator

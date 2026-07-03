@@ -484,11 +484,13 @@ start)
     USE_VNC=1
     USE_KVM=0
     USE_VM=0
+    USE_VM_FRESH=0
     while [ $# -gt 0 ]; do
         case "$1" in
             --no-vnc) USE_VNC=0 ;;
             --kvm) USE_KVM=1 ;;
             --vm) USE_VM=1; USE_KVM=1 ;;   # VM モード（--kvm を含意）
+            --vm-fresh) USE_VM=1; USE_KVM=1; USE_VM_FRESH=1 ;;  # ゲストを再 provision
         esac
         shift
     done
@@ -500,6 +502,7 @@ start)
 
     # 既に実行中 → attach（tmux セッションがなければ再作成）
     if is_running "$NAME"; then
+        [ "$USE_VM_FRESH" = "1" ] && echo "⚠️  --vm-fresh は稼働中コンテナには効きません。'claude-dev stop' 後に再実行するか、稼働中は 'vm rebuild'（コンテナ内）を使ってください。"
         echo "✅ ${NAME} は実行中。接続します..."
         ensure_infrastructure
         _url=$(get_novnc_url "$NAME")
@@ -629,6 +632,11 @@ start)
     # ゲスト qcow2/キャッシュはプロジェクトごとの名前付きボリュームに保持（同時起動時の競合回避）。
     VM_OPTS=""
     if [ "$USE_VM" = "1" ]; then
+        # --vm-fresh: ゲスト用ボリュームを破棄してから作成 → 初回ブートで再 provision
+        if [ "$USE_VM_FRESH" = "1" ]; then
+            docker volume rm -f "claude-dev-vm-${NAME}" >/dev/null 2>&1 || true
+            echo "🧹 VM ゲストディスクを破棄しました（--vm-fresh）。初回ブートで再 provision します"
+        fi
         VM_OPTS="-e CLAUDE_DEV_VM=1 -v claude-dev-vm-${NAME}:${CHOME}/.claude-dev-vm"
         for _v in VM_PORTS VM_MEM VM_SMP VM_DISK; do
             eval "_val=\${$_v:-}"
@@ -637,6 +645,10 @@ start)
     fi
 
     # コンテナ起動
+    if [ "$USE_VM" = "1" ]; then
+        echo "🖥️  VM モードで起動します。ゲスト VM（QEMU+virtiofs）を起動するため、通常より時間がかかります。"
+        echo "    （初回は cloud image の取得と provision で数分かかります。以降は数十秒程度）"
+    fi
     echo "🚀 起動中... [${NAME}] → ${PROJECT_DIR}"
     docker run -d \
         --name "$NAME" \
@@ -661,13 +673,32 @@ start)
         -t \
         "$RUN_IMAGE" >/dev/null
 
-    # tmux 起動を待つ
-    for i in $(seq 1 30); do
+    # tmux 起動を待つ（VM モードはゲスト VM のブート待ちで時間がかかるため長めに待つ）
+    _wait_max=30
+    [ "$USE_VM" = "1" ] && _wait_max=420
+    for i in $(seq 1 "$_wait_max"); do
         if docker exec -u "$CUSER" "$NAME" tmux has-session -t main 2>/dev/null; then
             break
         fi
+        # VM モードは待ちが長いので進捗を表示（15 秒ごと）
+        if [ "$USE_VM" = "1" ] && [ "$((i % 15))" -eq 0 ]; then
+            echo "   …VM 起動待ち (${i}s / 最大 ${_wait_max}s)"
+        fi
         sleep 1
     done
+
+    # tmux がまだ上がっていなければ（VM の provision が上限時間を超過等）、
+    # 無言で attach 失敗して終了せず、状況を案内する
+    if ! docker exec -u "$CUSER" "$NAME" tmux has-session -t main 2>/dev/null; then
+        if [ "$USE_VM" = "1" ]; then
+            echo "⏳ ゲスト VM の起動がまだ完了していません（provision 継続中）。"
+            echo "   コンテナは起動したままです。進捗は 'claude-dev start --vm' を再実行するか、"
+            echo "   コンテナ内で 'vm logs' / 'vm status' で確認できます。準備完了後に再接続されます。"
+        else
+            echo "⏳ tmux セッションの起動待ちがタイムアウトしました。'claude-dev start' を再実行してください。"
+        fi
+        exit 0
+    fi
 
     echo "✅ 起動完了（Ctrl-_ D で切断、claude-dev start で再接続）"
     _url=$(get_novnc_url "$NAME")
