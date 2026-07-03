@@ -18,3 +18,8 @@
 ## 2026-07-03（実機 E2E 検証・cloud-init 修正）
 - KVM ホストで実機 E2E を実施し全項目合格（docs/reviews/2026-07-03_vm-mode-e2e.md）: provision→QEMU→virtiofs 同一パス共有→ゲスト dockerd 到達→bind mount ライブ反映、自動化（vm-up 自力で dockerd 検知）。
 - 実機で発見・修正: ゲスト dockerd の tcp 待受設定を `-H fd:// -H tcp://0.0.0.0:2375`＋`systemctl restart docker` に是正（enable --now は再起動しない／unix 明示は docker.socket と競合／127.0.0.1 は hostfwd が届かない）。80 §3/§8・08 §3.2 を実態へ更新、実装状況を「実機 E2E 検証済み」に。
+
+## 2026-07-03（orchestrator の VM 対応）
+- orchestrator を VM モードで透過利用できるよう配線: `claude-dev orchestrate` が起動前に `/etc/claude-dev/vm.env` を source し、ゲスト DOCKER_HOST を orchestrator（および claudeChildEnv 経由で worker）へ引き継ぐ（非対話起動は rc を読まないため）。VM 未起動時は proxy にフォールバック。
+- 発見導線2 を実装: `state.go` の `VMModePreamble()`（CLAUDE_DEV_VM=1 で定型ポインタを返す）を mode.go(WallbounceArgs/ResolveArgs)・worker.go(BuildPrompt)・review.go(buildReviewPrompt) の先頭に LoadProjectPolicy と並べて前置。worker/reviewer/壁打ち/介入が「docker はゲスト・bind は /workspace 配下・詳細 VM_DEV.md」を認識。CLAUDE.md 非侵襲。
+- 80/60/10_cli/08 を更新。単体テスト（VMModePreamble の off/on とプロンプト前置）追加・緑。DOCKER_HOST 継承をシェルで確認。実機の orchestrator×VM 通し E2E は要イメージ再ビルドで次段階。

@@ -164,8 +164,9 @@ func CleanOrchWorktrees(ctx context.Context, repoDir, worktreesDir string) {
 // attempt feedback (if any), and context from the plan.
 func (w *Worker) BuildPrompt(p *Plan, t *Task, feedback string) string {
 	var b strings.Builder
-	// Project-specific decision policy (ORCHESTRATOR.md, if any) goes first so
-	// the worker frames its assumptions/escalations within it.
+	// VM モードの周知（発見導線2）＋プロジェクト固有の判断基準（ORCHESTRATOR.md）を
+	// 先頭に置き、worker が docker の向き先や bind の制約・方針を踏まえて動くようにする。
+	b.WriteString(VMModePreamble())
 	b.WriteString(LoadProjectPolicy(w.Workspace))
 	b.WriteString("# Goal\n")
 	b.WriteString(p.Goal)

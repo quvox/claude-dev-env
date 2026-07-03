@@ -58,6 +58,7 @@ VM モードは既存の「素の QEMU が叩ける」状態を、**管理され
 - ゲストで `dockerd` を **`0.0.0.0:2375`（ゲスト内 TCP）＋ unix socket（`-H fd://`）** で待受（tcp を 0.0.0.0 にするのは、QEMU user-mode hostfwd がゲストの SLIRP IP 宛に転送し 127.0.0.1 では届かないため。露出は claude コンテナの hostfwd 経由のみ＝実質コンテナ内限定）。unix socket は `docker build --ssh` 等ゲスト内直操作用。
 - QEMU user-mode ネットの **hostfwd** で claude コンテナの `127.0.0.1:2375` → ゲスト `:2375` に転送。
 - claude 側は `DOCKER_HOST=tcp://127.0.0.1:2375` を設定 → 既存のエージェント/worker がそのままゲスト daemon を操作。
+- **orchestrator（`claude-dev orchestrate`）**: 対話 TUI と違い**非対話コマンド**として起動されるため rc（vm.env）を自動では読まない。`claude-dev orchestrate` が起動前に `/etc/claude-dev/vm.env` を source して**ゲスト `DOCKER_HOST` を明示的に引き継ぐ**。worker（`claude -p`）は orchestrator の環境（`claudeChildEnv`）を継ぐため、worker の `docker` もゲストを指す。worktree は `/workspace/.orchestrator/worktrees/…`＝`/workspace` 配下なので virtiofs 共有され、worker の bind mount（同一パス）も成立する。
 - アプリのサービスポートも hostfwd で claude 側 `127.0.0.1:<port>` に露出（設定可能）。noVNC ブラウザからの確認はポートフォワード（既存 `claude-dev forward`）と組み合わせる。
 
 ### 3.3 ゲストイメージ（Ubuntu cloud image を provision）

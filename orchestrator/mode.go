@@ -63,7 +63,7 @@ func (m *Mode) RunInteractive(ctx context.Context, args ...string) error {
 // instruction, which is passed via --append-system-prompt.
 func (m *Mode) WallbounceArgs() []string {
 	args := []string{}
-	instr := LoadProjectPolicy(m.Workspace) + readFileOr(m.instructionPath("wallbounce.md"), "")
+	instr := VMModePreamble() + LoadProjectPolicy(m.Workspace) + readFileOr(m.instructionPath("wallbounce.md"), "")
 	if instr != "" {
 		args = append(args, "--append-system-prompt", instr)
 	}
@@ -78,7 +78,7 @@ func (m *Mode) WallbounceArgs() []string {
 // prepended to the instruction.
 func (m *Mode) ResolveArgs(ids []string) []string {
 	args := []string{}
-	instr := LoadProjectPolicy(m.Workspace) + readFileOr(m.instructionPath("intervene.md"), "")
+	instr := VMModePreamble() + LoadProjectPolicy(m.Workspace) + readFileOr(m.instructionPath("intervene.md"), "")
 	if instr != "" {
 		args = append(args, "--append-system-prompt", instr)
 	}

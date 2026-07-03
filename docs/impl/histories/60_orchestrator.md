@@ -126,3 +126,6 @@
 - 【仕様補完】Task スキーマに `ResumeSession` を追記。
 - 70：カバーするコードのツリーに実在ファイル（stats/strings/geometry.py スタブ・pytest.ini・.gitignore）を追加、「テストだけ」を「テストとスタブ」に修正。
 - 再ビルド・`go test`（-race 含む）緑・gofmt 済み。
+
+## 2026-07-03（VM モード対応）
+- VM モード（CLAUDE_DEV_VM=1）時、`VMModePreamble()`（state.go）を壁打ち/介入 instruction と worker/reviewer プロンプト先頭に前置（発見導線2。ORCHESTRATOR.md 前置と同機構）。DOCKER_HOST はゲスト値を環境から継承（Go 側追加操作なし）。docs/impl/80_vm-mode.md 参照。

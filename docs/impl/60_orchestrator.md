@@ -229,7 +229,9 @@ run loop の擬似フロー：
 - **worker 向けの判断ルール**：`worker.go` の `workerResultGuide`（worker プロンプトに付加）に、(a)「軽微は仮定して `assumptions` に記録／重大のみ `needs_human` でエスカレーション」、(b)**意味のある区切りで worktree に逐次コミットする**（中断時の作業保全。§worker ディスパッチ 5）、(c) 後戻り不可操作（push/deploy/削除/外部送信）は行わずエスカレーションする、を worker 視点で記述する。
 - **定量しきい値**（`stuck_limit` 等）は config（§設定）で調整する。
 - **プロジェクト固有の判断基準**（任意）：プロジェクトルートの `ORCHESTRATOR.md`（**コミット対象**。gitignore される `.orchestrator/` 運用状態とは別）。存在すれば、壁打ち/介入の対話 instruction と worker/reviewer プロンプトの先頭に `mode.go`／`worker.go`／`review.go` が prepend する。CLAUDE.md とは独立で、CLAUDE.md には判断基準を書かない。
-- **VM モード時の `VM_DEV.md` 前置（設計確定・未実装。正本 [80_vm-mode.md](80_vm-mode.md) / [docs/08_vm-mode.md](../08_vm-mode.md)）**：VM モード（`CLAUDE_DEV_VM=1`）では、`ORCHESTRATOR.md` 前置と同じ仕組みで、worker/壁打ちプロンプト先頭に `/workspace/VM_DEV.md`（VM 制御情報）へのポインタを前置し、worker/エージェントが「docker はゲスト VM daemon を指す・bind は `/workspace` 配下」等を把握できるようにする（VM モードの発見導線の1系統。CLAUDE.md には触れない）。
+- **VM モード対応（正本 [80_vm-mode.md](80_vm-mode.md) / [docs/08_vm-mode.md](../08_vm-mode.md)）**：
+  - **VM_DEV.md 前置（発見導線2）**：VM モード（環境変数 `CLAUDE_DEV_VM=1`）のとき、`LoadProjectPolicy`（`ORCHESTRATOR.md` 前置）と同じ仕組みで、壁打ち/介入 instruction と worker/reviewer プロンプトの先頭に **VM モードの短いポインタ**（「docker はゲスト VM daemon（`DOCKER_HOST` 設定済）を指す・bind mount の source は `/workspace` 配下のみ・詳細は `/workspace/VM_DEV.md`」）を prepend する。実装は `state.go` の `VMModePreamble()`（`CLAUDE_DEV_VM=1` のとき定型文を返し、それ以外は空）を `mode.go`／`worker.go`／`review.go` の各プロンプト先頭で `LoadProjectPolicy` と並べて前置。CLAUDE.md には触れない。
+  - **ゲスト `DOCKER_HOST` の継承**：orchestrator は `claude-dev orchestrate` が source した `/etc/claude-dev/vm.env` によりゲストの `DOCKER_HOST` を持ち、worker は `claudeChildEnv()`（`os.Environ()` 由来）でそれを継ぐ。よって Go 側の追加実装は不要（`DOCKER_HOST` を明示操作しない）。
 
 CLAUDE.md に置かない理由：CLAUDE.md は worker を含む Claude Code 全般への指示であり、オーケストレーターのガバナンス（いつ人間を呼ぶか）を混在させると worker にも波及して責務が濁るため。オーケストレーター脳は自分の instruction（＋将来のプロジェクト固有 policy）だけを読む。
 

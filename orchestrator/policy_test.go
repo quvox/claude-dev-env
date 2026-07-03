@@ -139,3 +139,40 @@ func argsContainPolicy(args []string) bool {
 	}
 	return false
 }
+
+// --- VM モード（発見導線2）: VMModePreamble のプロンプト前置 ---
+
+func TestVMModePreamble_OffByDefault(t *testing.T) {
+	t.Setenv("CLAUDE_DEV_VM", "")
+	if VMModePreamble() != "" {
+		t.Fatalf("VM preamble must be empty when CLAUDE_DEV_VM != 1")
+	}
+}
+
+func TestVMModePreamble_PrependedInVMMode(t *testing.T) {
+	t.Setenv("CLAUDE_DEV_VM", "1")
+	if pre := VMModePreamble(); pre == "" || !strings.Contains(pre, "VM_DEV.md") {
+		t.Fatalf("expected VM preamble mentioning VM_DEV.md, got %q", pre)
+	}
+	w := &Worker{Workspace: t.TempDir(), Cfg: DefaultConfig()}
+	p := &Plan{Goal: "g"}
+	tk := &Task{ID: "t1", Title: "x", Description: "d", Completion: "c"}
+	if !strings.Contains(w.BuildPrompt(p, tk, ""), "VM_DEV.md") {
+		t.Fatalf("worker prompt should include VM preamble in VM mode")
+	}
+	rv := &Reviewer{Cfg: DefaultConfig(), Worker: w}
+	if !strings.Contains(rv.buildReviewPrompt(p, tk), "VM_DEV.md") {
+		t.Fatalf("review prompt should include VM preamble in VM mode")
+	}
+	store, _ := NewStore(t.TempDir())
+	m := &Mode{Store: store, Workspace: t.TempDir()}
+	found := false
+	for _, a := range m.WallbounceArgs() {
+		if strings.Contains(a, "VM_DEV.md") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("wallbounce args should include VM preamble in VM mode")
+	}
+}

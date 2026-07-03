@@ -26,6 +26,21 @@ func LoadProjectPolicy(workspace string) string {
 	return "# プロジェクト固有の判断基準（ORCHESTRATOR.md）\n" + body + "\n\n"
 }
 
+// VMModePreamble returns a short pointer prepended to brain/worker prompts when
+// running under VM モード (env CLAUDE_DEV_VM=1), so they know `docker` targets the
+// guest VM daemon and bind mounts must live under /workspace. Returns "" (no-op)
+// otherwise. This is the orchestrator side of VM モードの発見導線2 (docs/impl/80,
+// docs/08 §3.6); CLAUDE.md is never touched.
+func VMModePreamble() string {
+	if os.Getenv("CLAUDE_DEV_VM") != "1" {
+		return ""
+	}
+	return "# VM モード\n" +
+		"`docker` はゲスト VM の daemon を指す（DOCKER_HOST 設定済）。" +
+		"bind mount の source は /workspace 配下のみ有効（virtiofs で同一パス共有・ホスト編集はライブ反映）。" +
+		"詳細は /workspace/VM_DEV.md を参照。\n\n"
+}
+
 // Phase constants for the state machine. The former top-level "intervening"
 // phase is abolished: interventions are handled per-task inside "executing".
 const (

@@ -89,8 +89,8 @@ func (rv *Reviewer) Review(ctx context.Context, p *Plan, t *Task) (*ReviewResult
 
 func (rv *Reviewer) buildReviewPrompt(p *Plan, t *Task) string {
 	var b strings.Builder
-	// Project-specific decision policy (ORCHESTRATOR.md, if any) goes first so
-	// the reviewer judges findings within it.
+	// VM モードの周知（発見導線2）＋プロジェクト固有の判断基準（ORCHESTRATOR.md）を先頭へ。
+	b.WriteString(VMModePreamble())
 	if rv.Worker != nil {
 		b.WriteString(LoadProjectPolicy(rv.Worker.Workspace))
 	}
