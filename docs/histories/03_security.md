@@ -18,3 +18,7 @@
 
 ## 2026-07-04（整合性確認による調整）
 - 設計↔実装仕様の徹底整合確認（独立3試行）を受けた微修正。無効化値を `0`（`false`/`no`/`off` も可）と明記し実装仕様(50)・コードと一致させた。緩和と VM モードの併存・攻撃耐性表の記述整合を確認。
+
+## 2026-07-04（/workspace bind 封じ込めを字句的に修正・残存リスク明記）
+- 実機で /workspace 配下 bind が全拒否される不具合を修正。原因は封じ込めの symlink 実体解決（EvalSymlinks/Lstat）が、ホスト FS を持たない proxy コンテナ内では常に失敗し既存祖先が / に落ちて全 bind を拒否していたこと。
+- 封じ込めを字句的（Clean＋.. 拒否＋prefix）に限定。proxy はホスト symlink を解決できず（socket のみ・proxy へは docker exec 可能ゆえホスト FS マウントも不可）、プロジェクト内 symlink のホスト外脱出は残存リスクとして §残存リスクに明記（無効化は CLAUDE_DEV_ALLOW_WORKSPACE_BINDS=0、より強い隔離は VM モード）。

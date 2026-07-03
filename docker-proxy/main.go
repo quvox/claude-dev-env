@@ -127,8 +127,13 @@ func lookupProjectDir(remoteIP string) string {
 
 // containWorkspacePath validates that containerSrc (a path as seen inside the
 // caller container) is /workspace or below, and returns the rewritten HOST path
-// (projectDir/<rel>). It rejects (returns false) paths outside /workspace, ".."
-// traversal, and symlink components that escape projectDir on the host.
+// (projectDir/<rel>). Containment is LEXICAL: it rejects paths outside
+// /workspace and ".." traversal. It intentionally does NOT resolve symlinks,
+// because the proxy container has no view of the host filesystem (it holds only
+// the Docker socket; mounting the host into the proxy would be unsafe since
+// exec into the proxy is permitted). Consequence: a symlink placed inside the
+// project that points outside is not detected here — a documented residual risk
+// (docs/03_security.md §5 / 残存リスク).
 func containWorkspacePath(projectDir, containerSrc string) (string, bool) {
 	if projectDir == "" {
 		return "", false
@@ -142,36 +147,7 @@ func containWorkspacePath(projectDir, containerSrc string) (string, bool) {
 	if host != pc && !strings.HasPrefix(host, pc+string(filepath.Separator)) {
 		return "", false // ".." traversal escaped the project dir
 	}
-	// Defend against symlink components that already exist on the host and point
-	// outside the project dir (a trailing not-yet-created component can't be a
-	// symlink; Docker creates it as a directory).
-	realProject := evalSymlinksOr(pc)
-	realAnc := evalSymlinksOr(existingAncestor(host))
-	if realAnc != realProject && !strings.HasPrefix(realAnc, realProject+string(filepath.Separator)) {
-		return "", false
-	}
 	return host, true
-}
-
-func evalSymlinksOr(p string) string {
-	if r, err := filepath.EvalSymlinks(p); err == nil {
-		return r
-	}
-	return p
-}
-
-// existingAncestor returns the deepest ancestor of p (including p) that exists.
-func existingAncestor(p string) string {
-	for {
-		if _, err := os.Lstat(p); err == nil {
-			return p
-		}
-		parent := filepath.Dir(p)
-		if parent == p {
-			return p
-		}
-		p = parent
-	}
 }
 
 // rewriteBinds rewrites /workspace-relative bind sources to host paths under

@@ -13,3 +13,8 @@
 
 ## 2026-07-04（整合性確認による調整）
 - 仕様↔コードの徹底整合確認（独立試行）を受けた微修正。無効化受理値に `off` を追記（コード allowWorkspaceBinds と一致）。カバーするコード一覧とテスト節に `binds_test.go` を反映。関数/定数・挙動・TTL・フォールバックはコードと一致を確認。
+
+## 2026-07-04（containWorkspacePath を字句的封じ込めに修正）
+- 実機不具合修正: containWorkspacePath の symlink 検査（EvalSymlinks/existingAncestor）を削除。proxy コンテナはホスト FS を持たず、ホストパス（/home/.../<project>）が proxy 内に存在しないため existingAncestor が / に落ち、封じ込め検査が常に false＝/workspace 配下 bind を全拒否していた。字句的封じ込め（Clean＋.. 拒否＋prefix）に統一。evalSymlinksOr/existingAncestor ヘルパー削除。
+- binds_test.go: TestContainWorkspacePath_SymlinkEscape を TestContainWorkspacePath_LexicalOnly に置換（symlink は非解決で字句的に受理・.. は拒否を検証）。go build/vet/test 緑。
+- 実機 E2E（hisol-work・proxy 再ビルド＋作り直し後）: docker run -v /workspace/docker/init.sql:/t.sql:ro が REWRITE→/home/t-kubo/workspace/hisol-work/docker/init.sql にマウントされ実ファイル読取成功。proxy ログに REWRITE binds を確認。
