@@ -31,3 +31,17 @@
 - 既知の uid 制約を明記（80 §5・08）: virtiofsd は uid1000 で動くため、ゲスト内コンテナが bind mount を別 uid へ chown する処理（mysql/grafana 等）は `operation not permitted`。root 化は逆に生成物が管理不能になる両刃のため、bind mount にコンテナ管理データを置くスタックは非対応（named volume 化で回避）。root-virtiofsd 案は撤回。
 - **ポート自動転送を実装**: `scripts/vm-portsync.sh`（新規）がゲスト docker の公開ポートを検出し QMP `hostfwd_add n0 tcp:127.0.0.1:P-:P` で claude 側 localhost へ同期。vm-up.sh がゲスト dockerd 準備完了後に `--loop`（既定5秒間隔・多重起動防止）で常駐起動。一発同期は `vm portsync`。`/run/vm/portsync.forwarded`（`<qemu_pid>:<port>`）で重複防止・VM 再起動で自然リセット。`VM_PORTS` 手動指定なしで公開ポートが自動到達。Dockerfile に COPY 追加、VM_DEV.md.tmpl のポート節を自動転送前提に更新。
 - 実機検証: 一発同期で新規ポート即到達、常駐ループが後付けコンテナのポートを数秒で自動フォワード（いずれも稼働中コンテナへ hot-copy して確認）。恒久反映は要 `make build`。
+
+## 2026-07-04（既定 RAM 8G 化・スワップ確保）
+- 原因特定: 実機 VM モード（別プロジェクト）が異常に遅い件を調査。ゲスト load avg 178・Swap 0・空き 350MB・kswapd0 43%・PSI memory full avg300 55%・QEMU が host CPU 150% 常時消費。TCP(2222/2375)は接続可だが ssh 認証/docker API が応答しない＝メモリ枯渇＋スワップ無しによるページ回収スラッシングでユーザーランドが CPU 枯渇。仮想化オーバーヘッドではない。
+- `scripts/vm-up.sh`: 既定 `VM_MEM` を 4096M→8192M に変更。`VM_SWAP`（既定 2G・0/空で無効）を追加し、cloud-init user-data の runcmd にスワップファイル作成（生成時に MB 確定→`fallocate`／失敗時 `dd` フォールバック→`mkswap`→`swapon`→fstab 追記・冪等）を注入。§3 のマウント直後に配置。
+- `claude-dev`: `start --vm` の env 受け渡しループに `VM_SWAP` を追加（`VM_PORTS VM_MEM VM_SMP VM_DISK VM_SWAP`）。上書き可能に。
+- 80 §3（スワップ手順）・§4（既定値 VM_MEM=8192M / VM_SWAP=2G）・§4 のメモリ単位一致の例・実装状況、08 §3.3・§4 正本ポインタを更新。
+- 静的検証: `bash -n` 緑（vm-up.sh / claude-dev）。user-data 生成をVM_SWAP=2G/2048M/0 でシミュレートし YAML インデント・dd count・無効時の空行が正しいことを確認。既定値変更・スワップは**要 provision 反映**（稼働中ゲストは `vm rebuild`／`--vm-fresh`、または既存ゲストへ手動 swapon）。
+
+## 2026-07-04（vm-healthd: ゲスト資源逼迫の検知・警告）
+- §7.2 を新設。`scripts/vm-healthd.sh`（新規・常駐）が QEMU プロセスの CPU（`/proc/<pid>/stat` の utime+stime を `VM_HEALTH_INTERVAL` 窓で2点サンプル、上限は `/proc/<pid>/cmdline` の `-smp` から解決）を評価し、上限比が `VM_HEALTH_CPU_PCT`（既定60%）以上を `VM_HEALTH_SUSTAIN`（既定12回≒3分）継続で WARN。ゲストには一切問い合わせない。
+- 警告: WARN 中は tmux `@vm_health` を set（OK 復帰で unset）＋遷移時 `display-message` フラッシュ（`VM_HEALTH_COOLDOWN` 既定600秒で抑制）。health ファイル `${CHOME}/.claude-dev-vm/health`（STATE/CPU/CEIL/TS/MSG）を毎周回書き、`vm status`・orchestrator dashboard が読む。
+- `vm-up.sh`: `start_healthd()` を追加し dockerd 準備後に portsync と併せ常駐起動（pgrep で多重起動防止）。`scripts/vm`: `status` に health 表示を追加。`tmux.conf`: status-right に `@vm_health` を条件表示。`Dockerfile.claude`: vm-healthd.sh を COPY＋chmod。
+- カバーするコード・実装状況・関連文書（60/30/40）を更新。
+- 検証: `bash -n` 緑。稼働中 VM（別プロジェクト）の実 QEMU に対しワンショット実行し、-smp からの上限解決（200%）・CPU 算出・WARN/OK 分岐・health ファイル生成を確認。**要イメージ再ビルドで全 VM に反映**（tmux.conf は RO マウントのため再 start で反映）。

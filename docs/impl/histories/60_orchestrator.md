@@ -129,3 +129,7 @@
 
 ## 2026-07-03（VM モード対応）
 - VM モード（CLAUDE_DEV_VM=1）時、`VMModePreamble()`（state.go）を壁打ち/介入 instruction と worker/reviewer プロンプト先頭に前置（発見導線2。ORCHESTRATOR.md 前置と同機構）。DOCKER_HOST はゲスト値を環境から継承（Go 側追加操作なし）。docs/impl/80_vm-mode.md 参照。
+
+## 2026-07-04（実行モードダッシュボードに VM 資源逼迫バナー）
+- `dashboard.go` の `render()` に、VM モード時のみ `vm-healthd` の health ファイル（`$HOME/.claude-dev-vm/health`、80 §7.2）を読む `readVMHealthBanner()` を追加。`STATE=WARN` かつ `TS` が新しい（既定120秒以内）ときだけ画面上部へ赤の警告バナーを出す。ファイル無し/非VM/鮮度切れ/パース失敗は "" で無表示（読取専用・ベストエフォート）。
+- controller ループは非改変（dashboard.go 限定）。`dashboard_test.go`（新規）で WARN鮮度/OK無表示/stale無視/非VMモードの4ケースを検証・緑。

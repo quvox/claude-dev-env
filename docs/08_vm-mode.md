@@ -63,7 +63,8 @@ VM モードは既存の「素の QEMU が叩ける」状態を、**管理され
 - アプリのサービスポートは **自動で** hostfwd され claude 側 `127.0.0.1:<port>` に露出する。常駐の port 同期（`vm-portsync.sh --loop`）がゲストの公開ポートを定期検出し QMP（`human-monitor-command` 経由の `hostfwd_add`）で張るため、`docker compose up` 等で公開すれば追加設定なしに `127.0.0.1:<port>` へ到達できる（`VM_PORTS` による起動時固定指定も併用可）。noVNC ブラウザからの確認はポートフォワード（既存 `claude-dev forward`）と組み合わせる。
 
 ### 3.3 ゲストイメージ（Ubuntu cloud image を provision）
-- 公式 Ubuntu cloud image（qcow2）をベースに、**cloud-init（seed）または provision スクリプトで Docker と virtiofs 自動マウント・dockerd TCP 待受を投入**して初回ビルド。
+- 公式 Ubuntu cloud image（qcow2）をベースに、**cloud-init（seed）または provision スクリプトで Docker と virtiofs 自動マウント・dockerd TCP 待受・スワップ確保を投入**して初回ビルド。
+- **スワップを必ず確保する（既定 2G のスワップファイル）**。cloud image は既定でスワップを持たず、ゲスト RAM が埋まると（スワップ無しでは）カーネルのページ回収が空回りしてゲスト全体が stall する（＝「異常に遅い」の主因）。スワップがあれば RAM 超過が致命的スラッシングにならず緩やかに劣化する。RAM 既定は 8192M（§4）。
 - ビルド成果物（qcow2）は**名前付きボリュームにキャッシュ/永続化**（コンテナ作り直しで消えない）。
 - Ubuntu の標準カーネルは `virtiofs`（`CONFIG_VIRTIO_FS`）対応のため追加カーネルビルドは不要。
 
@@ -93,10 +94,20 @@ VM を扱うために agent（Claude/orchestrator/worker）が知るべき情報
   2. **orchestrator は worker/壁打ちプロンプト先頭に `VM_DEV.md` へのポインタを前置**（既存の `ORCHESTRATOR.md` 前置と同じ仕組み。CLAUDE.md には触れない）。
   3. `claude-dev` が対話 claude 起動時に `--append-system-prompt` で「VM モード: `VM_DEV.md` 参照」の 1 行を注入（任意・CLAUDE.md 非侵襲）。
 
+### 3.7 ゲスト資源逼迫の警告（vm-healthd）
+ゲスト RAM が不足すると（スワップがあっても）ページ回収でゲスト全体が stall し、「異常に遅い」状態になる（§3.3 のスワップはこれを緩和するが根絶はしない）。これを**利用者・エージェントに気づかせる**ため、claude コンテナ内で軽量な監視を常駐させる。
+
+- **検知方式（コンテナ側のみ・ゲスト非依存）**: スラッシング時は ssh/docker API がゲストで応答しなくなる（＝警告を出したい瞬間ほどゲストへの問い合わせは機能しない）。そこで**ゲストには一切問い合わせず**、claude コンテナから常に読める **QEMU プロセスの CPU 使用率**だけを信号に使う。QEMU が `-smp` 由来の上限に対して高い比率を**継続的に**保つとき、資源逼迫（thrashing の疑い）と判定する。
+- **誤検知の扱い**: この方式は「正当な重い処理」と「スラッシング」を CPU だけでは厳密に区別できない。一過性のビルド等を拾わないよう**低め閾値＋長め継続窓**で判定し、警告文言は「逼迫の可能性」とし `vm status` での確認を促す（断定しない）。閾値・窓は環境変数で調整可能（正本は [docs/impl/80_vm-mode.md](impl/80_vm-mode.md) §7.2）。
+- **警告の出し先（2系統）**:
+  1. **tmux バナー** — tmux のステータス行に常時表示（level 追従で set/clear）＋ WARN 遷移時にフラッシュ通知。人間が noVNC/端末で即認識できる。
+  2. **orchestrator** — 実行モードのダッシュボード描画時に監視状態を読み、逼迫時は画面上部に警告バナーを出す。worker/壁打ちが資源逼迫を認識できる。
+- **CLAUDE.md 非侵襲**の方針は §3.6 と同じ（追記しない）。現況は `vm status` にも表示する。
+
 ## 4. ライフサイクル
 
 - **有効化**: `claude-dev start --vm`（`--kvm` を含意）。VM モードを示すフラグ/環境変数を渡す。**ホストに `/dev/kvm` が無い場合は警告して起動を中止**（TCG エミュレーションでは Docker ビルドに実用にならないため）。
-- **起動**: entrypoint もしくは専用スクリプトが、(1) キャッシュされたゲスト qcow2 が無ければ cloud image から provision、(2) virtiofsd 起動（`/workspace` 共有）、(3) QEMU 起動、(4) ゲスト dockerd の準備完了を待ち、(5) `DOCKER_HOST` を対話シェルへ設定し、ポート自動同期（`vm-portsync --loop`）を常駐起動。
+- **起動**: entrypoint もしくは専用スクリプトが、(1) キャッシュされたゲスト qcow2 が無ければ cloud image から provision、(2) virtiofsd 起動（`/workspace` 共有）、(3) QEMU 起動、(4) ゲスト dockerd の準備完了を待ち、(5) `DOCKER_HOST` を対話シェルへ設定し、ポート自動同期（`vm-portsync --loop`）と資源監視（`vm-healthd`）を常駐起動。
 - **操作補助**: ゲストへ入るための補助（`vm shell`＝ssh/シリアル）と、状態確認・停止・ログ（`vm status`/`vm down`/`vm logs`）。
 - **永続化**: ゲスト qcow2 とゲスト内の Docker データはボリュームで保持。`/workspace` は virtiofs 共有（ホスト実体）なのでコードは常にホスト側が正本。
 - **リセット（白紙 provision やり直し）**: 2 経路。(a) `claude-dev start --vm --vm-fresh` … コンテナ作成前にゲスト用ボリューム（`claude-dev-vm-<name>`）を破棄し、新コンテナ初回ブートで再 provision（稼働中コンテナには使えず、`stop` 後に実行）。(b) `vm rebuild`（稼働中コンテナ内ヘルパー）… VM を停止し overlay/seed を削除して再 provision（コンテナは作り直さない）。**キャッシュの扱いが異なる**：(a) はボリュームごと破棄するため **cloud image DL キャッシュも消え再取得する**（完全リセット）。(b) は overlay/seed のみ削除し **cloud image キャッシュは残す**（再ダウンロード回避）。
@@ -114,7 +125,7 @@ VM を扱うために agent（Claude/orchestrator/worker）が知るべき情報
   - `VM_DEV.md` は `/workspace/VM_DEV.md` に自動生成、`.gitignore` は非改変。
   - **provision は「初回起動時の遅延 provision＋ボリュームキャッシュ」方式**（ビルド時前倒しはしない。§3.3/§4 の通り）。
   - **アプリポートは自動フォワード**：常駐の `vm-portsync`（§3.3）がゲストの公開ポートを検出し、**同一番号で** hostfwd を自動追加する。`VM_PORTS` は起動時に固定で開くための明示指定として併用可。ホスト側ポート番号を別番号へ動的に自動割当することはしない（ゲストと同番号で mirror）。
-  - **ゲスト既定値（RAM/CPU/ディスク）や具体パラメータの正本は実装仕様 [docs/impl/80_vm-mode.md](impl/80_vm-mode.md)**（例: RAM 4096M / SMP 2 / disk 20G。**環境変数で上書き可・config ファイルは設けない**。RAM は単位付き必須）。
+  - **ゲスト既定値（RAM/CPU/ディスク）や具体パラメータの正本は実装仕様 [docs/impl/80_vm-mode.md](impl/80_vm-mode.md)**（例: RAM 8192M / SMP 2 / disk 20G / スワップ 2G。**環境変数で上書き可・config ファイルは設けない**。RAM は単位付き必須）。
 - **未決**: ssh-agent 方式 B（ゲストへの agent 転送）の具体配線（socat/hostfwd ポート・自動化するか手動手順に留めるか）、virtiofs の小ファイル大量時の性能チューニング（cache mode 等）、orchestrator worktree（`.orchestrator/worktrees`）を VM 内 Docker とどう併用するか。
 
 ## 7. 関連ドキュメント

@@ -11,6 +11,7 @@ RUN_DIR="/run/vm"
 QMP_SOCK="${RUN_DIR}/qmp.sock"
 PIDFILE="${RUN_DIR}/qemu.pid"
 SSH_KEY="${VM_HOME}/id_vm"
+HEALTH_FILE="${VM_HOME}/health"
 DOCKER_TCP="tcp://127.0.0.1:2375"
 
 qemu_pid() { [ -f "${PIDFILE}" ] && cat "${PIDFILE}" 2>/dev/null || true; }
@@ -25,6 +26,25 @@ case "$cmd" in
             echo "guest dockerd: reachable (${DOCKER_TCP})"
         else
             echo "guest dockerd: NOT reachable"
+        fi
+        # 資源監視（vm-healthd, §7.2）の現況
+        if [ -f "${HEALTH_FILE}" ]; then
+            h_state="$(sed -n 's/^STATE=//p' "${HEALTH_FILE}")"
+            h_cpu="$(sed -n 's/^CPU=//p' "${HEALTH_FILE}")"
+            h_ceil="$(sed -n 's/^CEIL=//p' "${HEALTH_FILE}")"
+            h_ts="$(sed -n 's/^TS=//p' "${HEALTH_FILE}")"
+            h_msg="$(sed -n 's/^MSG=//p' "${HEALTH_FILE}")"
+            h_age="$(( $(date +%s) - ${h_ts:-0} ))"
+            if [ "${h_state:-}" = "WARN" ]; then
+                echo "resource: ⚠ WARN — QEMU CPU ${h_cpu}% / 上限 ${h_ceil}%（${h_age}s 前更新）"
+                echo "          ${h_msg}"
+            else
+                echo "resource: ${h_state:-unknown} — QEMU CPU ${h_cpu:-?}% / 上限 ${h_ceil:-?}%（${h_age}s 前更新）"
+            fi
+        else
+            pgrep -f 'vm-healthd.sh --loop' >/dev/null 2>&1 \
+                && echo "resource: monitor starting (health 未生成)" \
+                || echo "resource: monitor not running"
         fi
         ;;
     shell)

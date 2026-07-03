@@ -5,10 +5,51 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 )
+
+// vmHealthFreshSecs bounds how old a vm-healthd health file may be before the
+// dashboard ignores it (the monitor writes every ~15s; see docs/impl/80 §7.2).
+const vmHealthFreshSecs = 120
+
+// readVMHealthBanner returns a one-line warning when the VM モード resource
+// monitor (vm-healthd) reports sustained pressure, else "". Best-effort and
+// read-only: any missing file / parse error / staleness yields "" (no banner).
+func readVMHealthBanner() string {
+	if os.Getenv("CLAUDE_DEV_VM") != "1" {
+		return ""
+	}
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return ""
+	}
+	data, err := os.ReadFile(filepath.Join(home, ".claude-dev-vm", "health"))
+	if err != nil {
+		return ""
+	}
+	kv := map[string]string{}
+	for _, ln := range strings.Split(string(data), "\n") {
+		if i := strings.IndexByte(ln, '='); i > 0 {
+			kv[ln[:i]] = ln[i+1:]
+		}
+	}
+	if kv["STATE"] != "WARN" {
+		return ""
+	}
+	ts, err := strconv.ParseInt(strings.TrimSpace(kv["TS"]), 10, 64)
+	if err != nil || time.Now().Unix()-ts > vmHealthFreshSecs {
+		return "" // stale or unparseable: monitor likely stopped
+	}
+	msg := kv["MSG"]
+	if msg == "" {
+		msg = fmt.Sprintf("VM資源逼迫の可能性（QEMU CPU %s%% / 上限 %s%%）。vm status を確認", kv["CPU"], kv["CEIL"])
+	}
+	return "⚠ " + oneline(msg, 100)
+}
 
 // DashboardState is a snapshot the controller publishes for rendering.
 type DashboardState struct {
@@ -95,6 +136,11 @@ func (d *Dashboard) render() {
 	var b strings.Builder
 	// Clear screen + home.
 	b.WriteString("\x1b[2J\x1b[H")
+	// VM モード時のみ: vm-healthd の資源逼迫警告を最上部に赤バナー表示（読取専用・
+	// ベストエフォート。docs/impl/80_vm-mode.md §7.2 / 60_orchestrator.md）。
+	if banner := readVMHealthBanner(); banner != "" {
+		fmt.Fprintf(&b, "\x1b[1;31m%s\x1b[0m\n", banner)
+	}
 	status := "● 実行中"
 	if s.Paused {
 		status = "⏸ 一時停止"

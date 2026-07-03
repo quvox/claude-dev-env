@@ -638,7 +638,7 @@ start)
             echo "🧹 VM ゲストディスクを破棄しました（--vm-fresh）。初回ブートで再 provision します"
         fi
         VM_OPTS="-e CLAUDE_DEV_VM=1 -v claude-dev-vm-${NAME}:${CHOME}/.claude-dev-vm"
-        for _v in VM_PORTS VM_MEM VM_SMP VM_DISK; do
+        for _v in VM_PORTS VM_MEM VM_SMP VM_DISK VM_SWAP; do
             eval "_val=\${$_v:-}"
             [ -n "$_val" ] && VM_OPTS="$VM_OPTS -e $_v=$_val"
         done

@@ -23,9 +23,10 @@ QMP_SOCK="${RUN_DIR}/qmp.sock"
 PIDFILE="${RUN_DIR}/qemu.pid"
 
 # 上書き可能な既定値（docs/impl/80 §4）。VM_MEM は必ず単位付き。
-VM_MEM="${VM_MEM:-4096M}"
+VM_MEM="${VM_MEM:-8192M}"
 VM_SMP="${VM_SMP:-2}"
 VM_DISK="${VM_DISK:-20G}"
+VM_SWAP="${VM_SWAP:-2G}"            # ゲストのスワップファイルサイズ（0/空で無効）
 VM_PORTS="${VM_PORTS:-}"            # 例: "8000,8080"
 CLOUD_IMG_URL="${CLOUD_IMG_URL:-https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img}"
 DOCKER_TCP="tcp://127.0.0.1:2375"
@@ -46,6 +47,14 @@ start_portsync() {
     log "started port auto-forward (vm-portsync --loop)"
 }
 
+# ゲスト資源逼迫を QEMU CPU から検知して警告する常駐監視を起動（多重起動は避ける）
+start_healthd() {
+    [ -x /usr/local/bin/vm-healthd.sh ] || return 0
+    pgrep -f 'vm-healthd.sh --loop' >/dev/null 2>&1 && return 0
+    setsid /usr/local/bin/vm-healthd.sh --loop >/dev/null 2>&1 &
+    log "started resource monitor (vm-healthd --loop)"
+}
+
 # VM_FRESH=1: 白紙 provision やり直し。走行中 VM を停止し overlay/seed を削除
 # （cloud image DL キャッシュは残す）→ 以降の初回判定で再 provision される。
 if [ "${VM_FRESH:-}" = "1" ]; then
@@ -56,7 +65,7 @@ if [ "${VM_FRESH:-}" = "1" ]; then
     rm -f "${GUEST_OVERLAY}" "${SEED_ISO}"
 elif dockerd_ready; then
     # 既に起動済み（dockerd 到達可能）なら冪等に終了
-    log "guest dockerd already reachable"; start_portsync; exit 0
+    log "guest dockerd already reachable"; start_portsync; start_healthd; exit 0
 fi
 
 # --- 前提チェック ---
@@ -78,8 +87,21 @@ if [ ! -f "${GUEST_OVERLAY}" ]; then
     [ -f "${SSH_KEY}" ] || ssh-keygen -t ed25519 -N '' -f "${SSH_KEY}" -q
     PUBKEY="$(cat "${SSH_KEY}.pub")"
 
+    # スワップ確保用 runcmd（VM_SWAP=0/空なら作らない）。生成時にサイズを MB へ確定し、
+    # fallocate 失敗時の dd フォールバック count も正しい値を焼き込む（docs/impl/80 §3）。
+    SWAP_RUNCMD=""
+    if [ -n "${VM_SWAP}" ] && [ "${VM_SWAP}" != "0" ]; then
+        SWAP_MB="$(numfmt --from=iec "${VM_SWAP}" 2>/dev/null | awk '{print int($1/1048576)}')"
+        [ -n "${SWAP_MB}" ] && [ "${SWAP_MB}" -gt 0 ] 2>/dev/null || SWAP_MB=2048
+        SWAP_RUNCMD="  - test -e /swapfile || fallocate -l ${SWAP_MB}M /swapfile || dd if=/dev/zero of=/swapfile bs=1M count=${SWAP_MB}
+  - chmod 600 /swapfile
+  - mkswap /swapfile
+  - swapon /swapfile
+  - grep -q '^/swapfile ' /etc/fstab || echo '/swapfile none swap sw 0 0' >> /etc/fstab"
+    fi
+
     # cloud-init: docker.io 導入 / dockerd を unix+tcp(127.0.0.1:2375) 待受 /
-    # virtiofs を /workspace に自動マウント / vm shell 用 SSH 公開鍵注入。
+    # virtiofs を /workspace に自動マウント / スワップ確保 / vm shell 用 SSH 公開鍵注入。
     USER_DATA="${VM_HOME}/user-data"
     cat > "${USER_DATA}" <<EOF
 #cloud-config
@@ -98,6 +120,7 @@ runcmd:
   - mkdir -p /workspace
   - grep -q '^workspace ' /etc/fstab || echo 'workspace /workspace virtiofs defaults,nofail 0 0' >> /etc/fstab
   - mount -a || true
+${SWAP_RUNCMD}
   - mkdir -p /etc/systemd/system/docker.service.d
   - |
     DKR=\$(command -v dockerd || echo /usr/bin/dockerd)
@@ -154,7 +177,7 @@ qemu-system-x86_64 \
 # --- ゲスト dockerd 準備待ち（同期ポーリング） ---
 log "waiting for guest dockerd (up to ${WAIT_SECS}s)…"
 for _ in $(seq 1 "${WAIT_SECS}"); do
-    if dockerd_ready; then log "guest dockerd is ready"; start_portsync; exit 0; fi
+    if dockerd_ready; then log "guest dockerd is ready"; start_portsync; start_healthd; exit 0; fi
     sleep 1
 done
 log "FATAL: guest dockerd did not become ready in ${WAIT_SECS}s (see ${LOG_DIR})"

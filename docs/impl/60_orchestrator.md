@@ -210,6 +210,7 @@ run loop の擬似フロー：
   - 壁打ち：引数なしの対話起動＋オーケストレーター脳の instruction を投入（§ instruction 注入）。
   - 介入対応（`[i]` 押下時のみ）：`--resume` は使わず**フレッシュ起動**し、`intervention/open.json` の全件と各 `intervention/<id>/question.md` を初期プロンプト/コンテキストとして渡す（06 §6.2 ノブ1=フレッシュ再構成、ノブ3=常駐セッションを使わず controller が毎回新規 exec）。**旧「ノブ2=先に起動して待たせる」は廃止**——トリガー発火で自動起動して全実行をブロックする旧挙動をやめ、人間が `[i]` を押した時にオンデマンド起動する（06 §6.3）。複数件あればまとめて提示し、1 件ずつ回答させる。コントローラは `cmd.Run()` でその終了までブロックするが、**背景の worker 子プロセスは前景占有中も走り続ける**。
 - **実行モード** `RunDashboard(ctx)`：`dashboard.go` が ANSI で TTY を再描画しつつ、`worker.go` の goroutine 群を監督する。各タスク行は `待機中/実行中/レビュー中/修正中/要判断/完了/失敗/ブロック` のラベルと、実行中タスクの経過時間・試行回数を表示する（タスクが running になった時点で `syncDashboard` を呼ぶため「ずっと待機中に見える」ことはない）。`要判断`（`waiting_human`）は ⏸ で示し、要判断キューの件数も表示する。キー操作：
+  - **VM 資源逼迫バナー（VM モード時）**：`render()` は描画のたびに `vm-healthd` の health ファイル（`$HOME/.claude-dev-vm/health`。正本 [80_vm-mode.md](80_vm-mode.md) §7.2）をベストエフォートで読み、`STATE=WARN` かつ `TS` が新しい（既定 120 秒以内）ときだけ画面上部へ赤の警告バナー（`⚠ VM資源逼迫（QEMU CPU …% / 上限 …%）…`）を出す。ファイルが無い／VM モードでない／鮮度切れ・パース失敗時は何も出さない（読取専用・エラーは無視）。**controller ループは非改変**で、追加は `dashboard.go`（`render` と補助 `readVMHealthBanner`）に限定する。
   - **`d`（worker 出力）**：詳細表示をトグルする。ON の間は実行中 worker の出力ログ（`workers/<taskID>.log`）の末尾をライブ表示する（`dashboard.go` の `renderDetail`/`tailFile`）。worker は出力をログへ**ストリーム書き込み**する（§ worker ディスパッチ）ので、完了を待たずに進捗が見える。
   - **`p`（一時停止）**：新規スケジューリングを止める／再開するトグル（実行中 worker は走り続ける）。
   - **`i`（介入対応）**：`intervention/open.json` に未解決の要判断がある時だけ意味を持つ。対話 `claude` を前景に exec し、溜まっている要判断をまとめて回答させる（上記「介入対応」）。**他 worker は前景占有中も走り続ける**。回答済みタスクは executing で再ディスパッチされる。
