@@ -17,3 +17,6 @@
 
 ## 2026-07-04（vm-healthd.sh を COPY）
 - `Dockerfile.claude` に `scripts/vm-healthd.sh` を `/usr/local/bin` へ COPY＋実行権付与を追加（VM モードの資源監視常駐。80 §7.2）。あわせて本文の VM スクリプト COPY 記述に vm-portsync.sh/vm-healthd.sh を明記。
+
+## 2026-07-04（DooD ポート転送 dood-portsync 追加）
+- Dockerfile.claude に scripts/dood-portsync.sh の COPY＋実行権付与を追加（socat は既存）。

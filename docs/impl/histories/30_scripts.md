@@ -10,3 +10,6 @@
 
 ## 2026-07-04（整合性確認による調整）
 - 徹底整合確認を受け、status-right の tmux フォーマット例のカンマエスケープを実ファイル(scripts/tmux.conf)に合わせ `#[fg=…#,bold]` へ訂正し、`#,` エスケープの意図を注記。
+
+## 2026-07-04（DooD ポート転送 dood-portsync 追加）
+- scripts/dood-portsync.sh（新規）の実装仕様を追加。docker ps(proxy 経由)の 0.0.0.0:PORT を検出し socat TCP-LISTEN:PORT,bind=127.0.0.1→GW:PORT を常駐（--loop・既定5s）。ローカル待受中(noVNC 等)はスキップ、/tmp/dood-portsync/forwarded で重複回避。scripts/ ツリーにも追加。

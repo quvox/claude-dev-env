@@ -260,11 +260,12 @@ COPY scripts/vm-up.sh /usr/local/bin/vm-up.sh
 COPY scripts/vm /usr/local/bin/vm
 COPY scripts/vm-portsync.sh /usr/local/bin/vm-portsync.sh
 COPY scripts/vm-healthd.sh /usr/local/bin/vm-healthd.sh
+COPY scripts/dood-portsync.sh /usr/local/bin/dood-portsync.sh
 COPY scripts/VM_DEV.md.tmpl /usr/local/share/claude-dev/VM_DEV.md.tmpl
 RUN chmod +x /usr/local/bin/init-firewall.sh /usr/local/bin/entrypoint.sh \
     /usr/local/bin/save_prompt.sh /usr/local/bin/sendslackmsg.sh \
     /usr/local/bin/vm-up.sh /usr/local/bin/vm /usr/local/bin/vm-portsync.sh \
-    /usr/local/bin/vm-healthd.sh
+    /usr/local/bin/vm-healthd.sh /usr/local/bin/dood-portsync.sh
 
 # --- orchestrator バイナリ + instruction テンプレート ---
 COPY --from=orch-builder /claude-orchestrator /usr/local/bin/claude-orchestrator

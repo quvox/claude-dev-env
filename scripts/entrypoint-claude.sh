@@ -291,6 +291,17 @@ if [ "${CLAUDE_DEV_VM:-}" = "1" ]; then
     fi
 fi
 
+# --- DooD モードのポート転送（非 VM かつ proxy 経由）---
+# ホスト共有daemon に公開されたコンテナポートを claude コンテナの 127.0.0.1 へ socat 転送し、
+# テスト等が叩く 127.0.0.1:PORT を到達可能にする（VM モードの vm-portsync 相当。docs/impl/30）。
+if [ "${CLAUDE_DEV_VM:-}" != "1" ] \
+   && [ "${CLAUDE_DEV_DOOD_PORTSYNC:-1}" != "0" ] \
+   && printf '%s' "${DOCKER_HOST:-}" | grep -q 'docker-proxy' \
+   && [ -x /usr/local/bin/dood-portsync.sh ]; then
+    su "$USERNAME" -c "DOCKER_HOST='${DOCKER_HOST}' setsid /usr/local/bin/dood-portsync.sh --loop >/dev/null 2>&1 &" || true
+    echo "🔌 DooD ポート転送を起動（ホスト公開ポートを 127.0.0.1 へ同期）"
+fi
+
 # --- CLAUDE.md にコンテナ環境情報を書き込み ---
 # マーカー（<!-- claude-dev-auto-start/end -->）で囲んだ範囲を毎回削除→再書き込みする。
 # これにより entrypoint の更新が次回起動時に必ず反映される。

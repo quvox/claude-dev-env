@@ -157,6 +157,15 @@ Claude コンテナ                        Docker Socket Proxy               Doc
 └──────────────┘                      └─────────────────────┘           └──────────┘
 ```
 
+### DooD のポートアクセス（dood-portsync）
+
+DooD ではコンテナは**ホストの Docker デーモン**で起動し、公開ポートは**ホストの `0.0.0.0:PORT`** に出る。一方 Claude コンテナは別 network namespace のため、コンテナ内テスト等が叩く `127.0.0.1:PORT` はホストの公開ポートに届かない（Claude コンテナ自身のループバックを指すため）。
+
+これを解消するため、DooD モードでは Claude コンテナ内に常駐ヘルパー **`dood-portsync`** を起動する（VM モードの `vm-portsync` に相当）。ホスト（共有 daemon）に公開されたポートを検出し、`socat` で **`127.0.0.1:PORT`（コンテナ内ループバック限定）→ デフォルトゲートウェイ（＝ホスト）:PORT** の転送を張る。これにより `127.0.0.1:PORT` がホスト公開ポートへ到達できる。
+
+- 転送のリスナーは各 Claude コンテナ内 `127.0.0.1` のみ（ホストへは何も新規公開しない）。ただし DooD の性質上、**サービスの実ポートはホスト `0.0.0.0:PORT` に既に公開**されている（ホスト側で可視・別プロジェクトと同一ポートは衝突しうる）。ホスト非公開・ポート隔離が必要なら VM モードを使う（[03_security.md](03_security.md) §5 / [08_vm-mode.md](08_vm-mode.md)）。
+- 既定有効。`CLAUDE_DEV_DOOD_PORTSYNC=0` で無効化できる。実装は [docs/impl/30_scripts.md](impl/30_scripts.md)（`dood-portsync.sh`）・[docs/impl/31_entrypoint.md](impl/31_entrypoint.md)（自動起動）。
+
 ## ブラウザ操作
 
 VNC ありコンテナでは、chrome-devtools MCP サーバー経由でコンテナ内の Google Chrome を操作する。Chrome は `--remote-debugging-port=9222` で起動し、MCP サーバーが DevTools Protocol で Chrome を制御する。

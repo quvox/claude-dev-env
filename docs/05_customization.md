@@ -255,6 +255,15 @@ cd ~/repos/my-project
 claude-dev start   # ボリュームが再作成され、デフォルトの .zshrc がコピーされる
 ```
 
+## DooD モードのポートアクセス（127.0.0.1:PORT）
+
+既定（DooD）モードでは、`docker`/`docker compose` で起動したコンテナは**ホストの Docker デーモン**で動き、公開ポートは**ホスト側**に出る。Claude コンテナは別ネットワークのため、コンテナ内のテスト等が叩く `127.0.0.1:PORT` はそのままでは届かない。
+
+これを解消するため、DooD モードでは Claude コンテナ内で `dood-portsync` が自動起動し、ホストに公開されたポートを `127.0.0.1:PORT`（コンテナ内ループバック）へ自動転送する。`docker compose up` で公開したポートは数秒以内に `127.0.0.1:PORT` で叩けるようになる（追加設定不要）。
+
+- **無効化**: `claude-dev start` 時に環境変数 `CLAUDE_DEV_DOOD_PORTSYNC=0` を渡す（または `-e` で設定）。
+- **注意**: DooD ではサービスの実ポートはホストに公開される（ホストから見え、同じポートを使う別プロジェクトとはホスト上で衝突しうる）。ホスト非公開・ポート隔離が必要な場合は **VM モード（`claude-dev start --vm`）** を使う（[04_cli-reference.md](04_cli-reference.md) / [08_vm-mode.md](08_vm-mode.md)）。
+
 ## Linux デスクトップの操作
 
 Web アプリの確認は `chrome-devtools` MCP（Chrome 操作）が標準だが、それ以外の **Linux デスクトップ（GUI）全般**を Claude に操作させたい場合は、用途に応じて次の 2 方式を使う。いずれも VNC ありコンテナ（`claude-dev start`、デフォルト）が前提で、ユーザーは noVNC 画面で操作をリアルタイムに確認できる。

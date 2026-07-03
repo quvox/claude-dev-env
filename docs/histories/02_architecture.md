@@ -15,3 +15,6 @@
 
 ## 2026-07-04（proxy の /workspace 配下 bind 許可を反映）
 - Docker Socket Proxy のセキュリティ説明を更新。ホストバインドは原則拒否だが、呼び出し元の /workspace 配下は実ホストパスへ書き換えて許可する（既定有効・CLAUDE_DEV_ALLOW_WORKSPACE_BINDS で切替）旨と §5 への参照を追記（正本 03_security.md §5 / impl 50）。ASCII 図の `-v /:/host` 拒否例は /workspace 外のため引き続き正。
+
+## 2026-07-04（DooD ポート転送 dood-portsync 追加）
+- DooD のポートアクセス設計を追記。DooD ではコンテナ公開ポートがホスト 0.0.0.0:PORT に出て claude コンテナの 127.0.0.1 に届かない問題を、常駐 dood-portsync（socat で 127.0.0.1:PORT→GW:PORT 転送。VM モードの vm-portsync 相当）で解消する旨と、ホスト可視・隔離が要るなら VM モードという整理を記載。
