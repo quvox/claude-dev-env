@@ -539,9 +539,10 @@ sleep 0.5
 # 新コンテナで Chrome が「別プロセスが使用中」と判定し --remote-debugging-port を無視する
 rm -f \$HOME/.chrome-profile/SingletonLock \$HOME/.chrome-profile/SingletonSocket \$HOME/.chrome-profile/SingletonCookie
 
-# Chrome
+# Chrome / Chromium（GUI ブラウザ。amd64=Google Chrome / arm64=Playwright Chromium）
+# claude-dev-chrome ランチャーがアーキに応じて適切なバイナリを起動する。
 sleep 2
-google-chrome-stable --no-sandbox --disable-gpu --disable-software-rasterizer \
+claude-dev-chrome --no-sandbox --disable-gpu --disable-software-rasterizer \
     --disable-dev-shm-usage --disable-background-networking \
     --no-first-run --no-default-browser-check --start-maximized \
     --remote-debugging-port=9222 \

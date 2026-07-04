@@ -1,6 +1,6 @@
 # Claude Code 安全開発環境
 
-Linux サーバ上で Claude Code を承認待ちなし・安全に使うための Docker 環境。
+Linux サーバ上で Claude Code を承認待ちなし・安全に使うための Docker 環境（macOS + Docker Desktop でも動作）。
 
 任意のプロジェクトディレクトリで `claude-dev start` を実行するだけで、コンテナ隔離された Claude Code 環境が起動する。
 
@@ -54,6 +54,25 @@ claude-dev start
 ```
 
 > `make setup` は .env 作成、Docker ネットワーク/ボリューム作成、イメージビルド、CLI の PATH 登録を一括で行う。個別に実行する場合は `make help` を参照。
+
+## macOS（Docker Desktop）で使う
+
+Linux 向けツールだが、macOS + Docker Desktop でも動く。CLI は macOS 適応版 `claude-dev-mac` を使うが、`make install` が OS を判定して `claude-dev-mac` を `/usr/local/bin/claude-dev` として配置するため、**利用者コマンド名はどの OS でも `claude-dev`** で同じ。
+
+```bash
+git clone https://github.com/quvox/claude-dev-env.git ~/claude-dev-env
+cd ~/claude-dev-env
+brew install jq                     # 必須（start がホスト設定を抽出するのに使う）
+make setup                          # macOS では claude-dev-mac を /usr/local/bin/claude-dev へ symlink（sudo）
+make login
+cd ~/repos/my-project && claude-dev start
+```
+
+- **SSH agent**: Docker Desktop の魔法ソケット `/run/host-services/ssh-auth.sock` 経由でホストの ssh-agent を転送する（macOS の Unix ソケットは直接マウントできないため）。
+- **Web アプリ**: 手元マシン = Docker ホストなので、`claude-dev forward <port>` の後は `http://localhost:<host-port>` に直接アクセスできる（SSH トンネル不要）。
+- **VM/KVM モード（`--vm` / `--kvm`）は非対応**（macOS には `/dev/kvm` が無く、ネスト仮想化も使えない）。Docker を多用する開発は通常起動（Docker Socket Proxy 経由）で行う。
+- **Apple Silicon**: ネイティブ arm64 でビルド/実行する（エミュレーションなし）。Google Chrome は Linux arm64 版が無いため、VNC の GUI ブラウザは **Playwright Chromium**（arm64 対応）を使う。chrome-devtools MCP はそのまま動作する。Intel Mac は従来どおり Google Chrome。
+- 設計の詳細は [docs/09_macos-support.md](docs/09_macos-support.md)。
 
 ## 日常の使い方
 
@@ -144,14 +163,16 @@ vm logs                        # 起動・ゲストのログ
 | [docs/04_cli-reference.md](docs/04_cli-reference.md) | 全コマンドのリファレンス |
 | [docs/05_customization.md](docs/05_customization.md) | ファイアウォール・CLAUDE.md・tmux・hooks/env 等のカスタマイズ |
 | [docs/08_vm-mode.md](docs/08_vm-mode.md) | VM モード（QEMU+virtiofs でゲスト VM 内のネイティブ Docker を使う）の設計 |
+| [docs/09_macos-support.md](docs/09_macos-support.md) | macOS（Docker Desktop）対応の設計（claude-dev-mac） |
 | [docs/impl/INDEX.md](docs/impl/INDEX.md) | 実装仕様書（コードと 1 対 1 の Single Source of Truth）一覧 |
 
 ## ファイル構成
 
 ```
 claude-dev-env/
-├── Makefile                           セットアップ・ビルド・管理タスク
-├── claude-dev                         CLI ツール本体
+├── Makefile                           セットアップ・ビルド・管理タスク（OS 判定で CLI を選択）
+├── claude-dev                         CLI ツール本体（Linux 版）
+├── claude-dev-mac                     CLI ツール本体（macOS 版。詳細 docs/09_macos-support.md）
 ├── .env.example                       設定テンプレート
 ├── CLAUDE.md                          コンテナ内の Claude Code 向け指示
 ├── .devcontainer/

@@ -11,6 +11,8 @@ keywords: [ CLI, コマンドリファレンス, claude-dev, orchestrate, ポー
 
 操作は **Makefile**（セットアップ・ビルド・管理）と **claude-dev CLI**（日常の開発操作）の 2 系統で提供される。
 
+> **macOS について**: macOS では CLI 本体は `claude-dev-mac`（`make install` が `claude-dev` として配置）を使う。コマンド名・サブコマンド体系は本リファレンスと同一。差分は VM/KVM 非対応（`--vm`/`--kvm` はエラー）と、`forward`/`ports`/`list` の案内が SSH トンネルではなく `http://localhost:<host-port>` 直結になる点のみ。詳細は [docs/09_macos-support.md](09_macos-support.md)。
+
 ### Makefile ターゲット一覧
 
 インストールやビルドなどの管理タスクは Makefile で実行する。
@@ -25,8 +27,8 @@ keywords: [ CLI, コマンドリファレンス, claude-dev, orchestrate, ポー
 | `make build-docker-proxy` | Docker Socket Proxy イメージをビルド |
 | `make upgrade` | 全イメージを最新版にリビルド（`--no-cache`） |
 | `make status` | イメージ・コンテナ・ボリュームの状態確認 |
-| `make install` | `claude-dev` を `/usr/local/bin/` にシンボリックリンク |
-| `make uninstall` | シンボリックリンクを削除 |
+| `make install` | CLI を `/usr/local/bin/claude-dev` に登録（**Linux**: シンボリックリンク。**macOS**: `claude-dev-mac` を `install(1)`+`sudo` でコピー配置） |
+| `make uninstall` | `/usr/local/bin/claude-dev` を削除（symlink・実ファイル双方に対応） |
 | `make clean` | 全リセット（コンテナ・ボリューム・イメージ削除、確認あり） |
 | `make help` | ヘルプ表示 |
 

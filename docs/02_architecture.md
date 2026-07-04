@@ -7,6 +7,8 @@ keywords: [ アーキテクチャ, Docker, VNC, 認証, ポートフォワード
 
 > **この文書の役割**: システム全体の設計（コンテナ構成・Docker リソース・認証フロー・ポートフォワード・ブラウザ操作）を俯瞰する設計文書。実装の詳細仕様は [docs/impl/](impl/INDEX.md) を参照。
 
+> **対応 OS**: 本文書は Linux サーバ運用を主眼に記述するが、コンテナ内資産（イメージ・entrypoint・firewall・docker-proxy）は OS 非依存で、ホスト側 CLI を差し替えることで **macOS + Docker Desktop** でも動作する。OS 依存はホスト側 CLI に閉じる（macOS 版 = `claude-dev-mac`）。macOS 固有の設計は [docs/09_macos-support.md](09_macos-support.md) を参照。
+
 ## 全体構成
 
 ```
