@@ -19,6 +19,11 @@ if [ -f "$CONFIG_FILE" ]; then
     set +a
 fi
 
+# --- Docker CLI の "What's next:" ヒントを抑制 ---
+# docker run / exec 後（tmux から抜けた時など）に出るプロモ表示を止める。
+# 利用者が明示設定していればそれを尊重する。
+export DOCKER_CLI_HINTS="${DOCKER_CLI_HINTS:-false}"
+
 # --- 定数 ---
 NETWORK="claude-dev-net"
 NOVNC_BASE_PORT=6080   # noVNC ポート開始番号

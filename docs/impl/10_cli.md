@@ -30,6 +30,7 @@ claude-dev      （単一の bash スクリプト）
 
 - `SCRIPT_PATH`: `readlink -f`/`realpath` で自身の実体パスを解決（シンボリックリンク経由実行に対応）。`BASE_DIR` はその親ディレクトリ。
 - `CONFIG_FILE="${BASE_DIR}/.env"` が存在すれば `set -a; source; set +a` で環境変数としてエクスポート。
+- `DOCKER_CLI_HINTS` を既定 `false` で export（利用者設定は尊重）。`docker run`/`exec` 後（tmux から抜けた時など）に出る Docker CLI の「What's next:」ヒント表示を抑制する。
 - `CUSER` / `CHOME="/home/${CUSER}"`: コンテナ内ユーザー名。**実行するイメージ（`IMG_CLAUDE`）に焼き込まれた `CONTAINER_USER` env を優先**して解決し（`docker image inspect ... | sed -n 's/^CONTAINER_USER=//p'`）、取得できなければ `whoami` にフォールバックする。ローカルビルドのイメージは `CONTAINER_USER=<whoami>` のため従来と同一（後方互換）。GHCR の generic user イメージ（`CONTAINER_USER=dev`）を `pull` した場合は `CUSER=dev` となり、マウント先 `/home/dev`・`docker exec -u dev` が自動追従する（設計 [../10_ghcr-images.md](../10_ghcr-images.md)）。UID/GID は entrypoint が `/workspace` 所有者へ実行時に追従させる。
 
 ### 定数
