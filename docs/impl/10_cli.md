@@ -101,7 +101,7 @@ GHCR のビルド済みイメージを取得してローカルビルドを省く
 8. **マウント/オプション組み立て**:
    - `GITCONFIG_OPT`: `~/.gitconfig` があれば RO マウント
    - `DOCKER_OPTS`: ソケットがあれば `ensure_docker_proxy_container` 後 `DOCKER_HOST=tcp://<proxy>:2375`
-   - `SSH_OPTS`: `ensure_ssh_agent` 後、agent ソケットを `/tmp/ssh-agent.sock`（RO）転送 + `SSH_AUTH_SOCK` 設定。`known_hosts` を RO マウント。`~/.ssh/config` は `IdentityFile`/`IdentitiesOnly` 行を `sed` で除去した一時ファイルを RO マウント
+   - `SSH_OPTS`: `ensure_ssh_agent` 後、agent ソケットを `/tmp/ssh-agent.sock`（RO）転送 + `SSH_AUTH_SOCK` 設定。`known_hosts` を RO マウント。`~/.ssh/config` は `IdentityFile`/`IdentitiesOnly`/`IdentityAgent` 行を `sed` で除去した一時ファイルを RO マウント（`IdentityAgent` はホスト固有 agent パスがコンテナ内で `SSH_AUTH_SOCK` を上書きするのを防ぐため。ホストの config 実体は不変）
    - `NOVNC_PORT_OPT`（VNC 時のみ）: 空き noVNC ポートを `find_available_novnc_port` で確保し `-p <port>:6080` + `VOL_CHROME` を `~/.chrome-profile` にマウント
    - `KVM_OPTS`: **`--kvm` 指定時のみ**、ホストに存在する `/dev/kvm` `/dev/vhost-net` `/dev/net/tun` を `--device` で渡す（既定では渡さない。通常は Chrome 操作のみで十分なため、KVM/QEMU が必要なときだけ明示的に有効化する）。デバイス受け渡しはコンテナ作成時にのみ行われるため、稼働中コンテナへ後付けはできず、`stop` → `start --kvm` で再作成する
 9. **コンテナ起動**: 起動直前に **使用イメージ名とバージョン**（`image_version "$RUN_IMAGE"`）を表示する。VM モード（`USE_VM=1`）のときは `docker run` の前に「VM モードで起動する／通常より時間がかかる（初回は cloud image 取得＋provision で数分）」旨を表示する。`docker run -d` で `--cap-add NET_ADMIN`・`NET_RAW`（FW 用）、`--restart unless-stopped`、`/workspace` マウント、各ボリューム、`tmux.conf`/`CLAUDE.md` を RO マウント、上記オプション群、`NODE_OPTIONS=--max-old-space-size=4096`、`-t` を付与。

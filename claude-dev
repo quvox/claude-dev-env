@@ -649,11 +649,13 @@ start)
     if [ -f "${HOME}/.ssh/known_hosts" ]; then
         SSH_OPTS="${SSH_OPTS} -v ${HOME}/.ssh/known_hosts:${CHOME}/.ssh/known_hosts:ro"
     fi
-    # ~/.ssh/config（エージェント転送用に加工してマウント）
-    # IdentityFile / IdentitiesOnly はコンテナ内に鍵ファイルがないため除去
+    # ~/.ssh/config（エージェント転送用に加工した「一時コピー」を RO マウント。ホストの config は不変）
+    # IdentityFile / IdentitiesOnly はコンテナ内に鍵ファイルがないため除去。
+    # IdentityAgent はホスト固有の agent パスを指し、コンテナ内では SSH_AUTH_SOCK を
+    # 上書きして agent を不通にするため必ず除去する。
     if [ -f "${HOME}/.ssh/config" ]; then
         _ssh_config_tmp=$(mktemp /tmp/claude-dev-ssh-config.XXXXXX)
-        sed -E '/^[[:space:]]*(IdentityFile|IdentitiesOnly)/d' "${HOME}/.ssh/config" > "$_ssh_config_tmp"
+        sed -E '/^[[:space:]]*(IdentityFile|IdentitiesOnly|IdentityAgent)/d' "${HOME}/.ssh/config" > "$_ssh_config_tmp"
         SSH_OPTS="${SSH_OPTS} -v ${_ssh_config_tmp}:${CHOME}/.ssh/config:ro"
     fi
 
