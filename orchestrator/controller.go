@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -86,6 +87,7 @@ func (c *Controller) Run(ctx context.Context) error {
 // ---- wallbounce ----
 
 func (c *Controller) runWallbounce(ctx context.Context, st *State) error {
+	printModeBanner("wallbounce")
 	if err := c.Mode.RunInteractive(ctx, c.Mode.WallbounceArgs()...); err != nil {
 		// Interactive session ending non-zero (e.g. /exit) is not fatal; we
 		// still inspect control.json.
@@ -100,18 +102,15 @@ func (c *Controller) runWallbounce(ctx context.Context, st *State) error {
 	if ctrl != nil {
 		switch ctrl.Request {
 		case ReqExecute:
-			if plan != nil && plan.Ready {
-				if missing := lintPlan(plan); missing != "" {
-					// Plan not lint-clean: every task must have a task-specific
-					// completion (docs/06 §8.1). Do not execute; send the brain back
-					// to wallbounce with the reason.
-					_ = c.Store.AppendAudit(AuditEntry{Event: "plan_lint_failed", Detail: map[string]any{"missing": missing}})
-					c.Notifier.Notify(fmt.Sprintf("[%s] 実行不可: 各タスクに completion が必要です（%s）。壁打ちで補ってください。", plan.Goal, oneline(missing, 160)))
-					return nil // stay in wallbounce
-				}
+			if plan != nil && plan.Ready && lintPlan(plan) == "" {
 				return c.transition(st, PhaseExecuting)
 			}
-			// execute requested but plan not ready: fall through to confirm.
+			// execute requested but plan not executable (not ready or a task
+			// lacks completion). Do NOT go silent and do NOT show the menu:
+			// explain on the terminal and hand the reason back to the brain, then
+			// stay in wallbounce so it fixes the plan next round (docs/06 §4.5/§8.1).
+			c.reportNotExecutable(plan)
+			return nil
 		case ReqAbort:
 			return c.transition(st, PhaseDone)
 		case ReqContinueWallbounce:
@@ -119,15 +118,53 @@ func (c *Controller) runWallbounce(ctx context.Context, st *State) error {
 		}
 	}
 
-	// No decisive control: ask the human explicitly (safe side).
-	switch c.confirm("壁打ち: 続ける(continue)/実行(execute)/終了(done)?") {
+	// No decisive control.json: ask the human via a cursor/number menu.
+	switch c.confirm("壁打ち: 次の操作を選んでください") {
 	case "execute":
-		return c.transition(st, PhaseExecuting)
+		if plan != nil && plan.Ready && lintPlan(plan) == "" {
+			return c.transition(st, PhaseExecuting)
+		}
+		c.reportNotExecutable(plan)
+		return nil
 	case "done":
 		return c.transition(st, PhaseDone)
 	default:
 		return nil // continue wallbounce
 	}
+}
+
+// reportNotExecutable explains on the terminal (never silently) why execution
+// cannot start, records it to the audit log and Slack, and hands the reason to
+// the next wallbounce brain via handoff_note.md so it fixes the plan without the
+// human relaying it. The wording never asks the human to edit plan.json (that is
+// the brain's job — docs/06 §4.3/§4.5). Japanese (docs/06 §5.7).
+func (c *Controller) reportNotExecutable(plan *Plan) {
+	var reason, note string
+	switch {
+	case plan == nil || len(plan.Tasks) == 0:
+		reason = "plan がまだありません。壁打ち（対話）でゴールとタスクを固めてください。"
+		note = reason
+	case !plan.Ready:
+		reason = "plan がまだ ready ではありません。壁打ちで詰めてから実行してください。"
+		note = reason
+	default:
+		missing := lintPlan(plan)
+		if missing == "" {
+			return // actually executable; nothing to report
+		}
+		reason = fmt.Sprintf("各タスクに completion（受け入れ基準）が必要です。未設定: %s。壁打ちに戻って対話で completion を補ってください（plan.json は壁打ち脳が更新します）。", missing)
+		note = fmt.Sprintf("前回の実行差し戻し理由: 次のタスクに completion が未設定でした: %s。各タスクに具体的な completion を必ず付与してから ready=true にして execute してください。", missing)
+	}
+	_ = c.Store.AppendAudit(AuditEntry{Event: "plan_not_executable", Detail: map[string]any{"reason": reason}})
+	if isTTY() {
+		fmt.Fprintf(os.Stderr, "\n\x1b[1;33m⚠ 実行できません: %s\x1b[0m\n\n", reason)
+	}
+	goal := ""
+	if plan != nil {
+		goal = plan.Goal
+	}
+	c.Notifier.Notify(fmt.Sprintf("[%s] 実行不可: %s", goal, oneline(reason, 200)))
+	_ = c.Store.WriteAtomicSidecar("handoff_note.md", note)
 }
 
 func (c *Controller) confirm(prompt string) string {
@@ -159,6 +196,8 @@ func (c *Controller) runExecuting(ctx context.Context, st *State) error {
 	NormalizeForResume(plan)
 	_ = c.Store.SavePlan(plan)
 	c.planMu.Unlock()
+
+	printModeBanner("executing")
 
 	dash := &DashboardState{Goal: plan.Goal}
 	syncDashboard(dash, plan)
@@ -567,8 +606,26 @@ func (c *Controller) openInterventionCount() int {
 
 // refreshInterventionCount publishes the open-intervention count to the dashboard.
 func (c *Controller) refreshInterventionCount(dash *DashboardState) {
-	n := c.openInterventionCount()
-	dash.Set(func(s *DashboardState) { s.InterventionsOpen = n })
+	q := c.Store.LoadOpenInterventions()
+	taskIDs := make([]string, 0, len(q.Items))
+	for _, it := range q.Items {
+		taskIDs = append(taskIDs, it.TaskID)
+	}
+	dash.Set(func(s *DashboardState) {
+		s.InterventionsOpen = len(taskIDs)
+		titles := make([]string, 0, len(taskIDs))
+		for _, tid := range taskIDs {
+			label := tid
+			for _, dt := range s.Tasks {
+				if dt.ID == tid && dt.Title != "" {
+					label = tid + " " + dt.Title
+					break
+				}
+			}
+			titles = append(titles, label)
+		}
+		s.OpenTitles = titles
+	})
 }
 
 // ---- interventions (resolution) ----
@@ -587,6 +644,7 @@ func (c *Controller) resolveInterventions(ctx context.Context, st *State, plan *
 	for _, it := range q.Items {
 		ids = append(ids, it.ID)
 	}
+	printModeBanner("intervene")
 	if rerr := c.Mode.RunInteractive(ctx, c.Mode.ResolveArgs(ids)...); rerr != nil {
 		_ = c.Store.AppendAudit(AuditEntry{Event: "intervene_exit", Detail: map[string]any{"err": rerr.Error()}})
 	}
@@ -767,8 +825,8 @@ func buildQuestion(t *Task, reason string) string {
 		fmt.Fprintf(&b, "%s\n", nh.Question)
 		if len(nh.Options) > 0 {
 			b.WriteString("\n選択肢:\n")
-			for _, o := range nh.Options {
-				fmt.Fprintf(&b, "- %s\n", o)
+			for i, o := range nh.Options {
+				fmt.Fprintf(&b, "%d. %s\n", i+1, o)
 			}
 		}
 	} else {

@@ -623,3 +623,40 @@ func countJSONL(t *testing.T, s *Store, name string) int {
 	}
 	return n
 }
+
+// TestReportNotExecutable_MissingCompletion verifies that a lint-failing plan
+// (a task lacks completion) is reported visibly: a handoff_note.md is written
+// for the next wallbounce brain and a Slack notice is emitted (docs/06 §4.5/§8.1).
+func TestReportNotExecutable_MissingCompletion(t *testing.T) {
+	ctrl, store := newTestController(t, testCfg(), &mockClaude{}, &mockGit{})
+	// Ready plan but t2 lacks a completion → lint fails on t2.
+	plan := &Plan{Goal: "g", Ready: true, Tasks: []Task{
+		{ID: "t1", Status: TaskPending, Completion: "done when x"},
+		{ID: "t2", Status: TaskPending},
+	}}
+	ctrl.reportNotExecutable(plan)
+
+	note, _ := store.ReadAtomicSidecar("handoff_note.md")
+	if !strings.Contains(note, "t2") || !strings.Contains(note, "completion") {
+		t.Fatalf("handoff_note.md should name t2 + completion, got %q", note)
+	}
+	if strings.Contains(note, "t1") {
+		t.Fatalf("handoff_note.md should not flag t1 (it has completion): %q", note)
+	}
+	cn := ctrl.Notifier.(*captureNotifier)
+	if len(cn.msgs) == 0 || !strings.Contains(cn.msgs[0], "実行不可") {
+		t.Fatalf("expected a 実行不可 Slack notice, got %v", cn.msgs)
+	}
+}
+
+// TestReportNotExecutable_NotReady covers the not-ready branch (no completion
+// list needed).
+func TestReportNotExecutable_NotReady(t *testing.T) {
+	ctrl, store := newTestController(t, testCfg(), &mockClaude{}, &mockGit{})
+	plan := &Plan{Goal: "g", Ready: false, Tasks: []Task{{ID: "t1", Status: TaskPending}}}
+	ctrl.reportNotExecutable(plan)
+	note, _ := store.ReadAtomicSidecar("handoff_note.md")
+	if !strings.Contains(note, "ready") {
+		t.Fatalf("handoff_note.md should mention ready, got %q", note)
+	}
+}

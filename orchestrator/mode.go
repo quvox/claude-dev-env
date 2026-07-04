@@ -63,7 +63,17 @@ func (m *Mode) RunInteractive(ctx context.Context, args ...string) error {
 // instruction, which is passed via --append-system-prompt.
 func (m *Mode) WallbounceArgs() []string {
 	args := []string{}
-	instr := VMModePreamble() + LoadProjectPolicy(m.Workspace) + readFileOr(m.instructionPath("wallbounce.md"), "")
+	// Prepend any lint-rejection note from the previous handoff so the brain
+	// fixes the missing completions without the human relaying it (docs/06 §4.5).
+	// Consume-once: read then delete.
+	note, _ := m.Store.ReadAtomicSidecar("handoff_note.md")
+	_ = os.Remove(m.Store.path("handoff_note.md"))
+	preamble := ""
+	if strings.TrimSpace(note) != "" {
+		preamble = "【前回の実行差し戻し（handoff_note）】\n" + strings.TrimSpace(note) +
+			"\n上記を最優先で解消し、全タスクに completion を付けてから実行してください。\n\n"
+	}
+	instr := preamble + VMModePreamble() + LoadProjectPolicy(m.Workspace) + readFileOr(m.instructionPath("wallbounce.md"), "")
 	if instr != "" {
 		args = append(args, "--append-system-prompt", instr)
 	}

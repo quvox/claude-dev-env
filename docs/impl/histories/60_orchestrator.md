@@ -133,3 +133,14 @@
 ## 2026-07-04（実行モードダッシュボードに VM 資源逼迫バナー）
 - `dashboard.go` の `render()` に、VM モード時のみ `vm-healthd` の health ファイル（`$HOME/.claude-dev-vm/health`、80 §7.2）を読む `readVMHealthBanner()` を追加。`STATE=WARN` かつ `TS` が新しい（既定120秒以内）ときだけ画面上部へ赤の警告バナーを出す。ファイル無し/非VM/鮮度切れ/パース失敗は "" で無表示（読取専用・ベストエフォート）。
 - controller ループは非改変（dashboard.go 限定）。`dashboard_test.go`（新規）で WARN鮮度/OK無表示/stale無視/非VMモードの4ケースを検証・緑。
+
+## 2026-07-04（オーケストレーター UX 改修の実装仕様＋実装）
+- 06 の UX 改修（§4.3/§4.5/§5.4–5.7/§8.1）を 60 に反映し実装：
+  - term.go: selectMenu（矢印↑↓/j k＋Enter・番号即確定・各項目説明・非TTU既定=続ける）と printModeBanner（壁打ち/介入/実行の入場バナー）。純関数 resolveMenu を分離し term_test.go で検証。
+  - main.go: terminalConfirm をテキスト入力から selectMenu（1.続ける/2.実行/3.終了・日本語）へ置換（bufio 依存除去）。
+  - controller.go: runWallbounce を「execute+ready+lint clean→executing／execute だが実行不可→reportNotExecutable+壁打ち直帰（メニュー無し）／continue_wallbounce→再実行／abort→done／control 無・不明→メニュー」に再構成。reportNotExecutable（端末stderr＋audit＋Slack＋handoff_note.md、plan.json 編集を促さない文言）。buildQuestion の選択肢を 1. 連番化。executing/intervene 入場で printModeBanner。ダッシュボードに要判断一覧（タスク名）。
+  - mode.go: WallbounceArgs が handoff_note.md を消費して instruction 先頭へ前置。
+  - 状態ストアに handoff_note.md（機械所有・人間非編集）。
+- 指示テンプレ：wallbounce.md（plan.json タスクスキーマに completion 追加＝必須化・自己検証で全completion揃うまで ready/execute しない・/exit 案内・handoff_note 反映・plan.json を人間編集させない・選択肢番号・日本語）、intervene.md（キュー進捗の口頭明示・answer.md 記録後 /exit・番号・日本語）。
+- 設計↔実装仕様・実装仕様内の整合性を独立多エージェントで徹底確認し、メニュー起動条件の二重定義・worker 言語前提の食い違い・§13 誤参照・テスト一覧漏れ等を是正。
+- 検証: go build/vet 緑、gofmt 済み、go test（-race 含む）全緑（term_test.go の selectMenu/resolveMenu/buildQuestion 連番、controller_test の reportNotExecutable/handoff_note を追加）。対話メニューの実機 TTY E2E は次段階（自己検証サンプルで attach 確認）。

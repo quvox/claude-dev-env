@@ -8,7 +8,6 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"errors"
 	"flag"
@@ -143,25 +142,16 @@ func run(workspace, instrDir, goal string, fresh, startExec bool) error {
 }
 
 // terminalConfirm asks the human on the terminal when control.json is missing
-// or invalid. On a non-TTY it returns "continue" (never auto-executes).
+// or unclear, via a cursor/number-selectable menu (docs/06 §4.5/§5.6). On a
+// non-TTY it returns "continue" (never auto-executes). Returns one of
+// "continue"/"execute"/"done" (mapped by the controller to
+// continue_wallbounce/execute/abort). Japanese labels (docs/06 §5.7).
 func terminalConfirm(prompt string) string {
-	if !isTTY() {
-		return "continue"
-	}
-	fmt.Printf("%s\n> ", prompt)
-	r := bufio.NewReader(os.Stdin)
-	line, err := r.ReadString('\n')
-	if err != nil {
-		return "continue"
-	}
-	switch strings.TrimSpace(strings.ToLower(line)) {
-	case "execute", "e":
-		return "execute"
-	case "done", "q", "quit":
-		return "done"
-	default:
-		return "continue"
-	}
+	return selectMenu(prompt, []menuItem{
+		{Value: "continue", Label: "1. 続ける", Desc: "対話（壁打ち）に戻って要件・plan をさらに詰める（plan は保持）"},
+		{Value: "execute", Label: "2. 実行", Desc: "plan の各タスクを worker に並行ディスパッチして実装を進める（要 ready＋全 completion）"},
+		{Value: "done", Label: "3. 終了", Desc: "このオーケストレーション実行を終了する"},
+	}, 0)
 }
 
 // isResumable reports whether a loaded state represents a genuinely interrupted

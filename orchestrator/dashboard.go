@@ -60,7 +60,8 @@ type DashboardState struct {
 	LastSummaryTS     string
 	AssumptionsN      int
 	InterventionsN    int
-	InterventionsOpen int // unresolved per-task interventions (open.json)
+	InterventionsOpen int      // unresolved per-task interventions (open.json)
+	OpenTitles        []string // task titles of open interventions (for the list; docs/06 §5.5)
 	Paused            bool
 	Detail            bool // when true, render live worker output tails ([d] toggles)
 }
@@ -181,6 +182,13 @@ func (d *Dashboard) render() {
 	b.WriteString("\n")
 	fmt.Fprintf(&b, "仮定ログ %d / 要判断 %d 件  （done %d/%d, 実行中 %d）\n",
 		s.AssumptionsN, s.InterventionsOpen, done, n, len(running))
+	if len(s.OpenTitles) > 0 {
+		items := make([]string, len(s.OpenTitles))
+		for i, t := range s.OpenTitles {
+			items[i] = fmt.Sprintf("(%d) %s", i+1, oneline(t, 36))
+		}
+		fmt.Fprintf(&b, "  要判断: %s ← [i]で対応\n", strings.Join(items, " / "))
+	}
 	ihint := ""
 	if s.InterventionsOpen > 0 {
 		ihint = " [i]介入対応"
