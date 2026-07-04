@@ -43,19 +43,19 @@ keywords: [ GitHubActions, GHCR, buildx, マルチアーキ, push-by-digest, ima
   - `arm64`: runner `ubuntu-24.04-arm`（ネイティブ arm64） / `linux/arm64`
 - `runs-on: ${{ matrix.platform.runner }}`。
 
-手順: checkout → `docker/setup-buildx-action` → `docker/login-action`（ghcr.io、`github.actor`＋`GITHUB_TOKEN`）→ `docker/build-push-action@v6`:
+手順: checkout → `docker/setup-buildx-action` → `docker/login-action`（ghcr.io、`github.actor`＋`GITHUB_TOKEN`）→ `docker/build-push-action@v7`:
 - `context: .`、`file: matrix.image.dockerfile`、`target: matrix.image.target`、`platforms: matrix.platform.docker`（単一アーキ）。
 - `build-args`: `USERNAME=dev` / `USER_UID=1000` / `USER_GID=1000`（generic user。docker-proxy は当該 ARG 未宣言のため無視＝警告のみ）。
 - `provenance: false`（余分な attestation manifest を作らず manifest list をクリーンに保つ）。
 - `outputs: type=image,name=${REGISTRY}/${owner}/claude-dev-${name},push-by-digest=true,name-canonical=true,push=true`（**タグを付けずダイジェストで push**）。
 - `cache-from`/`cache-to`: `type=gha,scope=${name}-${arch}`（アーキ・イメージ別キャッシュ）。
 
-その後、`steps.build.outputs.digest` を `${runner.temp}/digests/<digest-without-sha256:>` に空ファイルとして書き出し、`actions/upload-artifact@v4`（name `digests-${name}-${arch}`、`if-no-files-found: error`、`retention-days: 1`）で保存。
+その後、`steps.build.outputs.digest` を `${runner.temp}/digests/<digest-without-sha256:>` に空ファイルとして書き出し、`actions/upload-artifact@v7`（name `digests-${name}-${arch}`、`if-no-files-found: error`、`retention-days: 1`）で保存。
 
 ### `merge`（matrix）
 `needs: [prepare, build]`、`runs-on: ubuntu-latest`。matrix は `image_name`（`claude`/`claude-vnc`/`docker-proxy`）の 3 ジョブ。
 
-手順: `actions/download-artifact@v4` を **exact 名で 2 回**（`digests-${image_name}-amd64` と `digests-${image_name}-arm64`）呼び、当該イメージの全アーキ分を 1 ディレクトリへ集約する（**パターン方式は使わない**。`digests-claude-*` が `digests-claude-vnc-*` を巻き込む前置一致バグを避けるため。イメージ名が別イメージ名の前置になり得る＝`claude`⊂`claude-vnc` 対策）→ buildx セットアップ → GHCR ログイン → `docker buildx imagetools create` で **manifest list を作成**:
+手順: `actions/download-artifact@v8` を **exact 名で 2 回**（`digests-${image_name}-amd64` と `digests-${image_name}-arm64`）呼び、当該イメージの全アーキ分を 1 ディレクトリへ集約する（**パターン方式は使わない**。`digests-claude-*` が `digests-claude-vnc-*` を巻き込む前置一致バグを避けるため。イメージ名が別イメージ名の前置になり得る＝`claude`⊂`claude-vnc` 対策）→ buildx セットアップ → GHCR ログイン → `docker buildx imagetools create` で **manifest list を作成**:
 - `-t ${IMAGE}:${tag}` と `-t ${IMAGE}:latest` の 2 タグ。
 - ソースはダウンロードしたダイジェスト群（`${IMAGE}@sha256:<digest>` を各ファイル名から構成）。
 - `IMAGE=${REGISTRY}/${owner}/claude-dev-${image_name}`。
