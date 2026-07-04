@@ -55,7 +55,7 @@ keywords: [ GitHubActions, GHCR, buildx, マルチアーキ, push-by-digest, ima
 ### `merge`（matrix）
 `needs: [prepare, build]`、`runs-on: ubuntu-latest`。matrix は `image_name`（`claude`/`claude-vnc`/`docker-proxy`）の 3 ジョブ。
 
-手順: `actions/download-artifact@v4`（`pattern: digests-${image_name}-*`、`merge-multiple: true` で当該イメージの全アーキ分を 1 ディレクトリへ）→ buildx セットアップ → GHCR ログイン → `docker buildx imagetools create` で **manifest list を作成**:
+手順: `actions/download-artifact@v4` を **exact 名で 2 回**（`digests-${image_name}-amd64` と `digests-${image_name}-arm64`）呼び、当該イメージの全アーキ分を 1 ディレクトリへ集約する（**パターン方式は使わない**。`digests-claude-*` が `digests-claude-vnc-*` を巻き込む前置一致バグを避けるため。イメージ名が別イメージ名の前置になり得る＝`claude`⊂`claude-vnc` 対策）→ buildx セットアップ → GHCR ログイン → `docker buildx imagetools create` で **manifest list を作成**:
 - `-t ${IMAGE}:${tag}` と `-t ${IMAGE}:latest` の 2 タグ。
 - ソースはダウンロードしたダイジェスト群（`${IMAGE}@sha256:<digest>` を各ファイル名から構成）。
 - `IMAGE=${REGISTRY}/${owner}/claude-dev-${image_name}`。
