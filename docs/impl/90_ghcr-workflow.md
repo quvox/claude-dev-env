@@ -45,7 +45,7 @@ keywords: [ GitHubActions, GHCR, buildx, マルチアーキ, push-by-digest, ima
 
 手順: checkout → `docker/setup-buildx-action` → `docker/login-action`（ghcr.io、`github.actor`＋`GITHUB_TOKEN`）→ `docker/build-push-action@v7`:
 - `context: .`、`file: matrix.image.dockerfile`、`target: matrix.image.target`、`platforms: matrix.platform.docker`（単一アーキ）。
-- `build-args`: `USERNAME=dev` / `USER_UID=1000` / `USER_GID=1000`（generic user。docker-proxy は当該 ARG 未宣言のため無視＝警告のみ）。
+- `build-args`: `USERNAME=dev` / `USER_UID=1000` / `USER_GID=1000`（generic user）、および **`IMAGE_VERSION=${tag}`**（＝`YYYYMMDDHHmm`。Dockerfile がこれを `io.github.quvox.claude-dev.version`／`org.opencontainers.image.version` ラベルに焼き込み、`claude-dev start` がバージョン表示に使う）。docker-proxy は `USERNAME` 系 ARG を宣言しないため無視＝警告のみ（`IMAGE_VERSION` は宣言済み）。
 - `provenance: false`（余分な attestation manifest を作らず manifest list をクリーンに保つ）。
 - `outputs: type=image,name=${REGISTRY}/${owner}/claude-dev-${name},push-by-digest=true,name-canonical=true,push=true`（**タグを付けずダイジェストで push**）。
 - `cache-from`/`cache-to`: `type=gha,scope=${name}-${arch}`（アーキ・イメージ別キャッシュ）。

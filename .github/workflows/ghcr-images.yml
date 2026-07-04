@@ -75,6 +75,7 @@ jobs:
             USERNAME=dev
             USER_UID=1000
             USER_GID=1000
+            IMAGE_VERSION=${{ needs.prepare.outputs.tag }}
           provenance: false
           outputs: type=image,name=${{ env.REGISTRY }}/${{ needs.prepare.outputs.owner }}/claude-dev-${{ matrix.image.name }},push-by-digest=true,name-canonical=true,push=true
           cache-from: type=gha,scope=${{ matrix.image.name }}-${{ matrix.platform.arch }}

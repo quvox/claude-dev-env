@@ -13,6 +13,10 @@ COPY docker-proxy/*.go ./
 RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /docker-proxy .
 
 FROM alpine:3.21
+# イメージバージョン（CI は YYYYMMDDHHmm、ローカルビルドは既定 local）。claude-dev start が表示する。
+ARG IMAGE_VERSION=local
+LABEL io.github.quvox.claude-dev.version="${IMAGE_VERSION}" \
+      org.opencontainers.image.version="${IMAGE_VERSION}"
 RUN apk add --no-cache ca-certificates
 COPY --from=builder /docker-proxy /usr/local/bin/docker-proxy
 

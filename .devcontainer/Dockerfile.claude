@@ -29,6 +29,14 @@ ARG USER_UID=1500
 ARG USER_GID=1500
 ENV USER_HOME=/home/${USERNAME}
 
+# --- イメージバージョン（CI は YYYYMMDDHHmm、ローカルビルドは既定 local）---
+# vnc ステージは base を継承するためこのラベルも引き継ぐ。claude-dev start が表示する。
+# 専用キー io.github.quvox.claude-dev.version を CLI が読む（OCI 標準キーは ubuntu が
+# 24.04 を設定済みで衝突するため。標準キーも実バージョンで上書きしておく）。
+ARG IMAGE_VERSION=local
+LABEL io.github.quvox.claude-dev.version="${IMAGE_VERSION}" \
+      org.opencontainers.image.version="${IMAGE_VERSION}"
+
 # --- システムパッケージ ---
 RUN apt-get update && apt-get install -y --no-install-recommends \
     # ファイアウォール

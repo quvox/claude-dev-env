@@ -264,6 +264,18 @@ get_novnc_url() {
     fi
 }
 
+# 指定イメージ（または image ID）のバージョン表記を返す
+# org.opencontainers.image.version ラベル優先（CI=YYYYMMDDHHmm / ローカル=local）、
+# 無ければ unknown。あわせて短縮 ID と作成日時を付す。
+image_version() {
+    local ref="$1" v id created
+    v=$(docker image inspect "$ref" --format '{{index .Config.Labels "io.github.quvox.claude-dev.version"}}' 2>/dev/null)
+    id=$(docker image inspect "$ref" --format '{{.Id}}' 2>/dev/null | sed 's/^sha256://' | cut -c1-12)
+    created=$(docker image inspect "$ref" --format '{{.Created}}' 2>/dev/null | cut -c1-16 | tr 'T' ' ')
+    case "$v" in ""|"<no value>") v="unknown" ;; esac
+    echo "${v} (id ${id}, built ${created})"
+}
+
 # Claude コンテナが 0 なら Docker Proxy コンテナを停止
 stop_proxy_if_idle() {
     local count
@@ -541,6 +553,8 @@ start)
     if is_running "$NAME"; then
         [ "$USE_VM_FRESH" = "1" ] && echo "⚠️  --vm-fresh は稼働中コンテナには効きません。'claude-dev stop' 後に再実行するか、稼働中は 'vm rebuild'（コンテナ内）を使ってください。"
         echo "✅ ${NAME} は実行中。接続します..."
+        _img_id=$(docker inspect --format '{{.Image}}' "$NAME" 2>/dev/null)
+        [ -n "$_img_id" ] && echo "🏷️  イメージバージョン: $(image_version "$_img_id")"
         ensure_infrastructure
         _url=$(get_novnc_url "$NAME")
         [ -n "$_url" ] && echo "🖥️  noVNC: $_url"
@@ -687,6 +701,7 @@ start)
         echo "    （初回は cloud image の取得と provision で数分かかります。以降は数十秒程度）"
     fi
     echo "🚀 起動中... [${NAME}] → ${PROJECT_DIR}"
+    echo "🏷️  イメージ: ${RUN_IMAGE}  バージョン $(image_version "$RUN_IMAGE")"
     docker run -d \
         --name "$NAME" \
         --hostname "$NAME" \
