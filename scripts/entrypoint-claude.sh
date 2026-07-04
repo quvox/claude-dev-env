@@ -88,6 +88,20 @@ for dev in /dev/kvm /dev/vhost-net; do
     fi
 done
 
+# --- SSH agent の受け口を用意（macOS 版の TCP ブリッジ）---
+# CLAUDE_DEV_SSH_BRIDGE_PORT が渡された場合（macOS の方式D。設計 docs/09 §1）、
+# ホストの claude-dev 専用 agent へ host.docker.internal:<port> 経由で接続する socat を
+# $USERNAME 権限で起動し、/tmp/ssh-agent.sock（ユーザー所有・0600）を用意する。
+# Linux 版は $SSH_AUTH_SOCK を /tmp/ssh-agent.sock に直接 bind mount しているため本分岐は通らない。
+if [ -n "${CLAUDE_DEV_SSH_BRIDGE_PORT:-}" ] && command -v socat >/dev/null 2>&1; then
+    rm -f /tmp/ssh-agent.sock
+    su "$USERNAME" -c "nohup socat UNIX-LISTEN:/tmp/ssh-agent.sock,fork,mode=600 TCP:host.docker.internal:${CLAUDE_DEV_SSH_BRIDGE_PORT} >/dev/null 2>&1 &"
+    for _i in $(seq 1 20); do
+        [ -S /tmp/ssh-agent.sock ] && break
+        sleep 0.2
+    done
+fi
+
 # --- SSH_AUTH_SOCK をシェル初期化ファイルに設定 ---
 # Docker の -e で渡された SSH_AUTH_SOCK は su -l でリセットされるため、
 # シェル初期化ファイルに書き出して全シェルで利用可能にする

@@ -100,19 +100,8 @@ env:
 ##  Linux: 書込可能なら ln -sf、不可なら sudo ln -sf を案内。
 install:
 	@chmod +x "$(CLI)"
-ifeq ($(UNAME_S),Darwin)
-	@echo "🍎 macOS: $(INSTALL_PATH) → $(CLI) を symlink します（sudo）"
 	@sudo ln -sf "$(CLI)" "$(INSTALL_PATH)"
 	@echo "✅ $(INSTALL_PATH) にインストールしました（どの OS でも claude-dev コマンドで実行）"
-else
-	@if [ -w "$(dir $(INSTALL_PATH))" ]; then \
-		ln -sf "$(CLI)" "$(INSTALL_PATH)"; \
-		echo "✅ $(INSTALL_PATH) にインストールしました"; \
-	else \
-		echo "⚠️  $(INSTALL_PATH) への書き込み権限がありません"; \
-		echo "   実行してください: sudo ln -sf $(CLI) $(INSTALL_PATH)"; \
-	fi
-endif
 
 ## CLI の PATH 登録を解除
 uninstall:

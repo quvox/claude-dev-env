@@ -61,132 +61,165 @@ CHOME="/home/${CUSER}"
 # ヘルパー関数
 # =============================================================================
 
-# --- ユーザー設定ファイル ---
+# --- ユーザー設定ファイル / SSH（方式D: 専用 agent＋socat TCP ブリッジ）---
+# 設計 docs/09_macos-support.md §1 / 実装仕様 docs/impl/11_cli-mac.md D1
 USER_CONFIG="${HOME}/.config/claude-dev.yaml"
+DEV_DIR="${HOME}/.claude-dev"
+DEV_AGENT_SOCK="${DEV_DIR}/ssh-agent.sock"
+DEV_AGENT_PID_FILE="${DEV_DIR}/ssh-agent.pid"
+DEV_BRIDGE_PID_FILE="${DEV_DIR}/ssh-bridge.pid"
+DEV_BRIDGE_PORT_FILE="${DEV_DIR}/ssh-bridge.port"
 
-# ~/.config/claude-dev.yaml から ssh_keys のリストを読み取る
-# YAML が存在しなければ ~/.ssh/ の鍵ファイルを列挙して自動生成する
-load_ssh_keys_from_config() {
-    local config="$USER_CONFIG"
+# ~/.ssh/id_*（.pub 除く）を DISCOVERED_KEYS に列挙
+discover_ssh_keys() {
+    DISCOVERED_KEYS=()
+    local f
+    for f in "$HOME"/.ssh/id_*; do
+        case "$f" in *.pub) continue ;; esac
+        [ -f "$f" ] && DISCOVERED_KEYS+=("$f")
+    done
+}
 
-    # 設定ファイルがなければ自動生成
-    if [ ! -f "$config" ]; then
-        local found_keys=()
-        for f in ~/.ssh/id_*; do
-            case "$f" in *.pub) continue ;; esac
-            [ -f "$f" ] && found_keys+=("$f")
-        done
+# config に ssh_keys セクションがあるか（=選択済み）
+config_has_ssh_selection() {
+    [ -f "$USER_CONFIG" ] && grep -qE '^ssh_keys:' "$USER_CONFIG"
+}
 
-        mkdir -p "$(dirname "$config")"
-        {
-            echo "# claude-dev 設定ファイル"
-            echo "# ssh-agent に登録する SSH 鍵を指定してください"
-            echo "# 不要な鍵はコメントアウトまたは削除してください"
-            echo "ssh_keys:"
-            if [ ${#found_keys[@]} -eq 0 ]; then
-                echo "  # 鍵が見つかりませんでした。以下の形式で追加してください:"
-                echo '  # - ~/.ssh/id_ed25519'
-            else
-                for k in "${found_keys[@]}"; do
-                    echo "  - $k"
-                done
-            fi
-        } > "$config"
-        echo "📝 設定ファイルを作成しました: $config"
-    fi
-
-    # ssh_keys セクションからパスを読み取る
+# config の ssh_keys を SSH_KEY_LIST に読み込む（自動生成はしない）
+load_config_ssh_keys() {
     SSH_KEY_LIST=()
-    local in_section=0
+    [ -f "$USER_CONFIG" ] || return 0
+    local line val in_section=0
     while IFS= read -r line; do
-        # コメント行・空行をスキップ
-        case "$line" in
-            \#*|"") continue ;;
-        esac
-        # ssh_keys: セクション開始
-        if [[ "$line" =~ ^ssh_keys: ]]; then
-            in_section=1
-            continue
-        fi
-        # 別のトップレベルキーに到達したら終了
-        if [[ $in_section -eq 1 && "$line" =~ ^[a-zA-Z_] ]]; then
-            break
-        fi
-        # リストアイテムを読み取る
+        case "$line" in \#*|"") continue ;; esac
+        if [[ "$line" =~ ^ssh_keys: ]]; then in_section=1; continue; fi
+        if [[ $in_section -eq 1 && "$line" =~ ^[a-zA-Z_] ]]; then break; fi
         if [[ $in_section -eq 1 && "$line" =~ ^[[:space:]]*-[[:space:]]+(.*) ]]; then
-            local val="${BASH_REMATCH[1]}"
-            # コメント部分を除去
-            val="${val%%#*}"
-            # 前後の空白を除去
+            val="${BASH_REMATCH[1]}"; val="${val%%#*}"
             val="$(echo "$val" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
-            # ~ をホームディレクトリに展開
             val="${val/#\~/$HOME}"
             [ -n "$val" ] && SSH_KEY_LIST+=("$val")
         fi
-    done < "$config"
+    done < "$USER_CONFIG"
 }
 
-# ssh-agent が動いていなければ起動し、鍵が未登録なら ssh-add する
-ensure_ssh_agent() {
-    # agent が動いていなければ起動
-    if [ -z "${SSH_AUTH_SOCK:-}" ] || [ ! -S "${SSH_AUTH_SOCK:-}" ]; then
-        eval "$(ssh-agent -s)" >/dev/null
-        echo "🔑 ssh-agent を起動しました"
-    fi
+# 選択鍵を config に書き出す（引数=鍵パス群。claude-dev が所有するファイル）
+write_config_ssh_keys() {
+    mkdir -p "$(dirname "$USER_CONFIG")"
+    {
+        echo "# claude-dev 設定ファイル（このファイルは claude-dev が管理します）"
+        echo "# ssh_keys: コンテナへ転送する SSH 鍵。再選択は 'claude-dev ssh-keys'、初期化は 'claude-dev ssh-keys reset'"
+        echo "ssh_keys:"
+        local k
+        for k in "$@"; do echo "  - $k"; done
+    } > "$USER_CONFIG"
+}
 
-    # 鍵が既に登録されていれば何もしない
-    if ssh-add -l >/dev/null 2>&1; then
+# ~/.ssh の鍵を対話選択し config に保存。結果を SSH_KEY_LIST にも反映
+select_ssh_keys_interactive() {
+    discover_ssh_keys
+    if [ ${#DISCOVERED_KEYS[@]} -eq 0 ]; then
+        echo "⚠️  ~/.ssh に鍵ファイル（id_*）が見つかりません。SSH 転送なしで続行します。"
+        write_config_ssh_keys
+        SSH_KEY_LIST=()
         return 0
     fi
+    echo "利用可能な SSH 鍵:"
+    local i=1 k
+    for k in "${DISCOVERED_KEYS[@]}"; do echo "  $i) $k"; i=$((i + 1)); done
+    printf "コンテナで使う鍵を選択 (番号をカンマ/空白区切り, a=全部, n=なし): "
+    local ans=""; read -r ans || ans=""
+    local chosen=() tok
+    case "$ans" in
+        a|A|all|ALL) chosen=("${DISCOVERED_KEYS[@]}") ;;
+        n|N|none|NONE|"") chosen=() ;;
+        *)
+            for tok in $(echo "$ans" | tr ',' ' '); do
+                case "$tok" in ''|*[!0-9]*) continue ;; esac
+                if [ "$tok" -ge 1 ] && [ "$tok" -le ${#DISCOVERED_KEYS[@]} ]; then
+                    chosen+=("${DISCOVERED_KEYS[$((tok - 1))]}")
+                fi
+            done
+            ;;
+    esac
+    write_config_ssh_keys "${chosen[@]}"
+    echo "✅ SSH 鍵の選択を保存しました: $USER_CONFIG（${#chosen[@]} 件）"
+    SSH_KEY_LIST=("${chosen[@]}")
+}
 
-    # 設定ファイルから鍵リストを読み込む
-    load_ssh_keys_from_config
-
-    if [ ${#SSH_KEY_LIST[@]} -eq 0 ]; then
-        echo "⚠️  SSH 鍵が設定されていません。$USER_CONFIG を編集してください"
-        return 0
+# 専用 ssh-agent（~/.claude-dev/ssh-agent.sock）を起動し、選択鍵を ssh-add する
+# SSH_KEY_LIST を事前に用意しておくこと。成功で 0。
+ensure_dedicated_agent() {
+    mkdir -p "$DEV_DIR"
+    local rc=0
+    SSH_AUTH_SOCK="$DEV_AGENT_SOCK" ssh-add -l >/dev/null 2>&1 || rc=$?
+    if [ "$rc" -eq 2 ] || [ ! -S "$DEV_AGENT_SOCK" ]; then
+        rm -f "$DEV_AGENT_SOCK"
+        local out
+        out=$(ssh-agent -a "$DEV_AGENT_SOCK" 2>/dev/null) || {
+            echo "⚠️  専用 ssh-agent の起動に失敗しました"; return 1; }
+        echo "$out" | sed -n 's/.*SSH_AGENT_PID=\([0-9][0-9]*\).*/\1/p' | head -1 > "$DEV_AGENT_PID_FILE"
     fi
-
-    # 存在しない鍵を警告しつつ、有効な鍵だけ処理する
-    local keys=()
+    # 選択鍵を追加（重複 add は無害。パスフレーズ付きは対話で一度だけ）
+    local key need_pp=()
     for key in "${SSH_KEY_LIST[@]}"; do
-        if [ -f "$key" ]; then
-            keys+=("$key")
+        [ -f "$key" ] || { echo "⚠️  ${key}: 見つかりません（スキップ）"; continue; }
+        if SSH_AUTH_SOCK="$DEV_AGENT_SOCK" SSH_ASKPASS=/bin/false SSH_ASKPASS_REQUIRE=force ssh-add "$key" 2>/dev/null; then
+            :
         else
-            echo "⚠️  ${key}: ファイルが見つかりません（スキップ）"
+            need_pp+=("$key")
         fi
     done
-
-    if [ ${#keys[@]} -eq 0 ]; then
-        echo "⚠️  有効な SSH 鍵がありません。$USER_CONFIG を確認してください"
-        return 0
-    fi
-
-    # まずパスフレーズなしの鍵を自動追加
-    local added=0
-    local need_passphrase=()
-    for key in "${keys[@]}"; do
-        if SSH_ASKPASS=/bin/false SSH_ASKPASS_REQUIRE=force ssh-add "$key" 2>/dev/null; then
-            added=1
-        else
-            need_passphrase+=("$key")
-        fi
-    done
-
-    # パスフレーズ付きの鍵は対話的に追加を試みる
-    if [ ${#need_passphrase[@]} -gt 0 ]; then
-        echo "🔑 パスフレーズ付きの SSH 鍵があります。パスフレーズを入力してください。"
-        for key in "${need_passphrase[@]}"; do
-            if ssh-add "$key"; then
-                added=1
-            else
-                echo "⚠️  ${key}: 追加できませんでした（スキップ）"
-            fi
+    if [ ${#need_pp[@]} -gt 0 ]; then
+        echo "🔑 パスフレーズ付きの鍵を専用 agent に追加します（初回のみ入力）:"
+        for key in "${need_pp[@]}"; do
+            SSH_AUTH_SOCK="$DEV_AGENT_SOCK" ssh-add "$key" || echo "⚠️  ${key}: 追加できませんでした（スキップ）"
         done
     fi
+    return 0
+}
 
-    if [ "$added" -eq 0 ]; then
-        echo "⚠️  SSH 鍵を追加できませんでした。手動で ssh-add を実行してから再度 claude-dev start してください"
+# 空き 127.0.0.1 TCP ポートを返す（9700〜。forward(8100〜)/noVNC(6080〜) と重ならない範囲）
+find_free_local_port() {
+    local p
+    for p in $(seq 9700 9799); do
+        if ! (: </dev/tcp/127.0.0.1/"$p") 2>/dev/null; then echo "$p"; return 0; fi
+    done
+    echo 9700
+}
+
+# 専用 agent への host socat ブリッジを起動し、使用中ポートを標準出力に返す
+# socat が無い/起動失敗なら非0を返す（呼び出し側は SSH 転送をスキップ）
+ensure_ssh_bridge() {
+    if ! command -v socat >/dev/null 2>&1; then
+        echo "⚠️  socat が見つかりません。SSH agent 転送には socat が必要です。" >&2
+        echo "    👉 導入してください:  brew install socat" >&2
+        echo "    （導入後に 'claude-dev start' を再実行してください。今回は SSH agent 転送なしで続行します）" >&2
+        return 1
+    fi
+    mkdir -p "$DEV_DIR"
+    # 既存ブリッジが生きていればその port を再利用
+    if [ -f "$DEV_BRIDGE_PID_FILE" ] && [ -f "$DEV_BRIDGE_PORT_FILE" ] \
+       && kill -0 "$(cat "$DEV_BRIDGE_PID_FILE" 2>/dev/null)" 2>/dev/null; then
+        cat "$DEV_BRIDGE_PORT_FILE"
+        return 0
+    fi
+    local port="${CLAUDE_DEV_SSH_BRIDGE_PORT:-}"
+    [ -n "$port" ] || port=$(find_free_local_port)
+    nohup socat "TCP-LISTEN:${port},bind=127.0.0.1,fork,reuseaddr" "UNIX-CONNECT:${DEV_AGENT_SOCK}" >/dev/null 2>&1 &
+    echo $! > "$DEV_BRIDGE_PID_FILE"
+    echo "$port" > "$DEV_BRIDGE_PORT_FILE"
+    echo "$port"
+}
+
+# 稼働中 claude コンテナが 0 ならブリッジ socat を停止（専用 agent は残す）
+stop_ssh_bridge_if_idle() {
+    local count
+    count=$(docker ps --filter "ancestor=$IMG_CLAUDE" --filter "ancestor=$IMG_CLAUDE_VNC" -q 2>/dev/null | wc -l)
+    if [ "$count" -eq 0 ] && [ -f "$DEV_BRIDGE_PID_FILE" ]; then
+        kill "$(cat "$DEV_BRIDGE_PID_FILE" 2>/dev/null)" 2>/dev/null || true
+        rm -f "$DEV_BRIDGE_PID_FILE" "$DEV_BRIDGE_PORT_FILE"
+        echo "🔌 SSH ブリッジを停止しました（Claude コンテナなし）"
     fi
 }
 
@@ -663,14 +696,28 @@ start)
         DOCKER_OPTS="-e DOCKER_HOST=tcp://${DOCKER_PROXY_CONTAINER}:2375"
     fi
 
-    # SSH agent 準備 & ソケット転送（秘密鍵ファイルはマウントしない）
-    # macOS ではホストの $SSH_AUTH_SOCK を直接マウントできないため、Docker Desktop の
-    # 魔法ソケット /run/host-services/ssh-auth.sock（VM 内でホスト agent へブリッジ）を使う。
-    # マウント先を /tmp/ssh-agent.sock に固定して entrypoint の既存処理と整合させる。
-    ensure_ssh_agent
+    # SSH agent（方式D: claude-dev 専用 agent＋socat TCP ブリッジ。秘密鍵はコンテナに渡さない）
+    # macOS の Unix ソケットはコンテナへ直接マウントできず、Docker Desktop 魔法ソケットは
+    # 利用者の鍵がある agent を転送しないため、専用 agent を鍵ファイルから構築して転送する。
     SSH_OPTS=""
-    if [ -n "${SSH_AUTH_SOCK:-}" ]; then
-        SSH_OPTS="-v /run/host-services/ssh-auth.sock:/tmp/ssh-agent.sock -e SSH_AUTH_SOCK=/tmp/ssh-agent.sock"
+    # 鍵の選択（未選択なら対話選択して config 保存。以後は config を使う）
+    if config_has_ssh_selection; then
+        load_config_ssh_keys
+    else
+        select_ssh_keys_interactive
+    fi
+    _valid_keys=0
+    for _k in "${SSH_KEY_LIST[@]}"; do [ -f "$_k" ] && _valid_keys=1; done
+    if [ "$_valid_keys" = "1" ]; then
+        if ensure_dedicated_agent; then
+            _sshport=$(ensure_ssh_bridge) || _sshport=""
+            if [ -n "$_sshport" ]; then
+                SSH_OPTS="-e CLAUDE_DEV_SSH_BRIDGE_PORT=${_sshport}"
+                echo "🔑 SSH agent 転送: 127.0.0.1:${_sshport}（専用 agent、選択鍵 ${#SSH_KEY_LIST[@]} 件）"
+            fi
+        fi
+    else
+        echo "ℹ️  SSH 鍵が未選択のため SSH agent 転送なしで起動します（'claude-dev ssh-keys' で選択）"
     fi
     # ~/.ssh/known_hosts（読み取り専用、秘密情報なし）
     if [ -f "${HOME}/.ssh/known_hosts" ]; then
@@ -830,8 +877,48 @@ stop)
         echo "ℹ️  ${NAME} は存在しません"
     fi
 
-    # Claude コンテナが残っていなければ Docker Proxy も停止
+    # Claude コンテナが残っていなければ Docker Proxy と SSH ブリッジも停止
     stop_proxy_if_idle
+    stop_ssh_bridge_if_idle
+    ;;
+
+# -----------------------------------------------------------------------------
+# SSH 鍵の選択（対話）/ 初期化
+#   claude-dev ssh-keys          コンテナへ転送する鍵を対話選択して config に保存
+#   claude-dev ssh-keys reset    選択を初期化（config 消去＋専用 agent フラッシュ/停止）
+# -----------------------------------------------------------------------------
+ssh-keys)
+    case "${2:-}" in
+        reset)
+            # config の ssh_keys セクションを除去
+            if [ -f "$USER_CONFIG" ]; then
+                _tmp=$(mktemp)
+                grep -vE '^ssh_keys:|^[[:space:]]*-[[:space:]]' "$USER_CONFIG" > "$_tmp" 2>/dev/null || true
+                mv "$_tmp" "$USER_CONFIG"
+            fi
+            # 専用 agent の鍵をフラッシュして停止、ブリッジも停止
+            if [ -S "$DEV_AGENT_SOCK" ]; then
+                SSH_AUTH_SOCK="$DEV_AGENT_SOCK" ssh-add -D 2>/dev/null || true
+            fi
+            if [ -f "$DEV_BRIDGE_PID_FILE" ]; then
+                kill "$(cat "$DEV_BRIDGE_PID_FILE" 2>/dev/null)" 2>/dev/null || true
+                rm -f "$DEV_BRIDGE_PID_FILE" "$DEV_BRIDGE_PORT_FILE"
+            fi
+            if [ -f "$DEV_AGENT_PID_FILE" ]; then
+                kill "$(cat "$DEV_AGENT_PID_FILE" 2>/dev/null)" 2>/dev/null || true
+                rm -f "$DEV_AGENT_PID_FILE"
+            fi
+            rm -f "$DEV_AGENT_SOCK"
+            echo "✅ SSH 鍵の選択をリセットしました。次回 claude-dev start で再選択します"
+            ;;
+        ""|select)
+            select_ssh_keys_interactive
+            ;;
+        *)
+            echo "使い方: claude-dev ssh-keys [reset]"
+            exit 1
+            ;;
+    esac
     ;;
 
 # -----------------------------------------------------------------------------
@@ -1066,6 +1153,7 @@ claude-dev - Claude Code 安全開発環境（macOS 版）
   claude-dev pull [TAG]          GHCR からビルド済みイメージを取得（ビルドの代わり。既定 latest）
   claude-dev login               OAuth ログイン
   claude-dev logout              認証情報を削除
+  claude-dev ssh-keys [reset]    コンテナへ転送する SSH 鍵を対話選択（reset で初期化）
 
 開発:
   claude-dev start               カレントディレクトリで環境を起動（VNC + Chrome 付き）
