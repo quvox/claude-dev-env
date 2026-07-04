@@ -21,6 +21,11 @@ RUN_DIR="/tmp/dood-portsync"
 STATE="${RUN_DIR}/forwarded"          # 転送済みポートを記録（1行1ポート）
 LOG="${RUN_DIR}/dood-portsync.log"
 INTERVAL="${CLAUDE_DEV_DOOD_PORTSYNC_INTERVAL:-5}"
+# 除外ポート: claude コンテナ自身の内部サービス（noVNC 6080 / VNC 5999 / Chrome 9222）は
+# 転送しない。ホスト側で別コンテナが同番ポートを 0.0.0.0 に公開していると、その転送が
+# コンテナ内で自前サービスの bind と競合する（例: noVNC が 6080 を bind できず起動失敗）。
+# 追加/変更は CLAUDE_DEV_DOOD_PORTSYNC_EXCLUDE（空白区切り）で上書き可。
+EXCLUDE="${CLAUDE_DEV_DOOD_PORTSYNC_EXCLUDE:-6080 5999 9222}"
 # デフォルトゲートウェイ = docker bridge の GW = ホスト。ホスト公開ポートはここで到達可能。
 GATEWAY="$(ip route 2>/dev/null | awk '/^default/{print $3; exit}')"
 
@@ -42,10 +47,17 @@ local_listening() {
     return 1
 }
 
+is_excluded() {
+    local x
+    for x in ${EXCLUDE}; do [ "$1" = "$x" ] && return 0; done
+    return 1
+}
+
 sync_once() {
     local p
     for p in $(published_ports); do
         grep -qx "${p}" "${STATE}" 2>/dev/null && continue   # 既に処理済み
+        if is_excluded "${p}"; then continue; fi              # 内部サービスポートは転送しない
         if local_listening "${p}"; then
             echo "${p}" >> "${STATE}"                          # 既に何かが待受（noVNC 等）→ スキップ記録
             continue

@@ -262,6 +262,7 @@ claude-dev start   # ボリュームが再作成され、デフォルトの .zsh
 これを解消するため、DooD モードでは Claude コンテナ内で `dood-portsync` が自動起動し、ホストに公開されたポートを `127.0.0.1:PORT`（コンテナ内ループバック）へ自動転送する。`docker compose up` で公開したポートは数秒以内に `127.0.0.1:PORT` で叩けるようになる（追加設定不要）。
 
 - **無効化**: `claude-dev start` 時に環境変数 `CLAUDE_DEV_DOOD_PORTSYNC=0` を渡す（または `-e` で設定）。
+- **転送しないポート**: コンテナ内部サービス（noVNC `6080` / VNC `5999` / Chrome `9222`）は既定で転送対象外（`CLAUDE_DEV_DOOD_PORTSYNC_EXCLUDE` で変更可）。これらを転送すると noVNC 等の起動と競合するため。
 - **注意**: DooD ではサービスの実ポートはホストに公開される（ホストから見え、同じポートを使う別プロジェクトとはホスト上で衝突しうる）。ホスト非公開・ポート隔離が必要な場合は **VM モード（`claude-dev start --vm`）** を使う（[04_cli-reference.md](04_cli-reference.md) / [08_vm-mode.md](08_vm-mode.md)）。
 
 ## Linux デスクトップの操作
