@@ -1,24 +1,41 @@
 # Claude Code 安全開発環境
 
-Linux サーバ上で Claude Code を承認待ちなし・安全に使うための Docker 環境（macOS + Docker Desktop でも動作）。
+Claude Code を **承認待ちで止まらず・コンテナ隔離で安全に・SSH 切断でも継続** して使うための Docker 開発環境。**Linux サーバ**と **macOS（Docker Desktop）**の両方で動く。
 
-任意のプロジェクトディレクトリで `claude-dev start` を実行するだけで、コンテナ隔離された Claude Code 環境が起動する。
+任意のプロジェクトディレクトリで `claude-dev start` を実行するだけで、隔離された Claude Code 環境（必要なら GUI/Chrome 付き）が起動する。
 
-## 特徴
+## 目的・背景
 
-| 課題 | 解決方法 |
-|------|----------|
-| 承認待ちで止まる | コンテナ隔離下で `--dangerously-skip-permissions` |
-| SSH 切断で中断 | tmux でセッション永続化 |
-| 複数プロジェクト | プロジェクトごとに独立コンテナを起動 |
+Claude Code をそのまま使うと、ファイル変更やコマンド実行のたびに承認を求められて自律作業が止まり、SSH が切れれば作業も中断する。かといってホストで `--dangerously-skip-permissions` を使うのは危険。本ツールは次を目的とする。
+
+- **承認待ちをなくす**: コンテナで隔離した中でだけ権限バイパスを効かせ、ホストを危険に晒さずに Claude Code を自律実行させる。
+- **中断させない**: tmux でセッションを永続化し、SSH 切断・再接続をまたいで作業を継続する。
+- **複数案件を並行**: プロジェクトごとに独立コンテナを起動し、同時に走らせる。
+- **実ブラウザで検証**: コンテナ内の Chrome を noVNC で覗きつつ、Claude Code に chrome-devtools MCP で操作させて Web アプリを動作確認する。
+- **多層防御**: 生 Docker ソケット・SSH 秘密鍵をコンテナに渡さず、ファイアウォールで情報漏洩先を遮断する。
+
+## 主な機能
+
+| 機能 | 概要 |
+|------|------|
+| 承認待ちなし実行 | コンテナ隔離下で `bypassPermissions`。ホストは保護 |
+| セッション永続化 | tmux（prefix `Ctrl-_`）。SSH 切断でも継続、再接続で復帰 |
+| 複数プロジェクト並列 | ディレクトリ名ごとに独立コンテナ |
+| GUI / ブラウザ | Chrome + TigerVNC + noVNC + chrome-devtools MCP（日本語入力 IBus-Mozc）。`--no-vnc` で軽量化 |
+| Docker Socket Proxy | Docker API を検査中継し、ホスト bind・privileged 等の危険操作をブロック |
+| SSH agent 転送 | 秘密鍵ファイルを渡さず署名操作のみ許可 |
+| ブラックリスト FW | ペーストサイト・Webhook・メタデータ・SMTP・外部 SSH を遮断 |
+| AI オーケストレーター | `claude-dev orchestrate`：壁打ち→ worker への並列委譲で自律実行（[docs/06](docs/06_orchestration.md)） |
+| VM モード（Linux） | コンテナ内ゲスト VM でネイティブ Docker（bind/compose/privileged 可） |
+| GHCR 配布 | GitHub Actions が毎日ビルドしたイメージを `claude-dev pull` で取得（amd64/arm64） |
 
 ## アーキテクチャ
 
 ```
-Linux サーバ (SSH)
+ホスト（Linux サーバ / macOS）
 │
-├── Makefile         セットアップ・ビルド・管理
-├── claude-dev CLI   日常の開発操作（どこからでも実行可能）
+├── Makefile         セットアップ・ビルド・管理（OS 判定で CLI を選択）
+├── claude-dev CLI   日常の開発操作（macOS では claude-dev-mac が claude-dev として動く）
 │
 ├── プロジェクトコンテナ（都度起動）
 │   ├── project-a  (VNC あり)   Chrome + noVNC + chrome-devtools MCP
@@ -28,22 +45,64 @@ Linux サーバ (SSH)
 ├── claude-dev-docker-proxy (共有) Docker Socket Proxy（危険操作をブロック）
 ├── claude-dev-net              コンテナ間ネットワーク
 │
-├── claude-dev-auth (volume)    認証情報
-├── claude-dev-config (volume)  共有シェル設定
+├── claude-dev-auth (volume)        認証情報（.credentials.json / .claude.json）
+├── claude-dev-config (volume)      共有シェル設定（.zshrc）
 ├── claude-dev-chrome-data (volume) Chrome プロファイル
-└── claude-dev-history (volume) コマンド履歴
+└── claude-dev-history (volume)     コマンド履歴
 ```
 
-## クイックスタート
+- コンテナ内資産（イメージ・entrypoint・ファイアウォール・docker-proxy）は OS 非依存で共有し、**OS 差分はホスト側 CLI に閉じる**。詳細設計は [docs/02_architecture.md](docs/02_architecture.md)。
+
+## 前提条件
+
+| | Linux サーバ | macOS |
+|---|---|---|
+| OS / ランタイム | Ubuntu 22.04+ / Debian 12+、Docker Engine 24+ & CLI | macOS + Docker Desktop（Apple Silicon / Intel） |
+| 必須ツール | `jq`、`git`、`make` | `jq`（`brew install jq`）、`git`、`make`（Xcode CLT） |
+| アカウント | Claude Pro / Max（OAuth 認証） | 同左 |
+| その他 | SSH アクセス | — |
+
+> ホストサーバ側の事前準備（Docker 導入等）は [PREPARATION.md](PREPARATION.md) を参照。
+
+---
+
+## セットアップと使い方 — Linux の場合
 
 ```bash
 # 1. クローン & 設定
 git clone https://github.com/quvox/claude-dev-env.git ~/claude-dev-env
 cd ~/claude-dev-env
-cp .env.example .env && vim .env
+cp .env.example .env && vim .env      # 任意（SSH 鍵/GHCR 設定など）
 
-# 2. セットアップ（初回のみ。ビルド + PATH 登録）
+# 2. セットアップ（初回のみ：ビルド + PATH 登録を一括）
 make setup
+
+# 3. OAuth ログイン（表示される URL をブラウザで開いて認証 → /exit）
+make login
+
+# 4. 開発開始
+cd ~/repos/my-project
+claude-dev start                      # VNC + Chrome 付きで起動 & tmux 接続
+```
+
+- `make setup` は `.env` 作成 → Docker ネットワーク/ボリューム作成 → イメージビルド → `claude-dev` を `/usr/local/bin` に **symlink** 登録、を一括で行う（`/usr/local/bin` に書けなければ `sudo ln -sf` を案内）。
+- イメージは **ホストのユーザー名・UID/GID を焼き込んで**ビルドされる（`/workspace` の所有権が一致）。
+- **Web アプリのリモート確認**: サーバ上で `claude-dev forward <port>` → クライアント PC で `ssh -O forward -L <host-port>:localhost:<host-port> <server>` → ブラウザで `http://localhost:<host-port>`（[docs/01](docs/01_getting-started.md) 参照）。
+
+---
+
+## セットアップと使い方 — macOS の場合
+
+macOS では CLI 本体は macOS 適応版 `claude-dev-mac` を使う。`make install` が OS を判定し `claude-dev-mac` を `/usr/local/bin/claude-dev` として登録するため、**利用者コマンド名はどの OS でも `claude-dev`** で同じ。
+
+```bash
+# 1. クローン & 前提ツール
+git clone https://github.com/quvox/claude-dev-env.git ~/claude-dev-env
+cd ~/claude-dev-env
+brew install jq
+
+# 2. セットアップ（macOS では claude-dev-mac を /usr/local/bin/claude-dev へ sudo symlink）
+make setup                            # sudo パスワードを求められる
 
 # 3. OAuth ログイン
 make login
@@ -53,137 +112,139 @@ cd ~/repos/my-project
 claude-dev start
 ```
 
-> `make setup` は .env 作成、Docker ネットワーク/ボリューム作成、イメージビルド、CLI の PATH 登録を一括で行う。個別に実行する場合は `make help` を参照。
+macOS 固有のふるまい（詳細設計は [docs/09_macos-support.md](docs/09_macos-support.md)）:
 
-## macOS（Docker Desktop）で使う
+- **SSH agent**: macOS の Unix ソケットは直接マウントできないため、Docker Desktop の魔法ソケット `/run/host-services/ssh-auth.sock` 経由でホストの ssh-agent を転送する。
+- **Web アプリ**: 手元マシン = Docker ホストなので、`claude-dev forward <port>` の後は **`http://localhost:<host-port>` に直接アクセス**できる（SSH トンネル不要）。
+- **Apple Silicon（arm64）**: ネイティブ arm64 でビルド/実行する。Google Chrome は Linux arm64 版が無いため、VNC の GUI ブラウザは **Playwright Chromium**（arm64 対応）を使う（chrome-devtools MCP はそのまま動作）。Intel Mac は従来どおり Google Chrome。
+- **VM/KVM モード（`--vm` / `--kvm`）は非対応**（`/dev/kvm` が無く、ネスト仮想化も使えない）。Docker を多用する開発は通常起動（Docker Socket Proxy 経由）で行う。
 
-Linux 向けツールだが、macOS + Docker Desktop でも動く。CLI は macOS 適応版 `claude-dev-mac` を使うが、`make install` が OS を判定して `claude-dev-mac` を `/usr/local/bin/claude-dev` として配置するため、**利用者コマンド名はどの OS でも `claude-dev`** で同じ。
+---
 
-```bash
-git clone https://github.com/quvox/claude-dev-env.git ~/claude-dev-env
-cd ~/claude-dev-env
-brew install jq                     # 必須（start がホスト設定を抽出するのに使う）
-make setup                          # macOS では claude-dev-mac を /usr/local/bin/claude-dev へ symlink（sudo）
-make login
-cd ~/repos/my-project && claude-dev start
-```
-
-- **SSH agent**: Docker Desktop の魔法ソケット `/run/host-services/ssh-auth.sock` 経由でホストの ssh-agent を転送する（macOS の Unix ソケットは直接マウントできないため）。
-- **Web アプリ**: 手元マシン = Docker ホストなので、`claude-dev forward <port>` の後は `http://localhost:<host-port>` に直接アクセスできる（SSH トンネル不要）。
-- **VM/KVM モード（`--vm` / `--kvm`）は非対応**（macOS には `/dev/kvm` が無く、ネスト仮想化も使えない）。Docker を多用する開発は通常起動（Docker Socket Proxy 経由）で行う。
-- **Apple Silicon**: ネイティブ arm64 でビルド/実行する（エミュレーションなし）。Google Chrome は Linux arm64 版が無いため、VNC の GUI ブラウザは **Playwright Chromium**（arm64 対応）を使う。chrome-devtools MCP はそのまま動作する。Intel Mac は従来どおり Google Chrome。
-- 設計の詳細は [docs/09_macos-support.md](docs/09_macos-support.md)。
-
-## 日常の使い方
+## 日常の使い方（共通）
 
 ```bash
-# プロジェクトで作業開始
+# 起動・接続
 cd ~/repos/my-project
-claude-dev start              # 起動 & tmux 接続
+claude-dev start                 # 起動 & tmux 接続（再実行で再接続）
+claude-dev start --no-vnc        # Chrome/VNC なしの軽量モード
+claude-dev attach my-project     # 名前指定で接続
 
-# tmux 内で Claude Code を起動
-claude
+# tmux 内で
+claude                           # Claude Code を起動
+Ctrl-_ D                         # デタッチ（コンテナは動き続ける）
 
-# 切断（SSH 切れても OK）
-Ctrl-_ D
+# AI オーケストレーター（壁打ち→自律実行）
+claude-dev orchestrate                       # 壁打ちから開始
+claude-dev orchestrate "ユーザー認証を実装"   # ゴールを与えて開始
 
-# 再接続
-claude-dev start              # 同じディレクトリなら自動再接続
-claude-dev attach my-project  # 名前指定も可
-
-# 別プロジェクトも同時に
-cd ~/repos/other-project
-claude-dev start
-
-# VNC ありならブラウザで Chrome を確認できる
-# → noVNC URL は起動時に表示される
-
-# ブラウザ不要なプロジェクトは軽量モードで起動
-cd ~/repos/cli-tool
-claude-dev start --no-vnc
-
-# Web アプリのポートを動的にフォワード
-claude-dev forward 3000       # → host:8100 → container:3000
-claude-dev ports              # アクティブなフォワード一覧
-claude-dev unforward 3000     # フォワード解除
+# Web アプリのポートフォワード
+claude-dev forward 3000          # host:8100 → container:3000
+claude-dev ports                 # アクティブなフォワード + noVNC URL
+claude-dev unforward 3000
 
 # 管理
-claude-dev list               # 実行中セッション一覧（noVNC URL + フォワード状況も表示）
-claude-dev stop my-project    # 停止（フォワード用プロキシも自動クリーンアップ）
-claude-dev upgrade            # Claude Code + Chrome + Docker Proxy 更新
-make status                   # 全体の状態確認
+claude-dev list                  # 実行中セッション一覧（noVNC URL・フォワードも表示）
+claude-dev stop my-project       # 停止（フォワードも自動クリーンアップ）
+claude-dev upgrade               # 全イメージを更新（--no-cache 再ビルド）
+make status                      # 全体の状態確認
 ```
 
-## VM モード（Docker を多用する開発）
+VNC ありの場合、起動時に表示される noVNC URL（`http://localhost:<port>/vnc.html`）をブラウザで開くと、コンテナ内 Chrome の画面をリアルタイムに確認できる。日本語入力は `Super+Space`（IBus-Mozc）。全コマンドは [docs/04_cli-reference.md](docs/04_cli-reference.md)。
 
-bind mount や docker compose を使う「Docker 中心のシステム」を開発する場合、既定構成（Docker Socket Proxy 経由）ではホスト bind mount が使えない。**VM モード**は、コンテナ内に KVM のゲスト VM を立て、その中で**ネイティブ Docker**（bind mount・compose・privileged 可）を動かすことでこれを解決する。
+## GHCR からイメージを取得（ビルド不要）
+
+`make build` の代わりに、GitHub Actions が毎日ビルドして GitHub Container Registry(GHCR) に push したイメージを pull して使える（amd64/arm64 両対応）。
+
+```bash
+cd ~/claude-dev-env
+cp .env.example .env             # 必要なら CLAUDE_DEV_REGISTRY / CLAUDE_DEV_IMAGE_TAG を編集
+claude-dev pull                  # 最新(latest)を取得しローカル名に retag
+claude-dev pull 202607041830     # 特定バージョン(YYYYMMDDHHmm)に固定して取得
+cd ~/repos/my-project && claude-dev start   # pull 済みイメージを使う（再ビルドなし）
+```
+
+- タグは `YYYYMMDDHHmm`（JST）と `latest`。private パッケージなら事前に `docker login ghcr.io`（PAT）が必要。
+- 配布イメージは generic user（`dev`）で焼かれ、UID/GID は起動時に `/workspace` 所有者へ追従する。
+- 仕組み・定期ビルドの設計は [docs/10_ghcr-images.md](docs/10_ghcr-images.md)。
+
+## VM モード（Linux 専用・Docker を多用する開発）
+
+bind mount や docker compose を使う「Docker 中心のシステム」を開発する場合、既定構成（Docker Socket Proxy 経由）ではホスト bind mount が使えない。**VM モード**は、コンテナ内に KVM のゲスト VM を立て、その中で**ネイティブ Docker**（bind mount・compose・privileged 可）を動かすことでこれを解決する。**macOS では非対応**。
 
 ```bash
 cd ~/repos/docker-heavy-project
-claude-dev start --vm          # ゲスト VM を起動（--kvm を含意。ホストに /dev/kvm が必要）
+claude-dev start --vm            # ゲスト VM を起動（--kvm を含意。ホストに /dev/kvm が必要）
+docker compose up                # bind mount もそのまま効く（/workspace 配下は即反映）
+VM_PORTS=3000,8080 claude-dev start --vm   # アプリのポートも転送する場合
 
-# 起動後は普段どおり docker を使うだけ（透過）。裏でゲスト VM の dockerd を指している。
-docker compose up              # bind mount もそのまま効く（/workspace 配下のコードは即反映）
-
-# アプリのポートも転送したい場合（起動時に環境変数で指定）
-VM_PORTS=3000,8080 claude-dev start --vm
-
-# VM の操作（コンテナ内ヘルパー）
-vm status                      # QEMU / dockerd / virtiofs の状態
-vm shell                       # ゲストに入る（ssh）
-vm logs                        # 起動・ゲストのログ
+vm status | vm shell | vm logs   # コンテナ内 VM ヘルパー
 ```
 
-- **仕組み**: ホスト → claude コンテナ → ゲスト VM → VM 内 Docker の層構成。コードは virtiofs で `/workspace` を**同一パス共有**（ホストでの編集がゲスト内 Docker に**ライブ反映**）。`docker` は `DOCKER_HOST` でゲストの daemon を指すため、操作は普段どおり。
-- **前提**: ホストに `/dev/kvm`（ベアメタル or ネスト仮想化有効なクラウド）。無い場合は `--vm` は中止する。既存環境から使うにはイメージ再ビルド（`make build-claude` / `claude-dev upgrade`）が必要。
-- **初回**: ゲストイメージのダウンロードと provision に数分かかる（以降のブートは短い）。
-- **注意点**: bind mount の source は `/workspace` 配下のみ有効。ゲスト内サービスは `claude-dev forward` で公開する。詳細は起動時に生成される `/workspace/VM_DEV.md`、設計は [docs/08_vm-mode.md](docs/08_vm-mode.md) を参照。
-- 既定は従来の軽量コンテナ。VM モードは Docker を多用する案件のときだけ使う（重い・`/dev/kvm` 必須）。
+- **仕組み**: ホスト → claude コンテナ → ゲスト VM → VM 内 Docker。コードは virtiofs で `/workspace` を同一パス共有（ライブ反映）、`docker` は `DOCKER_HOST` でゲストの daemon を指す。
+- **前提**: ホストに `/dev/kvm`（ベアメタル or ネスト仮想化有効なクラウド）。設計は [docs/08_vm-mode.md](docs/08_vm-mode.md)。
 
 ## セキュリティ
 
-多層防御で Claude Code の暴走リスクを軽減する。
+多層防御で Claude Code の暴走・情報漏洩リスクを軽減する（詳細 [docs/03_security.md](docs/03_security.md)）。
 
 1. **Docker コンテナ隔離** — ホストファイルシステムへのアクセスを遮断
-2. **マウント制限** — SSH 秘密鍵、`~/.aws`, `.env` 等はコンテナに存在しない
-3. **認証情報の保護** — 専用ボリュームにマウント。ファイアウォールで窃取先をブロック
-4. **Docker Socket Proxy** — 生ソケットを渡さず、プロキシ経由でホストマウント・特権モード等の危険操作をブロック
-5. **SSH agent 転送** — 秘密鍵ファイルを渡さず、agent ソケット経由で署名操作のみ許可
-6. **ブラックリスト FW** — ペーストサイト、Webhook、メタデータエンドポイント、SMTP、外部 SSH をブロック
-7. **非 root 実行** — ホストと同じユーザー名・UID/GID で実行（ビルド時に一致させる）
+2. **マウント制限** — SSH 秘密鍵、`~/.aws`、`.env` 等はコンテナに存在しない
+3. **認証情報の保護** — 専用ボリュームにマウントし、ファイアウォールで窃取先をブロック
+4. **Docker Socket Proxy** — 生ソケットを渡さず、ホスト bind・privileged・host ネットワーク等をブロック
+5. **SSH agent 転送** — 秘密鍵ファイルを渡さず署名操作のみ許可
+6. **ブラックリスト FW** — ペーストサイト・Webhook・メタデータ・SMTP・外部 SSH を遮断
+7. **非 root 実行** — UID/GID をホストに合わせて実行（ローカルビルドはユーザー名も一致。GHCR 配布版は generic user で UID/GID を起動時に追従）
 8. **git ロールバック** — 変更はすべて `git diff` で確認、`git checkout` で復元可能
+
+## ディレクトリ構成
+
+```
+claude-dev-env/
+├── Makefile                     セットアップ・ビルド・管理タスク（OS 判定で CLI を選択）
+├── claude-dev                   CLI 本体（Linux 版）
+├── claude-dev-mac               CLI 本体（macOS 版。make install が claude-dev として配置）
+├── .env.example                 設定テンプレート（SSH 鍵・GHCR レジストリ/タグ等）
+├── CLAUDE.md                    コンテナ内 Claude Code 向けの開発ルール
+├── INDEX.md                     ドキュメント索引（まずここを見る）
+├── PREPARATION.md               ホスト側の事前準備手順
+│
+├── .devcontainer/
+│   ├── Dockerfile.claude        Claude コンテナ（マルチステージ base→vnc。arm64 対応）
+│   └── Dockerfile.docker-proxy  Docker Socket Proxy コンテナ
+│
+├── .github/workflows/
+│   └── ghcr-images.yml          GHCR へ毎日・マルチアーキで push する CI
+│
+├── docker-proxy/                Docker Socket Proxy ソース（Go）
+├── orchestrator/                AI オーケストレーター ソース（Go。claude-orchestrator）
+├── examples/orch-sample/        オーケストレーター自己検証用サンプル
+│
+├── scripts/
+│   ├── entrypoint-claude.sh     コンテナ起動スクリプト（UID/GID 追従・認証共有・VNC/Chrome 起動）
+│   ├── init-firewall-claude.sh  ブラックリスト方式ファイアウォール
+│   ├── dood-portsync.sh         DooD 時のホスト公開ポートを 127.0.0.1 へ同期
+│   ├── vm-up.sh / vm / vm-*.sh  VM モード：ゲスト VM 起動・操作・ポート同期・監視
+│   ├── VM_DEV.md.tmpl           VM モードのエージェント向け情報テンプレート
+│   ├── save_prompt.sh / sendslackmsg.sh  Claude Code hook（履歴保存・Slack 通知）
+│   ├── orch-sample.sh           サンプル scaffold
+│   └── tmux.conf                tmux 設定（prefix: Ctrl-_）
+│
+└── docs/                        設計・実装仕様・レビュー（下表）
+```
 
 ## ドキュメント
 
 | ドキュメント | 内容 |
 |------------|------|
+| [INDEX.md](INDEX.md) | ドキュメント全体の索引（要約・キーワード付き） |
 | [docs/01_getting-started.md](docs/01_getting-started.md) | インストール手順と基本的な使い方 |
 | [docs/02_architecture.md](docs/02_architecture.md) | システム設計・コンテナ構成・認証フロー |
 | [docs/03_security.md](docs/03_security.md) | 脅威モデルと防御層の詳細 |
 | [docs/04_cli-reference.md](docs/04_cli-reference.md) | 全コマンドのリファレンス |
 | [docs/05_customization.md](docs/05_customization.md) | ファイアウォール・CLAUDE.md・tmux・hooks/env 等のカスタマイズ |
-| [docs/08_vm-mode.md](docs/08_vm-mode.md) | VM モード（QEMU+virtiofs でゲスト VM 内のネイティブ Docker を使う）の設計 |
+| [docs/06_orchestration.md](docs/06_orchestration.md) | AI オーケストレーターの設計 |
+| [docs/08_vm-mode.md](docs/08_vm-mode.md) | VM モード（Linux）の設計 |
 | [docs/09_macos-support.md](docs/09_macos-support.md) | macOS（Docker Desktop）対応の設計（claude-dev-mac） |
+| [docs/10_ghcr-images.md](docs/10_ghcr-images.md) | GHCR への定期 push・pull 運用の設計 |
 | [docs/impl/INDEX.md](docs/impl/INDEX.md) | 実装仕様書（コードと 1 対 1 の Single Source of Truth）一覧 |
-
-## ファイル構成
-
-```
-claude-dev-env/
-├── Makefile                           セットアップ・ビルド・管理タスク（OS 判定で CLI を選択）
-├── claude-dev                         CLI ツール本体（Linux 版）
-├── claude-dev-mac                     CLI ツール本体（macOS 版。詳細 docs/09_macos-support.md）
-├── .env.example                       設定テンプレート
-├── CLAUDE.md                          コンテナ内の Claude Code 向け指示
-├── .devcontainer/
-│   ├── Dockerfile.claude              Claude コンテナ (マルチステージ: base → vnc)
-│   └── Dockerfile.docker-proxy        Docker Socket Proxy コンテナ
-├── docker-proxy/                      Docker Socket Proxy ソースコード
-├── scripts/
-│   ├── init-firewall-claude.sh        ブラックリスト FW
-│   ├── entrypoint-claude.sh           Claude コンテナ起動スクリプト
-│   ├── vm-up.sh / vm                  VM モード: ゲスト VM 起動・操作ヘルパー
-│   ├── VM_DEV.md.tmpl                 VM モードのエージェント向け情報テンプレート
-│   └── tmux.conf                      tmux 設定（prefix: Ctrl-_）
-└── docs/                              ドキュメント
-```

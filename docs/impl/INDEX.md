@@ -16,3 +16,4 @@
 | [60_orchestrator.md](60_orchestrator.md) | `orchestrator/`（Go） | AI オーケストレーターの実装仕様。制御ループ・状態ストア・worker 並行ディスパッチ・品質ゲート・介入・Slack 通知・ビルド配置。 |
 | [70_sample-project.md](70_sample-project.md) | `examples/orch-sample/` ほか | オーケストレーター自己検証用サンプルの scaffold・seed plan・検証用 CLI affordance。 |
 | [80_vm-mode.md](80_vm-mode.md) | VM モード関連（`scripts/vm*` 等） | VM モード（QEMU+KVM＋virtiofs、ゲスト内 dockerd を DOCKER_HOST で利用）の実装仕様。**Linux 専用**（macOS では非対応）。 |
+| [90_ghcr-workflow.md](90_ghcr-workflow.md) | `.github/workflows/ghcr-images.yml` | GHCR へ 3 イメージを毎日・マルチアーキ(amd64/arm64)で push する GitHub Actions ワークフロー（prepare→build[matrix, push-by-digest]→merge[imagetools]、YYYYMMDDHHmm+latest タグ）。設計は [../10_ghcr-images.md](../10_ghcr-images.md)。 |

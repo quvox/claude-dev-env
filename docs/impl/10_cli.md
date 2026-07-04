@@ -30,7 +30,7 @@ claude-dev      （単一の bash スクリプト）
 
 - `SCRIPT_PATH`: `readlink -f`/`realpath` で自身の実体パスを解決（シンボリックリンク経由実行に対応）。`BASE_DIR` はその親ディレクトリ。
 - `CONFIG_FILE="${BASE_DIR}/.env"` が存在すれば `set -a; source; set +a` で環境変数としてエクスポート。
-- `CUSER="$(whoami)"`, `CHOME="/home/${CUSER}"`: コンテナ内ユーザーをホストのカレントユーザーに一致させる。
+- `CUSER` / `CHOME="/home/${CUSER}"`: コンテナ内ユーザー名。**実行するイメージ（`IMG_CLAUDE`）に焼き込まれた `CONTAINER_USER` env を優先**して解決し（`docker image inspect ... | sed -n 's/^CONTAINER_USER=//p'`）、取得できなければ `whoami` にフォールバックする。ローカルビルドのイメージは `CONTAINER_USER=<whoami>` のため従来と同一（後方互換）。GHCR の generic user イメージ（`CONTAINER_USER=dev`）を `pull` した場合は `CUSER=dev` となり、マウント先 `/home/dev`・`docker exec -u dev` が自動追従する（設計 [../10_ghcr-images.md](../10_ghcr-images.md)）。UID/GID は entrypoint が `/workspace` 所有者へ実行時に追従させる。
 
 ### 定数
 
@@ -80,6 +80,9 @@ claude-dev      （単一の bash スクリプト）
 
 ### `logout`
 全 Claude コンテナとプロキシコンテナを停止し、`VOL_AUTH` の中身を空にする（一時コンテナで `rm -rf /auth/* /auth/.*`）。
+
+### `pull [TAG]`
+GHCR のビルド済みイメージを取得してローカルビルドを省く。`.env` の `CLAUDE_DEV_REGISTRY`（既定 `ghcr.io/quvox`）と `CLAUDE_DEV_IMAGE_TAG`（既定 `latest`。引数 `TAG` で上書き）から、`${REG}/claude-dev-claude`・`-claude-vnc`・`-docker-proxy` の各 `:TAG` を `docker pull` し、**ローカル名（`claude-dev-claude` 等）へ `docker tag` で retag** する。以降 `start`/`require_setup` は retag 済みイメージを使い自動ビルドしない。少なくとも 1 つ成功すれば完了メッセージ、全失敗なら private 用の `docker login ghcr.io` を案内して `exit 1`。Docker が対象アーキの manifest を自動選択する（Apple Silicon=arm64 / Linux=amd64）。GHCR への push は GitHub Actions が担う（[90_ghcr-workflow.md](90_ghcr-workflow.md)、設計 [../10_ghcr-images.md](../10_ghcr-images.md)）。
 
 ### `start [--no-vnc] [--kvm] [--vm] [--vm-fresh]`
 本 CLI の中核。`NAME=container_name`、`PROJECT_DIR=$(pwd)`。`--no-vnc` で `USE_VNC=0`、`--kvm` で `USE_KVM=1`（既定 `0`）。

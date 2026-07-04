@@ -65,6 +65,19 @@ claude-dev login
 
 トークンが期限切れになったら `logout` → `login` で再認証する。
 
+#### `claude-dev pull [TAG]`
+
+GHCR のビルド済みイメージを取得してローカルビルド（`setup`/`build`）を省く。`.env` の `CLAUDE_DEV_REGISTRY`（既定 `ghcr.io/quvox`）と `CLAUDE_DEV_IMAGE_TAG`（既定 `latest`）を参照し、`claude-dev-claude` / `claude-dev-claude-vnc` / `claude-dev-docker-proxy` の 3 イメージを pull してローカル名に retag する。以降 `claude-dev start` は pull 済みイメージを使い、再ビルドしない。
+
+```bash
+claude-dev pull                 # latest を取得
+claude-dev pull 202607041830    # 特定バージョン(YYYYMMDDHHmm)に固定
+```
+
+- amd64/arm64 は Docker が実行環境に合わせて自動選択（Apple Silicon=arm64 / Linux=amd64）。
+- private パッケージの場合は事前に `docker login ghcr.io`（PAT）が必要。
+- GHCR への push は GitHub Actions が毎日実行する（設計 [docs/10_ghcr-images.md](10_ghcr-images.md)）。
+
 #### `claude-dev logout`
 
 認証情報を削除する。実行中の全プロジェクトコンテナと Docker Socket Proxy コンテナ（`claude-dev-docker-proxy`）を停止し、`claude-dev-auth` ボリューム内のファイルをすべて削除する。
@@ -309,6 +322,7 @@ claude-dev reset
 |-------------|---------|
 | 初回セットアップ | `make setup` |
 | イメージビルド | `make build` |
+| イメージ取得（ビルド省略・GHCR） | `claude-dev pull` |
 | Claude Code 更新 | `make upgrade` |
 | 状態確認（全体） | `make status` |
 | PATH 登録 | `make install` |

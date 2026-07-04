@@ -39,8 +39,11 @@ IMG_CLAUDE_VNC="claude-dev-claude-vnc"
 IMG_DOCKER_PROXY="claude-dev-docker-proxy"
 DOCKER_PROXY_CONTAINER="claude-dev-docker-proxy"
 
-# --- コンテナ内ユーザー名（ホストのカレントユーザーに合わせる）---
-CUSER="$(whoami)"
+# --- コンテナ内ユーザー名 ---
+# 実行するイメージに焼き込まれた CONTAINER_USER を優先する（GHCR の generic user=dev 対応）。
+# イメージが無ければホストの whoami にフォールバック（ローカルビルド運用は従来どおり＝後方互換）。
+CUSER="$(docker image inspect "$IMG_CLAUDE" --format '{{range .Config.Env}}{{println .}}{{end}}' 2>/dev/null | sed -n 's/^CONTAINER_USER=//p' | head -1)"
+[ -n "$CUSER" ] || CUSER="$(whoami)"
 CHOME="/home/${CUSER}"
 
 # --- プラットフォーム ---
@@ -500,6 +503,37 @@ logout)
         -c "rm -rf /auth/* /auth/.*" 2>/dev/null || true
     echo "✅ 認証情報を削除しました"
     echo "   再ログイン: claude-dev login"
+    ;;
+
+# -----------------------------------------------------------------------------
+# GHCR からイメージを取得してローカル名に retag（ビルドの代わりに使う）
+#   claude-dev pull [TAG]
+#   .env の CLAUDE_DEV_REGISTRY（既定 ghcr.io/quvox）/ CLAUDE_DEV_IMAGE_TAG（既定 latest）を参照。
+#   引数 TAG で latest 以外（YYYYMMDDHHmm）に固定できる。
+# -----------------------------------------------------------------------------
+pull)
+    REG="${CLAUDE_DEV_REGISTRY:-ghcr.io/quvox}"
+    TAG="${2:-${CLAUDE_DEV_IMAGE_TAG:-latest}}"
+    echo "📥 GHCR からイメージを取得します: ${REG}/{$IMG_CLAUDE,$IMG_CLAUDE_VNC,$IMG_DOCKER_PROXY}:${TAG}"
+    _pull_ok=0
+    for name in "$IMG_CLAUDE" "$IMG_CLAUDE_VNC" "$IMG_DOCKER_PROXY"; do
+        src="${REG}/${name}:${TAG}"
+        echo "  - pull ${src}"
+        if docker pull "$src"; then
+            docker tag "$src" "${name}:latest"
+            echo "    → ローカル名 ${name} に retag"
+            _pull_ok=1
+        else
+            echo "    ⚠️  ${src} の取得に失敗（存在しない/未ログイン/権限？）"
+        fi
+    done
+    if [ "$_pull_ok" = "1" ]; then
+        echo "✅ pull 完了。'claude-dev start' はこのイメージを使います（再ビルドしません）"
+        echo "   固定バージョンは 'claude-dev pull <YYYYMMDDHHmm>' か .env の CLAUDE_DEV_IMAGE_TAG"
+    else
+        echo "❌ すべての pull に失敗しました。private リポジトリなら 'docker login ghcr.io' が必要です"
+        exit 1
+    fi
     ;;
 
 # -----------------------------------------------------------------------------
@@ -1009,6 +1043,7 @@ claude-dev - Claude Code 安全開発環境（macOS 版）
 
 セットアップ（初回のみ）:
   claude-dev setup               イメージビルド + インフラ構築
+  claude-dev pull [TAG]          GHCR からビルド済みイメージを取得（ビルドの代わり。既定 latest）
   claude-dev login               OAuth ログイン
   claude-dev logout              認証情報を削除
 

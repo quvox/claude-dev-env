@@ -18,6 +18,7 @@
 | [docs/07_self-verification.md](docs/07_self-verification.md) | 本オーケストレーター自身を、リポジトリ同梱の小さなサンプルサブプロジェクトに対して実際に動かし、ユースケースに沿って検証・改善するための設計文書。実プロジェクトを犠牲にせず高速・再現可能にオーケストレーターの不具合を発見/修正する開発ループを定める。 | 自己検証, ドッグフーディング, サンプルプロジェクト, 再現性, 介入, 中断再開, 動作確認 |
 | [docs/08_vm-mode.md](docs/08_vm-mode.md) | Docker を多用する開発のために、claude コンテナ内で QEMU/KVM のゲスト VM を起動し、その中でネイティブ Docker を動かす「VM モード」の設計文書。virtiofs で /workspace を同一パス共有してライブ編集を保ち、ゲストの dockerd を DOCKER_HOST で claude 側エージェントから使う。bind mount・privileged 等を VM 境界に隔離して安全に許す。 | VMモード, QEMU, KVM, virtiofs, Docker, 隔離, DOCKER_HOST |
 | [docs/09_macos-support.md](docs/09_macos-support.md) | macOS（Docker Desktop）上で本環境を動かすための設計文書。Linux 版 claude-dev の OS 依存箇所を洗い出し、macOS 版 CLI（claude-dev-mac）での解決方針（SSH agent 魔法ソケット・Docker ソケット検出・VM/KVM 非対応・ポート直結・sudo symlink 配置・Apple Silicon ネイティブ arm64／arm64 は Playwright Chromium）を定める。 | macOS, Docker Desktop, claude-dev-mac, SSHエージェント, arm64, ポートフォワード, VM非対応 |
+| [docs/10_ghcr-images.md](docs/10_ghcr-images.md) | コンテナイメージを GitHub Container Registry(GHCR) へ GitHub Actions から毎日・マルチアーキ(amd64/arm64)で push し YYYYMMDDHHmm タグで識別する仕組みの設計。pull して使う運用（generic user イメージ＋CLI の CONTAINER_USER 解決）も定める。 | GHCR, GitHubActions, マルチアーキ, イメージ配布, pull, タグ, buildx |
 | [docs/MODIFICATION.md](docs/MODIFICATION.md) | オーケストレーター方針 追記提案（MODIFICATION） |  |
 | [docs/impl/00_overview.md](docs/impl/00_overview.md) | リポジトリの実装全体を俯瞰し、コンポーネントの責務・制御フロー・Dockerリソース命名・ルート設定ファイルの役割・設計上の不変条件を示す。 | 実装仕様, コンポーネント構成, 制御フロー, Dockerリソース, 不変条件, 設計概要, CLI |
 | [docs/impl/10_cli.md](docs/impl/10_cli.md) | ホスト側の claude-dev シェルスクリプトの実装仕様。ヘルパー関数・サブコマンド・コンテナ起動引数などの成果物仕様を記述する。 | CLI, claude-dev, bash, ヘルパー関数, コンテナ起動, ポートフォワード, orchestrate |
@@ -31,7 +32,8 @@
 | [docs/impl/60_orchestrator.md](docs/impl/60_orchestrator.md) | AI オーケストレーター（Go 製コントローラ）の実装仕様。外部制御ループ・状態ストア・モード切替・worker 並行ディスパッチ・品質ゲート・介入・判断基準・Slack 通知・ビルド配置を定める。設計の意図は docs/06_orchestration.md を参照。 | オーケストレーター, Go, 制御ループ, 状態ストア, worker, 介入, 並行実行 |
 | [docs/impl/70_sample-project.md](docs/impl/70_sample-project.md) | オーケストレーター自己検証用のサンプルサブプロジェクト（テンプレート examples/orch-sample/）と、それを使い捨て作業コピーへ展開する scaffold（Makefile/スクリプト）、決定論的に介入・並行・中断再開を踏ませる seed plan、検証用 CLI affordance の実装仕様。 | サンプルプロジェクト, scaffold, seed plan, 自己検証, Makefile, orchestrate, テンプレート |
 | [docs/impl/80_vm-mode.md](docs/impl/80_vm-mode.md) | VM モード（QEMU+KVM でゲスト VM を起動し virtiofs で /workspace を同一パス共有、ゲスト内 dockerd を DOCKER_HOST で使う）の実装仕様。Dockerfile への virtiofsd/cloud-image-utils 追加、Ubuntu cloud image の provision、起動スクリプト、claude-dev の --vm/vm、VM_DEV.md 生成の成果物仕様を定める。 | VMモード, QEMU, virtiofs, cloud-init, DOCKER_HOST, hostfwd, VM_DEV |
+| [docs/impl/90_ghcr-workflow.md](docs/impl/90_ghcr-workflow.md) | GHCR へイメージ(claude/claude-vnc/docker-proxy)を毎日・マルチアーキ(amd64/arm64)で push する GitHub Actions ワークフロー(.github/workflows/ghcr-images.yml)の実装仕様。prepare→build(matrix, push-by-digest)→merge(imagetools) の3ジョブと YYYYMMDDHHmm+latest タグを定める。 | GitHubActions, GHCR, buildx, マルチアーキ, push-by-digest, imagetools, タグ |
 | [docs/reviews/2026-06-28_orchestrator-tty-fix.md](docs/reviews/2026-06-28_orchestrator-tty-fix.md) | レビュー: オーケストレーター 端末モード不具合の修正 |  |
 | [docs/reviews/2026-07-01_orchestrator-e2e.md](docs/reviews/2026-07-01_orchestrator-e2e.md) | オーケストレーター 実機 E2E 動作確認（自己検証サンプル） |  |
 
-_計 25 件_
+_計 27 件_
