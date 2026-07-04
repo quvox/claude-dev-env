@@ -1,0 +1,85 @@
+#!/usr/bin/env bash
+# =============================================================================
+# vm — VM モードのコンテナ内ヘルパー（docs/impl/80_vm-mode.md §7）。
+# サブコマンド: status / shell / restart / down / rebuild / portsync / logs
+# =============================================================================
+set -euo pipefail
+
+VM_HOME="${HOME}/.claude-dev-vm"
+LOG_DIR="${VM_HOME}/logs"
+RUN_DIR="/run/vm"
+QMP_SOCK="${RUN_DIR}/qmp.sock"
+PIDFILE="${RUN_DIR}/qemu.pid"
+SSH_KEY="${VM_HOME}/id_vm"
+HEALTH_FILE="${VM_HOME}/health"
+DOCKER_TCP="tcp://127.0.0.1:2375"
+
+qemu_pid() { [ -f "${PIDFILE}" ] && cat "${PIDFILE}" 2>/dev/null || true; }
+qemu_running() { local p; p="$(qemu_pid)"; [ -n "$p" ] && kill -0 "$p" 2>/dev/null; }
+
+cmd="${1:-status}"
+case "$cmd" in
+    status)
+        if qemu_running; then echo "QEMU: running (pid $(qemu_pid))"; else echo "QEMU: not running"; fi
+        pgrep -f 'virtiofsd' >/dev/null 2>&1 && echo "virtiofsd: running" || echo "virtiofsd: not running"
+        if docker -H "${DOCKER_TCP}" info >/dev/null 2>&1; then
+            echo "guest dockerd: reachable (${DOCKER_TCP})"
+        else
+            echo "guest dockerd: NOT reachable"
+        fi
+        # 資源監視（vm-healthd, §7.2）の現況
+        if [ -f "${HEALTH_FILE}" ]; then
+            h_state="$(sed -n 's/^STATE=//p' "${HEALTH_FILE}")"
+            h_cpu="$(sed -n 's/^CPU=//p' "${HEALTH_FILE}")"
+            h_ceil="$(sed -n 's/^CEIL=//p' "${HEALTH_FILE}")"
+            h_ts="$(sed -n 's/^TS=//p' "${HEALTH_FILE}")"
+            h_msg="$(sed -n 's/^MSG=//p' "${HEALTH_FILE}")"
+            h_age="$(( $(date +%s) - ${h_ts:-0} ))"
+            if [ "${h_state:-}" = "WARN" ]; then
+                echo "resource: ⚠ WARN — QEMU CPU ${h_cpu}% / 上限 ${h_ceil}%（${h_age}s 前更新）"
+                echo "          ${h_msg}"
+            else
+                echo "resource: ${h_state:-unknown} — QEMU CPU ${h_cpu:-?}% / 上限 ${h_ceil:-?}%（${h_age}s 前更新）"
+            fi
+        else
+            pgrep -f 'vm-healthd.sh --loop' >/dev/null 2>&1 \
+                && echo "resource: monitor starting (health 未生成)" \
+                || echo "resource: monitor not running"
+        fi
+        ;;
+    shell)
+        shift || true
+        exec ssh -p 2222 -i "${SSH_KEY}" \
+            -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+            dev@127.0.0.1 "$@"
+        ;;
+    restart)
+        "$0" down || true
+        exec /usr/local/bin/vm-up.sh
+        ;;
+    rebuild)
+        # ゲストを白紙 provision やり直し（overlay/seed 破棄）。cloud image は残す。
+        echo "VM を再 provision します（overlay/seed を破棄）…"
+        exec env VM_FRESH=1 /usr/local/bin/vm-up.sh
+        ;;
+    portsync)
+        # ゲスト公開ポートを 127.0.0.1 へ即時同期（常駐ループとは別に一発実行したい時用）
+        exec /usr/local/bin/vm-portsync.sh
+        ;;
+    down)
+        if [ -S "${QMP_SOCK}" ] && command -v socat >/dev/null 2>&1; then
+            # QMP でグレースフルに停止
+            printf '{"execute":"qmp_capabilities"}\n{"execute":"system_powerdown"}\n' \
+                | socat - "UNIX-CONNECT:${QMP_SOCK}" >/dev/null 2>&1 || true
+            for _ in $(seq 1 15); do qemu_running || break; sleep 1; done
+        fi
+        if qemu_running; then kill "$(qemu_pid)" 2>/dev/null || true; fi
+        pkill -f 'virtiofsd' 2>/dev/null || true
+        echo "VM stopped"
+        ;;
+    logs)
+        tail -n "${2:-100}" "${LOG_DIR}/vm-up.log" "${LOG_DIR}/qemu-serial.log" "${LOG_DIR}/virtiofsd.log" 2>/dev/null
+        ;;
+    *)
+        echo "usage: vm {status|shell|restart|down|rebuild|portsync|logs}" >&2; exit 2 ;;
+esac

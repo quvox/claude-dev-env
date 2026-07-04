@@ -258,6 +258,50 @@ fi
 # --- ファイアウォール設定 ---
 /usr/local/bin/init-firewall.sh 2>/dev/null || true
 
+# --- VM モード起動（--vm / CLAUDE_DEV_VM=1）---
+# ゲスト VM（QEMU+virtiofs）を起動し dockerd 準備完了を待つ（docs/impl/80 §5）。
+# 成功時のみ DOCKER_HOST をゲストへ向け、VM_DEV.md を生成。失敗時は proxy 既定を維持。
+if [ "${CLAUDE_DEV_VM:-}" = "1" ]; then
+    echo "🖥️  VM モード: ゲスト VM を起動中（初回は provision に数分かかります）…"
+    # vm-up.sh は $USERNAME 権限で走るため、root 所有のマウント点/実行時ディレクトリを
+    # 事前に $USERNAME 所有で用意する（docker ボリューム `~/.claude-dev-vm` と /run/vm は
+    # 既定で root:root。これを直さないと vm-up.sh の mkdir が Permission denied で失敗する）。
+    install -d -o "$USERNAME" -g "$USERNAME" "$USER_HOME/.claude-dev-vm" /run/vm
+    if su "$USERNAME" -c '/usr/local/bin/vm-up.sh'; then
+        mkdir -p /etc/claude-dev
+        echo "export DOCKER_HOST='tcp://127.0.0.1:2375'" > /etc/claude-dev/vm.env
+        for rc in /etc/zsh/zshrc /etc/bash.bashrc; do
+            if [ -f "$rc" ] && ! grep -q '/etc/claude-dev/vm.env' "$rc"; then
+                {
+                    echo ''
+                    echo '# --- claude-dev: VM モード DOCKER_HOST（ゲストの dockerd） ---'
+                    echo '[ -f /etc/claude-dev/vm.env ] && . /etc/claude-dev/vm.env'
+                } >> "$rc"
+            fi
+        done
+        if [ -f /usr/local/share/claude-dev/VM_DEV.md.tmpl ]; then
+            sed -e 's#@DOCKER_HOST@#tcp://127.0.0.1:2375#g' \
+                -e "s#@VM_PORTS@#${VM_PORTS:-（Docker API のみ）}#g" \
+                /usr/local/share/claude-dev/VM_DEV.md.tmpl > /workspace/VM_DEV.md
+            chown "$USERNAME":"$USERNAME" /workspace/VM_DEV.md 2>/dev/null || true
+        fi
+        echo "✅ VM モード有効。制御情報は /workspace/VM_DEV.md（docker はゲスト VM を指します）"
+    else
+        echo "⚠️  VM の起動に失敗。VM 無しで継続します（docker は既定の proxy 経路のまま）。'vm logs' で調査可。"
+    fi
+fi
+
+# --- DooD モードのポート転送（非 VM かつ proxy 経由）---
+# ホスト共有daemon に公開されたコンテナポートを claude コンテナの 127.0.0.1 へ socat 転送し、
+# テスト等が叩く 127.0.0.1:PORT を到達可能にする（VM モードの vm-portsync 相当。docs/impl/30）。
+if [ "${CLAUDE_DEV_VM:-}" != "1" ] \
+   && [ "${CLAUDE_DEV_DOOD_PORTSYNC:-1}" != "0" ] \
+   && printf '%s' "${DOCKER_HOST:-}" | grep -q 'docker-proxy' \
+   && [ -x /usr/local/bin/dood-portsync.sh ]; then
+    su "$USERNAME" -c "DOCKER_HOST='${DOCKER_HOST}' setsid /usr/local/bin/dood-portsync.sh --loop >/dev/null 2>&1 &" || true
+    echo "🔌 DooD ポート転送を起動（ホスト公開ポートを 127.0.0.1 へ同期）"
+fi
+
 # --- CLAUDE.md にコンテナ環境情報を書き込み ---
 # マーカー（<!-- claude-dev-auto-start/end -->）で囲んだ範囲を毎回削除→再書き込みする。
 # これにより entrypoint の更新が次回起動時に必ず反映される。
@@ -318,8 +362,10 @@ CLAUDE_AUTO_EOF
 CLAUDE_VNC_EOF
     fi
 
-    # KVM が渡されている場合（--kvm 起動）は仮想化に関する指示を追加
-    if [ -c /dev/kvm ]; then
+    # KVM が渡されている場合（--kvm 起動）は仮想化に関する指示を追加。
+    # ただし VM モード（--vm / CLAUDE_DEV_VM=1）では CLAUDE.md への追記を抑止し、
+    # KVM/VM 情報は /workspace/VM_DEV.md へ集約する（docs/impl/80 §5, docs/08 §3.6）。
+    if [ -c /dev/kvm ] && [ "${CLAUDE_DEV_VM:-}" != "1" ]; then
         cat >> /workspace/CLAUDE.md << 'CLAUDE_KVM_EOF'
 ## KVM / 仮想化（重要）
 
@@ -493,9 +539,10 @@ sleep 0.5
 # 新コンテナで Chrome が「別プロセスが使用中」と判定し --remote-debugging-port を無視する
 rm -f \$HOME/.chrome-profile/SingletonLock \$HOME/.chrome-profile/SingletonSocket \$HOME/.chrome-profile/SingletonCookie
 
-# Chrome
+# Chrome / Chromium（GUI ブラウザ。amd64=Google Chrome / arm64=Playwright Chromium）
+# claude-dev-chrome ランチャーがアーキに応じて適切なバイナリを起動する。
 sleep 2
-google-chrome-stable --no-sandbox --disable-gpu --disable-software-rasterizer \
+claude-dev-chrome --no-sandbox --disable-gpu --disable-software-rasterizer \
     --disable-dev-shm-usage --disable-background-networking \
     --no-first-run --no-default-browser-check --start-maximized \
     --remote-debugging-port=9222 \

@@ -1,3 +1,8 @@
+---
+summary: セットアップ・ビルド・メンテナンスを担う Makefile のターゲット仕様（claude/VNC/docker-proxy イメージ・orchestrator のローカルビルド）とマルチステージビルド構成を記述する。
+keywords: [ Makefile, ビルド, セットアップ, マルチステージ, Docker, インストール, orchestrator ]
+---
+
 # 実装仕様: Makefile
 
 > **この文書の役割**: 初回セットアップ・イメージビルド・メンテナンスを担う `Makefile` のターゲット仕様。日常操作は `claude-dev` CLI（[10_cli.md](10_cli.md)）が担い、Makefile は主にビルドと PATH 登録など「セットアップ系」を担当する。
@@ -16,7 +21,9 @@ Makefile
 
 - `SHELL := /bin/bash`
 - `BASE_DIR`: Makefile の所在ディレクトリの絶対パス
-- `CLI := $(BASE_DIR)/claude-dev`, `INSTALL_PATH := /usr/local/bin/claude-dev`
+- `UNAME_S := $(shell uname -s)`: OS 判定。`Darwin`（macOS）なら `CLI := $(BASE_DIR)/claude-dev-mac`、それ以外は `CLI := $(BASE_DIR)/claude-dev`
+- macOS でもビルドはネイティブアーキ（Apple Silicon=arm64 / Intel=amd64）。`DOCKER_DEFAULT_PLATFORM` は固定しない（共有 Dockerfile が arm64 対応済み。設計 [../09_macos-support.md](../09_macos-support.md) §5）
+- `INSTALL_PATH := /usr/local/bin/claude-dev`（利用者コマンド名はどの OS でも `claude-dev`）
 - イメージ/コンテナ/ネットワーク/ボリューム名は CLI と同一（`IMG_CLAUDE`, `IMG_CLAUDE_VNC`, `IMG_DOCKER_PROXY`, `DOCKER_PROXY_CONTAINER`, `NETWORK`, `VOL_AUTH`, `VOL_HISTORY`, `VOL_CONFIG`, `VOL_CHROME`）
 - `CUSER := $(shell whoami)`
 
@@ -27,15 +34,19 @@ Makefile
 | `help`（デフォルト） | — | セットアップ/ビルド/メンテナンスのコマンド一覧を表示 |
 | `setup` | `env network volumes build install` | 初回セットアップ一括実行。完了後に次手順を案内 |
 | `env` | — | `.env` が無ければ `.env.example` からコピー |
-| `install` | — | `CLI` に実行権限を付与し `INSTALL_PATH` へ symlink。書込権限が無ければ `sudo` 実行を案内 |
-| `uninstall` | — | `INSTALL_PATH` の symlink を削除 |
+| `install` | — | `CLI` に実行権限を付与し `INSTALL_PATH` → `CLI` の symlink を張る。**macOS（`Darwin`）**: `/usr/local/bin` が root 所有のことが多いため `sudo ln -sf`。**Linux**: 書込可能なら `ln -sf`、不可なら `sudo ln -sf` を案内 |
+| `uninstall` | — | `INSTALL_PATH` を削除（`rm -f`、失敗時 `sudo rm -f`） |
 | `network` | — | `claude-dev-net` を冪等作成 |
 | `volumes` | — | 4 ボリュームを冪等作成 |
 | `build` | `build-claude build-claude-vnc build-docker-proxy` | 全イメージビルド |
 | `build-claude` | — | `Dockerfile.claude` の `--target base` を `IMG_CLAUDE` としてビルド（`USERNAME`/`USER_UID`/`USER_GID` を build-arg で付与） |
 | `build-claude-vnc` | `build-claude` | `--target vnc` を `IMG_CLAUDE_VNC` としてビルド |
 | `build-docker-proxy` | — | `Dockerfile.docker-proxy` を `IMG_DOCKER_PROXY` としてビルド |
+| `build-orchestrator` | — | `cd orchestrator && go build -o orchestrator . && go vet ./... && go test ./...`。ローカル build/test 用に**実行ファイル `orchestrator/orchestrator` を生成**する（`go build ./...` はバイナリを残さないため `-o` で明示。自己検証の高速ループはこのバイナリを直接起動する。[70_sample-project.md](70_sample-project.md)）。イメージ用バイナリは `build-claude` の base ビルドに同梱されるため独立イメージは作らない。詳細は [60_orchestrator.md](60_orchestrator.md) 参照 |
+| `orch-sample` | — | `scripts/orch-sample.sh` を呼び、`examples/orch-sample/` テンプレートを使い捨て作業コピー `workspace/orch-sample/`（独立 git リポジトリ）へ scaffold する。`FORCE=1` で再生成、`SEED=1` で決定論検証用 seed plan を配置。自己検証用（[70_sample-project.md](70_sample-project.md) / [docs/07_self-verification.md](../07_self-verification.md)） |
+| `orch-sample-clean` | — | `workspace/orch-sample/` を削除する |
 | `login` | — | `$(CLI) login` に委譲 |
+| `update-claude` | — | Claude Code のみ高速更新。`CLAUDE_CACHE_BUST=$(date +%s)` を build-arg に付けて `IMG_CLAUDE`(base) と `IMG_CLAUDE_VNC`(vnc) を再ビルド（`--no-cache` ではなくキャッシュ利用。Claude Code 導入レイヤー以降だけ無効化）。反映は `stop`→`start` を案内 |
 | `upgrade` | — | 3 イメージを `--no-cache` で再ビルド。反映は `stop`→`start` を案内 |
 | `status` | — | イメージ一覧・稼働中 Claude セッション・プロキシコンテナ・ボリュームを表示 |
 | `clean` | — | 確認プロンプト後、全 Claude コンテナ・プロキシコンテナを削除、4 ボリューム・ネットワーク・3 イメージを削除 |

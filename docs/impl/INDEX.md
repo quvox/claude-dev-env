@@ -1,53 +1,19 @@
 # 実装仕様一覧 (INDEX)
 
-> **この文書の役割**: `docs/impl/` 配下の実装仕様書群の全体構成と、各文書が対応する実装コードの一覧を示す目次。実装仕様書は要求定義・設計文書とは別種であり、**実装コードを自然言語で表現した Single Source of Truth (SSOT)** である。設計の俯瞰は `docs/02_architecture.md`、利用者向け情報は `docs/01_getting-started.md` / `docs/04_cli-reference.md` を参照。
+> 実装仕様ドキュメント群の全体構成を示す索引。各文書はソースコードと 1 対 1（または特定ディレクトリ）に対応する Single Source of Truth。まずこの一覧で必要な文書を絞り、該当ファイルのみを開くこと。
 
-## 実装仕様書とは
-
-- 要件や設計を検討した後、コードを実装する前に作成・更新する。常に「成果物（実装）が**どういうものか**」を表す。
-- 細かな処理コードは書かず、**データ構造・インタフェース・ロジック**を詳細に記述する。
-- 各文書は「カバーする実装コード」と 1 対 1（または 1 対多）で対応し、同じソースコードが複数文書に重複して現れないようにする。
-
-## 文書 ↔ コード 対応表
-
-| 文書 | 対応コード | 概要 |
-|------|-----------|------|
-| [00_overview.md](00_overview.md) | リポジトリ全体構成 / ルート直下ファイル（`.env.example`, `.mcp.json`, `CLAUDE.md`, `README.md`, `PREPARATION.md`） | 実装全体のコンポーネント構成と制御/データフロー、ルート設定ファイルの役割 |
-| [10_cli.md](10_cli.md) | `claude-dev` | CLI 本体。全サブコマンドとヘルパー関数 |
-| [20_makefile.md](20_makefile.md) | `Makefile` | セットアップ・ビルド・メンテナンスのタスク定義 |
-| [30_scripts.md](30_scripts.md) | `scripts/` ディレクトリ概要 / `scripts/save_prompt.sh` / `scripts/sendslackmsg.sh` / `scripts/tmux.conf` | スクリプト群の概要と、小スクリプト（hook 2 種 + tmux 設定）の仕様 |
-| [31_entrypoint.md](31_entrypoint.md) | `scripts/entrypoint-claude.sh` | Claude コンテナのエントリポイント処理 |
-| [32_firewall.md](32_firewall.md) | `scripts/init-firewall-claude.sh` | ブラックリスト方式ファイアウォール |
-| [40_devcontainer.md](40_devcontainer.md) | `.devcontainer/Dockerfile.claude` / `.devcontainer/Dockerfile.docker-proxy` / `.devcontainer/tmux.conf` / `.zshrc` | Docker イメージのビルド仕様とビルド入力設定ファイル |
-| [50_docker-proxy.md](50_docker-proxy.md) | `docker-proxy/main.go` / `docker-proxy/main_test.go` / `docker-proxy/go.mod` | Docker Socket Proxy（Go）の検査ロジックとテスト |
-
-## カバー範囲（ディレクトリツリー）
-
-```
-claude-dev-env/
-├── claude-dev              → 10_cli.md
-├── Makefile                → 20_makefile.md
-├── .zshrc                  → 40_devcontainer.md（ビルド入力）
-├── .env.example            → 00_overview.md
-├── .mcp.json               → 00_overview.md
-├── scripts/
-│   ├── entrypoint-claude.sh    → 31_entrypoint.md
-│   ├── init-firewall-claude.sh → 32_firewall.md
-│   ├── save_prompt.sh          → 30_scripts.md
-│   ├── sendslackmsg.sh         → 30_scripts.md
-│   └── tmux.conf               → 30_scripts.md
-├── .devcontainer/
-│   ├── Dockerfile.claude       → 40_devcontainer.md
-│   ├── Dockerfile.docker-proxy → 40_devcontainer.md
-│   └── tmux.conf               → 40_devcontainer.md
-└── docker-proxy/
-    ├── main.go                 → 50_docker-proxy.md
-    ├── main_test.go            → 50_docker-proxy.md
-    └── go.mod                  → 50_docker-proxy.md
-```
-
-## 変更履歴の管理
-
-- 実装仕様書を変更した際の履歴は、**この文書群には書かず** `docs/impl/histories/` 配下に出力する。
-- 履歴ファイルは対象の実装仕様書と同じサブディレクトリ・ファイル名で保存する（例: `30_scripts.md` の履歴 → `docs/impl/histories/30_scripts.md`）。
-- 各実装仕様書本体は常に「最新の成果物」を表し、修正履歴を含めない。
+| ファイル | 対応するコード | 内容 |
+|---|---|---|
+| [00_overview.md](00_overview.md) | リポジトリ全体 | 実装全体の俯瞰。コンポーネントの責務・制御フロー・Docker リソース命名・ルート設定ファイル・設計上の不変条件。 |
+| [10_cli.md](10_cli.md) | `claude-dev` | ホスト側 CLI（Linux 版）の実装仕様。ヘルパー関数・サブコマンド・コンテナ起動引数。 |
+| [11_cli-mac.md](11_cli-mac.md) | `claude-dev-mac` | ホスト側 CLI（macOS 版）の実装仕様。Linux 版との差分（SSH agent 魔法ソケット・Docker ソケット検出・VM/KVM 拒否・ポート直結・ネイティブアーキ）。設計は [../09_macos-support.md](../09_macos-support.md)。 |
+| [20_makefile.md](20_makefile.md) | `Makefile` | セットアップ・ビルド・メンテナンスのターゲット仕様とマルチステージビルド構成（OS 判定での CLI 選択を含む）。 |
+| [30_scripts.md](30_scripts.md) | `scripts/`（hook・tmux.conf 等） | `scripts/` の構成概要と hook スクリプト（save_prompt.sh / sendslackmsg.sh）・tmux.conf・dood-portsync 等の実装仕様。 |
+| [31_entrypoint.md](31_entrypoint.md) | `scripts/entrypoint-claude.sh` | Claude コンテナの ENTRYPOINT。UID/GID 追従・認証共有・MCP 設定・VNC/Chrome 起動・tmux セッション開始。 |
+| [32_firewall.md](32_firewall.md) | `scripts/init-firewall-claude.sh` | ブラックリスト方式ファイアウォールの iptables 構成・適用ルール・カスタマイズ点。 |
+| [40_devcontainer.md](40_devcontainer.md) | `.devcontainer/Dockerfile.claude` ほか | Dockerfile.claude（orch-builder/base/vnc）・Dockerfile.docker-proxy・tmux.conf・.zshrc のビルド仕様（arm64 アーキ別分岐を含む）。 |
+| [50_docker-proxy.md](50_docker-proxy.md) | `docker-proxy/`（Go） | Docker API を安全に中継するリバースプロキシの検査ロジック・hijack 処理・テスト仕様。 |
+| [60_orchestrator.md](60_orchestrator.md) | `orchestrator/`（Go） | AI オーケストレーターの実装仕様。制御ループ・状態ストア・worker 並行ディスパッチ・品質ゲート・介入・Slack 通知・ビルド配置。 |
+| [70_sample-project.md](70_sample-project.md) | `examples/orch-sample/` ほか | オーケストレーター自己検証用サンプルの scaffold・seed plan・検証用 CLI affordance。 |
+| [80_vm-mode.md](80_vm-mode.md) | VM モード関連（`scripts/vm*` 等） | VM モード（QEMU+KVM＋virtiofs、ゲスト内 dockerd を DOCKER_HOST で利用）の実装仕様。**Linux 専用**（macOS では非対応）。 |
+| [90_ghcr-workflow.md](90_ghcr-workflow.md) | `.github/workflows/ghcr-images.yml` | GHCR へ 3 イメージを毎日・マルチアーキ(amd64/arm64)で push する GitHub Actions ワークフロー（prepare→build[matrix, push-by-digest]→merge[imagetools]、YYYYMMDDHHmm+latest タグ）。設計は [../10_ghcr-images.md](../10_ghcr-images.md)。 |

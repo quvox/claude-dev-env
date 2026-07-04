@@ -1,3 +1,8 @@
+---
+summary: ファイアウォール・CLAUDE.md・tmux・hooks/envなど、利用者が環境を調整するためのカスタマイズ手順をまとめた利用者向けガイド。
+keywords: [ カスタマイズ, ファイアウォール, hooks, Slack通知, tmux, KVM, デスクトップ操作 ]
+---
+
 # カスタマイズガイド
 
 > **この文書の役割**: ファイアウォール・CLAUDE.md・tmux・hooks/env など、利用者が環境を調整するためのカスタマイズ手順をまとめた利用者向けガイド。
@@ -239,7 +244,7 @@ echo 'alias ll="ls -la"' >> ~/.zshrc
 source ~/.zshrc
 ```
 
-PATH やランタイム初期化（fnm, Go, Rust 等）はシステム側 (`/etc/zsh/zshrc`) に配置されており、`~/.zshrc` を編集しても壊れない。
+PATH やランタイム初期化（fnm, Go, Rust, pyenv 等）はシステム側 (`/etc/zsh/zshrc`) に配置されており、`~/.zshrc` を編集しても壊れない（pyenv は `~/.zshrc.default` にも二重初期化ガード付きで入っている）。
 
 **注意:** `~/.zshrc` のリセットが必要な場合は、`claude-dev-config` ボリュームを削除してコンテナを再起動する:
 
@@ -249,6 +254,15 @@ docker volume rm claude-dev-config
 cd ~/repos/my-project
 claude-dev start   # ボリュームが再作成され、デフォルトの .zshrc がコピーされる
 ```
+
+## DooD モードのポートアクセス（127.0.0.1:PORT）
+
+既定（DooD）モードでは、`docker`/`docker compose` で起動したコンテナは**ホストの Docker デーモン**で動き、公開ポートは**ホスト側**に出る。Claude コンテナは別ネットワークのため、コンテナ内のテスト等が叩く `127.0.0.1:PORT` はそのままでは届かない。
+
+これを解消するため、DooD モードでは Claude コンテナ内で `dood-portsync` が自動起動し、ホストに公開されたポートを `127.0.0.1:PORT`（コンテナ内ループバック）へ自動転送する。`docker compose up` で公開したポートは数秒以内に `127.0.0.1:PORT` で叩けるようになる（追加設定不要）。
+
+- **無効化**: `claude-dev start` 時に環境変数 `CLAUDE_DEV_DOOD_PORTSYNC=0` を渡す（または `-e` で設定）。
+- **注意**: DooD ではサービスの実ポートはホストに公開される（ホストから見え、同じポートを使う別プロジェクトとはホスト上で衝突しうる）。ホスト非公開・ポート隔離が必要な場合は **VM モード（`claude-dev start --vm`）** を使う（[04_cli-reference.md](04_cli-reference.md) / [08_vm-mode.md](08_vm-mode.md)）。
 
 ## Linux デスクトップの操作
 

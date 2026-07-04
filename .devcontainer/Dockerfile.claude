@@ -8,6 +8,16 @@
 # ブラックリスト方式ファイアウォール
 # 認証情報はボリュームマウントで管理
 # =============================================================================
+# =============================================================================
+# orchestrator ビルドステージ（AI オーケストレーター / Go・stdlib のみ）
+# =============================================================================
+FROM golang:1.24-alpine AS orch-builder
+WORKDIR /app
+COPY orchestrator/go.mod ./
+RUN go mod download
+COPY orchestrator/*.go ./
+RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /claude-orchestrator .
+
 FROM ubuntu:24.04 AS base
 
 ENV DEBIAN_FRONTEND=noninteractive
@@ -36,6 +46,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     sudo procps \
     # Python 3
     python3 python3-pip python3-venv python3-dev \
+    # pyenv で CPython をソースビルドするための依存（実行時に別バージョンを追加ビルドする際にも必要なので残す）
+    libssl-dev zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev \
+    libncursesw5-dev tk-dev libxml2-dev libxmlsec1-dev libffi-dev liblzma-dev \
     # サンドボックス（Claude Code 推奨）
     bubblewrap socat \
     # Chromium / Playwright 依存パッケージ（chromium-browser は Ubuntu 24.04 で snap 専用のため除外）
@@ -47,10 +60,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     xdg-utils \
     # スクリーンショット・動画キャプチャ
     scrot ffmpeg x11-apps \
-    # KVM / QEMU（ハードウェア仮想化）
+    # KVM / QEMU（ハードウェア仮想化）＋ VM モード（virtiofs 共有・cloud-init provision）
     qemu-system-x86 qemu-utils ovmf cpu-checker bridge-utils \
+    virtiofsd cloud-image-utils \
     # その他
-    unzip zip xz-utils gnupg locales \
+    unzip zip xz-utils gnupg locales rsync \
     && rm -rf /var/lib/apt/lists/* \
     # --- Docker CLI + Docker Compose plugin ---
     && install -m 0755 -d /etc/apt/keyrings \
@@ -114,6 +128,21 @@ RUN curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-$(dpkg --print-architect
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
     | sh -s -- -y --default-toolchain stable --profile minimal
 
+# --- pyenv (Python バージョン管理) ---
+# ${USER_HOME}/.pyenv に配置。既定の CPython を1つソースビルドして global に設定し、
+# インストール直後から `python`/`pyenv` が使える状態にする。追加バージョンは実行時に
+# `pyenv install <ver>` でビルドできる（ビルド依存は apt で導入済み）。
+ARG PYTHON_VERSION=3.13
+RUN git clone --depth 1 https://github.com/pyenv/pyenv.git ${USER_HOME}/.pyenv
+# シム高速化用の C 拡張（任意。失敗してもビルドは継続する）
+RUN cd ${USER_HOME}/.pyenv && src/configure && make -C src || echo "pyenv native ext build skipped"
+RUN export PYENV_ROOT="${USER_HOME}/.pyenv" \
+    && export PATH="${PYENV_ROOT}/bin:${PATH}" \
+    && PYV="$(pyenv latest -k ${PYTHON_VERSION})" \
+    && echo "pyenv: installing CPython ${PYV}" \
+    && pyenv install "${PYV}" \
+    && pyenv global "${PYV}"
+
 # --- pnpm ---
 RUN export PATH="${USER_HOME}/.local/share/fnm:$PATH" \
     && eval "$($USER_HOME/.local/share/fnm/fnm env)" \
@@ -141,7 +170,10 @@ RUN curl -fsSL https://releases.hashicorp.com/terraform/index.json \
     && rm /tmp/terraform.zip
 
 # --- Google Cloud CLI ---
-RUN curl -fsSL https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-cli-linux-$(uname -m).tar.gz \
+# アーキ名を Google の配布名へ写像する（arm64/aarch64 → arm、それ以外は uname -m のまま）。
+# arm64 で $(uname -m)=aarch64 のままだと URL が 404 になるため。
+RUN GC_ARCH=$(uname -m); case "$GC_ARCH" in aarch64|arm64) GC_ARCH=arm ;; esac \
+    && curl -fsSL "https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-cli-linux-${GC_ARCH}.tar.gz" \
     | tar -xz -C ${USER_HOME} \
     && ${USER_HOME}/google-cloud-sdk/install.sh --quiet --path-update=false \
     && sudo ln -s ${USER_HOME}/google-cloud-sdk/bin/gcloud /usr/local/bin/gcloud \
@@ -197,6 +229,10 @@ RUN mkdir -p /etc/zsh && { \
         echo 'export PATH="${HOME}/.local/share/fnm:${PATH}"'; \
         echo 'eval "$(fnm env --use-on-cd --shell zsh 2>/dev/null)"'; \
         echo 'export PATH="${HOME}/.local/bin:${HOME}/.cargo/bin:/usr/local/go/bin:${HOME}/go/bin:${PATH}"'; \
+        echo '# pyenv (Python バージョン管理)'; \
+        echo 'export PYENV_ROOT="${HOME}/.pyenv"'; \
+        echo 'export PATH="${PYENV_ROOT}/bin:${PATH}"'; \
+        echo 'command -v pyenv >/dev/null 2>&1 && eval "$(pyenv init - zsh 2>/dev/null)"'; \
     } >> /etc/zsh/zshrc \
     && { \
         echo ''; \
@@ -204,6 +240,10 @@ RUN mkdir -p /etc/zsh && { \
         echo 'export PATH="${HOME}/.local/share/fnm:${PATH}"'; \
         echo 'eval "$(fnm env --use-on-cd --shell bash 2>/dev/null)"'; \
         echo 'export PATH="${HOME}/.local/bin:${HOME}/.cargo/bin:/usr/local/go/bin:${HOME}/go/bin:${PATH}"'; \
+        echo '# pyenv (Python バージョン管理)'; \
+        echo 'export PYENV_ROOT="${HOME}/.pyenv"'; \
+        echo 'export PATH="${PYENV_ROOT}/bin:${PATH}"'; \
+        echo 'command -v pyenv >/dev/null 2>&1 && eval "$(pyenv init - bash 2>/dev/null)"'; \
     } >> /etc/bash.bashrc
 
 # --- デフォルト .zshrc ---
@@ -218,8 +258,22 @@ COPY scripts/init-firewall-claude.sh /usr/local/bin/init-firewall.sh
 COPY scripts/entrypoint-claude.sh /usr/local/bin/entrypoint.sh
 COPY scripts/save_prompt.sh /usr/local/bin/save_prompt.sh
 COPY scripts/sendslackmsg.sh /usr/local/bin/sendslackmsg.sh
+# --- VM モード（QEMU + virtiofs）スクリプト ---
+COPY scripts/vm-up.sh /usr/local/bin/vm-up.sh
+COPY scripts/vm /usr/local/bin/vm
+COPY scripts/vm-portsync.sh /usr/local/bin/vm-portsync.sh
+COPY scripts/vm-healthd.sh /usr/local/bin/vm-healthd.sh
+COPY scripts/dood-portsync.sh /usr/local/bin/dood-portsync.sh
+COPY scripts/VM_DEV.md.tmpl /usr/local/share/claude-dev/VM_DEV.md.tmpl
 RUN chmod +x /usr/local/bin/init-firewall.sh /usr/local/bin/entrypoint.sh \
-    /usr/local/bin/save_prompt.sh /usr/local/bin/sendslackmsg.sh
+    /usr/local/bin/save_prompt.sh /usr/local/bin/sendslackmsg.sh \
+    /usr/local/bin/vm-up.sh /usr/local/bin/vm /usr/local/bin/vm-portsync.sh \
+    /usr/local/bin/vm-healthd.sh /usr/local/bin/dood-portsync.sh
+
+# --- orchestrator バイナリ + instruction テンプレート ---
+COPY --from=orch-builder /claude-orchestrator /usr/local/bin/claude-orchestrator
+COPY orchestrator/instructions/ /usr/local/share/claude-orchestrator/
+RUN chmod +x /usr/local/bin/claude-orchestrator
 
 # --- 作業ディレクトリ ---
 RUN mkdir -p /workspace && chown $USERNAME:$USERNAME /workspace
@@ -264,15 +318,32 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     fonts-noto-cjk-extra fonts-dejavu-core \
     && rm -rf /var/lib/apt/lists/*
 
-# --- Google Chrome（安定版）---
-# APT リポジトリ経由でインストール（deb 直接ダウンロードより安定）
-RUN curl -fsSL https://dl.google.com/linux/linux_signing_key.pub \
-        | gpg --dearmor -o /usr/share/keyrings/google-chrome.gpg \
-    && echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome.gpg] http://dl.google.com/linux/chrome/deb/ stable main" \
-        > /etc/apt/sources.list.d/google-chrome.list \
-    && apt-get update \
-    && apt-get install -y --no-install-recommends google-chrome-stable \
-    && rm -rf /var/lib/apt/lists/*
+# --- GUI ブラウザ（アーキ別）---
+# amd64: Google Chrome 安定版を APT 経由でインストール（従来どおり）。
+# arm64: Google Chrome は Linux arm64 版が存在しないため、base で導入済みの
+#        Playwright Chromium を GUI ブラウザとして使う（arm64 対応）。
+# entrypoint / openbox メニューは共通ランチャー /usr/local/bin/claude-dev-chrome を叩くため、
+# 呼び出し側はアーキを意識しない。
+RUN if [ "$(dpkg --print-architecture)" = "amd64" ]; then \
+        curl -fsSL https://dl.google.com/linux/linux_signing_key.pub \
+            | gpg --dearmor -o /usr/share/keyrings/google-chrome.gpg \
+        && echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome.gpg] http://dl.google.com/linux/chrome/deb/ stable main" \
+            > /etc/apt/sources.list.d/google-chrome.list \
+        && apt-get update \
+        && apt-get install -y --no-install-recommends google-chrome-stable \
+        && rm -rf /var/lib/apt/lists/* ; \
+    fi
+
+# --- 共通 GUI ブラウザランチャー /usr/local/bin/claude-dev-chrome ---
+# google-chrome-stable があればそれを、無ければ Playwright Chromium を起動する。
+RUN if command -v google-chrome-stable >/dev/null 2>&1; then \
+        printf '#!/bin/bash\nexec google-chrome-stable "$@"\n' > /usr/local/bin/claude-dev-chrome ; \
+    else \
+        CHROMIUM_PATH=$(find ${USER_HOME}/.cache/ms-playwright -name "chrome" \( -path "*/chrome-linux/chrome" -o -path "*/chrome-linux64/chrome" \) 2>/dev/null | head -1) ; \
+        [ -n "$CHROMIUM_PATH" ] || { echo "ERROR: GUI 用 Chromium が見つかりません（Playwright Chromium 未導入）" >&2; exit 1; } ; \
+        printf '#!/bin/bash\nexec "%s" "$@"\n' "$CHROMIUM_PATH" > /usr/local/bin/claude-dev-chrome ; \
+    fi \
+    && chmod +x /usr/local/bin/claude-dev-chrome
 
 # --- noVNC v1.6.0 ---
 RUN curl -fsSL https://github.com/novnc/noVNC/archive/refs/tags/v1.6.0.tar.gz -o /tmp/novnc.tar.gz \
@@ -330,7 +401,7 @@ RUN mkdir -p ${USER_HOME}/.config/openbox \
 <?xml version="1.0" encoding="UTF-8"?>
 <openbox_menu xmlns="http://openbox.org/3.4/menu">
   <menu id="root-menu" label="Menu">
-    <item label="Chrome"><action name="Execute"><execute>google-chrome-stable --no-sandbox --disable-gpu --disable-software-rasterizer --disable-dev-shm-usage --no-first-run --no-default-browser-check</execute></action></item>
+    <item label="Chrome"><action name="Execute"><execute>claude-dev-chrome --no-sandbox --disable-gpu --disable-software-rasterizer --disable-dev-shm-usage --no-first-run --no-default-browser-check</execute></action></item>
     <item label="Terminal"><action name="Execute"><execute>lxterminal</execute></action></item>
     <separator />
     <item label="Toggle IME (Super+Space / Ctrl+\\ / F3)"><action name="Execute"><execute>toggle-ime</execute></action></item>

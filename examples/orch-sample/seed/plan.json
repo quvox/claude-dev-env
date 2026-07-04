@@ -1,0 +1,57 @@
+{
+  "goal": "mathkit ユーティリティライブラリを完成させ、tests/ の全テスト（pytest）を通す。",
+  "completion": "src/mathkit/ の stats.py・strings.py・geometry.py が実装され、pytest（pythonpath=src）を実行すると tests/ の全テストが通る。加えて外部公開用のリリース告知文ドラフトが作成され、リリース操作（git tag v0.1.0）が行われている。",
+  "ready": true,
+  "tasks": [
+    {
+      "id": "t-stats",
+      "title": "stats.py の mean/median を実装",
+      "description": "src/mathkit/stats.py の mean(xs) と median(xs) を実装する。mean は算術平均、median は中央値（偶数個の要素なら中央2要素の平均、入力順に依存せずソートして判定）を返す。外部依存は使わず標準ライブラリのみ。tests/test_stats.py を pytest（pythonpath=src）で実行し、全て通ることを確認する。テストは期待仕様なので変更しない。",
+      "completion": "src/mathkit/stats.py のみが担当。mean/median が実装され、pytest tests/test_stats.py が全て通る。他モジュール（strings.py・geometry.py）の実装、リリース告知、git tag 等のリリース作業は責務外。",
+      "deps": [],
+      "status": "pending",
+      "irreversible": false
+    },
+    {
+      "id": "t-strings",
+      "title": "strings.py の slugify を実装",
+      "description": "src/mathkit/strings.py の slugify(s) を実装する。文字列を小文字化し、単語（空白区切り）をハイフンで連結し、英数字とハイフン以外の記号は除去し、前後の余分な空白/ハイフンは落とす。例: slugify(\"Hello World!\") == \"hello-world\"。外部依存は使わず標準ライブラリのみ。tests/test_strings.py を pytest（pythonpath=src）で実行し、全て通ることを確認する。テストは変更しない。",
+      "completion": "src/mathkit/strings.py のみが担当。slugify が実装され、pytest tests/test_strings.py が全て通る。他モジュール（stats.py・geometry.py）の実装、リリース告知、git tag 等のリリース作業は責務外。",
+      "deps": [],
+      "status": "pending",
+      "irreversible": false
+    },
+    {
+      "id": "t-geometry",
+      "title": "geometry.py の rect_area/circle_area を実装",
+      "description": "src/mathkit/geometry.py の rect_area(w, h) と circle_area(r) を実装する。rect_area は w*h、circle_area は math.pi を用いて πr^2 を返す。外部依存は使わず標準ライブラリ（math）のみ。tests/test_geometry.py を pytest（pythonpath=src）で実行し、全て通ることを確認する。テストは変更しない。",
+      "completion": "src/mathkit/geometry.py のみが担当。rect_area/circle_area が実装され、pytest tests/test_geometry.py が全て通る。他モジュール（stats.py・strings.py）の実装、リリース告知、git tag 等のリリース作業は責務外。",
+      "deps": [],
+      "status": "pending",
+      "irreversible": false
+    },
+    {
+      "id": "t-announce",
+      "title": "リリース告知文ドラフトの作成（後戻り不可）",
+      "description": "外部公開用のリリース告知文（アナウンス）のドラフトを作成する。これは外部コミットメントに当たるため後戻り不可の操作として扱い、実行前に必ず人間の承認を得ること。承認後、告知文を ANNOUNCEMENT.md としてリポジトリ直下に作成する。",
+      "completion": "リポジトリ直下に ANNOUNCEMENT.md（外部公開用のリリース告知文ドラフト）が作成されている。外部コミットメントに当たるため irreversible として人間の承認を得てから実行する。コード実装やテスト、git tag 等のリリース作業は責務外。",
+      "deps": [],
+      "status": "pending",
+      "irreversible": true
+    },
+    {
+      "id": "t-release",
+      "title": "リリース操作（git tag v0.1.0）",
+      "description": "全モジュールの実装が完了し pytest が全て通り、告知文ドラフトが用意された後、リリース操作として git tag v0.1.0 を作成する。タグ付けは後戻り不可の操作なので、実行前に必ず人間の承認を得ること。",
+      "completion": "git tag v0.1.0 が作成されている（git tag に v0.1.0 が含まれる）。後戻り不可のリリース操作なので人間の承認を得てから実行する。前提として全テストが通り告知文ドラフトが存在すること。",
+      "deps": [
+        "t-stats",
+        "t-strings",
+        "t-geometry",
+        "t-announce"
+      ],
+      "status": "pending",
+      "irreversible": true
+    }
+  ]
+}

@@ -11,15 +11,255 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"os"
+	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
 
 const (
 	listenAddr = ":2375"
 	socketPath = "/var/run/docker.sock"
+	// workspaceMount is where each claude container mounts its project dir.
+	workspaceMount = "/workspace"
+	// projectCacheTTL bounds how long a resolved source-IP → PROJECT_DIR mapping
+	// is trusted before re-querying the Docker API.
+	projectCacheTTL = 60 * time.Second
 )
+
+// allowWorkspaceBinds enables rewriting/allowing bind mounts whose source is
+// under the caller's /workspace (docs/03_security.md §5, docs/impl/50). Default
+// on; set CLAUDE_DEV_ALLOW_WORKSPACE_BINDS=0/false/no to fall back to rejecting
+// all host bind mounts.
+var allowWorkspaceBinds = func() bool {
+	switch strings.ToLower(os.Getenv("CLAUDE_DEV_ALLOW_WORKSPACE_BINDS")) {
+	case "0", "false", "no", "off":
+		return false
+	}
+	return true
+}()
+
+// resolveProjectDir maps a caller's source IP to its host PROJECT_DIR (the host
+// path it mounts at /workspace), or ("", false) if unknown. It is a var so tests
+// can inject a stub instead of hitting the Docker API.
+var resolveProjectDir = cachedResolveProjectDir
+
+// dockerHTTP talks to the host Docker socket for read-only lookups (container list).
+var dockerHTTP = &http.Client{
+	Timeout: 5 * time.Second,
+	Transport: &http.Transport{
+		DialContext: func(_ context.Context, _, _ string) (net.Conn, error) {
+			return net.Dial("unix", socketPath)
+		},
+	},
+}
+
+type projectCacheEntry struct {
+	dir string
+	exp time.Time
+}
+
+var (
+	projectCache   = map[string]projectCacheEntry{}
+	projectCacheMu sync.Mutex
+)
+
+// cachedResolveProjectDir wraps lookupProjectDir with a short TTL cache.
+func cachedResolveProjectDir(remoteIP string) (string, bool) {
+	projectCacheMu.Lock()
+	if e, ok := projectCache[remoteIP]; ok && time.Now().Before(e.exp) {
+		projectCacheMu.Unlock()
+		return e.dir, e.dir != ""
+	}
+	projectCacheMu.Unlock()
+
+	dir := lookupProjectDir(remoteIP)
+
+	projectCacheMu.Lock()
+	projectCache[remoteIP] = projectCacheEntry{dir: dir, exp: time.Now().Add(projectCacheTTL)}
+	projectCacheMu.Unlock()
+	return dir, dir != ""
+}
+
+// lookupProjectDir asks the Docker daemon for the container whose network IP is
+// remoteIP and returns the host source of its /workspace mount ("" if none).
+func lookupProjectDir(remoteIP string) string {
+	resp, err := dockerHTTP.Get("http://docker/containers/json")
+	if err != nil {
+		return ""
+	}
+	defer resp.Body.Close()
+	var cs []struct {
+		Mounts []struct {
+			Destination string `json:"Destination"`
+			Source      string `json:"Source"`
+		} `json:"Mounts"`
+		NetworkSettings struct {
+			Networks map[string]struct {
+				IPAddress string `json:"IPAddress"`
+			} `json:"Networks"`
+		} `json:"NetworkSettings"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&cs); err != nil {
+		return ""
+	}
+	for _, c := range cs {
+		match := false
+		for _, n := range c.NetworkSettings.Networks {
+			if n.IPAddress != "" && n.IPAddress == remoteIP {
+				match = true
+				break
+			}
+		}
+		if !match {
+			continue
+		}
+		for _, m := range c.Mounts {
+			if m.Destination == workspaceMount {
+				return m.Source
+			}
+		}
+	}
+	return ""
+}
+
+// containWorkspacePath validates that containerSrc (a path as seen inside the
+// caller container) is /workspace or below, and returns the rewritten HOST path
+// (projectDir/<rel>). Containment is LEXICAL: it rejects paths outside
+// /workspace and ".." traversal. It intentionally does NOT resolve symlinks,
+// because the proxy container has no view of the host filesystem (it holds only
+// the Docker socket; mounting the host into the proxy would be unsafe since
+// exec into the proxy is permitted). Consequence: a symlink placed inside the
+// project that points outside is not detected here — a documented residual risk
+// (docs/03_security.md §5 / 残存リスク).
+func containWorkspacePath(projectDir, containerSrc string) (string, bool) {
+	if projectDir == "" {
+		return "", false
+	}
+	if containerSrc != workspaceMount && !strings.HasPrefix(containerSrc, workspaceMount+"/") {
+		return "", false
+	}
+	rel := strings.TrimPrefix(containerSrc, workspaceMount) // "" or "/sub/dir"
+	host := filepath.Clean(filepath.Join(projectDir, rel))
+	pc := filepath.Clean(projectDir)
+	if host != pc && !strings.HasPrefix(host, pc+string(filepath.Separator)) {
+		return "", false // ".." traversal escaped the project dir
+	}
+	return host, true
+}
+
+// rewriteBinds rewrites /workspace-relative bind sources to host paths under
+// projectDir, preserving all other request fields. It returns an error if any
+// host bind mount is outside /workspace (or fails containment). When projectDir
+// is "" (feature off or caller unknown), every absolute host bind is rejected
+// and named volumes/tmpfs pass through — matching the pre-existing behavior.
+func rewriteBinds(body []byte, projectDir string) ([]byte, bool, error) {
+	var top map[string]json.RawMessage
+	if err := json.Unmarshal(body, &top); err != nil {
+		return body, false, nil // unparseable: let Docker validate (existing policy)
+	}
+	hcRaw, ok := top["HostConfig"]
+	if !ok || len(hcRaw) == 0 || string(hcRaw) == "null" {
+		return body, false, nil
+	}
+	var hc map[string]json.RawMessage
+	if err := json.Unmarshal(hcRaw, &hc); err != nil {
+		return body, false, nil
+	}
+	changed := false
+
+	if raw, ok := hc["Binds"]; ok && string(raw) != "null" {
+		var binds []string
+		if err := json.Unmarshal(raw, &binds); err == nil {
+			for i, b := range binds {
+				parts := strings.SplitN(b, ":", 2)
+				src := parts[0]
+				if !strings.HasPrefix(src, "/") {
+					continue // named volume
+				}
+				host, ok := containWorkspacePath(projectDir, src)
+				if !ok {
+					return nil, false, fmt.Errorf("host bind mount is not allowed: %s", b)
+				}
+				if host != src {
+					if len(parts) == 2 {
+						binds[i] = host + ":" + parts[1]
+					} else {
+						binds[i] = host
+					}
+					changed = true
+				}
+			}
+			if changed {
+				nb, err := json.Marshal(binds)
+				if err != nil {
+					return nil, false, err
+				}
+				hc["Binds"] = nb
+			}
+		}
+	}
+
+	if raw, ok := hc["Mounts"]; ok && string(raw) != "null" {
+		var mounts []map[string]json.RawMessage
+		if err := json.Unmarshal(raw, &mounts); err == nil {
+			mchanged := false
+			for _, m := range mounts {
+				var typ string
+				_ = json.Unmarshal(m["Type"], &typ)
+				if typ != "bind" {
+					continue
+				}
+				var src string
+				_ = json.Unmarshal(m["Source"], &src)
+				host, ok := containWorkspacePath(projectDir, src)
+				if !ok {
+					return nil, false, fmt.Errorf("bind mount is not allowed: source=%s", src)
+				}
+				if host != src {
+					nb, err := json.Marshal(host)
+					if err != nil {
+						return nil, false, err
+					}
+					m["Source"] = nb
+					mchanged = true
+				}
+			}
+			if mchanged {
+				nb, err := json.Marshal(mounts)
+				if err != nil {
+					return nil, false, err
+				}
+				hc["Mounts"] = nb
+				changed = true
+			}
+		}
+	}
+
+	if !changed {
+		return body, false, nil
+	}
+	nhc, err := json.Marshal(hc)
+	if err != nil {
+		return nil, false, err
+	}
+	top["HostConfig"] = nhc
+	nbody, err := json.Marshal(top)
+	if err != nil {
+		return nil, false, err
+	}
+	return nbody, true, nil
+}
+
+// clientIP extracts the source IP from an http.Request's RemoteAddr.
+func clientIP(remoteAddr string) string {
+	if host, _, err := net.SplitHostPort(remoteAddr); err == nil {
+		return host
+	}
+	return remoteAddr
+}
 
 // dangerousCapabilities is the set of Linux capabilities that must not be added.
 var dangerousCapabilities = map[string]bool{
@@ -278,21 +518,23 @@ func validateContainerCreate(r *http.Request, logger *log.Logger) error {
 		return fmt.Errorf("UsernsMode=host is not allowed")
 	}
 
-	// Check Binds (host path mounts).
-	for _, bind := range hc.Binds {
-		// Binds are in the format "hostPath:containerPath[:options]".
-		// A named volume does not start with "/".
-		parts := strings.SplitN(bind, ":", 2)
-		if len(parts) >= 1 && strings.HasPrefix(parts[0], "/") {
-			return fmt.Errorf("host bind mount is not allowed: %s", bind)
+	// Bind mounts (Binds + Mounts type=bind): allow only sources under the
+	// caller's /workspace, rewriting them to the host PROJECT_DIR. When the
+	// feature is off or the caller can't be resolved, projectDir stays "" and
+	// rewriteBinds rejects every absolute host bind (pre-existing behavior).
+	projectDir := ""
+	if allowWorkspaceBinds {
+		if pd, ok := resolveProjectDir(clientIP(r.RemoteAddr)); ok {
+			projectDir = pd
 		}
 	}
-
-	// Check Mounts (alternative mount specification).
-	for _, m := range hc.Mounts {
-		if m.Type == "bind" {
-			return fmt.Errorf("bind mount is not allowed: source=%s", m.Source)
-		}
+	if newBody, changed, err := rewriteBinds(body, projectDir); err != nil {
+		return err
+	} else if changed {
+		r.Body = io.NopCloser(bytes.NewReader(newBody))
+		r.ContentLength = int64(len(newBody))
+		r.Header.Set("Content-Length", strconv.Itoa(len(newBody)))
+		logger.Printf("REWRITE binds: /workspace -> %s", projectDir)
 	}
 
 	// Check dangerous capabilities.

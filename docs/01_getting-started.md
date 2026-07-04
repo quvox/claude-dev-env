@@ -1,13 +1,21 @@
+---
+summary: 本環境を初めて導入する利用者向けに、前提条件・インストール手順・基本的な使い方・Webアクセス・トラブルシューティングを説明する導入ガイド。
+keywords: [ クイックスタート, インストール, OAuth認証, tmux, ポートフォワード, セッション管理, SSH ]
+---
+
 # クイックスタートガイド
 
 > **この文書の役割**: 本環境を初めて導入する利用者向けに、前提条件・インストール手順・基本的な使い方を示す導入ガイド。
 
 ## 前提条件
 
-- Linux サーバ（Ubuntu 22.04+ / Debian 12+ 推奨）
-- Docker Engine 24+ & Docker CLI
-- SSH アクセス
+- Linux サーバ（Ubuntu 22.04+ / Debian 12+ 推奨） **または** macOS + Docker Desktop
+- Docker Engine 24+ & Docker CLI（macOS は Docker Desktop に同梱）
+- SSH アクセス（Linux サーバ運用時）
+- `jq`（`claude-dev start` がホスト設定を抽出するのに使用。macOS は `brew install jq`）
 - Claude Pro / Max プラン（OAuth 認証に必要）
+
+> **macOS で使う場合**: CLI は macOS 適応版 `claude-dev-mac` を使う。`make install` が OS を判定して `/usr/local/bin/claude-dev` を `claude-dev-mac` への symlink（`sudo ln -sf`）にするため、以降のコマンドはどの OS でも `claude-dev` で共通。macOS 固有の差分（SSH agent 転送・ポート直結・VM/KVM 非対応・Apple Silicon は arm64 ネイティブで GUI ブラウザに Playwright Chromium）は [docs/09_macos-support.md](09_macos-support.md) を参照。以下の手順で「Linux サーバ + SSH トンネル」を前提にした箇所は、macOS では手元マシンが Docker ホストのため SSH トンネルは不要（`http://localhost:<host-port>` に直接アクセス）。
 
 ## インストール
 

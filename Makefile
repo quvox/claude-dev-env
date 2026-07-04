@@ -12,7 +12,16 @@ SHELL := /bin/bash
 
 # --- 設定 ---
 BASE_DIR := $(shell cd "$(dir $(lastword $(MAKEFILE_LIST)))" && pwd)
+# OS を判定し、macOS では macOS 版 CLI（claude-dev-mac）を使う。
+# 利用者コマンド名はどの OS でも claude-dev（INSTALL_PATH）。
+UNAME_S := $(shell uname -s)
+ifeq ($(UNAME_S),Darwin)
+CLI := $(BASE_DIR)/claude-dev-mac
+# macOS はネイティブアーキでビルド（Apple Silicon=arm64 / Intel=amd64）。
+# 共有 Dockerfile はアーキ別対応済み（arm64 は Playwright Chromium・gcloud は arm 写像）。
+else
 CLI := $(BASE_DIR)/claude-dev
+endif
 INSTALL_PATH := /usr/local/bin/claude-dev
 
 # --- Docker リソース名 ---
@@ -33,7 +42,8 @@ VOL_CHROME := claude-dev-chrome-data
 # =============================================================================
 
 .PHONY: help setup install login build network volumes \
-        upgrade update-claude status clean uninstall build-claude build-claude-vnc build-docker-proxy
+        upgrade update-claude status clean uninstall build-claude build-claude-vnc build-docker-proxy build-orchestrator \
+        orch-sample orch-sample-clean
 
 ## デフォルト: ヘルプ表示
 help:
@@ -48,6 +58,7 @@ help:
 	@echo "  make build-claude       Claude ベースイメージをビルド"
 	@echo "  make build-claude-vnc   Claude VNC イメージをビルド"
 	@echo "  make build-docker-proxy Docker Socket Proxy イメージをビルド"
+	@echo "  make build-orchestrator orchestrator をローカルビルド/テスト（イメージ用は build-claude に同梱）"
 	@echo ""
 	@echo "メンテナンス:"
 	@echo "  make update-claude  Claude Code のみ高速更新（Go/Rust 等はキャッシュ利用）"
@@ -84,9 +95,16 @@ env:
 		echo "ℹ️  .env は既に存在します"; \
 	fi
 
-## CLI を PATH に登録
+## CLI を PATH に登録（$(INSTALL_PATH) → $(CLI) への symlink）
+##  macOS: /usr/local/bin が root 所有のことが多いため sudo ln -sf で symlink。
+##  Linux: 書込可能なら ln -sf、不可なら sudo ln -sf を案内。
 install:
 	@chmod +x "$(CLI)"
+ifeq ($(UNAME_S),Darwin)
+	@echo "🍎 macOS: $(INSTALL_PATH) → $(CLI) を symlink します（sudo）"
+	@sudo ln -sf "$(CLI)" "$(INSTALL_PATH)"
+	@echo "✅ $(INSTALL_PATH) にインストールしました（どの OS でも claude-dev コマンドで実行）"
+else
 	@if [ -w "$(dir $(INSTALL_PATH))" ]; then \
 		ln -sf "$(CLI)" "$(INSTALL_PATH)"; \
 		echo "✅ $(INSTALL_PATH) にインストールしました"; \
@@ -94,10 +112,11 @@ install:
 		echo "⚠️  $(INSTALL_PATH) への書き込み権限がありません"; \
 		echo "   実行してください: sudo ln -sf $(CLI) $(INSTALL_PATH)"; \
 	fi
+endif
 
 ## CLI の PATH 登録を解除
 uninstall:
-	@if [ -L "$(INSTALL_PATH)" ]; then \
+	@if [ -L "$(INSTALL_PATH)" ] || [ -e "$(INSTALL_PATH)" ]; then \
 		rm -f "$(INSTALL_PATH)" 2>/dev/null || sudo rm -f "$(INSTALL_PATH)"; \
 		echo "✅ $(INSTALL_PATH) を削除しました"; \
 	else \
@@ -156,6 +175,22 @@ build-docker-proxy:
 	@docker build -t $(IMG_DOCKER_PROXY) \
 		-f $(BASE_DIR)/.devcontainer/Dockerfile.docker-proxy $(BASE_DIR)
 	@echo "✅ $(IMG_DOCKER_PROXY)"
+
+## orchestrator（ローカル build/test。イメージ用は build-claude に同梱される）
+## go build ./... はバイナリを残さないため -o で明示（自己検証の高速ループが直接起動する）
+build-orchestrator:
+	@echo "🔧 orchestrator をローカルビルド/テスト中..."
+	@cd $(BASE_DIR)/orchestrator && go build -o orchestrator . && go vet ./... && go test ./...
+	@echo "✅ orchestrator (local build/test) -> orchestrator/orchestrator"
+
+## 自己検証用サンプルサブプロジェクトの scaffold（examples/orch-sample -> workspace/orch-sample）
+## FORCE=1 で再生成、SEED=1 で決定論検証用 seed plan を配置（docs/07_self-verification.md）
+orch-sample:
+	@$(BASE_DIR)/scripts/orch-sample.sh $(if $(FORCE),--force,) $(if $(SEED),--seed,)
+
+## 自己検証用サンプルの作業コピーを削除
+orch-sample-clean:
+	@rm -rf $(BASE_DIR)/workspace/orch-sample && echo "🧹 removed workspace/orch-sample"
 
 # =============================================================================
 # 認証

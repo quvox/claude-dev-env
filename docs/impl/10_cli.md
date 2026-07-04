@@ -1,3 +1,8 @@
+---
+summary: ホスト側の claude-dev シェルスクリプトの実装仕様。ヘルパー関数・サブコマンド・コンテナ起動引数などの成果物仕様を記述する。
+keywords: [ CLI, claude-dev, bash, ヘルパー関数, コンテナ起動, ポートフォワード, orchestrate ]
+---
+
 # 実装仕様: claude-dev CLI
 
 > **この文書の役割**: ホスト側で日常操作を担う `claude-dev` シェルスクリプトの実装仕様。利用者向けのコマンド使用法は `docs/04_cli-reference.md` を参照し、本書は内部のヘルパー関数・分岐・コンテナ起動引数などの**成果物仕様**を記述する。
@@ -25,7 +30,7 @@ claude-dev      （単一の bash スクリプト）
 
 - `SCRIPT_PATH`: `readlink -f`/`realpath` で自身の実体パスを解決（シンボリックリンク経由実行に対応）。`BASE_DIR` はその親ディレクトリ。
 - `CONFIG_FILE="${BASE_DIR}/.env"` が存在すれば `set -a; source; set +a` で環境変数としてエクスポート。
-- `CUSER="$(whoami)"`, `CHOME="/home/${CUSER}"`: コンテナ内ユーザーをホストのカレントユーザーに一致させる。
+- `CUSER` / `CHOME="/home/${CUSER}"`: コンテナ内ユーザー名。**実行するイメージ（`IMG_CLAUDE`）に焼き込まれた `CONTAINER_USER` env を優先**して解決し（`docker image inspect ... | sed -n 's/^CONTAINER_USER=//p'`）、取得できなければ `whoami` にフォールバックする。ローカルビルドのイメージは `CONTAINER_USER=<whoami>` のため従来と同一（後方互換）。GHCR の generic user イメージ（`CONTAINER_USER=dev`）を `pull` した場合は `CUSER=dev` となり、マウント先 `/home/dev`・`docker exec -u dev` が自動追従する（設計 [../10_ghcr-images.md](../10_ghcr-images.md)）。UID/GID は entrypoint が `/workspace` 所有者へ実行時に追従させる。
 
 ### 定数
 
@@ -56,7 +61,7 @@ claude-dev      （単一の bash スクリプト）
 | `ensure_infrastructure` | ネットワークと 4 ボリュームを冪等に作成。 |
 | `get_novnc_url <name>` | `docker port <name> 6080` のホストポートから `http://localhost:<port>/vnc.html?autoconnect=true` を組み立てて返す（VNC なしなら空）。 |
 | `stop_proxy_if_idle` | 稼働中の Claude コンテナ数が 0 なら `DOCKER_PROXY_CONTAINER` を `rm -f`。 |
-| `ensure_docker_proxy_container` | ホストに `/var/run/docker.sock` がある場合のみ動作。イメージ未ビルドならビルドし、未起動ならプロキシコンテナを `claude-dev-net` 上に `--restart unless-stopped`・ソケットを RO マウントして起動。 |
+| `ensure_docker_proxy_container` | ホストに `/var/run/docker.sock` がある場合のみ動作。イメージ未ビルドならビルドし、未起動ならプロキシコンテナを `claude-dev-net` 上に `--restart unless-stopped`・ソケットを RO マウント・`-e CLAUDE_DEV_ALLOW_WORKSPACE_BINDS=${CLAUDE_DEV_ALLOW_WORKSPACE_BINDS:-1}`（`/workspace` 配下 bind 許可。既定有効。正本 [50_docker-proxy.md](50_docker-proxy.md) / [../03_security.md](../03_security.md)）付きで起動。無効化や設定変更は proxy を作り直す必要がある（共有・常駐のため）。 |
 
 ## サブコマンド仕様
 
@@ -76,8 +81,13 @@ claude-dev      （単一の bash スクリプト）
 ### `logout`
 全 Claude コンテナとプロキシコンテナを停止し、`VOL_AUTH` の中身を空にする（一時コンテナで `rm -rf /auth/* /auth/.*`）。
 
-### `start [--no-vnc] [--kvm]`
+### `pull [TAG]`
+GHCR のビルド済みイメージを取得してローカルビルドを省く。`.env` の `CLAUDE_DEV_REGISTRY`（既定 `ghcr.io/quvox`）と `CLAUDE_DEV_IMAGE_TAG`（既定 `latest`。引数 `TAG` で上書き）から、`${REG}/claude-dev-claude`・`-claude-vnc`・`-docker-proxy` の各 `:TAG` を `docker pull` し、**ローカル名（`claude-dev-claude` 等）へ `docker tag` で retag** する。以降 `start`/`require_setup` は retag 済みイメージを使い自動ビルドしない。少なくとも 1 つ成功すれば完了メッセージ、全失敗なら private 用の `docker login ghcr.io` を案内して `exit 1`。Docker が対象アーキの manifest を自動選択する（Apple Silicon=arm64 / Linux=amd64）。GHCR への push は GitHub Actions が担う（[90_ghcr-workflow.md](90_ghcr-workflow.md)、設計 [../10_ghcr-images.md](../10_ghcr-images.md)）。
+
+### `start [--no-vnc] [--kvm] [--vm] [--vm-fresh]`
 本 CLI の中核。`NAME=container_name`、`PROJECT_DIR=$(pwd)`。`--no-vnc` で `USE_VNC=0`、`--kvm` で `USE_KVM=1`（既定 `0`）。
+
+> **`--vm`（VM モード。実装済み・要イメージ再ビルド反映。正本: [80_vm-mode.md](80_vm-mode.md) / [docs/08_vm-mode.md](../08_vm-mode.md)）**: `--kvm` を含意し、`CLAUDE_DEV_VM=1` とゲスト qcow2 キャッシュ用ボリューム・アプリポート（`VM_PORTS`）をコンテナへ渡す。コンテナ内でゲスト VM（QEMU+virtiofs）を起動し、その中のネイティブ Docker を `DOCKER_HOST` 経由で使う。`/dev/kvm` がホストに無ければ警告して中止。VM 制御用の `vm` ヘルパー（`status`〔health 表示含む〕/`shell`/`restart`/`down`/`rebuild`/`portsync`/`logs`）はコンテナ内コマンドとして提供する。**`--vm-fresh`**（`--vm` 含意）はコンテナ作成前にゲスト用ボリューム `claude-dev-vm-<name>` を破棄して再 provision する（稼働中コンテナには効かず、`stop` 後に実行するか稼働中は `vm rebuild` を使う）。
 
 1. 既に稼働中なら attach: noVNC URL を表示し、`tmux has-session -t main` が無ければ作成してから `tmux attach`。
 2. 停止中コンテナがあれば削除。`ensure_infrastructure`。
@@ -92,11 +102,16 @@ claude-dev      （単一の bash スクリプト）
    - `SSH_OPTS`: `ensure_ssh_agent` 後、agent ソケットを `/tmp/ssh-agent.sock`（RO）転送 + `SSH_AUTH_SOCK` 設定。`known_hosts` を RO マウント。`~/.ssh/config` は `IdentityFile`/`IdentitiesOnly` 行を `sed` で除去した一時ファイルを RO マウント
    - `NOVNC_PORT_OPT`（VNC 時のみ）: 空き noVNC ポートを `find_available_novnc_port` で確保し `-p <port>:6080` + `VOL_CHROME` を `~/.chrome-profile` にマウント
    - `KVM_OPTS`: **`--kvm` 指定時のみ**、ホストに存在する `/dev/kvm` `/dev/vhost-net` `/dev/net/tun` を `--device` で渡す（既定では渡さない。通常は Chrome 操作のみで十分なため、KVM/QEMU が必要なときだけ明示的に有効化する）。デバイス受け渡しはコンテナ作成時にのみ行われるため、稼働中コンテナへ後付けはできず、`stop` → `start --kvm` で再作成する
-9. **コンテナ起動**: `docker run -d` で `--cap-add NET_ADMIN`・`NET_RAW`（FW 用）、`--restart unless-stopped`、`/workspace` マウント、各ボリューム、`tmux.conf`/`CLAUDE.md` を RO マウント、上記オプション群、`NODE_OPTIONS=--max-old-space-size=4096`、`-t` を付与。
-10. tmux 起動を最大 30 秒待ち、noVNC URL を表示して `tmux attach -t main`。
+9. **コンテナ起動**: VM モード（`USE_VM=1`）のときは `docker run` の前に「VM モードで起動する／通常より時間がかかる（初回は cloud image 取得＋provision で数分）」旨を表示する。`docker run -d` で `--cap-add NET_ADMIN`・`NET_RAW`（FW 用）、`--restart unless-stopped`、`/workspace` マウント、各ボリューム、`tmux.conf`/`CLAUDE.md` を RO マウント、上記オプション群、`NODE_OPTIONS=--max-old-space-size=4096`、`-t` を付与。
+10. tmux 起動を待つ。待ち時間の上限は通常 30 秒、**VM モードは 420 秒**（ゲスト VM の provision/ブート中は entrypoint が tmux 起動前でブロックするため）。VM モードでは 15 秒ごとに「…VM 起動待ち (Ns / 最大 Ms)」を表示する。準備できたら noVNC URL を表示して `tmux attach -t main`。上限を超えても tmux が未起動の場合は**無言で attach 失敗して終了せず**、VM モードなら「provision 継続中。コンテナは起動したまま。再実行 or `vm logs`/`vm status` で確認、準備完了後に再接続される」旨を、通常時は「タイムアウトしたので再実行を」旨を案内して `exit 0` する（コンテナは `docker run -d`＋`--restart unless-stopped` で稼働継続するため、次回 `start` の稼働中 attach 経路で接続できる）。
 
 ### `code`
 稼働中コンテナで `tmux new-window -t main "claude"` を実行し attach。未起動ならエラー。
+
+### `orchestrate [<ゴール>] [--fresh]`
+`code` と同系統で、稼働中コンテナに対し AI オーケストレーターを起動し attach する。未起動ならエラー。引数を走査し、`--fresh` をフラグとして除いた残りの最初の位置引数を `<ゴール>`（任意）として扱う。稼働中コンテナで `tmux new-window -t main -c /workspace "claude-orchestrator --workspace /workspace [--fresh] [\"<ゴール>\"]"` を実行（`-c /workspace` で新規ウィンドウの CWD を固定）し、`tmux attach -t main`。ゴールを省略すると壁打ち（検討）から開始する。`--fresh` は前回の実行状態を破棄して壁打ちから新規開始するフラグで、そのままバイナリへ受け渡す（再開/新規の判定は `claude-orchestrator` 側、[60_orchestrator.md](60_orchestrator.md) 参照）。worker のライブ出力はダッシュボードの `[d]` で確認する（旧 `--workers-window`／Config B は廃止）。**VM モード対応**: `claude-orchestrator` の起動コマンド前に `[ -f /etc/claude-dev/vm.env ] && . /etc/claude-dev/vm.env` を挟み、VM モード時はゲストの `DOCKER_HOST` を orchestrator（および worker）へ引き継ぐ（非対話起動は rc を読まないため。詳細 [80_vm-mode.md](80_vm-mode.md)）。
+
+> オーケストレーター本体（`claude-orchestrator`）はこの CLI が渡す `--workspace`/`--fresh` に加え、自己検証用に `--instructions`（instruction テンプレート上書き）と `--start-executing`（ready な seed plan があれば壁打ちを飛ばす検証専用 affordance）をバイナリ直叩きで受け付ける。詳細は [60_orchestrator.md](60_orchestrator.md) / [70_sample-project.md](70_sample-project.md)。`claude-dev orchestrate` 自体はこれらを公開しない（検証は本体バイナリを直接起動する）。
 
 ### `attach [NAME]`
 NAME（省略時カレント）が稼働中なら `tmux attach -t main`。

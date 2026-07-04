@@ -10,3 +10,9 @@
   - 再ビルド手順の `make build-claude` の説明を実装に一致させた（ベースイメージのみ、VNC は `make build-claude-vnc`）。
 - 「Linux デスクトップの操作」セクションを追加。方式 A（`xdotool`/`scrot` でコンテナ内デスクトップを直接操作、追加導入不要）と方式 C（KVM VM のデスクトップを computer-use MCP〔`rmcp-xdotool`〕+ `scrot` で操作）の手順・有効化方法・使い分けを記載。
 - KVM を `--kvm` オプトインに変更したのに合わせ、方式 C の QEMU 起動手順に「`-enable-kvm` には `claude-dev start --kvm` での起動が必要」を追記。
+
+## 2026-07-01
+- ランタイム初期化の例に pyenv を追記。pyenv はシステム rc に加え ~/.zshrc.default にも二重初期化ガード付きで配置される旨を補足。
+
+## 2026-07-04（DooD ポート転送 dood-portsync 追加）
+- 利用者向けに「DooD モードのポートアクセス」節を追加。127.0.0.1:PORT が自動転送で通ること、無効化 CLAUDE_DEV_DOOD_PORTSYNC=0、ホスト公開・隔離時は VM モードを案内。
