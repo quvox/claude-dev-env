@@ -51,7 +51,7 @@ type Controller struct {
 // Run executes the full lifecycle starting from the persisted (or fresh) state.
 func (c *Controller) Run(ctx context.Context) error {
 	// tmux 常駐方式: コントローラは orch-<CNAME>-main セッションの中で回る。自分の
-	// ウィンドウを "dashboard" に改名し、mouse off を確定する（worker/ブレインストーミングは同
+	// ウィンドウを "dashboard" に改名し、mouse on を確定する（worker/ブレインストーミングは同
 	// セッションの別ウィンドウとしてぶら下げる。docs/06 §4.2）。best-effort。
 	if c.Sessions != nil && tmuxAvailable() {
 		// Bind to the session we are ACTUALLY running in BEFORE any window op, so

@@ -131,7 +131,7 @@ type Plan struct {
 type Task struct {
     ID          string   `json:"id"`
     Title       string   `json:"title"`
-    Kind        string   `json:"kind,omitempty"`  // 工程種別。model/effort 選択に使う（§モデル選択）。ブレスト脳が付与。design/spec/requirements/usecase/adr/doc→熟考、他は既定
+    Kind        string   `json:"kind,omitempty"`  // 工程種別。model/effort 選択に使う（§モデル選択）。ブレスト脳が付与。design/spec/impl_spec/requirements/usecase/adr/doc/docs→熟考、他は既定（正本は models.go の deepTaskKinds）
     Description string   `json:"description"`     // worker へ渡す自己完結の指示
     Completion  string   `json:"completion"`      // **必須**。このタスク単体で判定可能な完了基準（担当対象・唯一の成果物パス・満たすべき構造・責務外の明示）。レビューはこれだけで採点する（§品質ゲート）。空ならプラン検証で弾く
     Deps        []string `json:"deps"`            // 先行タスクID
@@ -164,7 +164,7 @@ type NeedsHuman struct {
 
 // control.json（対話 claude → コントローラ）
 type Control struct {
-    Request        string `json:"request"`        // "execute"|"resume"|"continue_brainstorming"|"abort"
+    Request        string `json:"request"`        // "execute"|"resume"|"continue_brainstorming"|"abort"|"accept"（accept＝介入で受理→done 確定＋統合。§品質ゲート/§介入）
     InterventionID string `json:"intervention_id,omitempty"` // 任意。介入対応で 1 件のみ解決した場合のヒント。複数解決時は controller が answer.md の有無で再照合する
     TS             string `json:"ts"`
 }
@@ -211,8 +211,8 @@ run loop の擬似フロー：
 1. 続いて `main.go` が `state.json` を読んで**再開か新規開始かを判定**する（§ 並行性・再開・エラー処理の「再開と新規開始の判定」）：中断された run（Phase=`executing`）のみ再開し、それ以外（不在／`done`／未知 Phase）または `--fresh` 指定時は実行状態を破棄して新規開始する。その後 `controller.go` の run loop は、新規開始なら Phase=brainstorming（RunID 採番）、再開なら永続化済みの Phase（executing）から動く。再開（executing）時は `plan.json`・`intervention/open.json` を正本とし、残存する `control.json` は無視して消す。
 2. **brainstorming**：起動直前に**モードバナー**（§モード切替）を印字してから `mode.RunInteractive()` で対話 `claude` を前景に exec し、終了を待つ（人間が `/exit`／`Ctrl-D` で終了して初めて制御が戻る＝自動終了しない。06 §4.5/§5.4）。終了後 `control.json` を読む：
    - `execute` かつ `plan.Ready==true` かつ **lint clean**（全タスクに `completion` あり）→ executing へ。
-   - `execute` だが **plan が実行不可**（`plan.Ready!=true` または lint 失敗）→ **メニューは出さず**、下記「実行不可の可視化」を行ってブレインストーミングへ差し戻す（`return nil`）。脳が execute を書いたが未完成なので、次回ブレインストーミングで `handoff_note.md` を見て補完させる。
-   - `continue_brainstorming` → **メニューは出さず** Phase=brainstorming のまま `RunInteractive()` を再実行（脳が明示的に継続を選んだため。`return nil`）。
+   - `execute` だが **plan が実行不可**（`plan.Ready!=true` または lint 失敗）→ **メニューは出さず**、下記「実行不可の可視化」を行い、`runBrainstorming` 内部ループが `enterConversation=true` で brainstorming を継続（対話へ直接戻す）。脳が execute を書いたが未完成なので、次回ブレインストーミングで `handoff_note.md` を見て補完させる。
+   - `continue_brainstorming` → **メニューは出さず**、`runBrainstorming` 内部ループが `enterConversation=true` で brainstorming 窓（対話）へ直接戻して継続する（脳が明示的に継続を選んだため。旧「`return nil` で外側ループへ戻して `RunInteractive` 再実行」は内部ループ化で廃止。tmux 無しフォールバックのみ `RunInteractive`）。
    - `abort` → done。
    - `control.json` 無・不明 → **終了後の選択メニュー**（下記。決定的な handoff が無いので人間に方向を確認）。
    - **終了後の選択メニュー**：`term.go` の `selectMenu`（矢印↑↓で移動＋Enter 確定、**番号キーは即確定**、各項目に一行説明。非 TTY は既定 **続ける** を返し勝手に実行しない）を提示。**`実行` は plan が実行可能（`ready` かつ全 completion）＝`canExecute` のときだけ含める**（`terminalConfirm(prompt, canExecute)`）：可なら「1. 続ける / 2. 実行 / 3. 終了」、不可なら「1. 続ける / 2. 終了」（ブレインストーミング未完了で実行を提示しない）。戻り値のマッピング＝`continue`→`runBrainstorming` 内部ループが `enterConversation=true` で brainstorming 窓を起こし直し対話へ直接戻す／`execute`→再 lint し clean なら executing・不可なら「実行不可の可視化」して `enterConversation=true` で brainstorming 継続／`done`→done（06 §4.5 の値対応 continue_brainstorming/execute/abort）。
@@ -223,7 +223,7 @@ run loop の擬似フロー：
    - `[i]` キー（または `--resolve`）で人間が要判断に対応する時だけ、ループを止めずに（背景 worker は走らせたまま）対話 `claude` を前景に exec し、`open.json` 全件を seed。戻ったら回答済みエントリを解決し該当タスクを `pending` へ戻す。
    - `[p]`/`[q]` キー、SIGINT/SIGTERM の扱いは §モード切替・§並行性で定義。
    - **終了判定**：未解決の `waiting_human`／`open.json` エントリが 1 件でも残る間は run を終了しない。判断待ちが 0 かつ全タスク settled になったら完了検証（5）へ。
-4. **介入対応（executing の内部イベント。最上位状態ではない）**：該当タスクを `waiting_human` にした時点で `intervention/<id>/question.md` を書き、`open.json` に積み、Slack で件数アラート。人間が `[i]` を押すまで対話 `claude` は起動しない（オンデマンド。06 §6.2／6.3）。`[i]` 時は対話 `claude`（文脈 seed 済、複数件はまとめて提示）を前景に exec。回答後 `control.json` を読む：`resume` なら answer.md のあるエントリを `interventions.jsonl` へ確定・`open.json` から除去・該当タスクを `pending` へ戻して executing 継続、`abort` なら done へ遷移。
+4. **介入対応（executing の内部イベント。最上位状態ではない）**：該当タスクを `waiting_human` にした時点で `intervention/<id>/question.md` を書き、`open.json` に積み、Slack で件数アラート。人間が `[i]` を押すまで対話 `claude` は起動しない（オンデマンド。06 §6.2／6.3）。`[i]` 時は対話 `claude`（文脈 seed 済、複数件はまとめて提示）を前景に exec。回答後 `control.json` を読む：`accept` なら answer.md を確定・`open.json` から除去し、当該タスクを **done 確定＋worktree 統合**（`reconcileAndAccept`。再ディスパッチしない＝介入ループを断つ。§品質ゲート/§介入）、`resume` なら answer.md のあるエントリを `interventions.jsonl` へ確定・`open.json` から除去・該当タスクを `pending` へ戻して executing 継続（`reconcileOne` を共有 plan に適用）、`abort` なら done へ遷移。
 5. 判断待ち 0 かつ全タスク settled → 完了検証 → **done**。完了時、`plan.completion`（自然言語の完了基準）が非空なら `claude -p` で**助言的な完了検証**を行う（`checkCompletion`）：完了基準と各タスクの結果サマリを渡し `{"satisfied":bool,"missing":string}` を読み取る。これは**ブロックしない助言**で、エラー・空・解析不能時は満たしたものとして扱い（`parseCompletionVerdict` が `(true,"")` を返す）run を止めない。未充足なら Slack 通知に不足点を添えて人間の最終確認を促す。未充足時の**不足分の自動タスク化**は意図的に範囲外（人間が判断）。`failed`/`blocked` を含み全 `done` でない場合は「未完了タスクあり」で done。最終サマリを Slack 送信。
 
 ## モード切替の実装（前景所有・子プロセス）
@@ -302,7 +302,7 @@ CLAUDE.md に置かない理由：CLAUDE.md は worker を含む Claude Code 全
 - **`ModelProfile{Model, Effort}`**：`--model`（`opus`/`sonnet`/`haiku` 等のエイリアス、または `claude-sonnet-5` 等の完全名）＋ `--effort`（`low|medium|high|xhigh|max`）。
 - **ポリシー表（`models.go` の編集ブロック）**：
   - `profileDeep = {opus, high}`（熟考工程）／`profileDefault = {sonnet, high}`（それ以外）。
-  - `deepTaskKinds`（`design`/`spec`/`impl_spec`/`requirements`/`usecase`/`adr`/`doc`/`docs`/`review`）に属する `Task.Kind` は deep、未知/空は default。
+  - `deepTaskKinds`（`design`/`spec`/`impl_spec`/`requirements`/`usecase`/`adr`/`doc`/`docs`。コードは別名 `impl-spec` とロール由来の `review` も含む＝正本 `models.go`）に属する `Task.Kind` は deep、未知/空は default。
 - **選択関数**：`workerTaskProfile(t)`（worker タスク＝`Task.Kind` で分岐）／`brainstormingProfile`・`interveneProfile`・`reviewerProfile`（＝deep）／`completionProfile`（＝default・助言軽量）。
 - **配線**：`ExecClaude.RunPrompt` は `RunOpts.Effort` があれば `--effort` を、`model` 引数があれば `--model` を付す。`Worker.Dispatch`＝`workerTaskProfile(t)`、`Reviewer.Review`＝`reviewerProfile()`（散文→JSON 再整形は `haiku`/`low`）、完了検証＝`completionProfile()`、対話起動（`WriteLaunchScript(key, prof, sys, prompt)`）はブレスト＝`brainstormingProfile()`／介入＝`interveneProfile()` を `--model`/`--effort` として exec 行に付す。
 - **`Task.Kind`** はブレスト脳が付与する（`brainstorming.md` のスキーマ・指示）。旧 `worker_model` 設定は本表に置換され選択には使われない（互換のため config 解析のみ）。
@@ -360,7 +360,7 @@ CLAUDE.md に置かない理由：CLAUDE.md は worker を含む Claude Code 全
 
 ## 設定（config / env）
 
-`config.go` は設定を次の優先順位でマージする（下ほど強い）：**組み込み既定 → ユーザ全体 `~/.config/claude-dev.yaml` の `orchestrator:` セクション**（CLI と同ファイル、[10_cli.md](10_cli.md)）**→ プロジェクト `/workspace/.orchestrator/config.yaml`**。すべて任意で、無ければ既定値を使う。プロジェクト単位で並行度やモデルを変えられる。設定ファイルは `key: value` 形式の素朴な YAML サブセットで、外部ライブラリを使わず `config.go` 内の小さなパーサで読む（stdlib のみ）。
+`config.go` は設定を次の優先順位でマージする（下ほど強い）：**組み込み既定 → ユーザ全体 `~/.config/claude-dev.yaml` の `orchestrator:` セクション**（CLI と同ファイル、[10_cli.md](10_cli.md)）**→ プロジェクト `/workspace/.orchestrator/config.yaml`**。すべて任意で、無ければ既定値を使う。プロジェクト単位で並行度や各種上限値を変えられる（**モデル/effort は config では変えない＝`models.go` のポリシー表が決定。§モデル選択**）。設定ファイルは `key: value` 形式の素朴な YAML サブセットで、外部ライブラリを使わず `config.go` 内の小さなパーサで読む（stdlib のみ）。
 
 ```yaml
 # /workspace/.orchestrator/config.yaml（例）
@@ -370,7 +370,7 @@ stuck_limit: 3
 max_review_rounds: 10
 review_format_error_limit: 2
 worker_grace_seconds: 10
-worker_model: sonnet
+# worker_model は DEPRECATED（model/effort は models.go の工程別ポリシー表が決定。§モデル選択）
 reviewer_vendor: claude      # フェーズ 2 で codex
 merge_strategy: merge
 ```
@@ -379,9 +379,9 @@ merge_strategy: merge
 |---|---|---|
 | `max_workers` | 5 | 並行 worker 数（コスト・競合の上限） |
 | `stuck_limit` | 3 | トリガー 3 の規定回数（06 未決事項の解決） |
-| `max_review_rounds` | 3 | レビュー改訂の最大周回 |
+| `max_review_rounds` | 10 | Attempt 内の review→revise 反復上限（§試行回数とエスカレーション） |
 | `review_format_error_limit` | 2 | レビュー結果のパース不能が連続したら `review_gate_defect` 介入へ（実作業はやり直さない。§品質ゲート 8.2） |
-| `worker_grace_seconds` | 10 | 中断・タスク保留時に worker へ中間コミットさせる猶予秒数（§並行性・再開・エラー処理） |
+| `worker_grace_seconds` | 10 | 中断（Ctrl-C/`[q]`）時に実行中 worker へ SIGINT を送り中間コミットさせる猶予秒数（§並行性・再開・エラー処理。介入で `waiting_human` に保留する時点では worker は走っていないので対象外） |
 | `worker_model` | （非推奨・未使用） | **DEPRECATED**：model/effort は `models.go` の工程別ポリシー表で決まる（§モデル選択）。本値は選択に使われない（互換のため解析のみ） |
 | `reviewer_vendor` | `claude` | レビュア種別。**v1 では値は読み込むだけで未使用**（常に Claude）。`codex` 連携はフェーズ 2（§実装状況） |
 | `merge_strategy` | `merge` | worktree 取り込み方式 |
@@ -410,13 +410,14 @@ docker-proxy と同方式のマルチステージで `claude-orchestrator` を b
   ```dockerfile
   FROM golang:1.24-alpine AS orch-builder
   WORKDIR /app
-  COPY orchestrator/go.mod ./
-  RUN go mod download
+  COPY orchestrator/go.mod orchestrator/go.sum ./
+  COPY orchestrator/vendor/ ./vendor/       # vendoring：ネットワーク非依存で再現ビルド
   COPY orchestrator/*.go ./
-  RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /claude-orchestrator .
+  RUN CGO_ENABLED=0 go build -ldflags="-s -w" -mod=vendor -o /claude-orchestrator .
   # base ステージ内:
   COPY --from=orch-builder /claude-orchestrator /usr/local/bin/claude-orchestrator
   ```
+  （`bubbletea`/`lipgloss` 等の依存は `orchestrator/vendor/` に取り込み済み。`-mod=vendor` で `go mod download` 不要＝オフライン・再現ビルド。正本は [40_devcontainer.md](40_devcontainer.md)）
   instruction テンプレートも `COPY orchestrator/instructions/ /usr/local/share/claude-orchestrator/` で同梱。
 - `Makefile`：`build-orchestrator`（ローカル `go build`/`go test` 用）を追加。イメージ用は base ビルドに含まれるため独立イメージは作らない。
 
@@ -451,7 +452,7 @@ docker-proxy と同方式のマルチステージで `claude-orchestrator` を b
 | 状態ストアのファイル構成 | 本書「状態ストアのファイル構成」で確定（`/workspace/.orchestrator/`） |
 | 行き詰まり時の「別アプローチ」自動化範囲 | 失敗情報を付帯して worker を再ディスパッチ（別アプローチ）。最大 `stuck_limit` 回まで Attempt を重ね、なお未解決なら trigger 3（§試行回数とエスカレーション） |
 | Slack 双方向（軽微選択の非同期化） | フェーズ 1 は一方向通知のみ。双方向は将来検討 |
-| オーケストレーター用 LLM 選定 | worker/reviewer は config（既定 `sonnet`）。ブレインストーミング脳は対話 `claude` の設定に従う |
+| オーケストレーター用 LLM 選定 | model/effort は `models.go` の工程別ポリシー表が決定（§モデル選択）。worker＝`workerTaskProfile(t)`（設計系 kind は opus/high、他は sonnet/high）、reviewer/ブレスト/介入＝`profileDeep`(opus/high)、完了検証＝`profileDefault`。旧 `worker_model` config は非推奨・未使用 |
 | 介入の単位（peer を止めるか） | **タスク単位**。発火タスクのみ `waiting_human`、peer は継続。最上位 `intervening` 状態は廃止（06 §2.2/§6） |
 | 中断・再開でのやり直し | done は再実行しない／worker の中間コミット＋`--resume` セッション再開で作業保全／Ctrl-C はクリーン中断（06 §4.3） |
 | レビュー誤採点・パース失敗 | タスク固有 `completion` で採点・構造化出力・フォーマット違反は実作業を再実行せずゲート不具合介入（06 §8） |
@@ -491,7 +492,7 @@ docker-proxy と同方式のマルチステージで `claude-orchestrator` を b
 - `session.go`：`SessionManager`。唯一のセッション `MainSession()`（既定＝`orch-<CNAME>-main`。ただし `DetectSession` が起動時に実測したセッション名＝`sessionOverride` があればそれを返す）、その配下のウィンドウを `DashboardWindow()`/`BrainstormingWindow()`/`WorkerWindow(taskID)`（`session:window` ターゲット）で表す。`DetectSession`〔`$TMUX` 有り時に `tmux display-message -p '#{session_name}'` で実行中セッション名を取得し束縛。tmux 外は no-op＝`--print-main-session` は正準名を返す〕・`SetupMainSession`〔起動時に自窓を `dashboard` に改名＋セッションへ `mouse on`〕・`Ensure`〔`new-window -d`＋`remain-on-exit on`。冪等〕・`Run`〔`respawn-pane -k` 投入〕・`Kill`〔`kill-window`〕・`Has`〔**`list-windows -F '#{window_name}'` で窓名を厳密照合**。`display-message` は窓不在でも現窓へフォールバックし成功を返すため使わない＝実機で判明した落とし穴〕・`SwitchTo`〔`select-window`〕・`PaneDead`〔`/exit` 検知の副信号〕・`LaunchInteractive`〔保持ウィンドウへ対話 claude を投入し `select-window`〕・`ExpectedWindows`/`EnsureAll`〔復旧〕・`splitTarget`・`tmuxAvailable`。`remain-on-exit on` により対話 claude の `/exit` 後もウィンドウが残り、`tail`→介入→再ディスパッチを同一ウィンドウで駆動できる。テスト：命名正規化・ウィンドウターゲット名（`TestSessionNames`）・`TestSplitTarget`・`TestExpectedWindows`。
 - 対話のウィンドウ内投入（`mode.go`）：`brainstormingInstr`/`interveneInstr`（instruction 組立）・`IntervenePrompt`（1件の system/prompt ペア）・`WriteLaunchScript(key,sys,prompt)`（`.orchestrator/sessions/<key>.sh` に launcher を生成。VM env source・claude を PATH・`SLACK_BOT_TOKEN` strip・`cd` workspace・巨大 prompt は `.sys`/`.prompt` sidecar から `$(cat …)` で読む＝argv/quoting 肥大回避）・`shellSingleQuote`。テスト：`TestWriteLaunchScript`・`TestWriteLaunchScript_NoPromptOmitsPositional`・`TestShellSingleQuote`。
 - ブレインストーミングのウィンドウ化（`controller.go`）：`runBrainstorming` は**内部ループ**で、tmux 有り時 `runBrainstormingSession(ctx, enterConversation)`（brainstorming 窓を `Sessions.Run`〔`new-window -d`〕で起こし → 着地は `enterConversation` 依存〔初回=`SwitchTo(DashboardWindow)`＝ホーム、続ける/実行不可差し戻し=`SwitchTo(BrainstormingWindow)`＝対話へ直接戻す〕→ bubbletea ホーム描画（dashtui.go）→ `WaitConsume(until=!Has||PaneDead)` で `/exit` を待つ → `prog.Quit()`＋`Wait()`＋`ttyRestoreSane()` で端末復元後 `dashboard` へ）。**初回はカーソル選択式ホーム、`continue`／実行不可差し戻しは対話へ直接戻す**（`enterConversation=true`）。ループは `execute`（実行可）/`abort`/`done` でのみ抜け、continue/実行不可は `enterConversation=true` で `continue`。`LaunchInteractive`＝select-window する版は介入経路〔worker 窓〕でのみ使用。実行/終了遷移時に `closeBrainstormingSession`。tmux 無し（headless/テスト）は従来の `RunInteractive` 前景フォールバック（`RunInteractive` は当該フォールバック専用として残す）。
-- 介入のセッション化（`controller.go`）：`resolveInterventionInSession(taskID)`＝当該 `w-<taskID>` へ `LaunchInteractive`→`WaitConsume`→`main` 復帰→`resolveOne`（回答突合→pending→次 tick で再ディスパッチ）。ダッシュボードは `main` で生きたまま（`stopDash` しない）、peer も継続。executing ループは `d.Resolve`（⏸ 選択）と `[i]`（先頭要判断、tmux 有り時は同経路／無し時は従来 `resolveInterventions` バッチ）で起動。`openIDForTask` で open キューから id 解決。
+- 介入のセッション化（`controller.go`）：`resolveInterventionInSession(ctx, plan, taskID)`＝当該 `w-<taskID>` へ `LaunchInteractive`→`WaitConsume`→`dashboard` 復帰→handoff 分岐：`abort`→run done／`accept`→`reconcileAndAccept`（回答確定＋worktree 統合＋done 確定。merge 失敗時のみ pending）／その他（`resume`/未指定）→`reconcileOne` を**共有メモリの `plan`** に適用（`pending`→次 tick で再ディスパッチ）。`resolveOne` のようにディスクから別コピーを load/save しない（共有 plan との乖離で run 停止するため。§介入 L87）。解決直後に `syncDashboard`＋`refreshInterventionCount`。ダッシュボードは `main` で生きたまま（`stopDash` しない）、peer も継続。executing ループは `d.Resolve`（⏸ 選択）と `[i]`（先頭要判断、tmux 有り時は同経路／無し時は従来 `resolveInterventions` バッチ）で起動。`openIDForTask` で open キューから id 解決。
 - worker ウィンドウ結線（`controller.go`）：dispatch と **pre-dispatch ⏸ 化**の両方で `openWorkerSession`（ログ tail のライブ表示。⏸ タスクに必ずウィンドウが在る不変条件）、settle で `closeWorkerSession`（`waiting_human` は残す）。executing ループは数秒に一度 `EnsureAll` 相当の点検で、実行中タスクの消えた worker ウィンドウを `openWorkerSession` で再構築（誤 kill 復旧・06 §5.9）。`main.go` は `Sessions` を常に注入。
 - ダッシュボード＝カーソル選択式 TUI（`dashtui.go`・bubbletea）：`dashModel`（Init/Update/View）。カーソル（↑↓/jk）で選択、Enter で確定＝実行中はモデルが `select-window`／⏸ は `actions` チャネルへ `{resolve,taskID}`。`p`（`dash.Paused` トグル）・`d`（出力 tail トグル・モデル内）・`i`（先頭介入）・`q`（中断）。`newDashProgram` を controller が `isTTY()` 時のみ起動（`WithAltScreen`＋`WithContext(ctx)`）、非 TTY/テストは UI なし。旧 `render`/`renderString`/`readKeys`/`Dashboard`/`KeyEvent`/数字キー即移動/選択番号 `‹k›` は廃止。テスト：`TestDashView_RendersTasksAndCursor`・`TestDashCursor_MovesAndClamps`・`TestDashEnter_OnWaitingHumanSendsResolve`・`TestDashQuit_SendsQuit`（dashtui_test.go）、`TestSelectableWorkerID`/`TestSelectableWorkerStatus`。
 - handoff 監視：`Handoff.WaitConsume`（control.json をポーリング＋`until` で /exit 検知）。テスト：出現検知・until 終了。
