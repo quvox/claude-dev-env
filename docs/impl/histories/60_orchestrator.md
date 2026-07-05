@@ -158,3 +158,6 @@
 
 ## 2026-07-05（生存判定：has-session → pgrep〔コントローラプロセス〕）
 - 復旧/二重起動防止の生存判定を has-session から「claude-orchestrator プロセスの生存」へ変更（06 §5.9）。claude-dev orchestrate（10_cli 正本）を、コンテナ内 pgrep で cmdline が claude-orchestrator で始まるプロセス（tmux 起動ラッパを除外）を判定→生存なら attach／不在なら空き殻セッションを kill-session してから new-session -n dashboard で起こし直し(resume)、へ改修。self-kill は不採用（clean done は dashboard 窓 remain-on-exit off でセッション自然消滅、空き殻は中断/クラッシュ時のみ＝pgrep 判定で吸収）。Go コード変更なし。§80/§87/実装状況/10_cli を更新。独立2エージェントで design↔impl 整合確認。実機 E2E：空き殻状態で has-session=TRUE のところ pgrep=ABSENT を確認、復旧で resume まで確認。
+
+## 2026-07-05（ダッシュボード＝bubbletea カーソル選択 TUI）
+- dashboard.go を共有状態＋純ヘルパに縮小し、dashtui.go（新規・bubbletea dashModel）でカーソル選択式 TUI を実装。controller の実行ループは isTTY 時に newDashProgram（WithAltScreen＋WithContext）を起動し、旧 render/renderString/readKeys/Dashboard/KeyEvent/startDash/stopDash/数字キー即移動/選択番号‹k› を撤去。ユーザ操作は actions チャネル（resolve/intervene/quit）＋モデル内（カーソル/[p]/[d]）。bubbletea/lipgloss を go.mod に追加し vendoring（vendor/）で取り込み、Dockerfile.claude を -mod=vendor に更新。テスト：TestDashView_RendersTasksAndCursor 他（dashtui_test.go）。旧 render テストは撤去。go build/vet/test -race 全緑。実機で TUI 描画＋カーソル移動を確認。

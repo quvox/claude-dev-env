@@ -9,6 +9,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 // errSuspended is returned by the executing loop when the human presses [q]
@@ -297,27 +299,19 @@ func (c *Controller) runExecuting(ctx context.Context, st *State) error {
 		inflight = map[string]bool{}
 	)
 
-	// Dashboard lifecycle: it owns the TTY (raw key mode) during executing, but
-	// must yield the terminal while an interactive resolve session is foreground.
-	var (
-		d       *Dashboard
-		dcancel context.CancelFunc
-	)
-	startDash := func() {
-		d = NewDashboard(dash, c.Store, c.Sessions)
-		var dctx context.Context
-		dctx, dcancel = context.WithCancel(ctx)
-		go d.Run(dctx)
+	// Dashboard: a bubbletea TUI on the `dashboard` window's own PTY (docs/06 §5.3).
+	// It runs independently of the claude instances in the wallbounce/worker windows
+	// (separate panes), so it keeps rendering while the human is switched away — no
+	// stop/start dance needed. Only started on a TTY; headless/tests run the loop
+	// with no UI. User actions needing the controller arrive on `actions`; cursor
+	// movement, [p] pause (toggles dash.Paused) and [d] detail are handled in-model.
+	actions := make(chan dashAction, 8)
+	var prog *tea.Program
+	if isTTY() {
+		prog = newDashProgram(ctx, dash, c.Store, c.Sessions, actions)
+		go func() { _, _ = prog.Run() }()
+		defer prog.Quit()
 	}
-	stopDash := func() {
-		if dcancel != nil {
-			dcancel()
-			dcancel = nil
-		}
-		ttyRestoreSane()
-	}
-	startDash()
-	defer stopDash()
 
 	scheduleTick := func() {
 		var notifies []string
@@ -407,43 +401,25 @@ func (c *Controller) runExecuting(ctx context.Context, st *State) error {
 			// Signal (Ctrl-C) or parent cancel: clean, resumable suspend (same as
 			// [q]). Workers get their RunOpts grace window before force-kill.
 			return suspend()
-		case k := <-d.Keys:
-			switch k {
-			case KeyPause:
-				dash.Set(func(s *DashboardState) { s.Paused = !s.Paused })
-				continue
-			case KeyDetail:
-				dash.Set(func(s *DashboardState) { s.Detail = !s.Detail })
-				continue
-			case KeyQuit:
+		case a := <-actions:
+			// User actions from the TUI (docs/06 §5.3). Cursor/[p]/[d] are handled
+			// in the model; only these reach the controller.
+			switch a.kind {
+			case "quit":
 				return suspend()
-			case KeyIntervene:
-				if c.openInterventionCount() == 0 {
-					continue
-				}
-				if c.Sessions != nil && tmuxAvailable() {
-					// 独立ウィンドウ方式: [i] は先頭の要判断をその worker セッションで
-					// 対応する（ダッシュボードは main に生きたまま。stopDash 不要）。
+			case "resolve", "intervene":
+				// Enter on a ⏸ worker (resolve, carries taskID) or [i] (intervene =
+				// first open). Both open the intervention in that worker's window;
+				// the dashboard stays live, peers keep running.
+				taskID := a.taskID
+				if a.kind == "intervene" {
 					items := c.Store.LoadOpenInterventions().Items
 					if len(items) == 0 {
 						continue
 					}
-					aborted, rerr := c.resolveInterventionInSession(ctx, items[0].TaskID)
-					if rerr != nil {
-						workerCancel()
-						wg.Wait()
-						return rerr
-					}
-					if aborted {
-						workerCancel()
-						wg.Wait()
-						return c.transition(st, PhaseDone)
-					}
-					continue
+					taskID = items[0].TaskID
 				}
-				// Legacy fallback (no tmux): batch resolve in the foreground.
-				stopDash()
-				aborted, rerr := c.resolveInterventions(ctx, st, plan)
+				aborted, rerr := c.resolveInterventionInSession(ctx, taskID)
 				if rerr != nil {
 					workerCancel()
 					wg.Wait()
@@ -454,25 +430,8 @@ func (c *Controller) runExecuting(ctx context.Context, st *State) error {
 					wg.Wait()
 					return c.transition(st, PhaseDone)
 				}
-				startDash()
 				continue
 			}
-		case tid := <-d.Resolve:
-			// 独立ウィンドウ方式: ダッシュボードで ⏸ worker を数字キー選択 → その
-			// worker セッションで介入対話（docs/06 §5.3/§6.3）。ダッシュボードは main で
-			// 生きたまま（stopDash しない）。他 worker の実行も継続。
-			aborted, rerr := c.resolveInterventionInSession(ctx, tid)
-			if rerr != nil {
-				workerCancel()
-				wg.Wait()
-				return rerr
-			}
-			if aborted {
-				workerCancel()
-				wg.Wait()
-				return c.transition(st, PhaseDone)
-			}
-			continue
 		default:
 		}
 
@@ -531,7 +490,9 @@ func (c *Controller) runExecuting(ctx context.Context, st *State) error {
 	_ = c.Store.SavePlan(plan)
 	syncDashboard(dash, plan)
 	c.planMu.Unlock()
-	stopDash()
+	if prog != nil {
+		prog.Quit() // tear down the TUI before the (headless) completion check
+	}
 
 	return c.verifyCompletion(ctx, st, plan)
 }
