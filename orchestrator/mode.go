@@ -107,6 +107,23 @@ func (m *Mode) ResolveArgs(ids []string) []string {
 	return args
 }
 
+// ResolveArgsOne builds intervene args for a SINGLE intervention (独立セッション方式:
+// 各 worker セッションで1件ずつ対応。docs/06 §5.5/§6.3、docs/impl/60「独立セッション方式」).
+// Unlike ResolveArgs (batch), it seeds only that one question — the queue-wide
+// "which/next" is shown by the main selector, so the intervene brain focuses on
+// its single item.
+func (m *Mode) ResolveArgsOne(id string) []string {
+	args := []string{}
+	instr := VMModePreamble() + LoadProjectPolicy(m.Workspace) + readFileOr(m.instructionPath("intervene.md"), "")
+	if instr != "" {
+		args = append(args, "--append-system-prompt", instr)
+	}
+	if q, _ := m.Store.ReadQuestion(id); q != "" {
+		args = append(args, q)
+	}
+	return args
+}
+
 // ReadQuestion reads intervention/<id>/question.md (helper on the store).
 func (s *Store) ReadQuestion(id string) (string, error) {
 	data, err := os.ReadFile(s.path("intervention", id, "question.md"))

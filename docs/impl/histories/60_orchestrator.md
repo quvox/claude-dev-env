@@ -144,3 +144,8 @@
 - 指示テンプレ：wallbounce.md（plan.json タスクスキーマに completion 追加＝必須化・自己検証で全completion揃うまで ready/execute しない・/exit 案内・handoff_note 反映・plan.json を人間編集させない・選択肢番号・日本語）、intervene.md（キュー進捗の口頭明示・answer.md 記録後 /exit・番号・日本語）。
 - 設計↔実装仕様・実装仕様内の整合性を独立多エージェントで徹底確認し、メニュー起動条件の二重定義・worker 言語前提の食い違い・§13 誤参照・テスト一覧漏れ等を是正。
 - 検証: go build/vet 緑、gofmt 済み、go test（-race 含む）全緑（term_test.go の selectMenu/resolveMenu/buildQuestion 連番、controller_test の reportNotExecutable/handoff_note を追加）。対話メニューの実機 TTY E2E は次段階（自己検証サンプルで attach 確認）。
+
+## 2026-07-05（独立セッション方式の実装仕様＋構成要素の実装）
+- 「独立セッション方式（新アーキ）」節を追加（デーモン化・session.go・保持シェル・worker セッション・セレクタ・介入のセッション内対話・単一コマンド復旧・mouse off）。全体構成のモジュール表・カバー・実装状況を更新。06↔60・実装↔60 を独立エージェントで徹底確認し、保持シェル方式/pre-dispatch セッション/ResolveArgs 二重契約/命名(<CNAME>)/旧新ラベリング等を是正。
+- 実装（構成要素・go build/vet/test -race 緑・gofmt 済み）：session.go（SessionManager・命名・Ensure保持シェル+mouse off・Run/Kill/Has/SwitchTo・ExpectedSessions/EnsureAll）、daemon.go（pidfile群）、handoff.go WaitConsume（control.json 監視）、controller.go の worker セッション結線（open/closeWorkerSession・nil ガード）と介入 per-worker（reconcileOne/resolveOne）、mode.go ResolveArgsOne、dashboard.go セレクタ（selectableWorkerID/SwitchTo）、main.go で Sessions 注入。単体テスト追加。
+- 未実装（最終結線＝要・実機 E2E）：コントローラのデーモン化、RunInteractive→セッション launch+WaitConsume 置換、claude-dev orchestrate 改修、selector からの介入対話起動、pre-dispatch セッション生成。現行の対話・実行の既定動作は旧単一ウィンドウ方式のまま、その上に worker セッションのビュー＋セレクタが加わった状態。

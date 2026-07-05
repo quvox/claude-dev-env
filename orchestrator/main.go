@@ -122,6 +122,7 @@ func run(workspace, instrDir, goal string, fresh, startExec bool) error {
 		Reviewer: reviewer,
 		Notifier: notifier,
 		Confirm:  terminalConfirm,
+		Sessions: NewSessionManager(),
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())

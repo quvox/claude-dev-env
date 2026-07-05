@@ -26,6 +26,12 @@ type Controller struct {
 	Reviewer *Reviewer
 	Notifier Notifier
 
+	// Sessions manages the per-component tmux sessions (独立セッション方式・
+	// docs/impl/60「独立セッション方式（新アーキ）」). nil in tests/headless: all
+	// session hooks below are nil-guarded and best-effort, so behavior is
+	// unchanged when it is absent.
+	Sessions *SessionManager
+
 	// Confirm asks the human a wallbounce continuation question on the terminal
 	// when control.json is missing/invalid. Returns one of "continue",
 	// "execute", "done". Injectable for tests/headless.
@@ -133,6 +139,29 @@ func (c *Controller) runWallbounce(ctx context.Context, st *State) error {
 	}
 }
 
+// openWorkerSession creates this worker's tmux session (holder shell) and shows
+// its live log via `tail -F` (独立セッション方式・docs/impl/60). Best-effort and
+// nil-guarded: no-op when Sessions is unset (tests/headless) or tmux is absent.
+// The session persists across the worker's claude -p → intervene → re-dispatch;
+// only closeWorkerSession (on settle) tears it down.
+func (c *Controller) openWorkerSession(taskID string) {
+	if c.Sessions == nil {
+		return
+	}
+	name := c.Sessions.WorkerSession(taskID)
+	_ = c.Sessions.Run(context.Background(), name, "tail -n +1 -F "+c.Store.WorkerLogPath(taskID))
+}
+
+// closeWorkerSession tears down this worker's session (called when the task
+// settles: done/failed/blocked). waiting_human tasks keep their session for the
+// in-session intervention (Phase③ 3c).
+func (c *Controller) closeWorkerSession(taskID string) {
+	if c.Sessions == nil {
+		return
+	}
+	_ = c.Sessions.Kill(context.Background(), c.Sessions.WorkerSession(taskID))
+}
+
 // reportNotExecutable explains on the terminal (never silently) why execution
 // cannot start, records it to the audit log and Slack, and hands the reason to
 // the next wallbounce brain via handoff_note.md so it fixes the plan without the
@@ -221,7 +250,7 @@ func (c *Controller) runExecuting(ctx context.Context, st *State) error {
 		dcancel context.CancelFunc
 	)
 	startDash := func() {
-		d = NewDashboard(dash, c.Store)
+		d = NewDashboard(dash, c.Store, c.Sessions)
 		var dctx context.Context
 		dctx, dcancel = context.WithCancel(ctx)
 		go d.Run(dctx)
@@ -274,6 +303,7 @@ func (c *Controller) runExecuting(ctx context.Context, st *State) error {
 			attempt := t.Attempts
 			_ = c.Store.SavePlan(plan)
 			_ = c.Store.AppendAudit(AuditEntry{Event: "dispatch", TaskID: taskID, Detail: map[string]any{"attempt": attempt}})
+			c.openWorkerSession(taskID) // 独立セッション: この worker のビュー（ログ tail）を起こす
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
@@ -281,8 +311,15 @@ func (c *Controller) runExecuting(ctx context.Context, st *State) error {
 				c.planMu.Lock()
 				delete(inflight, taskID)
 				_ = c.Store.SavePlan(plan)
+				settled := false
+				if ft := findTask(plan, taskID); ft != nil {
+					settled = ft.Status == TaskDone || ft.Status == TaskFailed || ft.Status == TaskBlocked
+				}
 				syncDashboard(dash, plan)
 				c.planMu.Unlock()
+				if settled {
+					c.closeWorkerSession(taskID) // settle でセッションを閉じる（waiting_human は残す）
+				}
 			}()
 		}
 		syncDashboard(dash, plan)
@@ -659,26 +696,58 @@ func (c *Controller) resolveInterventions(ctx context.Context, st *State, plan *
 	c.planMu.Lock()
 	defer c.planMu.Unlock()
 	for _, it := range q.Items {
-		ans, _ := c.Store.ReadAnswer(it.ID)
-		if strings.TrimSpace(ans) == "" {
-			continue // still unanswered: leave it open
-		}
-		_ = c.Store.AppendIntervention(Intervention{ID: it.ID, TaskID: it.TaskID, Answer: ans})
-		_ = c.Store.RemoveOpenIntervention(it.ID)
-		if t := findTask(plan, it.TaskID); t != nil && t.Status != TaskDone {
-			if t.Irreversible {
-				t.IrrevApproved = true // approved: pre-dispatch trigger1 won't re-fire
-			}
-			t.Status = TaskPending
-			t.OpenInterventionID = ""
-			// Re-approach with the human's guidance as a fresh attempt.
-			t.SessionID = ""
-			t.ResumeSession = false
-		}
-		_ = c.Store.AppendAudit(AuditEntry{Event: "intervention_resolved", TaskID: it.TaskID, Detail: map[string]any{"id": it.ID}})
+		c.reconcileOne(plan, it.ID, it.TaskID)
 	}
 	_ = c.Store.SavePlan(plan)
 	return false, nil
+}
+
+// reconcileOne applies a single answered intervention: if answer.md is non-empty,
+// it records the answer, removes the entry from the open queue, and returns the
+// task to pending for a fresh re-dispatch (docs/06 §5.5). Returns true when it
+// was resolved (an answer was present); false leaves the intervention open (the
+// human exited before recording — safe, per docs/06 §5.2③). Caller MUST hold
+// planMu. Shared by the batch path (resolveInterventions) and the per-worker
+// session path (resolveOne / selector, Phase③ 3d).
+func (c *Controller) reconcileOne(plan *Plan, id, taskID string) bool {
+	ans, _ := c.Store.ReadAnswer(id)
+	if strings.TrimSpace(ans) == "" {
+		return false
+	}
+	_ = c.Store.AppendIntervention(Intervention{ID: id, TaskID: taskID, Answer: ans})
+	_ = c.Store.RemoveOpenIntervention(id)
+	if t := findTask(plan, taskID); t != nil && t.Status != TaskDone {
+		if t.Irreversible {
+			t.IrrevApproved = true // approved: pre-dispatch trigger1 won't re-fire
+		}
+		t.Status = TaskPending
+		t.OpenInterventionID = ""
+		// Re-approach with the human's guidance as a fresh attempt.
+		t.SessionID = ""
+		t.ResumeSession = false
+	}
+	_ = c.Store.AppendAudit(AuditEntry{Event: "intervention_resolved", TaskID: taskID, Detail: map[string]any{"id": id}})
+	return true
+}
+
+// resolveOne reconciles a single intervention after its in-session dialogue
+// (独立セッション方式・per-worker。docs/06 §5.5). It locks, loads the plan,
+// reconciles the one entry, and saves. Returns true if resolved. Used by the
+// worker-selector path (Phase③ 3d) after the human answers in that worker's
+// session; the intervene launch + handoff watch land with the daemon watch-model
+// (Phase③ 3e).
+func (c *Controller) resolveOne(id, taskID string) bool {
+	c.planMu.Lock()
+	defer c.planMu.Unlock()
+	plan, err := c.Store.LoadPlan()
+	if err != nil || plan == nil {
+		return false
+	}
+	if c.reconcileOne(plan, id, taskID) {
+		_ = c.Store.SavePlan(plan)
+		return true
+	}
+	return false
 }
 
 // lintPlan returns a comma-joined list of task IDs missing a task-specific

@@ -97,15 +97,43 @@ func (d *DashboardState) Set(fn func(*DashboardState)) {
 // Dashboard renders the execution-mode status screen with ANSI and reads keys.
 // On non-TTY terminals it degrades gracefully: no ANSI drawing, no key reads.
 type Dashboard struct {
-	State *DashboardState
-	Keys  chan KeyEvent
-	Store *Store // for reading live worker logs in detail view
-	tty   bool
+	State    *DashboardState
+	Keys     chan KeyEvent
+	Store    *Store          // for reading live worker logs in detail view
+	Sessions *SessionManager // worker セレクタ: 数字キーで当該 worker セッションへ切替（独立セッション方式・docs/06 §5.3）。nil 可
+	tty      bool
 }
 
 // NewDashboard builds a dashboard. headless (non-TTY) is auto-detected.
-func NewDashboard(st *DashboardState, store *Store) *Dashboard {
-	return &Dashboard{State: st, Keys: make(chan KeyEvent, 4), Store: store, tty: isTTY()}
+func NewDashboard(st *DashboardState, store *Store, sessions *SessionManager) *Dashboard {
+	return &Dashboard{State: st, Keys: make(chan KeyEvent, 4), Store: store, Sessions: sessions, tty: isTTY()}
+}
+
+// selectableWorkerID returns the task ID of the n-th (1-indexed) selectable
+// worker — those with a live tmux session (running/review/revise or
+// waiting_human). Returns "" if n is out of range. Pure/testable (docs/06 §5.3).
+func selectableWorkerID(tasks []DashTask, n int) string {
+	if n < 1 {
+		return ""
+	}
+	i := 0
+	for _, t := range tasks {
+		switch t.Status {
+		case TaskRunning, TaskReview, TaskRevise, TaskWaitingHuman:
+			i++
+			if i == n {
+				return t.ID
+			}
+		}
+	}
+	return ""
+}
+
+// SelectableWorker returns the task ID for selector index n under the state lock.
+func (s *DashboardState) SelectableWorker(n int) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return selectableWorkerID(s.Tasks, n)
 }
 
 // Run renders periodically until ctx is cancelled. On a non-TTY it still loops
@@ -301,6 +329,14 @@ func (d *Dashboard) readKeys(ctx context.Context) {
 			d.emit(KeyIntervene)
 		case 'q':
 			d.emit(KeyQuit)
+		default:
+			// worker セレクタ（独立セッション方式・docs/06 §5.3）：数字キーで
+			// n 番目の worker のセッションへ切り替える。best-effort（nil/tmux 無しは無視）。
+			if d.Sessions != nil && buf[0] >= '1' && buf[0] <= '9' {
+				if id := d.State.SelectableWorker(int(buf[0] - '0')); id != "" {
+					_ = d.Sessions.SwitchTo(context.Background(), d.Sessions.WorkerSession(id))
+				}
+			}
 		}
 	}
 }

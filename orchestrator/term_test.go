@@ -98,3 +98,19 @@ func TestBuildQuestion_NumbersOptions(t *testing.T) {
 		t.Fatalf("task title missing from question:\n%s", q)
 	}
 }
+
+func TestSelectableWorkerID(t *testing.T) {
+	tasks := []DashTask{
+		{ID: "t1", Status: TaskDone},         // not selectable
+		{ID: "t2", Status: TaskRunning},      // #1
+		{ID: "t3", Status: TaskPending},      // not selectable
+		{ID: "t4", Status: TaskWaitingHuman}, // #2
+		{ID: "t5", Status: TaskReview},       // #3
+	}
+	cases := map[int]string{0: "", 1: "t2", 2: "t4", 3: "t5", 4: ""}
+	for n, want := range cases {
+		if got := selectableWorkerID(tasks, n); got != want {
+			t.Errorf("selectableWorkerID(n=%d)=%q want %q", n, got, want)
+		}
+	}
+}

@@ -660,3 +660,50 @@ func TestReportNotExecutable_NotReady(t *testing.T) {
 		t.Fatalf("handoff_note.md should mention ready, got %q", note)
 	}
 }
+
+// TestResolveOne verifies the per-worker single-intervention reconcile (独立
+// セッション方式・Phase③ 3c): a recorded answer returns the task to pending,
+// removes it from the open queue, and records the intervention.
+func TestResolveOne(t *testing.T) {
+	ctrl, store := newTestController(t, testCfg(), &mockClaude{}, &mockGit{})
+	id := "iv-test-1"
+	// Seed: open intervention + question, task parked as waiting_human.
+	if err := store.WriteQuestion(id, "認証方式は？"); err != nil {
+		t.Fatal(err)
+	}
+	_ = store.AddOpenIntervention(OpenIntervention{ID: id, TaskID: "t1", TriggerReason: "ambiguity"})
+	plan := &Plan{Goal: "g", Ready: true, Tasks: []Task{
+		{ID: "t1", Status: TaskWaitingHuman, OpenInterventionID: id, Completion: "c"},
+	}}
+	if err := store.SavePlan(plan); err != nil {
+		t.Fatal(err)
+	}
+
+	// No answer yet → not resolved, stays open.
+	if ctrl.resolveOne(id, "t1") {
+		t.Fatal("resolveOne should be false with no answer recorded")
+	}
+
+	// Record the answer, then resolve.
+	dir := store.path("intervention", id)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(store.path("intervention", id, "answer.md"), []byte("DECISION=OAuth"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if !ctrl.resolveOne(id, "t1") {
+		t.Fatal("resolveOne should be true after answer recorded")
+	}
+
+	got, _ := store.LoadPlan()
+	if got.Tasks[0].Status != TaskPending {
+		t.Fatalf("t1 status=%q want pending", got.Tasks[0].Status)
+	}
+	if got.Tasks[0].OpenInterventionID != "" {
+		t.Fatalf("OpenInterventionID not cleared: %q", got.Tasks[0].OpenInterventionID)
+	}
+	if q := store.LoadOpenInterventions(); len(q.Items) != 0 {
+		t.Fatalf("open queue not empty: %d", len(q.Items))
+	}
+}
