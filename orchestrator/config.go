@@ -52,7 +52,7 @@ func DefaultConfig() Config {
 	return Config{
 		MaxWorkers:             5,
 		StuckLimit:             3,
-		MaxReviewRounds:        3,
+		MaxReviewRounds:        10,
 		ReviewFormatErrorLimit: 2,
 		WorkerGraceSeconds:     10,
 		WorkerModel:            "sonnet",

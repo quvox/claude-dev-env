@@ -199,3 +199,11 @@
 - 背景：worker/介入の対話 claude（全画面 TUI）の pane でホイールのスクロールアップ/ダウンが使えず非常に不便との要望。原因は `SetupMainSession` とラッパが `mouse off` を設定していたため（マウス→キー入力化による状態破壊を避ける保守的判断だった）。
 - 修正：`session.go:SetupMainSession` とラッパ `claude-dev`（orchestrate 起動経路）の `mouse off`→`mouse on` に変更。耐障害性は「クライアント破壊でもセッション＝コントローラは tmux サーバ上で生存し再 attach で復旧」（§5.9）で担保されるため、run は失われない。ダッシュボード（bubbletea）はマウスを要求しないので、その窓でのホイールは tmux コピーモード（スクロールバック閲覧）になり、キーボード操作（↑↓/Enter）には影響しない。
 - 設計同期：`06_orchestration.md`（§5.2 のマウス項・§5.9 の mouse 項を on に）、`60_orchestrator.md`（session.go 記述・CLI 記述の mouse を on に）。配布イメージ再ビルド。
+
+## 2026-07-06（介入ループの根治：受理→done 経路／レビュア散文の JSON 再要求／レビュー反復 10）
+- 背景：実機 t3 が review_gate_defect →（解決）→ stuck →（解決）→ stuck … と、解決するたびに `pending` 再ディスパッチ→再失敗→再介入の無限ループに陥り、人間が何度も呼ばれてオーケストレーターの意味が失われていた。根因：(1) `reconcileOne` が解決タスクを必ず `pending` に戻し「受理して done」する手段が無い、(2) レビュアが JSON でなく散文で結論を書きゲート不具合が再発、(3) レビュー反復上限が 3 で収束前に打ち切られやすい。
+- 修正：
+  - **受理→done 経路**（`state.go`/`handoff.go`/`controller.go`）：新 handoff `ReqAccept="accept"`。介入対応脳が `control.json` に `{"request":"accept"}` を書くと `reconcileAndAccept` が回答記録＋open 除去のうえ **worktree を統合（merge）してタスクを done 確定**（merge 失敗時のみ pending フォールバック）。`resume` は従来どおり `pending` 再ディスパッチ。`intervene.md`・gate-defect の question.md seed を accept/resume 使い分けに更新。
+  - **散文→JSON 再要求**（`review.go`）：`ParseReviewResult` 失敗時、フォーマットエラーに数える前に `reformatToJSON` がレビュアの散文結論（`resultFromStream` 抽出）を渡して「規定 JSON だけ出力」する軽量 `claude -p`（`haiku`・ログ無し）を 1 回行い、パースできれば採用（`review_reformat_ok` を audit）。
+  - **`max_review_rounds` 既定 3→10**（`config.go`。`stuck_limit` は 3 のまま）。
+- 検証：`accept_test.go`（受理→done＋merge／回答無しは no-op／散文→JSON 再整形で回収）・既存テスト pass（環境依存でハングする `TestIntervene_ResolveApprovesIrreversible` を除く）。設計 `06`（§8.2/§8.3・§4.5 相当・§介入）と実装仕様 `60`（§品質ゲート・§介入・config 既定）を同期。配布イメージ再ビルド。

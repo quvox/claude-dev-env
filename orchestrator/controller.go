@@ -944,17 +944,68 @@ func (c *Controller) resolveInterventionInSession(ctx context.Context, plan *Pla
 	if ctrl != nil && ctrl.Request == ReqAbort {
 		return true, nil
 	}
-	// Reconcile answer.md INTO THE SHARED in-memory plan (the one the scheduler
-	// loop uses), not a freshly-loaded copy. Otherwise the loop keeps its stale
-	// plan (task still waiting_human): it never re-dispatches the task AND its
-	// next SavePlan overwrites the on-disk pending back to waiting_human — the run
-	// gets permanently stuck right after the human answers (observed on w-t3).
+	// ACCEPT: the human judged the deliverable already acceptable (typically a
+	// review_gate_defect where only the gate malfunctioned). Mark the task done +
+	// integrate its worktree instead of re-dispatching — this is what breaks the
+	// resolve→pending→re-fail→re-intervene loop (docs/06 §8.3).
+	if ctrl != nil && ctrl.Request == ReqAccept {
+		c.reconcileAndAccept(ctx, plan, id, taskID)
+		return false, nil
+	}
+	// RESUME (default): reconcile answer.md INTO THE SHARED in-memory plan (the one
+	// the scheduler loop uses), not a freshly-loaded copy. Otherwise the loop keeps
+	// its stale plan (task still waiting_human): it never re-dispatches the task AND
+	// its next SavePlan overwrites the on-disk pending back to waiting_human — the
+	// run gets permanently stuck right after the human answers (observed on w-t3).
 	c.planMu.Lock()
 	if c.reconcileOne(plan, id, taskID) {
 		_ = c.Store.SavePlan(plan)
 	}
 	c.planMu.Unlock()
 	return false, nil
+}
+
+// reconcileAndAccept records the intervention answer and marks the task DONE
+// (integrating its worktree), rather than re-dispatching it. Used when the human
+// accepts the deliverable during an intervention (ReqAccept). Mirrors the gate's
+// Passed path (merge → done); on a merge failure it falls back to pending so the
+// task is re-attempted rather than silently lost. Operates on the SHARED plan.
+func (c *Controller) reconcileAndAccept(ctx context.Context, plan *Plan, id, taskID string) {
+	c.planMu.Lock()
+	ans, _ := c.Store.ReadAnswer(id)
+	if strings.TrimSpace(ans) == "" {
+		c.planMu.Unlock()
+		return // nothing recorded: leave it open (safe; human can retry)
+	}
+	_ = c.Store.AppendIntervention(Intervention{ID: id, TaskID: taskID, Answer: ans})
+	_ = c.Store.RemoveOpenIntervention(id)
+	if t := findTask(plan, taskID); t != nil {
+		t.OpenInterventionID = ""
+	}
+	c.planMu.Unlock()
+
+	// Integrate the worktree commits into the working branch (serialized).
+	c.mergeMu.Lock()
+	ierr := c.integrate(ctx, taskID)
+	c.mergeMu.Unlock()
+
+	c.planMu.Lock()
+	defer c.planMu.Unlock()
+	t := findTask(plan, taskID)
+	if t != nil {
+		if ierr != nil {
+			_ = c.Store.AppendAudit(AuditEntry{Event: "merge_error", TaskID: taskID, Detail: map[string]any{"err": ierr.Error(), "via": "accept"}})
+			t.Status = TaskPending // merge failed: re-attempt rather than drop
+		} else {
+			t.Status = TaskDone
+			t.SessionID = ""
+			t.ResumeSession = false
+			_ = c.Store.AppendAudit(AuditEntry{Event: "task_done", TaskID: taskID, Detail: map[string]any{"via": "intervention_accept"}})
+			c.updateSummaryLocked(plan)
+		}
+	}
+	_ = c.Store.AppendAudit(AuditEntry{Event: "intervention_resolved", TaskID: taskID, Detail: map[string]any{"id": id, "accepted": ierr == nil}})
+	_ = c.Store.SavePlan(plan)
 }
 
 // openIDForTask returns the open intervention id for a task, or "" if none.
@@ -1103,8 +1154,9 @@ func buildQuestion(t *Task, reason string) string {
 		// The implementation is likely finished; only the gate malfunctioned.
 		// Seed a first-pass artifact-existence check (docs/06 §8.2).
 		b.WriteString("レビュー結果が繰り返し解析不能でした（ゲート不具合。実装は完了している可能性が高い）。\n")
-		b.WriteString("まず成果物が上記の完了基準を満たすかを一次確認し、満たしていれば done として受理、\n")
-		b.WriteString("そうでなければ具体的な指摘を answer.md に記してください。\n\n")
+		b.WriteString("まず成果物が上記の完了基準を満たすかを一次確認してください。\n")
+		b.WriteString("満たしていれば control.json に {\"request\":\"accept\"} を書いて受理（done 確定・再実行しません）。\n")
+		b.WriteString("満たしていなければ具体的な指摘を answer.md に記し、plan.json を修正してから {\"request\":\"resume\"} を書いてください。\n\n")
 	}
 	if t.Result != nil && t.Result.NeedsHuman != nil {
 		nh := t.Result.NeedsHuman
@@ -1118,8 +1170,9 @@ func buildQuestion(t *Task, reason string) string {
 	} else {
 		fmt.Fprintf(&b, "タスク %q について判断が必要です。\n", t.ID)
 	}
-	b.WriteString("\n回答を intervention/<id>/answer.md と plan.json/該当タスクへ反映し、")
-	b.WriteString("control.json に {\"request\":\"resume\"} を書いて終了してください。\n")
+	b.WriteString("\n回答を intervention/<id>/answer.md に書き、control.json を書いて終了してください")
+	b.WriteString("（成果物が完了基準を満たし再実行不要なら {\"request\":\"accept\"}＝done 確定／")
+	b.WriteString("まだ直すなら plan.json を修正のうえ {\"request\":\"resume\"}）。\n")
 	return b.String()
 }
 

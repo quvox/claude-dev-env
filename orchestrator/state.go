@@ -67,6 +67,12 @@ const (
 	ReqResume                = "resume"
 	ReqContinueBrainstorming = "continue_brainstorming"
 	ReqAbort                 = "abort"
+	// ReqAccept: during an intervention the human judged the deliverable already
+	// acceptable (typically a review_gate_defect where only the gate malfunctioned).
+	// The controller marks the task done + integrates its worktree instead of
+	// re-dispatching — this breaks the resolve→pending→re-fail→re-intervene loop
+	// (docs/06 §8.3).
+	ReqAccept = "accept"
 )
 
 // NeedsHuman.Reason constants. trigger3 (stuck) is controller-detected and does

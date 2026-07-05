@@ -184,7 +184,7 @@ type Intervention struct { ID, TaskID, TriggerReason, Question, Answer, TS strin
 type AuditEntry   struct { TS, Event, TaskID string; Detail map[string]any; Usage *Usage }
 ```
 
-**介入キュー（タスク単位・複数同時可）**: 旧設計の「単一の open_intervention サイドカー＋最上位 `intervening` 状態」を廃止し、未解決の要判断を `intervention/open.json` の配列で持つ。あるタスクが要判断に該当したら controller は (1) そのタスクを `waiting_human` にして `OpenInterventionID` を埋め、(2) `intervention/<id>/question.md` を書き、(3) `open.json` にエントリを追加、(4) Slack 通知（件数）を出す。`waiting_human` のタスクは worker スロットを占有せず、**他タスクの実行は継続**する。人間が `[i]` で対応すると、対話 Claude に `open.json` の全件を seed し、回答ごとに `intervention/<id>/answer.md` と該当タスクが更新される。controller は回答済み（answer.md あり）のエントリを `open.json` から外し、`interventions.jsonl` へ確定記録し、当該タスクを再ディスパッチ可能（`pending`）へ戻す。`review_gate_defect` はレビューのフォーマット不具合起因の要判断（§品質ゲート 8.2）。
+**介入キュー（タスク単位・複数同時可）**: 旧設計の「単一の open_intervention サイドカー＋最上位 `intervening` 状態」を廃止し、未解決の要判断を `intervention/open.json` の配列で持つ。あるタスクが要判断に該当したら controller は (1) そのタスクを `waiting_human` にして `OpenInterventionID` を埋め、(2) `intervention/<id>/question.md` を書き、(3) `open.json` にエントリを追加、(4) Slack 通知（件数）を出す。`waiting_human` のタスクは worker スロットを占有せず、**他タスクの実行は継続**する。人間が `[i]` で対応すると、対話 Claude に `open.json` の全件を seed し、回答ごとに `intervention/<id>/answer.md` と該当タスクが更新される。controller は回答済み（answer.md あり）のエントリを `open.json` から外し、`interventions.jsonl` へ確定記録する。**handoff（control.json）に応じて分岐**：`accept`＝当該タスクを **done 確定＋worktree 統合**（`reconcileAndAccept`。再実行しない）／`resume`＝当該タスクを再ディスパッチ可能（`pending`）へ戻す（`reconcileOne`）／`abort`＝run を done。`accept` は「解決→pending→再失敗→再介入」の無限ループを断ち切るための経路（§品質ゲート／06 §8.3）。`review_gate_defect` はレビューのフォーマット不具合起因の要判断（§品質ゲート 8.2）。
 
 **Task.Status の遷移**：`pending`（依存解決待ちを含む）→ `running`（controller が worker ディスパッチ時に設定）→ `review` →（重大指摘）`revise` → 解消で `done`。介入トリガーに該当したタスクは `waiting_human` へ移り、その worker だけが停止して**介入キューに積まれる**（他タスクは継続。§介入トリガー判定／§並行性・再開・エラー処理）。人間の回答後、controller が `waiting_human`→`pending` に戻して再ディスパッチする（trigger1 の承認なら `IrrevApproved` を立てて再発火を防ぐ）。先行タスクが `failed`/`blocked` で起動不能なものは `MarkBlockedByFailedDeps` が `blocked` にする。`blocked` は**その run では終端**（依存が満たせない以上そのまま）。`done`/`failed`/`blocked` のいずれかになった全タスクは `AllSettled`＝これ以上進めないと判定されるが、**未解決の `waiting_human` が 1 件でも残る間は run を終了しない**（人間の回答を待ち続ける）。判断待ちが無く全タスクが settled なら、run は `verifyCompletion` で「未完了タスクあり」または完了として `done` へ遷移して終了する。中断後の再開や依存タスクの修正で状況が変われば、次回 run で再評価される。
 
@@ -300,11 +300,11 @@ CLAUDE.md に置かない理由：CLAUDE.md は worker を含む Claude Code 全
 1. 実装 worker と**別の** worker をレビュアとして起動（フェーズ 1 は同じ Claude、フェーズ 2 で Codex＝別ベンダー。06 §8/§11）。
 2. レビュー入力は worktree の diff。観点を分ける：①要件充足・動作 ②セキュリティ・エラー処理・保守性（FR-9）。両観点のチェックリストを **1 回のレビュー呼び出し**に与え、findings を観点タグ付きで返させる（観点ごとに別呼び出しはしない）。
 3. **採点基準は当該タスクの `Task.Completion` のみ**（プラン全体のゴールや兄弟タスクの責務で減点しない）。`Task.Completion` 空時に `Plan.Completion`/`Plan.Goal` へフォールバックする旧挙動は**禁止**（プラン検証で空タスクを弾く前提。06 §8.1）。レビュアプロンプトには「全体網羅・他観点・統合・後始末は別タスクの担当であり、本タスクの採点に含めない」旨を明記する。
-4. **レビュア出力は構造化出力で受ける**（findings[]：`severity`(`critical`|`major`|`minor`), file, message, aspect）。**レビュア指示（`reviewGuide`）は「最終出力は JSON オブジェクト 1 個のみ・散文の結論を書かない・合格は `{"findings":[]}`」を強く固定**する（散文で結論を書くとパース不能→合格が誤って `review_gate_defect` として人間へ昇格するため。実機で観測された誤昇格の対策）。パーサ `findReviewResultJSON` は (a) 最終行が JSON の厳密一致を優先し、(b) 失敗時は ```json フェンス除去・散文中に埋もれた `{...}`（文字列リテラル内の `}` を無視するブレース対応スキャン `findJSONObjects`）から **`findings` キーを持つ最後のオブジェクト**を拾うフォールバックを持つ。06 §8.2。tool による厳密なスキーマ強制は将来強化点（§実装状況）。
-5. **重大** severity（`critical`/`major`）が残る間は実装 worker へ差し戻し（revise）、`max_review_rounds`（既定 3）まで反復する（この間 `Attempts` は増やさない。§試行回数とエスカレーション）。
+4. **レビュア出力は構造化出力で受ける**（findings[]：`severity`(`critical`|`major`|`minor`), file, message, aspect）。**レビュア指示（`reviewGuide`）は「最終出力は JSON オブジェクト 1 個のみ・散文の結論を書かない・合格は `{"findings":[]}`」を強く固定**する（散文で結論を書くとパース不能→合格が誤って `review_gate_defect` として人間へ昇格するため。実機で観測された誤昇格の対策）。パーサ `findReviewResultJSON` は (a) 最終行が JSON の厳密一致を優先し、(b) 失敗時は ```json フェンス除去・散文中に埋もれた `{...}`（文字列リテラル内の `}` を無視するブレース対応スキャン `findJSONObjects`）から **`findings` キーを持つ最後のオブジェクト**を拾うフォールバックを持つ。**さらにそれでもパース不能なら `Reviewer.reformatToJSON` が、レビュアの散文結論（`resultFromStream` で抽出）を渡して「規定 JSON に変換して JSON だけ出力」する軽量な追加 `claude -p`（小型モデル `haiku`・ログ無し・pure 変換なので判定は変えない）を 1 回行い、パースできればそれを採用**する（`review_reformat_ok` を audit）。これで「結論を散文で書いた」だけのケースをフォーマットエラーに数える前に回収する（06 §8.2）。tool による厳密なスキーマ強制は将来強化点（§実装状況）。
+5. **重大** severity（`critical`/`major`）が残る間は実装 worker へ差し戻し（revise）、`max_review_rounds`（既定 10）まで反復する（この間 `Attempts` は増やさない。§試行回数とエスカレーション）。
 6. **フォーマット違反（パース不能）と内容不合格を区別する**（06 §8.2/§8.3）：
    - パース不能なら `Task.ReviewFormatErrors++`。**実装は完了しているので worker を再ディスパッチ（実作業のやり直し）せず、レビュー工程のみ再試行**する。
-   - `ReviewFormatErrors` が閾値（`review_format_error_limit`、既定 2）に達したら、それ以上リトライしても解消しない蓋然性が高いため、`review_gate_defect` 理由で**介入キューへ**（trigger3 とは別系統。実作業のやり直しはしない）。介入 seed に「成果物が `Task.Completion` を満たすかの一次確認」を添える（06 §8.2）。
+   - `ReviewFormatErrors` が閾値（`review_format_error_limit`、既定 2）に達したら、それ以上リトライしても解消しない蓋然性が高いため、`review_gate_defect` 理由で**介入キューへ**（trigger3 とは別系統。実作業のやり直しはしない）。介入 seed に「成果物が `Task.Completion` を満たすかの一次確認」と、**満たすなら `{"request":"accept"}`（done 確定・再実行なし）、直すなら plan.json 修正のうえ `{"request":"resume"}`** を添える（06 §8.2/§8.3。`accept` で介入ループを断つ）。
    - 内容として不合格（パースできた severe findings）なら `ReviewFormatErrors` をリセットし、5 の revise を続ける。
 7. 解消すれば `done`。`max_review_rounds` 上限到達でも重大指摘が残れば trigger 3（行き詰まり）として介入キューへ（§試行回数とエスカレーション）。
 
@@ -313,7 +313,7 @@ CLAUDE.md に置かない理由：CLAUDE.md は worker を含む Claude Code 全
 実装者が一意に解釈できるよう用語を確定する。
 
 - **1 試行（Attempt）** = worker への 1 回の実装ディスパッチ（初回実装／別アプローチでの再実装／クラッシュ・タイムアウト後の再実装のいずれか）。`Task.Attempts` はこの単位でのみ増やす（インクリメント主体は controller）。
-- **レビュー差し戻し（revise）** は同一 Attempt 内のループで、`max_review_rounds`（既定 3）が上限。**revise では `Attempts` を増やさない**。
+- **レビュー差し戻し（revise）** は同一 Attempt 内のループで、`max_review_rounds`（既定 10）が上限。**revise では `Attempts` を増やさない**。
 - **trigger 3（行き詰まり）** は次のいずれかで発火する：(a) `Attempts >= stuck_limit`（既定 3）、(b) ある Attempt 内で revise が `max_review_rounds` に達しても重大指摘が残る。
 - **別アプローチ**：ある Attempt が失敗（revise で重大指摘を解消できない／worker が `done` を出せない／クラッシュ）したら、controller は直前の失敗情報（worktree diff・レビュー指摘・worker ログの要約）を付して worker を**再ディスパッチ**し、異なる方針を促す。これが次の Attempt。最大 `stuck_limit` 回まで繰り返し、なお未解決なら trigger 3。
 
@@ -352,7 +352,7 @@ CLAUDE.md に置かない理由：CLAUDE.md は worker を含む Claude Code 全
 max_workers: 5
 worker_permission_mode: bypassPermissions
 stuck_limit: 3
-max_review_rounds: 3
+max_review_rounds: 10
 review_format_error_limit: 2
 worker_grace_seconds: 10
 worker_model: sonnet
