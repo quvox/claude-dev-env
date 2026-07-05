@@ -99,6 +99,7 @@ func (d *DashboardState) Set(fn func(*DashboardState)) {
 type Dashboard struct {
 	State    *DashboardState
 	Keys     chan KeyEvent
+	Resolve  chan string     // taskID of a ⏸ worker selected by number key → controller opens in-session intervene (独立セッション方式・docs/06 §5.3/§6.3)
 	Store    *Store          // for reading live worker logs in detail view
 	Sessions *SessionManager // worker セレクタ: 数字キーで当該 worker セッションへ切替（独立セッション方式・docs/06 §5.3）。nil 可
 	tty      bool
@@ -106,15 +107,17 @@ type Dashboard struct {
 
 // NewDashboard builds a dashboard. headless (non-TTY) is auto-detected.
 func NewDashboard(st *DashboardState, store *Store, sessions *SessionManager) *Dashboard {
-	return &Dashboard{State: st, Keys: make(chan KeyEvent, 4), Store: store, Sessions: sessions, tty: isTTY()}
+	return &Dashboard{State: st, Keys: make(chan KeyEvent, 4), Resolve: make(chan string, 4), Store: store, Sessions: sessions, tty: isTTY()}
 }
 
-// selectableWorkerID returns the task ID of the n-th (1-indexed) selectable
-// worker — those with a live tmux session (running/review/revise or
-// waiting_human). Returns "" if n is out of range. Pure/testable (docs/06 §5.3).
-func selectableWorkerID(tasks []DashTask, n int) string {
+// selectableWorker returns the (task ID, status) of the n-th (1-indexed)
+// selectable worker — those with a live tmux session (running/review/revise or
+// waiting_human). Returns ("","") if n is out of range. Pure/testable (docs/06
+// §5.3). The status lets the caller route ⏸ (waiting_human) to an in-session
+// intervene vs a plain view switch.
+func selectableWorker(tasks []DashTask, n int) (id, status string) {
 	if n < 1 {
-		return ""
+		return "", ""
 	}
 	i := 0
 	for _, t := range tasks {
@@ -122,11 +125,18 @@ func selectableWorkerID(tasks []DashTask, n int) string {
 		case TaskRunning, TaskReview, TaskRevise, TaskWaitingHuman:
 			i++
 			if i == n {
-				return t.ID
+				return t.ID, t.Status
 			}
 		}
 	}
-	return ""
+	return "", ""
+}
+
+// selectableWorkerID is selectableWorker keeping only the ID (kept for existing
+// callers/tests).
+func selectableWorkerID(tasks []DashTask, n int) string {
+	id, _ := selectableWorker(tasks, n)
+	return id
 }
 
 // SelectableWorker returns the task ID for selector index n under the state lock.
@@ -134,6 +144,14 @@ func (s *DashboardState) SelectableWorker(n int) string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return selectableWorkerID(s.Tasks, n)
+}
+
+// SelectableWorkerStatus returns the (task ID, status) for selector index n
+// under the state lock.
+func (s *DashboardState) SelectableWorkerStatus(n int) (string, string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return selectableWorker(s.Tasks, n)
 }
 
 // Run renders periodically until ctx is cancelled. On a non-TTY it still loops
@@ -158,6 +176,13 @@ func (d *Dashboard) Run(ctx context.Context) {
 
 // render draws the dashboard using ANSI escape codes.
 func (d *Dashboard) render() {
+	_, _ = os.Stdout.WriteString(d.renderString())
+}
+
+// renderString builds the full dashboard frame as a string (extracted from
+// render so the layout — notably the selector-number column, docs/06 §5.3 — is
+// unit-testable without a TTY). It takes the state lock itself.
+func (d *Dashboard) renderString() string {
 	s := d.State
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -183,6 +208,7 @@ func (d *Dashboard) render() {
 		}
 	}
 	running := make([]DashTask, 0, len(s.Tasks))
+	sel := 0 // selector counter: only selectable workers, 1-indexed (matches selectableWorkerID / docs/06 §5.3)
 	for i, t := range s.Tasks {
 		elapsed := ""
 		active := t.Status == TaskRunning || t.Status == TaskReview || t.Status == TaskRevise
@@ -192,6 +218,16 @@ func (d *Dashboard) render() {
 		if active {
 			running = append(running, t)
 		}
+		// A worker is selectable (has a live session to switch to) when it is
+		// active or ⏸ waiting_human — the same set as selectableWorkerID. Its
+		// selector number is a SEPARATE column from the task ordinal [i/n]
+		// (which counts all tasks incl. pending/done), so the two intentionally
+		// differ; showing the selector number prevents pressing the wrong key.
+		selTag := "   " // 3 cols, keeps non-selectable rows aligned with ‹k›
+		if active || t.Status == TaskWaitingHuman {
+			sel++
+			selTag = fmt.Sprintf("‹%d›", sel)
+		}
 		vendor := t.Vendor
 		if vendor == "" {
 			vendor = "claude"
@@ -200,8 +236,8 @@ func (d *Dashboard) render() {
 		if t.Attempts > 1 {
 			att = fmt.Sprintf(" (試行%d)", t.Attempts)
 		}
-		fmt.Fprintf(&b, "[%d/%d] worker %s (%s): %s %s%s\n",
-			i+1, n, oneline(t.Title, 28), vendor, statusLabel(t.Status), elapsed, att)
+		fmt.Fprintf(&b, "%s [%d/%d] worker %s (%s): %s %s%s\n",
+			selTag, i+1, n, oneline(t.Title, 28), vendor, statusLabel(t.Status), elapsed, att)
 	}
 	fmt.Fprintf(&b, "直近サマリ: %s", oneline(s.LastSummary, 50))
 	if s.LastSummaryTS != "" {
@@ -221,13 +257,19 @@ func (d *Dashboard) render() {
 	if s.InterventionsOpen > 0 {
 		ihint = " [i]介入対応"
 	}
+	// worker セレクタ案内（独立セッション方式・06 §5.3）：切替先セッションを持つ
+	// worker が居て、かつ Sessions 注入時（tmux 有り）のみ数字キーを案内する。
+	whint := ""
+	if sel > 0 && d.Sessions != nil {
+		whint = " [1-9]worker画面へ"
+	}
 	if s.Detail {
 		d.renderDetail(&b, running)
-		fmt.Fprintf(&b, "keys: [d]一覧に戻る [p]一時停止%s [q]中断(状態を保存し再開可)\n", ihint)
+		fmt.Fprintf(&b, "keys: [d]一覧に戻る [p]一時停止%s%s [q]中断(状態を保存し再開可)\n", whint, ihint)
 	} else {
-		fmt.Fprintf(&b, "keys: [d]worker出力を見る [p]一時停止%s [q]中断(状態を保存し再開可)\n", ihint)
+		fmt.Fprintf(&b, "keys: [d]worker出力を見る [p]一時停止%s%s [q]中断(状態を保存し再開可)\n", whint, ihint)
 	}
-	_, _ = os.Stdout.WriteString(b.String())
+	return b.String()
 }
 
 // renderDetail appends the tail of each running worker's live output log so the
@@ -330,11 +372,20 @@ func (d *Dashboard) readKeys(ctx context.Context) {
 		case 'q':
 			d.emit(KeyQuit)
 		default:
-			// worker セレクタ（独立セッション方式・docs/06 §5.3）：数字キーで
-			// n 番目の worker のセッションへ切り替える。best-effort（nil/tmux 無しは無視）。
+			// worker セレクタ（独立セッション方式・docs/06 §5.3/§6.3）：数字キーで
+			// n 番目の worker を選ぶ。⏸（waiting_human）なら Resolve へ流してコント
+			// ローラがそのセッションで介入対話を起こす。実行中等はビュー切替のみ。
+			// best-effort（nil/tmux 無しは無視）。
 			if d.Sessions != nil && buf[0] >= '1' && buf[0] <= '9' {
-				if id := d.State.SelectableWorker(int(buf[0] - '0')); id != "" {
-					_ = d.Sessions.SwitchTo(context.Background(), d.Sessions.WorkerSession(id))
+				if id, status := d.State.SelectableWorkerStatus(int(buf[0] - '0')); id != "" {
+					if status == TaskWaitingHuman {
+						select {
+						case d.Resolve <- id:
+						default:
+						}
+					} else {
+						_ = d.Sessions.SwitchTo(context.Background(), d.Sessions.WorkerSession(id))
+					}
 				}
 			}
 		}

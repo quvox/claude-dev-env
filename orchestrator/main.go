@@ -26,8 +26,16 @@ func main() {
 		instrDir  = flag.String("instructions", "", "override instruction template dir (dev/test)")
 		fresh     = flag.Bool("fresh", false, "discard leftover run state and start a new session from wallbounce")
 		startExec = flag.Bool("start-executing", false, "verification-only: if a ready seed plan.json exists, skip wallbounce and begin in executing")
+		printSess = flag.Bool("print-main-session", false, "print the controller's main tmux session name (orch-<CNAME>-main) and exit")
 	)
 	flag.Parse()
+
+	// claude-dev orchestrate calls this to learn the session name to has-session/
+	// attach against (tmux 常駐方式・docs/impl/10_cli.md). Print and exit.
+	if *printSess {
+		fmt.Println(NewSessionManager().MainSession())
+		return
+	}
 
 	goal := strings.TrimSpace(strings.Join(flag.Args(), " "))
 

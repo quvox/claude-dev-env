@@ -221,7 +221,7 @@ type Store struct {
 func NewStore(workspace string) (*Store, error) {
 	root := filepath.Join(workspace, ".orchestrator")
 	s := &Store{Root: root}
-	for _, d := range []string{"", "intervention", "workers", "worktrees"} {
+	for _, d := range []string{"", "intervention", "workers", "worktrees", "sessions"} {
 		if err := os.MkdirAll(filepath.Join(root, d), 0o755); err != nil {
 			return nil, err
 		}

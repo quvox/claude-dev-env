@@ -72,7 +72,11 @@ func (m *SessionManager) Has(ctx context.Context, name string) bool {
 
 // Ensure creates the session as a long-lived holder shell if absent, with mouse
 // disabled (docs/06 §5.9: mouse off avoids the mouse-as-keyboard corruption that
-// forces closing the terminal). Idempotent.
+// forces closing the terminal) and remain-on-exit ON so the session survives an
+// in-pane command exiting — the controller can then drive claude -p → intervene
+// → re-dispatch in one session (docs/impl/60「保持シェル」). The main session is
+// NOT created here (claude-dev orchestrate owns it with remain-on-exit OFF as a
+// liveness signal); Ensure is for wallbounce/worker sessions. Idempotent.
 func (m *SessionManager) Ensure(ctx context.Context, name string) error {
 	if m.Has(ctx, name) {
 		return nil
@@ -81,7 +85,43 @@ func (m *SessionManager) Ensure(ctx context.Context, name string) error {
 		return err
 	}
 	_ = tmuxRun(ctx, "set-option", "-t", name, "mouse", "off")
+	_ = tmuxRun(ctx, "set-option", "-t", name, "-w", "remain-on-exit", "on")
 	return nil
+}
+
+// PaneDead reports whether the named session's active pane has a dead process
+// (its command exited while remain-on-exit kept the pane). Used as the fallback
+// signal that an interactive claude ended without writing control.json. A
+// missing session or query error reads as NOT dead so WaitConsume keeps polling
+// (the Has() check in the caller handles a truly gone session).
+func (m *SessionManager) PaneDead(ctx context.Context, name string) bool {
+	out, err := exec.CommandContext(ctx, "tmux", "list-panes", "-t", name, "-F", "#{pane_dead}").Output()
+	if err != nil {
+		return false
+	}
+	return strings.Contains(string(out), "1")
+}
+
+// LaunchInteractive (re)ensures the session (holder shell + remain-on-exit),
+// injects an interactive claude via a launcher script into its pane, and
+// switches the attached client to it (独立セッション方式: 対話 claude をセッション内へ
+// 投入。docs/impl/60). Best-effort; no-op semantics when tmux is absent.
+func (m *SessionManager) LaunchInteractive(ctx context.Context, name, scriptPath string) error {
+	if err := m.Ensure(ctx, name); err != nil {
+		return err
+	}
+	if err := tmuxRun(ctx, "respawn-pane", "-k", "-t", name, "sh "+shellSingleQuote(scriptPath)); err != nil {
+		return err
+	}
+	return m.SwitchTo(ctx, name)
+}
+
+// tmuxAvailable reports whether tmux is on PATH. The session-based interactive
+// flow (LaunchInteractive + WaitConsume) is gated on this; without tmux the
+// controller falls back to the legacy foreground RunInteractive path.
+func tmuxAvailable() bool {
+	_, err := exec.LookPath("tmux")
+	return err == nil
 }
 
 // Run injects a command into the session's holder pane, replacing whatever ran

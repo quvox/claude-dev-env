@@ -94,14 +94,23 @@ func (c *Controller) Run(ctx context.Context) error {
 
 func (c *Controller) runWallbounce(ctx context.Context, st *State) error {
 	printModeBanner("wallbounce")
-	if err := c.Mode.RunInteractive(ctx, c.Mode.WallbounceArgs()...); err != nil {
-		// Interactive session ending non-zero (e.g. /exit) is not fatal; we
-		// still inspect control.json.
-		_ = c.Store.AppendAudit(AuditEntry{Event: "wallbounce_exit", Detail: map[string]any{"err": err.Error()}})
-	}
-	ctrl, err := c.Handoff.Consume()
-	if err != nil {
-		return err
+	var (
+		ctrl *Control
+		err  error
+	)
+	if c.Sessions != nil && tmuxAvailable() {
+		// tmux 常駐方式：壁打ちは wallbounce セッション内で動かし、control.json を
+		// ポーリング監視する（自 pane＝main のダッシュボード枠を奪わない。docs/06 §4.2）。
+		ctrl = c.runWallbounceSession(ctx)
+	} else {
+		// Legacy fallback (no tmux / headless): foreground child in this pane.
+		if rerr := c.Mode.RunInteractive(ctx, c.Mode.WallbounceArgs()...); rerr != nil {
+			_ = c.Store.AppendAudit(AuditEntry{Event: "wallbounce_exit", Detail: map[string]any{"err": rerr.Error()}})
+		}
+		ctrl, err = c.Handoff.Consume()
+		if err != nil {
+			return err
+		}
 	}
 	plan, _ := c.Store.LoadPlan()
 
@@ -109,6 +118,7 @@ func (c *Controller) runWallbounce(ctx context.Context, st *State) error {
 		switch ctrl.Request {
 		case ReqExecute:
 			if plan != nil && plan.Ready && lintPlan(plan) == "" {
+				c.closeWallbounceSession()
 				return c.transition(st, PhaseExecuting)
 			}
 			// execute requested but plan not executable (not ready or a task
@@ -128,14 +138,50 @@ func (c *Controller) runWallbounce(ctx context.Context, st *State) error {
 	switch c.confirm("壁打ち: 次の操作を選んでください") {
 	case "execute":
 		if plan != nil && plan.Ready && lintPlan(plan) == "" {
+			c.closeWallbounceSession()
 			return c.transition(st, PhaseExecuting)
 		}
 		c.reportNotExecutable(plan)
 		return nil
 	case "done":
+		c.closeWallbounceSession()
 		return c.transition(st, PhaseDone)
 	default:
 		return nil // continue wallbounce
+	}
+}
+
+// runWallbounceSession launches the wallbounce brain inside the wallbounce tmux
+// session and watches control.json until the human /exits (独立セッション方式・
+// docs/06 §4.2/§5.9). It re-switches the attached client into the wallbounce
+// session each poll so a client attaching to main right after startup is pulled
+// into the conversation (there is nothing else to view during wallbounce).
+// Returns the consumed Control (nil if the human exited without a handoff, which
+// the caller resolves via the confirm menu).
+func (c *Controller) runWallbounceSession(ctx context.Context) *Control {
+	name := c.Sessions.WallbounceSession()
+	script, err := c.Mode.WriteLaunchScript("wallbounce", c.Mode.wallbounceInstr(), "")
+	if err != nil {
+		_ = c.Store.AppendAudit(AuditEntry{Event: "wallbounce_launch_error", Detail: map[string]any{"err": err.Error()}})
+		return nil
+	}
+	_ = c.Sessions.LaunchInteractive(ctx, name, script)
+	ctrl, _ := c.Handoff.WaitConsume(ctx, 500*time.Millisecond, func() bool {
+		if !c.Sessions.Has(ctx, name) || c.Sessions.PaneDead(ctx, name) {
+			return true // /exit without a handoff
+		}
+		_ = c.Sessions.SwitchTo(ctx, name) // pull any freshly-attached client in
+		return false
+	})
+	_ = c.Sessions.SwitchTo(ctx, c.Sessions.MainSession())
+	return ctrl
+}
+
+// closeWallbounceSession tears down the wallbounce session (best-effort) when
+// leaving wallbounce (docs/06 §4.2: 実行フェーズでは不要なら閉じる).
+func (c *Controller) closeWallbounceSession() {
+	if c.Sessions != nil {
+		_ = c.Sessions.Kill(context.Background(), c.Sessions.WallbounceSession())
 	}
 }
 
@@ -283,6 +329,10 @@ func (c *Controller) runExecuting(ctx context.Context, st *State) error {
 				if msg := c.openInterventionLocked(plan, t, r); msg != "" {
 					notifies = append(notifies, msg)
 				}
+				// 独立セッション方式: pre-dispatch で ⏸ になったタスクにも worker
+				// セッションを起こし、セレクタから介入対話へ切り替えられるようにする
+				// （⏸ のタスクには必ずセッションが在る不変条件。docs/06 §4.2）。
+				c.openWorkerSession(t.ID)
 				continue
 			}
 			// Reserve the slot. A resume continues the SAME attempt/session; a
@@ -342,6 +392,7 @@ func (c *Controller) runExecuting(ctx context.Context, st *State) error {
 		return errSuspended
 	}
 
+	var lastEnsure time.Time // throttle periodic session recovery (docs/06 §5.9)
 	for {
 		select {
 		case <-ctx.Done():
@@ -362,8 +413,27 @@ func (c *Controller) runExecuting(ctx context.Context, st *State) error {
 				if c.openInterventionCount() == 0 {
 					continue
 				}
-				// Resolve interventions on demand. Peers keep running as background
-				// processes while the interactive session holds the foreground.
+				if c.Sessions != nil && tmuxAvailable() {
+					// 独立セッション方式: [i] は先頭の要判断をその worker セッションで
+					// 対応する（ダッシュボードは main に生きたまま。stopDash 不要）。
+					items := c.Store.LoadOpenInterventions().Items
+					if len(items) == 0 {
+						continue
+					}
+					aborted, rerr := c.resolveInterventionInSession(ctx, items[0].TaskID)
+					if rerr != nil {
+						workerCancel()
+						wg.Wait()
+						return rerr
+					}
+					if aborted {
+						workerCancel()
+						wg.Wait()
+						return c.transition(st, PhaseDone)
+					}
+					continue
+				}
+				// Legacy fallback (no tmux): batch resolve in the foreground.
 				stopDash()
 				aborted, rerr := c.resolveInterventions(ctx, st, plan)
 				if rerr != nil {
@@ -379,7 +449,43 @@ func (c *Controller) runExecuting(ctx context.Context, st *State) error {
 				startDash()
 				continue
 			}
+		case tid := <-d.Resolve:
+			// 独立セッション方式: ダッシュボードで ⏸ worker を数字キー選択 → その
+			// worker セッションで介入対話（docs/06 §5.3/§6.3）。ダッシュボードは main で
+			// 生きたまま（stopDash しない）。他 worker の実行も継続。
+			aborted, rerr := c.resolveInterventionInSession(ctx, tid)
+			if rerr != nil {
+				workerCancel()
+				wg.Wait()
+				return rerr
+			}
+			if aborted {
+				workerCancel()
+				wg.Wait()
+				return c.transition(st, PhaseDone)
+			}
+			continue
 		default:
+		}
+
+		// 独立セッション方式: 誤って閉じられた worker セッションを実行中なら再構築
+		// する（復旧。docs/06 §5.9）。tmux 呼び出しを抑えるため数秒に一度だけ。
+		if c.Sessions != nil && time.Since(lastEnsure) > 5*time.Second {
+			lastEnsure = time.Now()
+			c.planMu.Lock()
+			var active []string
+			for i := range plan.Tasks {
+				switch plan.Tasks[i].Status {
+				case TaskRunning, TaskReview, TaskRevise, TaskWaitingHuman:
+					active = append(active, plan.Tasks[i].ID)
+				}
+			}
+			c.planMu.Unlock()
+			for _, tid := range active {
+				if !c.Sessions.Has(ctx, c.Sessions.WorkerSession(tid)) {
+					c.openWorkerSession(tid)
+				}
+			}
 		}
 
 		if dashPaused(dash) {
@@ -748,6 +854,56 @@ func (c *Controller) resolveOne(id, taskID string) bool {
 		return true
 	}
 	return false
+}
+
+// resolveInterventionInSession runs a single intervention inside its worker's
+// tmux session (独立セッション方式・docs/06 §5.3/§6.3): it injects the intervene
+// brain (seeded with that one question) into orch-<CNAME>-w-<taskID>, switches
+// the client there, watches control.json until the human /exits, switches back
+// to main, then reconciles the answer (→ pending → re-dispatch). Peers keep
+// running; the dashboard stays live in main. Returns aborted=true if the human
+// requested abort. When the task has no open intervention it just views the
+// session. Requires c.Sessions (guarded by callers).
+func (c *Controller) resolveInterventionInSession(ctx context.Context, taskID string) (bool, error) {
+	if c.Sessions == nil {
+		return false, nil
+	}
+	name := c.Sessions.WorkerSession(taskID)
+	id := c.openIDForTask(taskID)
+	if id == "" {
+		_ = c.Sessions.SwitchTo(ctx, name) // nothing to resolve: just show it
+		return false, nil
+	}
+	sys, prompt := c.Mode.IntervenePrompt(id)
+	script, err := c.Mode.WriteLaunchScript("w-"+taskID, sys, prompt)
+	if err != nil {
+		_ = c.Store.AppendAudit(AuditEntry{Event: "intervene_launch_error", TaskID: taskID, Detail: map[string]any{"err": err.Error()}})
+		return false, nil
+	}
+	printModeBanner("intervene")
+	_ = c.Sessions.LaunchInteractive(ctx, name, script)
+	ctrl, cerr := c.Handoff.WaitConsume(ctx, 500*time.Millisecond, func() bool {
+		return !c.Sessions.Has(ctx, name) || c.Sessions.PaneDead(ctx, name)
+	})
+	_ = c.Sessions.SwitchTo(ctx, c.Sessions.MainSession())
+	if cerr != nil {
+		return false, cerr
+	}
+	if ctrl != nil && ctrl.Request == ReqAbort {
+		return true, nil
+	}
+	c.resolveOne(id, taskID) // reconcile answer.md → pending (re-dispatched next tick)
+	return false, nil
+}
+
+// openIDForTask returns the open intervention id for a task, or "" if none.
+func (c *Controller) openIDForTask(taskID string) string {
+	for _, it := range c.Store.LoadOpenInterventions().Items {
+		if it.TaskID == taskID {
+			return it.ID
+		}
+	}
+	return ""
 }
 
 // lintPlan returns a comma-joined list of task IDs missing a task-specific
