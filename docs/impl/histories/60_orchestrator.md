@@ -207,3 +207,12 @@
   - **散文→JSON 再要求**（`review.go`）：`ParseReviewResult` 失敗時、フォーマットエラーに数える前に `reformatToJSON` がレビュアの散文結論（`resultFromStream` 抽出）を渡して「規定 JSON だけ出力」する軽量 `claude -p`（`haiku`・ログ無し）を 1 回行い、パースできれば採用（`review_reformat_ok` を audit）。
   - **`max_review_rounds` 既定 3→10**（`config.go`。`stuck_limit` は 3 のまま）。
 - 検証：`accept_test.go`（受理→done＋merge／回答無しは no-op／散文→JSON 再整形で回収）・既存テスト pass（環境依存でハングする `TestIntervene_ResolveApprovesIrreversible` を除く）。設計 `06`（§8.2/§8.3・§4.5 相当・§介入）と実装仕様 `60`（§品質ゲート・§介入・config 既定）を同期。配布イメージ再ビルド。
+
+## 2026-07-06（工程別のモデル/effort 選択を導入）
+- 要望：worker/レビュー/ブレスト等で使う model・effort を作業内容で変えたい（ブレスト・設計・実装仕様・レビュー＝opus/high、それ以外＝sonnet/high）。後で基準を変えるので簡単に変更できるように（コンフィグ必須ではない）。
+- 実装：
+  - 新規 `models.go`＝**唯一の編集ポイント**。`ModelProfile{Model,Effort}`、`profileDeep={opus,high}`／`profileDefault={sonnet,high}`、`deepTaskKinds`（design/spec/impl_spec/requirements/usecase/adr/doc/docs/review）。選択関数 `workerTaskProfile`/`brainstormingProfile`/`interveneProfile`/`reviewerProfile`/`completionProfile`。
+  - `Task.Kind`（`state.go`）を追加し、ブレスト脳が付与（`brainstorming.md` にスキーマ・指示・値の目安）。
+  - `RunOpts.Effort` を追加し `ExecClaude.RunPrompt` が `--effort` を付与（`--model` は既存）。`Worker.Dispatch`＝`workerTaskProfile(t)`、`Reviewer.Review`＝`reviewerProfile()`（散文→JSON 再整形は haiku/low）、完了検証＝`completionProfile()`、対話起動 `WriteLaunchScript(key, prof, sys, prompt)` はブレスト/介入の profile を `--model`/`--effort` として exec 行へ付す。
+  - 旧 `worker_model` 設定は本表に置換され選択に不使用（互換のため config 解析のみ・DEPRECATED 明記）。`claude --effort` は low|medium|high|xhigh|max を確認。
+- 検証：`models_test.go`（kind→profile・ロール profile・effort 妥当性）、`mode_test.go`（launch script に `--model 'opus' --effort 'high'`）。`go test`（対話ハングテスト除く）pass。設計 06（§モデル選択）・実装仕様 60（models.go・Task.Kind・§モデル選択・config 表 DEPRECATED）を同期。配布イメージ再ビルド。

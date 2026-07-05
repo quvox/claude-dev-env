@@ -116,7 +116,12 @@ type Task struct {
 	// Completion is the task-specific acceptance criterion. Reviews are scored
 	// against THIS only (never the plan goal); an empty Completion is rejected by
 	// plan lint before executing (docs/impl/60 §品質ゲート 8.1).
-	Completion   string   `json:"completion"`
+	Completion string `json:"completion"`
+	// Kind classifies the task so the orchestrator can pick a model/effort profile
+	// (docs/impl/60 §モデル選択). The brainstorming brain sets it: design/spec/
+	// requirements/usecase/doc → 熟考プロファイル(opus)、それ以外(実装・テスト等)は既定
+	// (sonnet)。空は既定扱い。
+	Kind         string   `json:"kind,omitempty"`
 	Deps         []string `json:"deps"`
 	Status       string   `json:"status"`
 	Attempts     int      `json:"attempts"`

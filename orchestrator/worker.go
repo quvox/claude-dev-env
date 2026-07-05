@@ -37,6 +37,9 @@ type RunOpts struct {
 	// cancellation and waits up to that long before force-killing, so the worker
 	// can commit its work-in-progress on suspend.
 	GraceSeconds int
+	// Effort, when set, is passed as --effort (low|medium|high|xhigh|max). Chosen
+	// per work type via the models.go policy table.
+	Effort string
 }
 
 // ClaudeRunner runs a headless `claude -p` worker and returns its raw stdout.
@@ -222,8 +225,10 @@ func (w *Worker) Dispatch(ctx context.Context, p *Plan, t *Task, feedback string
 	prompt := w.BuildPrompt(p, t, feedback)
 	dir := w.Store.WorktreeAbs(t.ID)
 	logPath := w.Store.WorkerLogPath(t.ID)
-	opts := RunOpts{SessionID: t.SessionID, Resume: t.ResumeSession, GraceSeconds: w.Cfg.WorkerGraceSeconds}
-	out, err := w.Claude.RunPrompt(ctx, dir, w.Cfg.WorkerModel, prompt, logPath, opts)
+	// Model/effort by task kind (models.go policy table).
+	prof := workerTaskProfile(t)
+	opts := RunOpts{SessionID: t.SessionID, Resume: t.ResumeSession, GraceSeconds: w.Cfg.WorkerGraceSeconds, Effort: prof.Effort}
+	out, err := w.Claude.RunPrompt(ctx, dir, prof.Model, prompt, logPath, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -350,6 +355,9 @@ func (e ExecClaude) RunPrompt(ctx context.Context, dir, model, prompt, logPath s
 	args := []string{"-p", prompt, "--output-format", "stream-json", "--verbose"}
 	if model != "" {
 		args = append(args, "--model", model)
+	}
+	if opts.Effort != "" {
+		args = append(args, "--effort", opts.Effort)
 	}
 	if e.PermissionMode != "" {
 		args = append(args, "--permission-mode", e.PermissionMode)

@@ -77,7 +77,8 @@ func (rv *Reviewer) Review(ctx context.Context, p *Plan, t *Task) (*ReviewResult
 	prompt := rv.buildReviewPrompt(p, t)
 	dir := rv.Store.WorktreeAbs(t.ID)
 	logPath := rv.Store.WorkerLogPath(t.ID + ".review")
-	out, err := rv.Claude.RunPrompt(ctx, dir, rv.Cfg.WorkerModel, prompt, logPath, RunOpts{GraceSeconds: rv.Cfg.WorkerGraceSeconds})
+	prof := reviewerProfile() // models.go policy table
+	out, err := rv.Claude.RunPrompt(ctx, dir, prof.Model, prompt, logPath, RunOpts{GraceSeconds: rv.Cfg.WorkerGraceSeconds, Effort: prof.Effort})
 	if err != nil {
 		return nil, err
 	}
@@ -121,7 +122,8 @@ func (rv *Reviewer) reformatToJSON(ctx context.Context, dir string, reviewOut []
 		"重大/中程度の指摘が無ければ {\"findings\":[]}。\n" +
 		"それ以外は {\"findings\":[{\"severity\":\"critical|major|minor\",\"file\":\"path\",\"message\":\"...\",\"aspect\":\"requirements|security\"}]}。\n\n" +
 		"----- レビュー結論 -----\n" + prose
-	out, err := rv.Claude.RunPrompt(ctx, dir, "haiku", prompt, "", RunOpts{GraceSeconds: rv.Cfg.WorkerGraceSeconds})
+	// Pure prose→JSON transform: a small model at low effort is enough and cheap.
+	out, err := rv.Claude.RunPrompt(ctx, dir, "haiku", prompt, "", RunOpts{GraceSeconds: rv.Cfg.WorkerGraceSeconds, Effort: "low"})
 	if err != nil {
 		return nil
 	}

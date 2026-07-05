@@ -15,7 +15,7 @@ func TestWriteLaunchScript(t *testing.T) {
 	}
 	m := &Mode{Store: store, Workspace: dir}
 
-	script, err := m.WriteLaunchScript("w-t3", "SYS-INSTR", "QUESTION-PROMPT")
+	script, err := m.WriteLaunchScript("w-t3", ModelProfile{Model: "opus", Effort: "high"}, "SYS-INSTR", "QUESTION-PROMPT")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -42,6 +42,8 @@ func TestWriteLaunchScript(t *testing.T) {
 		"w-t3.sys",
 		"w-t3.prompt",
 		"exec ",
+		"--model 'opus'",
+		"--effort 'high'",
 	} {
 		if !strings.Contains(s, want) {
 			t.Errorf("script missing %q:\n%s", want, s)
@@ -53,7 +55,7 @@ func TestWriteLaunchScript_NoPromptOmitsPositional(t *testing.T) {
 	dir := t.TempDir()
 	store, _ := NewStore(dir)
 	m := &Mode{Store: store, Workspace: dir}
-	script, err := m.WriteLaunchScript("brainstorming", "SYS", "")
+	script, err := m.WriteLaunchScript("brainstorming", ModelProfile{Model: "opus", Effort: "high"}, "SYS", "")
 	if err != nil {
 		t.Fatal(err)
 	}

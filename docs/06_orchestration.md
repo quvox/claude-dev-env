@@ -186,7 +186,12 @@ tmux server（＝常駐の器。クライアント全終了でも生存）
   - **実行不可時は「無言で戻らない」**：`execute` を要求されても plan が実行不可（`ready` でない／タスクが `completion` 未設定）なら、コントローラは**その理由を端末に明示**したうえでブレインストーミングへ戻す。Slack 通知だけに出して端末に何も表示しない（＝無言で `claude` が再起動したように見える）挙動は禁止。
     - **文言は「人間に `plan.json` を編集させる」ものにしない**（重要・前述 §4.3 の原則）。人間の接点はブレインストーミング（対話）だけで、`plan.json` はブレインストーミング脳が書く。表示は「ブレインストーミングに戻って（対話で）`completion` を補ってください」のように**対話への誘導**とし、ファイル編集を促さない。
     - 理由は**次回ブレインストーミングのブレインストーミング脳へ引き渡す**（ブレインストーミングプロンプトへの前置＋監査ログ）。これにより人間が内容を中継しなくても、脳が自動で欠けた `completion` を補える。
-- **設定（config）**：並行度や挙動はプロジェクト/ユーザ設定で変えられる（`max_workers`・`stuck_limit`・`max_review_rounds`・`review_format_error_limit`・`worker_grace_seconds`・`worker_model`・`merge_strategy`・`worker_permission_mode`・`reviewer_vendor`）。既定値と優先順位は 60 の「設定」を参照。
+- **設定（config）**：並行度や挙動はプロジェクト/ユーザ設定で変えられる（`max_workers`・`stuck_limit`・`max_review_rounds`・`review_format_error_limit`・`worker_grace_seconds`・`merge_strategy`・`worker_permission_mode`・`reviewer_vendor`）。既定値と優先順位は 60 の「設定」を参照。
+- **モデル/effort の選択（工程別）**：各工程で使う `claude` の**モデルと reasoning effort（`--model`/`--effort`）は「作業内容」で切り替える**。方針（2026-07 時点）：
+  - **熟考が要る工程＝`opus`/`high`**：ブレスト・介入対応・レビュー、および plan タスクのうち **設計系**（`kind`＝`requirements`/`usecase`/`design`/`spec`/`adr`/`doc`）。
+  - **それ以外＝`sonnet`/`high`**：実装・テスト等の worker タスク（`kind` 未知/空を含む）。完了検証も既定側（助言・軽量）。
+  - 分類のため **plan の各タスクは `kind` を持つ**（ブレスト脳が付与＝`brainstorming.md`）。ブレスト/介入/レビューは工程（ロール）で判定する。
+  - **この基準は 1 箇所（`orchestrator/models.go` のポリシー表）だけを編集すれば全体に反映される**（コンフィグファイルにはしない＝設計/実装仕様と一緒に管理し変更容易にする方針）。旧 `worker_model` 設定は本ポリシー表に置き換わり、選択には使われない（互換のため解析のみ）。実装詳細は 60 の「モデル選択」。
 - **完了検証**：全タスク完了時、`completion`（自然言語の完了基準）に対する **助言的な `claude -p` 検証**を行い、未充足の可能性があれば Slack 通知に添えて人間の最終確認を促す（実行をブロックはしない。不足分の自動タスク化は v1 では行わない）。
 
 ## 5. 画面・プロセス構成（CLI）

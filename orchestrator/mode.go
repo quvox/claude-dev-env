@@ -113,7 +113,7 @@ func shellSingleQuote(s string) string {
 // token so only the controller posts), cd's to the workspace, and exec's claude
 // with the system prompt and optional initial prompt read from sidecar files —
 // avoiding multi-KB argv/quoting through tmux (独立ウィンドウ方式・docs/impl/60).
-func (m *Mode) WriteLaunchScript(key, sysPrompt, prompt string) (string, error) {
+func (m *Mode) WriteLaunchScript(key string, prof ModelProfile, sysPrompt, prompt string) (string, error) {
 	dir := m.Store.path("sessions")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", err
@@ -136,6 +136,13 @@ func (m *Mode) WriteLaunchScript(key, sysPrompt, prompt string) (string, error) 
 	b.WriteString("unset SLACK_BOT_TOKEN\n")
 	fmt.Fprintf(&b, "cd %s 2>/dev/null || true\n", shellSingleQuote(m.Workspace))
 	fmt.Fprintf(&b, "exec %s", shellSingleQuote(claudePath()))
+	// Model/effort by role (models.go policy table): brainstorming/intervene 用。
+	if strings.TrimSpace(prof.Model) != "" {
+		fmt.Fprintf(&b, " --model %s", shellSingleQuote(prof.Model))
+	}
+	if strings.TrimSpace(prof.Effort) != "" {
+		fmt.Fprintf(&b, " --effort %s", shellSingleQuote(prof.Effort))
+	}
 	if strings.TrimSpace(sysPrompt) != "" {
 		fmt.Fprintf(&b, " --append-system-prompt \"$(cat %s)\"", shellSingleQuote(sysFile))
 	}

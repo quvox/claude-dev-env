@@ -28,7 +28,7 @@ type Config struct {
 	// work-in-progress when the run is suspended (Ctrl-C/[q]) before it is hard
 	// killed. docs/impl/60 §並行性・再開・エラー処理.
 	WorkerGraceSeconds int
-	WorkerModel        string // worker の claude -p モデル
+	WorkerModel        string // DEPRECATED: model/effort は models.go のポリシー表で工程別に決まる（本値は選択に使われない・互換のため解析のみ）
 	ReviewerVendor     string // claude | codex
 	MergeStrategy      string // merge | rebase
 	// WorkerPermissionMode is the --permission-mode passed to worker/reviewer

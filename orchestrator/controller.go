@@ -199,7 +199,7 @@ func (c *Controller) runBrainstorming(ctx context.Context, st *State) error {
 // which the caller resolves via the confirm menu).
 func (c *Controller) runBrainstormingSession(ctx context.Context, enterConversation bool) *Control {
 	name := c.Sessions.BrainstormingWindow()
-	script, err := c.Mode.WriteLaunchScript("brainstorming", c.Mode.brainstormingInstr(), "")
+	script, err := c.Mode.WriteLaunchScript("brainstorming", brainstormingProfile(), c.Mode.brainstormingInstr(), "")
 	if err != nil {
 		_ = c.Store.AppendAudit(AuditEntry{Event: "brainstorming_launch_error", Detail: map[string]any{"err": err.Error()}})
 		return nil
@@ -927,7 +927,7 @@ func (c *Controller) resolveInterventionInSession(ctx context.Context, plan *Pla
 		return false, nil
 	}
 	sys, prompt := c.Mode.IntervenePrompt(id)
-	script, err := c.Mode.WriteLaunchScript("w-"+taskID, sys, prompt)
+	script, err := c.Mode.WriteLaunchScript("w-"+taskID, interveneProfile(), sys, prompt)
 	if err != nil {
 		_ = c.Store.AppendAudit(AuditEntry{Event: "intervene_launch_error", TaskID: taskID, Detail: map[string]any{"err": err.Error()}})
 		return false, nil
@@ -1064,7 +1064,8 @@ func (c *Controller) checkCompletion(ctx context.Context, plan *Plan) (bool, str
 	if strings.TrimSpace(plan.Completion) == "" || c.Worker == nil || c.Worker.Claude == nil {
 		return true, ""
 	}
-	out, err := c.Worker.Claude.RunPrompt(ctx, c.Worker.Workspace, c.Cfg.WorkerModel, buildCompletionPrompt(plan), "", RunOpts{})
+	cp := completionProfile() // models.go policy table
+	out, err := c.Worker.Claude.RunPrompt(ctx, c.Worker.Workspace, cp.Model, buildCompletionPrompt(plan), "", RunOpts{Effort: cp.Effort})
 	if err != nil {
 		return true, ""
 	}
