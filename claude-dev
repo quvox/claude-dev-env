@@ -567,7 +567,9 @@ start)
             docker exec -u "$CUSER" "$NAME" tmux new-session -d -s main 2>/dev/null || true
             sleep 0.5
         fi
-        docker exec -it -u "$CUSER" "$NAME" tmux attach -t main
+        if [ "${CLAUDE_DEV_NO_ATTACH:-0}" != 1 ]; then
+            docker exec -it -u "$CUSER" "$NAME" tmux attach -t main
+        fi
         exit 0
     fi
 
@@ -762,7 +764,11 @@ start)
     echo "✅ 起動完了（Ctrl-_ D で切断、claude-dev start で再接続）"
     _url=$(get_novnc_url "$NAME")
     [ -n "$_url" ] && echo "🖥️  noVNC: $_url"
-    docker exec -it -u "$CUSER" "$NAME" tmux attach -t main
+    # CLAUDE_DEV_NO_ATTACH=1 のときは attach せず戻る（orchestrate がコンテナだけ
+    # 起こしてから orch セッションへ attach するため）。
+    if [ "${CLAUDE_DEV_NO_ATTACH:-0}" != 1 ]; then
+        docker exec -it -u "$CUSER" "$NAME" tmux attach -t main
+    fi
     ;;
 
 # -----------------------------------------------------------------------------
@@ -798,9 +804,16 @@ orchestrate)
     require_setup
     NAME=$(container_name)
 
+    # コンテナ未起動なら、まず起動してから（attach せずに）orchestrator へ進む。
+    # start の全ロジック（認証コピー/マウント/VNC/VM/tmux 起動待ち）を再利用し、
+    # 最後の main への attach だけ CLAUDE_DEV_NO_ATTACH=1 で抑止する。
     if ! is_running "$NAME"; then
-        echo "❌ コンテナが起動していません: claude-dev start を先に実行"
-        exit 1
+        echo "🚀 コンテナが未起動のため起動します（claude-dev start 相当）..."
+        CLAUDE_DEV_NO_ATTACH=1 "$SCRIPT_PATH" start || { echo "❌ コンテナ起動に失敗しました"; exit 1; }
+        if ! is_running "$NAME"; then
+            echo "❌ コンテナが起動できませんでした（VM モードは provision に時間がかかることがあります。少し待って再実行してください）"
+            exit 1
+        fi
     fi
 
     shift  # "orchestrate" を除去

@@ -69,7 +69,7 @@ func TestSelectMenu_NonTTYReturnsDefault(t *testing.T) {
 }
 
 func TestTerminalConfirm_NonTTYContinue(t *testing.T) {
-	if got := terminalConfirm("x"); got != "continue" {
+	if got := terminalConfirm("x", true); got != "continue" {
 		t.Fatalf("non-TTY terminalConfirm => %q, want continue", got)
 	}
 }

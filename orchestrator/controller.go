@@ -35,9 +35,11 @@ type Controller struct {
 	Sessions *SessionManager
 
 	// Confirm asks the human a wallbounce continuation question on the terminal
-	// when control.json is missing/invalid. Returns one of "continue",
-	// "execute", "done". Injectable for tests/headless.
-	Confirm func(prompt string) string
+	// when control.json is missing/invalid. canExecute gates whether the "実行"
+	// option is offered at all (only when the plan is actually ready+lint-clean;
+	// otherwise 壁打ち is not finished and execute must not be presented). Returns
+	// one of "continue", "execute", "done". Injectable for tests/headless.
+	Confirm func(prompt string, canExecute bool) string
 
 	// planMu guards all reads/writes of *Plan and Store mutations during the
 	// concurrent execution phase. mergeMu serializes integrate() so concurrent
@@ -143,10 +145,14 @@ func (c *Controller) runWallbounce(ctx context.Context, st *State) error {
 		}
 	}
 
-	// No decisive control.json: ask the human via a cursor/number menu.
-	switch c.confirm("壁打ち: 次の操作を選んでください") {
+	// No decisive control.json: ask the human via a cursor/number menu. The
+	// "実行" option is offered ONLY when the plan is genuinely executable (ready +
+	// every task has completion); otherwise 壁打ち is not finished, so we present
+	// only 続ける/終了 (docs/06 §4.5).
+	canExec := plan != nil && plan.Ready && lintPlan(plan) == ""
+	switch c.confirm("壁打ち: 次の操作を選んでください", canExec) {
 	case "execute":
-		if plan != nil && plan.Ready && lintPlan(plan) == "" {
+		if canExec {
 			c.closeWallbounceSession()
 			return c.transition(st, PhaseExecuting)
 		}
@@ -252,9 +258,9 @@ func (c *Controller) reportNotExecutable(plan *Plan) {
 	_ = c.Store.WriteAtomicSidecar("handoff_note.md", note)
 }
 
-func (c *Controller) confirm(prompt string) string {
+func (c *Controller) confirm(prompt string, canExecute bool) string {
 	if c.Confirm != nil {
-		return c.Confirm(prompt)
+		return c.Confirm(prompt, canExecute)
 	}
 	// Headless / no confirm hook: default to continuing wallbounce (safe; the
 	// human can re-attach). Never auto-execute.

@@ -65,8 +65,11 @@ func (m *SessionManager) MainSession() string { return m.Prefix + "-main" }
 
 // DashboardWindow / WallbounceWindow / WorkerWindow return `session:window`
 // targets for the respective windows under the main session.
-func (m *SessionManager) DashboardWindow() string  { return m.MainSession() + ":" + dashboardWindowName }
-func (m *SessionManager) WallbounceWindow() string { return m.MainSession() + ":wallbounce" }
+func (m *SessionManager) DashboardWindow() string { return m.MainSession() + ":" + dashboardWindowName }
+
+// WallbounceWindow is the 壁打ち window. Its tmux window NAME is "brainstorming"
+// (human-facing label; the internal identifiers keep the wallbounce name).
+func (m *SessionManager) WallbounceWindow() string { return m.MainSession() + ":brainstorming" }
 func (m *SessionManager) WorkerWindow(taskID string) string {
 	return m.MainSession() + ":w-" + taskID
 }

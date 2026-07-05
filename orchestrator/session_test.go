@@ -29,7 +29,7 @@ func TestSessionNames(t *testing.T) {
 	if got := m.DashboardWindow(); got != "orch-hisol-work-main:dashboard" {
 		t.Errorf("DashboardWindow=%q", got)
 	}
-	if got := m.WallbounceWindow(); got != "orch-hisol-work-main:wallbounce" {
+	if got := m.WallbounceWindow(); got != "orch-hisol-work-main:brainstorming" {
 		t.Errorf("WallbounceWindow=%q", got)
 	}
 	if got := m.WorkerWindow("t3"); got != "orch-hisol-work-main:w-t3" {
@@ -69,7 +69,7 @@ func TestExpectedWindows(t *testing.T) {
 	}}
 	// wallbounce phase: the wallbounce window (dashboard is the controller's own).
 	wb := m.ExpectedWindows(PhaseWallbounce, nil)
-	if len(wb) != 1 || wb[0] != "orch-p-main:wallbounce" {
+	if len(wb) != 1 || wb[0] != "orch-p-main:brainstorming" {
 		t.Fatalf("wallbounce expected [main:wallbounce], got %v", wb)
 	}
 	// executing phase: worker windows for active tasks only.
