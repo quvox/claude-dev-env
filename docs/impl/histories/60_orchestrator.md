@@ -188,3 +188,9 @@
   - `findReviewResultJSON` を頑健化＝(a) 最終行の厳密一致を優先、(b) 失敗時は ```json フェンスや散文中に埋もれた `{...}` を、文字列リテラル内 `}` を無視するブレース対応スキャン（新規 `findJSONObjects`）で拾い、`findings` キーを持つ最後のオブジェクトを採用。共通判定は `tryReviewResult`（`findings` キー必須＝無関係な JSON を弾く）。
 - 検証：`review_parse_test.go`（厳密／散文後の JSON／フェンス／同一行前置／文字列内 `}`／純散文は失敗／findings 無しオブジェクトは棄却）pass。純散文（今回の t3 の生ログ相当）は依然パース不能＝安全側で人間へ（誤って合格扱いにしない）。指示強化で次回以降は JSON を確実に出させ誤昇格を抑止。`go test`（既存の対話ハングテスト除く）pass。配布イメージ再ビルド。
 - 設計同期：`60_orchestrator.md` §品質ゲート項目4（レビュア指示強化・パーサ頑健化）。
+
+## 2026-07-05（追補：介入解決後に run が恒久停止する競合を根治）
+- 背景：実機 w-t3 で要判断に回答し `/exit` した直後、pane は死ぬが閉じず・dashboard も変わらず・以降進まなくなった。調査：`intervention_resolved` は記録され `open.json` は空・`answer.md` も正しく書かれていたのに、plan.json の t3 は `waiting_human` のまま、コントローラは生存（idle）。
+- 原因：`resolveInterventionInSession` が `resolveOne`（ディスクから別コピーを `LoadPlan`→`reconcileOne`→`SavePlan`）を呼んでいたため、`runExecuting` が保持する**共有メモリの `plan`（t3=waiting_human）と乖離**。ループは (1) t3 が pending に戻ったと気づかず再ディスパッチせず、(2) 次の `SavePlan` でディスクの pending を waiting_human に上書きし戻す → 回答直後に恒久停止。
+- 修正（`controller.go`）：`resolveInterventionInSession(ctx, plan, taskID)` に共有 `plan` を渡し、`planMu` 下で `reconcileOne(plan,…)`＋`SavePlan(plan)` を実行（`resolveInterventions` レガシー経路と同じ正しいパターンに統一）。呼び出し側は解決直後に `syncDashboard`＋`refreshInterventionCount` で即時反映。`resolveOne` は単体テストで使用中のため保持。
+- 検証：`go build`／`go test`（既存の対話ハングテスト除く）pass。設計 `60_orchestrator.md`（介入＝worker ウィンドウ内で対話の項に「共有 plan へ突合」の必須事項を明記）。配布イメージ再ビルド。

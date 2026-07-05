@@ -493,7 +493,7 @@ func (c *Controller) runExecuting(ctx context.Context, st *State) error {
 					}
 					taskID = items[0].TaskID
 				}
-				aborted, rerr := c.resolveInterventionInSession(ctx, taskID)
+				aborted, rerr := c.resolveInterventionInSession(ctx, plan, taskID)
 				if rerr != nil {
 					workerCancel()
 					wg.Wait()
@@ -504,6 +504,13 @@ func (c *Controller) runExecuting(ctx context.Context, st *State) error {
 					wg.Wait()
 					return c.transition(st, PhaseDone)
 				}
+				// Reflect the resolution immediately: the shared `plan` now has the
+				// task back to pending, so refresh the dashboard and let the next
+				// scheduleTick re-dispatch it (the count comes from open.json).
+				c.planMu.Lock()
+				syncDashboard(dash, plan)
+				c.planMu.Unlock()
+				c.refreshInterventionCount(dash)
 				continue
 			}
 		default:
@@ -909,7 +916,7 @@ func (c *Controller) resolveOne(id, taskID string) bool {
 // running; the dashboard stays live in main. Returns aborted=true if the human
 // requested abort. When the task has no open intervention it just views the
 // session. Requires c.Sessions (guarded by callers).
-func (c *Controller) resolveInterventionInSession(ctx context.Context, taskID string) (bool, error) {
+func (c *Controller) resolveInterventionInSession(ctx context.Context, plan *Plan, taskID string) (bool, error) {
 	if c.Sessions == nil {
 		return false, nil
 	}
@@ -937,7 +944,16 @@ func (c *Controller) resolveInterventionInSession(ctx context.Context, taskID st
 	if ctrl != nil && ctrl.Request == ReqAbort {
 		return true, nil
 	}
-	c.resolveOne(id, taskID) // reconcile answer.md → pending (re-dispatched next tick)
+	// Reconcile answer.md INTO THE SHARED in-memory plan (the one the scheduler
+	// loop uses), not a freshly-loaded copy. Otherwise the loop keeps its stale
+	// plan (task still waiting_human): it never re-dispatches the task AND its
+	// next SavePlan overwrites the on-disk pending back to waiting_human — the run
+	// gets permanently stuck right after the human answers (observed on w-t3).
+	c.planMu.Lock()
+	if c.reconcileOne(plan, id, taskID) {
+		_ = c.Store.SavePlan(plan)
+	}
+	c.planMu.Unlock()
 	return false, nil
 }
 
