@@ -29,7 +29,7 @@ func (h *Handoff) Consume() (*Control, error) {
 	}
 	// Validate request value; unknown requests are treated as absent.
 	switch c.Request {
-	case ReqExecute, ReqResume, ReqContinueBrainstorming, ReqAbort:
+	case ReqExecute, ReqResume, ReqContinueBrainstorming, ReqAbort, ReqAccept:
 	default:
 		_ = h.Store.DeleteControl()
 		return nil, nil

@@ -77,11 +77,23 @@ func (rv *Reviewer) Review(ctx context.Context, p *Plan, t *Task) (*ReviewResult
 	prompt := rv.buildReviewPrompt(p, t)
 	dir := rv.Store.WorktreeAbs(t.ID)
 	logPath := rv.Store.WorkerLogPath(t.ID + ".review")
-	out, err := rv.Claude.RunPrompt(ctx, dir, rv.Cfg.WorkerModel, prompt, logPath, RunOpts{GraceSeconds: rv.Cfg.WorkerGraceSeconds})
+	prof := reviewerProfile() // models.go policy table
+	out, err := rv.Claude.RunPrompt(ctx, dir, prof.Model, prompt, logPath, RunOpts{GraceSeconds: rv.Cfg.WorkerGraceSeconds, Effort: prof.Effort})
 	if err != nil {
 		return nil, err
 	}
 	res, perr := ParseReviewResult(out)
+	if perr != nil {
+		// The reviewer answered in prose instead of the required JSON. Before
+		// counting a format error (which escalates to a human as a gate defect),
+		// ask a cheap follow-up to CONVERT its own prose verdict into the JSON
+		// schema. This recovers the common "narrated conclusion" case without
+		// bothering a human (docs/06 §8.2).
+		if r2 := rv.reformatToJSON(ctx, dir, out); r2 != nil {
+			res, perr = r2, nil
+			_ = rv.Store.AppendAudit(AuditEntry{Event: "review_reformat_ok", TaskID: t.ID})
+		}
+	}
 	if perr != nil {
 		return nil, perr
 	}
@@ -92,6 +104,34 @@ func (rv *Reviewer) Review(ctx context.Context, p *Plan, t *Task) (*ReviewResult
 		})
 	}
 	return res, nil
+}
+
+// reformatToJSON asks a cheap follow-up call to convert the reviewer's prose
+// verdict into the required JSON schema. Pure text transformation (feeds the
+// prose back in the prompt), so it does not need the worktree/tools and cannot
+// change the verdict — it only re-serializes it. Returns nil if it still can't
+// produce parseable JSON (the caller then counts a real format error). Uses a
+// small model (haiku) and no log file (the display log already holds the review).
+func (rv *Reviewer) reformatToJSON(ctx context.Context, dir string, reviewOut []byte) *ReviewResult {
+	prose := resultFromStream(string(reviewOut))
+	if strings.TrimSpace(prose) == "" {
+		prose = string(reviewOut) // fall back to raw output
+	}
+	prompt := "以下はコードレビューの結論（散文）です。内容は一切変えず、指摘だけを規定の JSON に" +
+		"変換して JSON オブジェクト 1 個だけを出力してください（説明・コードフェンス・前後の文は禁止）。\n" +
+		"重大/中程度の指摘が無ければ {\"findings\":[]}。\n" +
+		"それ以外は {\"findings\":[{\"severity\":\"critical|major|minor\",\"file\":\"path\",\"message\":\"...\",\"aspect\":\"requirements|security\"}]}。\n\n" +
+		"----- レビュー結論 -----\n" + prose
+	// Pure prose→JSON transform: a small model at low effort is enough and cheap.
+	out, err := rv.Claude.RunPrompt(ctx, dir, "haiku", prompt, "", RunOpts{GraceSeconds: rv.Cfg.WorkerGraceSeconds, Effort: "low"})
+	if err != nil {
+		return nil
+	}
+	res, perr := ParseReviewResult(out)
+	if perr != nil {
+		return nil
+	}
+	return res
 }
 
 func (rv *Reviewer) buildReviewPrompt(p *Plan, t *Task) string {
