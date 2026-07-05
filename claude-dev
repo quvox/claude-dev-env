@@ -873,7 +873,10 @@ orchestrate)
         # コントローラ本体を main セッションの dashboard ウィンドウで常駐させる
         # （dashboard 窓は remain-on-exit off。生存判定はプロセスで行う＝上記）。
         docker exec -u "$CUSER" "$NAME" tmux new-session -d -s "$_sess" -n dashboard -c /workspace "$_cmd"
-        docker exec -u "$CUSER" "$NAME" tmux set-option -t "$_sess" mouse off
+        # mouse on: worker/介入の対話 claude でホイールスクロールを使えるように
+        # （耐障害性はクライアント破壊でもセッション＝コントローラ生存で担保。docs/06 §5.9）。
+        # コントローラ起動時の SetupMainSession でも on を確定するが、attach 前に先行設定する。
+        docker exec -u "$CUSER" "$NAME" tmux set-option -t "$_sess" mouse on
         docker exec -it -u "$CUSER" "$NAME" tmux attach -t "$_sess"
     fi
     ;;

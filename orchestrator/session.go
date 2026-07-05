@@ -127,12 +127,14 @@ func tmuxAvailable() bool {
 	return err == nil
 }
 
-// SetupMainSession, run once at controller startup, disables mouse on the main
-// session (docs/06 §5.9: mouse off avoids the mouse-as-keyboard corruption) and
-// renames the controller's own window to `dashboard`. Best-effort; no-op without
-// tmux / outside a tmux pane.
+// SetupMainSession, run once at controller startup, enables mouse on the main
+// session and renames the controller's own window to `dashboard`. Mouse is ON so
+// the human can wheel-scroll inside the worker/intervention claude TUIs (a strong
+// usability request); resilience is preserved because a broken client never takes
+// down the session/controller — re-attach recovers (docs/06 §5.9). Best-effort;
+// no-op without tmux / outside a tmux pane.
 func (m *SessionManager) SetupMainSession(ctx context.Context) {
-	_ = tmuxRun(ctx, "set-option", "-t", m.MainSession(), "mouse", "off")
+	_ = tmuxRun(ctx, "set-option", "-t", m.MainSession(), "mouse", "on")
 	_ = tmuxRun(ctx, "rename-window", dashboardWindowName) // renames the current (controller's) window
 }
 

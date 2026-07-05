@@ -194,3 +194,8 @@
 - 原因：`resolveInterventionInSession` が `resolveOne`（ディスクから別コピーを `LoadPlan`→`reconcileOne`→`SavePlan`）を呼んでいたため、`runExecuting` が保持する**共有メモリの `plan`（t3=waiting_human）と乖離**。ループは (1) t3 が pending に戻ったと気づかず再ディスパッチせず、(2) 次の `SavePlan` でディスクの pending を waiting_human に上書きし戻す → 回答直後に恒久停止。
 - 修正（`controller.go`）：`resolveInterventionInSession(ctx, plan, taskID)` に共有 `plan` を渡し、`planMu` 下で `reconcileOne(plan,…)`＋`SavePlan(plan)` を実行（`resolveInterventions` レガシー経路と同じ正しいパターンに統一）。呼び出し側は解決直後に `syncDashboard`＋`refreshInterventionCount` で即時反映。`resolveOne` は単体テストで使用中のため保持。
 - 検証：`go build`／`go test`（既存の対話ハングテスト除く）pass。設計 `60_orchestrator.md`（介入＝worker ウィンドウ内で対話の項に「共有 plan へ突合」の必須事項を明記）。配布イメージ再ビルド。
+
+## 2026-07-05（追補：tmux mouse を on にしてスクロール可能に）
+- 背景：worker/介入の対話 claude（全画面 TUI）の pane でホイールのスクロールアップ/ダウンが使えず非常に不便との要望。原因は `SetupMainSession` とラッパが `mouse off` を設定していたため（マウス→キー入力化による状態破壊を避ける保守的判断だった）。
+- 修正：`session.go:SetupMainSession` とラッパ `claude-dev`（orchestrate 起動経路）の `mouse off`→`mouse on` に変更。耐障害性は「クライアント破壊でもセッション＝コントローラは tmux サーバ上で生存し再 attach で復旧」（§5.9）で担保されるため、run は失われない。ダッシュボード（bubbletea）はマウスを要求しないので、その窓でのホイールは tmux コピーモード（スクロールバック閲覧）になり、キーボード操作（↑↓/Enter）には影響しない。
+- 設計同期：`06_orchestration.md`（§5.2 のマウス項・§5.9 の mouse 項を on に）、`60_orchestrator.md`（session.go 記述・CLI 記述の mouse を on に）。配布イメージ再ビルド。
