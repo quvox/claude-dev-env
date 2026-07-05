@@ -2,6 +2,13 @@
 
 > 対応文書: `docs/impl/60_orchestrator.md`
 
+## 2026-07-05（「続ける」＝対話に直接戻す／ブレインストーミングホームの階段状崩れ修正）
+- 背景：人間から「『1.続ける』を選んで Enter しても brainstorming ウィンドウに移動しない（ホームに戻され再選択が要る）／そもそも窓が無いように見える」との指摘。クリーン再現では「続ける」で brainstorming 窓は復活していた（`done` で消えていたのは別要因）が、(a) ホーム画面の下部ヒント行が右へ階段状にずれる描画バグ、(b)「続ける＝対話に戻る」という期待と実挙動（ホームで再選択）が不一致、の2点が真の問題だった。
+- 着地の分岐（`controller.go`）：`runBrainstormingSession(ctx, enterConversation)` に着地フラグを追加。初回起動は `false`＝`SwitchTo(DashboardWindow)`（ホーム＝カーソル選択式）、`continue`／実行不可差し戻しは `true`＝`SwitchTo(BrainstormingWindow)`（対話へ直接戻す）。`runBrainstorming` を**内部ループ**化し、continue/実行不可のたびに `enterConversation=true` で再入場、`execute`（実行可）/`abort`/`done` でのみ遷移する（従来は `return nil` で外側ループへ戻していた）。
+- 階段状崩れ修正（`dashtui.go` View ブレインストーミング分岐）：ヒント行を `lipgloss.Render("…\n")` と改行込みで描いていたのを、**改行を `Render` の外**（`WriteByte('\n')`）に出して各行のテキストだけをスタイルする形へ。styled セグメントに `\n` が入ると bubbletea の行差分が崩れ後続行が右へずれるため。
+- 検証：`go build`/`go test ./...` pass。実機（hisol-work）でクリーン起動→ホーム描画が全行 col0（崩れ無し）、`/exit` 相当→確認メニュー正常（❯1.続ける/2.終了）、`1`（続ける）→**brainstorming 窓が active**（対話へ直接復帰・claude 稼働）を確認。配布イメージ再ビルド。
+- 設計同期：`06_orchestration.md`（§4.5「1.続ける」＝対話に戻る＝`select-window`、§5.1/§8 の起動フローを「カーソル選択→Enter・以後の続けるは対話へ直接戻る」に更新、旧 `Ctrl-b w` 記述を除去）、`60_orchestrator.md`（ブレインストーミング着地の分岐・内部ループ・`printBrainstormingHome` 廃止＝bubbletea View 化を反映）。
+
 ## 2026-06-29（可観測性・中断の再開可能化・完了検証・Config B 廃止／設計↔実装の総点検）
 - 背景：実機運用で「ずっと待機中に見える／`[d]` で何も出ない／`[q]` で worker が消えて復元不能」となり使い物にならなかった。原因はダッシュボード設計と中断セマンティクスの不備。併せて設計↔実装の不整合と未実装機能を総点検した。
 - ダッシュボード（`dashboard.go`）：タスクが running になった時点で `syncDashboard` を呼ぶよう変更し、状態ラベル（待機中/実行中/…）・経過時間・試行回数を表示。`syncDashboard` は running の開始時刻を引き継いで経過時間が伸びるようにした。`[d]` を no-op から「実行中 worker のログ末尾をライブ表示するトグル」に実装（`renderDetail`/`tailFile`）。`NewDashboard` は `Store` を受け取る。

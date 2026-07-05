@@ -103,66 +103,82 @@ func (c *Controller) Run(ctx context.Context) error {
 // ---- brainstorming ----
 
 func (c *Controller) runBrainstorming(ctx context.Context, st *State) error {
-	printModeBanner("brainstorming")
-	var (
-		ctrl *Control
-		err  error
-	)
-	if c.Sessions != nil && tmuxAvailable() {
-		// tmux 常駐方式：ブレインストーミングは brainstorming セッション内で動かし、control.json を
-		// ポーリング監視する（自 pane＝main のダッシュボード枠を奪わない。docs/06 §4.2）。
-		ctrl = c.runBrainstormingSession(ctx)
-	} else {
-		// Legacy fallback (no tmux / headless): foreground child in this pane.
-		if rerr := c.Mode.RunInteractive(ctx, c.Mode.BrainstormingArgs()...); rerr != nil {
-			_ = c.Store.AppendAudit(AuditEntry{Event: "brainstorming_exit", Detail: map[string]any{"err": rerr.Error()}})
+	// enterConversation controls the landing window for the NEXT session launch:
+	// first arrival → dashboard home (cursor-select); every 続ける/continue →
+	// straight back into the brainstorming conversation (docs/06 §4.2).
+	enterConversation := false
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
 		}
-		ctrl, err = c.Handoff.Consume()
-		if err != nil {
-			return err
+		printModeBanner("brainstorming")
+		var (
+			ctrl *Control
+			err  error
+		)
+		if c.Sessions != nil && tmuxAvailable() {
+			// tmux 常駐方式：ブレインストーミングは brainstorming ウィンドウ内で動かし、control.json を
+			// ポーリング監視する（自 pane＝main のダッシュボード枠を奪わない。docs/06 §4.2）。
+			ctrl = c.runBrainstormingSession(ctx, enterConversation)
+		} else {
+			// Legacy fallback (no tmux / headless): foreground child in this pane.
+			if rerr := c.Mode.RunInteractive(ctx, c.Mode.BrainstormingArgs()...); rerr != nil {
+				_ = c.Store.AppendAudit(AuditEntry{Event: "brainstorming_exit", Detail: map[string]any{"err": rerr.Error()}})
+			}
+			ctrl, err = c.Handoff.Consume()
+			if err != nil {
+				return err
+			}
 		}
-	}
-	plan, _ := c.Store.LoadPlan()
+		enterConversation = false
+		plan, _ := c.Store.LoadPlan()
+		canExec := plan != nil && plan.Ready && lintPlan(plan) == ""
 
-	if ctrl != nil {
-		switch ctrl.Request {
-		case ReqExecute:
-			if plan != nil && plan.Ready && lintPlan(plan) == "" {
+		if ctrl != nil {
+			switch ctrl.Request {
+			case ReqExecute:
+				if canExec {
+					c.closeBrainstormingSession()
+					return c.transition(st, PhaseExecuting)
+				}
+				// execute requested but plan not executable (not ready or a task
+				// lacks completion). Do NOT go silent and do NOT show the menu:
+				// explain on the terminal and hand the reason back to the brain, then
+				// re-enter the conversation so it fixes the plan (docs/06 §4.5/§8.1).
+				c.reportNotExecutable(plan)
+				enterConversation = true
+				continue
+			case ReqAbort:
+				c.closeBrainstormingSession()
+				return c.transition(st, PhaseDone)
+			case ReqContinueBrainstorming:
+				enterConversation = true
+				continue // stay in brainstorming; re-enter the conversation
+			}
+		}
+
+		// No decisive control.json: ask the human via a cursor/number menu. The
+		// "実行" option is offered ONLY when the plan is genuinely executable (ready +
+		// every task has completion); otherwise ブレインストーミング is not finished, so we present
+		// only 続ける/終了 (docs/06 §4.5).
+		switch c.confirm("ブレインストーミング: 次の操作を選んでください", canExec) {
+		case "execute":
+			if canExec {
 				c.closeBrainstormingSession()
 				return c.transition(st, PhaseExecuting)
 			}
-			// execute requested but plan not executable (not ready or a task
-			// lacks completion). Do NOT go silent and do NOT show the menu:
-			// explain on the terminal and hand the reason back to the brain, then
-			// stay in brainstorming so it fixes the plan next round (docs/06 §4.5/§8.1).
 			c.reportNotExecutable(plan)
-			return nil
-		case ReqAbort:
+			enterConversation = true
+			continue
+		case "done":
 			c.closeBrainstormingSession()
 			return c.transition(st, PhaseDone)
-		case ReqContinueBrainstorming:
-			return nil // stay in brainstorming; loop re-runs interactive
+		default:
+			enterConversation = true
+			continue // 続ける：対話に戻る
 		}
-	}
-
-	// No decisive control.json: ask the human via a cursor/number menu. The
-	// "実行" option is offered ONLY when the plan is genuinely executable (ready +
-	// every task has completion); otherwise ブレインストーミング is not finished, so we present
-	// only 続ける/終了 (docs/06 §4.5).
-	canExec := plan != nil && plan.Ready && lintPlan(plan) == ""
-	switch c.confirm("ブレインストーミング: 次の操作を選んでください", canExec) {
-	case "execute":
-		if canExec {
-			c.closeBrainstormingSession()
-			return c.transition(st, PhaseExecuting)
-		}
-		c.reportNotExecutable(plan)
-		return nil
-	case "done":
-		c.closeBrainstormingSession()
-		return c.transition(st, PhaseDone)
-	default:
-		return nil // continue brainstorming
 	}
 }
 
@@ -176,18 +192,26 @@ func (c *Controller) runBrainstorming(ctx context.Context, st *State) error {
 // navigable target (↑↓/Enter, not raw `Ctrl-_ w`). The watch never forces the
 // view. Returns the consumed Control (nil if the human exited without a handoff,
 // which the caller resolves via the confirm menu).
-func (c *Controller) runBrainstormingSession(ctx context.Context) *Control {
+func (c *Controller) runBrainstormingSession(ctx context.Context, enterConversation bool) *Control {
 	name := c.Sessions.BrainstormingWindow()
 	script, err := c.Mode.WriteLaunchScript("brainstorming", c.Mode.brainstormingInstr(), "")
 	if err != nil {
 		_ = c.Store.AppendAudit(AuditEntry{Event: "brainstorming_launch_error", Detail: map[string]any{"err": err.Error()}})
 		return nil
 	}
-	// Run (not LaunchInteractive): create the brainstorming window with the claude
-	// but do NOT select-window to it — Ensure uses `new-window -d`, so the
-	// dashboard window remains current (home).
+	// Run (not LaunchInteractive): create/revive the brainstorming window with the
+	// claude (Ensure uses `new-window -d`, so it does not steal focus).
+	//
+	// Landing (docs/06 §4.2): 「続ける」= 対話に戻る, so on a continue re-entry we
+	// select-window straight into the brainstorming conversation — the human asked
+	// for 続ける to land them back in the chat, not on the home. On first arrival we
+	// keep the dashboard as home (cursor-select) so the human orients before entering.
 	_ = c.Sessions.Run(ctx, name, "sh "+shellSingleQuote(script))
-	_ = c.Sessions.SwitchTo(ctx, c.Sessions.DashboardWindow())
+	if enterConversation {
+		_ = c.Sessions.SwitchTo(ctx, name)
+	} else {
+		_ = c.Sessions.SwitchTo(ctx, c.Sessions.DashboardWindow())
+	}
 
 	// Dashboard TUI in the brainstorming phase: the SAME cursor-select UI as
 	// executing (docs/06 §5.3). It offers the brainstorming window as the single

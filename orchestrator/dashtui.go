@@ -165,8 +165,13 @@ func (m dashModel) View() string {
 			b.WriteString("  " + item)
 		}
 		b.WriteString("\n\n")
-		b.WriteString(dashHintStyle.Render("Enter でそのウィンドウへ移動 → AI と検討して plan を固める\n"))
-		b.WriteString(dashHintStyle.Render("対話で /exit すると：実行可能なら実行モードへ／未確定ならここで 続ける・終了 を選ぶ\n"))
+		// NOTE: keep the newline OUTSIDE lipgloss.Render — a `\n` inside a styled
+		// segment spans the style across the line break and bubbletea's line-diff
+		// then staircases the following lines. Style each line's text only.
+		b.WriteString(dashHintStyle.Render("Enter でそのウィンドウへ移動 → AI と検討して plan を固める"))
+		b.WriteByte('\n')
+		b.WriteString(dashHintStyle.Render("対話で /exit すると：実行可能なら実行モードへ／未確定ならここで 続ける・終了 を選ぶ"))
+		b.WriteByte('\n')
 		b.WriteString(dashHintStyle.Render("↑↓/jk 選択 · Enter 移動"))
 		return b.String()
 	}
