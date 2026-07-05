@@ -149,3 +149,9 @@
 - 「独立セッション方式（新アーキ）」節を追加（デーモン化・session.go・保持シェル・worker セッション・セレクタ・介入のセッション内対話・単一コマンド復旧・mouse off）。全体構成のモジュール表・カバー・実装状況を更新。06↔60・実装↔60 を独立エージェントで徹底確認し、保持シェル方式/pre-dispatch セッション/ResolveArgs 二重契約/命名(<CNAME>)/旧新ラベリング等を是正。
 - 実装（構成要素・go build/vet/test -race 緑・gofmt 済み）：session.go（SessionManager・命名・Ensure保持シェル+mouse off・Run/Kill/Has/SwitchTo・ExpectedSessions/EnsureAll）、daemon.go（pidfile群）、handoff.go WaitConsume（control.json 監視）、controller.go の worker セッション結線（open/closeWorkerSession・nil ガード）と介入 per-worker（reconcileOne/resolveOne）、mode.go ResolveArgsOne、dashboard.go セレクタ（selectableWorkerID/SwitchTo）、main.go で Sessions 注入。単体テスト追加。
 - 未実装（最終結線＝要・実機 E2E）：コントローラのデーモン化、RunInteractive→セッション launch+WaitConsume 置換、claude-dev orchestrate 改修、selector からの介入対話起動、pre-dispatch セッション生成。現行の対話・実行の既定動作は旧単一ウィンドウ方式のまま、その上に worker セッションのビュー＋セレクタが加わった状態。
+
+## 2026-07-05（独立ウィンドウ方式：1 セッション＋ウィンドウ）
+- 「独立セッション方式」→「独立ウィンドウ方式」へ改訂。session.go を window API（`MainSession`＋`DashboardWindow`/`WallbounceWindow`/`WorkerWindow`、`new-window`/`kill-window`/`select-window`/`list-windows`、`SetupMainSession`〔自窓を dashboard へ改名＋mouse off〕、`remain-on-exit on`〔dashboard は off〕、`splitTarget`）へ書き換え。`Has` は `list-windows` で窓名を厳密照合（`display-message -t session:window` が窓不在でも現窓へフォールバックし誤って成功を返す落とし穴を回避＝実機で判明・修正）。
+- controller/dashboard/mode/main を window ターゲットへ結線。`ReqAbort` でも `closeWallbounceSession` を呼ぶよう対称化。`[d]`（ダッシュボード内 tail）と番号キー（個別ウィンドウ切替）は併存（置換ではない）と明記。
+- 未使用の `daemon.go`（setsid デーモン用 pidfile。tmux 常駐方式では has-session が主機構）を削除。旧称・旧命名のコードコメントを刷新。
+- 独立2エージェントで design↔impl↔code を徹底確認し、front matter/責務表/§実装状況の「セッション」語誤用・`ResolveArgsOne`→`IntervenePrompt`・テスト帰属・`-n dashboard` 正本整合を是正。`go build`/`vet`/`gofmt`/`go test -race` 全緑。

@@ -99,9 +99,9 @@ func (d *DashboardState) Set(fn func(*DashboardState)) {
 type Dashboard struct {
 	State    *DashboardState
 	Keys     chan KeyEvent
-	Resolve  chan string     // taskID of a ⏸ worker selected by number key → controller opens in-session intervene (独立セッション方式・docs/06 §5.3/§6.3)
+	Resolve  chan string     // taskID of a ⏸ worker selected by number key → controller opens in-session intervene (独立ウィンドウ方式・docs/06 §5.3/§6.3)
 	Store    *Store          // for reading live worker logs in detail view
-	Sessions *SessionManager // worker セレクタ: 数字キーで当該 worker セッションへ切替（独立セッション方式・docs/06 §5.3）。nil 可
+	Sessions *SessionManager // worker セレクタ: 数字キーで当該 worker セッションへ切替（独立ウィンドウ方式・docs/06 §5.3）。nil 可
 	tty      bool
 }
 
@@ -257,7 +257,7 @@ func (d *Dashboard) renderString() string {
 	if s.InterventionsOpen > 0 {
 		ihint = " [i]介入対応"
 	}
-	// worker セレクタ案内（独立セッション方式・06 §5.3）：切替先セッションを持つ
+	// worker セレクタ案内（独立ウィンドウ方式・06 §5.3）：切替先セッションを持つ
 	// worker が居て、かつ Sessions 注入時（tmux 有り）のみ数字キーを案内する。
 	whint := ""
 	if sel > 0 && d.Sessions != nil {
@@ -372,7 +372,7 @@ func (d *Dashboard) readKeys(ctx context.Context) {
 		case 'q':
 			d.emit(KeyQuit)
 		default:
-			// worker セレクタ（独立セッション方式・docs/06 §5.3/§6.3）：数字キーで
+			// worker セレクタ（独立ウィンドウ方式・docs/06 §5.3/§6.3）：数字キーで
 			// n 番目の worker を選ぶ。⏸（waiting_human）なら Resolve へ流してコント
 			// ローラがそのセッションで介入対話を起こす。実行中等はビュー切替のみ。
 			// best-effort（nil/tmux 無しは無視）。
@@ -384,7 +384,7 @@ func (d *Dashboard) readKeys(ctx context.Context) {
 						default:
 						}
 					} else {
-						_ = d.Sessions.SwitchTo(context.Background(), d.Sessions.WorkerSession(id))
+						_ = d.Sessions.SwitchTo(context.Background(), d.Sessions.WorkerWindow(id))
 					}
 				}
 			}

@@ -92,7 +92,7 @@ func (m *Mode) interveneInstr() string {
 }
 
 // IntervenePrompt returns the (system prompt, initial prompt) pair for resolving
-// a single intervention in its worker session (独立セッション方式・docs/06 §6.3).
+// a single intervention in its worker session (独立ウィンドウ方式・docs/06 §6.3).
 // The initial prompt is that intervention's question.md.
 func (m *Mode) IntervenePrompt(id string) (sys, prompt string) {
 	sys = m.interveneInstr()
@@ -112,7 +112,7 @@ func shellSingleQuote(s string) string {
 // normalizes the environment (source VM env, put claude on PATH, strip the Slack
 // token so only the controller posts), cd's to the workspace, and exec's claude
 // with the system prompt and optional initial prompt read from sidecar files —
-// avoiding multi-KB argv/quoting through tmux (独立セッション方式・docs/impl/60).
+// avoiding multi-KB argv/quoting through tmux (独立ウィンドウ方式・docs/impl/60).
 func (m *Mode) WriteLaunchScript(key, sysPrompt, prompt string) (string, error) {
 	dir := m.Store.path("sessions")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -176,8 +176,8 @@ func (m *Mode) ResolveArgs(ids []string) []string {
 	return args
 }
 
-// ResolveArgsOne builds intervene args for a SINGLE intervention (独立セッション方式:
-// 各 worker セッションで1件ずつ対応。docs/06 §5.5/§6.3、docs/impl/60「独立セッション方式」).
+// ResolveArgsOne builds intervene args for a SINGLE intervention (独立ウィンドウ方式:
+// 各 worker セッションで1件ずつ対応。docs/06 §5.5/§6.3、docs/impl/60「独立ウィンドウ方式」).
 // Unlike ResolveArgs (batch), it seeds only that one question — the queue-wide
 // "which/next" is shown by the main selector, so the intervene brain focuses on
 // its single item.

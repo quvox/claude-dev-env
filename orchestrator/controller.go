@@ -26,8 +26,8 @@ type Controller struct {
 	Reviewer *Reviewer
 	Notifier Notifier
 
-	// Sessions manages the per-component tmux sessions (独立セッション方式・
-	// docs/impl/60「独立セッション方式（新アーキ）」). nil in tests/headless: all
+	// Sessions manages the per-component tmux sessions (独立ウィンドウ方式・
+	// docs/impl/60「独立ウィンドウ方式（新アーキ）」). nil in tests/headless: all
 	// session hooks below are nil-guarded and best-effort, so behavior is
 	// unchanged when it is absent.
 	Sessions *SessionManager
@@ -46,6 +46,12 @@ type Controller struct {
 
 // Run executes the full lifecycle starting from the persisted (or fresh) state.
 func (c *Controller) Run(ctx context.Context) error {
+	// tmux 常駐方式: コントローラは orch-<CNAME>-main セッションの中で回る。自分の
+	// ウィンドウを "dashboard" に改名し、mouse off を確定する（worker/壁打ちは同
+	// セッションの別ウィンドウとしてぶら下げる。docs/06 §4.2）。best-effort。
+	if c.Sessions != nil && tmuxAvailable() {
+		c.Sessions.SetupMainSession(ctx)
+	}
 	st, err := c.Store.LoadState()
 	if err != nil {
 		return err
@@ -128,6 +134,7 @@ func (c *Controller) runWallbounce(ctx context.Context, st *State) error {
 			c.reportNotExecutable(plan)
 			return nil
 		case ReqAbort:
+			c.closeWallbounceSession()
 			return c.transition(st, PhaseDone)
 		case ReqContinueWallbounce:
 			return nil // stay in wallbounce; loop re-runs interactive
@@ -152,14 +159,14 @@ func (c *Controller) runWallbounce(ctx context.Context, st *State) error {
 }
 
 // runWallbounceSession launches the wallbounce brain inside the wallbounce tmux
-// session and watches control.json until the human /exits (独立セッション方式・
+// session and watches control.json until the human /exits (独立ウィンドウ方式・
 // docs/06 §4.2/§5.9). It re-switches the attached client into the wallbounce
 // session each poll so a client attaching to main right after startup is pulled
 // into the conversation (there is nothing else to view during wallbounce).
 // Returns the consumed Control (nil if the human exited without a handoff, which
 // the caller resolves via the confirm menu).
 func (c *Controller) runWallbounceSession(ctx context.Context) *Control {
-	name := c.Sessions.WallbounceSession()
+	name := c.Sessions.WallbounceWindow()
 	script, err := c.Mode.WriteLaunchScript("wallbounce", c.Mode.wallbounceInstr(), "")
 	if err != nil {
 		_ = c.Store.AppendAudit(AuditEntry{Event: "wallbounce_launch_error", Detail: map[string]any{"err": err.Error()}})
@@ -173,7 +180,7 @@ func (c *Controller) runWallbounceSession(ctx context.Context) *Control {
 		_ = c.Sessions.SwitchTo(ctx, name) // pull any freshly-attached client in
 		return false
 	})
-	_ = c.Sessions.SwitchTo(ctx, c.Sessions.MainSession())
+	_ = c.Sessions.SwitchTo(ctx, c.Sessions.DashboardWindow())
 	return ctrl
 }
 
@@ -181,12 +188,12 @@ func (c *Controller) runWallbounceSession(ctx context.Context) *Control {
 // leaving wallbounce (docs/06 §4.2: 実行フェーズでは不要なら閉じる).
 func (c *Controller) closeWallbounceSession() {
 	if c.Sessions != nil {
-		_ = c.Sessions.Kill(context.Background(), c.Sessions.WallbounceSession())
+		_ = c.Sessions.Kill(context.Background(), c.Sessions.WallbounceWindow())
 	}
 }
 
 // openWorkerSession creates this worker's tmux session (holder shell) and shows
-// its live log via `tail -F` (独立セッション方式・docs/impl/60). Best-effort and
+// its live log via `tail -F` (独立ウィンドウ方式・docs/impl/60). Best-effort and
 // nil-guarded: no-op when Sessions is unset (tests/headless) or tmux is absent.
 // The session persists across the worker's claude -p → intervene → re-dispatch;
 // only closeWorkerSession (on settle) tears it down.
@@ -194,7 +201,7 @@ func (c *Controller) openWorkerSession(taskID string) {
 	if c.Sessions == nil {
 		return
 	}
-	name := c.Sessions.WorkerSession(taskID)
+	name := c.Sessions.WorkerWindow(taskID)
 	_ = c.Sessions.Run(context.Background(), name, "tail -n +1 -F "+c.Store.WorkerLogPath(taskID))
 }
 
@@ -205,7 +212,7 @@ func (c *Controller) closeWorkerSession(taskID string) {
 	if c.Sessions == nil {
 		return
 	}
-	_ = c.Sessions.Kill(context.Background(), c.Sessions.WorkerSession(taskID))
+	_ = c.Sessions.Kill(context.Background(), c.Sessions.WorkerWindow(taskID))
 }
 
 // reportNotExecutable explains on the terminal (never silently) why execution
@@ -329,7 +336,7 @@ func (c *Controller) runExecuting(ctx context.Context, st *State) error {
 				if msg := c.openInterventionLocked(plan, t, r); msg != "" {
 					notifies = append(notifies, msg)
 				}
-				// 独立セッション方式: pre-dispatch で ⏸ になったタスクにも worker
+				// 独立ウィンドウ方式: pre-dispatch で ⏸ になったタスクにも worker
 				// セッションを起こし、セレクタから介入対話へ切り替えられるようにする
 				// （⏸ のタスクには必ずセッションが在る不変条件。docs/06 §4.2）。
 				c.openWorkerSession(t.ID)
@@ -414,7 +421,7 @@ func (c *Controller) runExecuting(ctx context.Context, st *State) error {
 					continue
 				}
 				if c.Sessions != nil && tmuxAvailable() {
-					// 独立セッション方式: [i] は先頭の要判断をその worker セッションで
+					// 独立ウィンドウ方式: [i] は先頭の要判断をその worker セッションで
 					// 対応する（ダッシュボードは main に生きたまま。stopDash 不要）。
 					items := c.Store.LoadOpenInterventions().Items
 					if len(items) == 0 {
@@ -450,7 +457,7 @@ func (c *Controller) runExecuting(ctx context.Context, st *State) error {
 				continue
 			}
 		case tid := <-d.Resolve:
-			// 独立セッション方式: ダッシュボードで ⏸ worker を数字キー選択 → その
+			// 独立ウィンドウ方式: ダッシュボードで ⏸ worker を数字キー選択 → その
 			// worker セッションで介入対話（docs/06 §5.3/§6.3）。ダッシュボードは main で
 			// 生きたまま（stopDash しない）。他 worker の実行も継続。
 			aborted, rerr := c.resolveInterventionInSession(ctx, tid)
@@ -468,7 +475,7 @@ func (c *Controller) runExecuting(ctx context.Context, st *State) error {
 		default:
 		}
 
-		// 独立セッション方式: 誤って閉じられた worker セッションを実行中なら再構築
+		// 独立ウィンドウ方式: 誤って閉じられた worker セッションを実行中なら再構築
 		// する（復旧。docs/06 §5.9）。tmux 呼び出しを抑えるため数秒に一度だけ。
 		if c.Sessions != nil && time.Since(lastEnsure) > 5*time.Second {
 			lastEnsure = time.Now()
@@ -482,7 +489,7 @@ func (c *Controller) runExecuting(ctx context.Context, st *State) error {
 			}
 			c.planMu.Unlock()
 			for _, tid := range active {
-				if !c.Sessions.Has(ctx, c.Sessions.WorkerSession(tid)) {
+				if !c.Sessions.Has(ctx, c.Sessions.WorkerWindow(tid)) {
 					c.openWorkerSession(tid)
 				}
 			}
@@ -837,7 +844,7 @@ func (c *Controller) reconcileOne(plan *Plan, id, taskID string) bool {
 }
 
 // resolveOne reconciles a single intervention after its in-session dialogue
-// (独立セッション方式・per-worker。docs/06 §5.5). It locks, loads the plan,
+// (独立ウィンドウ方式・per-worker。docs/06 §5.5). It locks, loads the plan,
 // reconciles the one entry, and saves. Returns true if resolved. Used by the
 // worker-selector path (Phase③ 3d) after the human answers in that worker's
 // session; the intervene launch + handoff watch land with the daemon watch-model
@@ -857,8 +864,8 @@ func (c *Controller) resolveOne(id, taskID string) bool {
 }
 
 // resolveInterventionInSession runs a single intervention inside its worker's
-// tmux session (独立セッション方式・docs/06 §5.3/§6.3): it injects the intervene
-// brain (seeded with that one question) into orch-<CNAME>-w-<taskID>, switches
+// tmux session (独立ウィンドウ方式・docs/06 §5.3/§6.3): it injects the intervene
+// brain (seeded with that one question) into orch-<CNAME>-main:w-<taskID>, switches
 // the client there, watches control.json until the human /exits, switches back
 // to main, then reconciles the answer (→ pending → re-dispatch). Peers keep
 // running; the dashboard stays live in main. Returns aborted=true if the human
@@ -868,7 +875,7 @@ func (c *Controller) resolveInterventionInSession(ctx context.Context, taskID st
 	if c.Sessions == nil {
 		return false, nil
 	}
-	name := c.Sessions.WorkerSession(taskID)
+	name := c.Sessions.WorkerWindow(taskID)
 	id := c.openIDForTask(taskID)
 	if id == "" {
 		_ = c.Sessions.SwitchTo(ctx, name) // nothing to resolve: just show it
@@ -885,7 +892,7 @@ func (c *Controller) resolveInterventionInSession(ctx context.Context, taskID st
 	ctrl, cerr := c.Handoff.WaitConsume(ctx, 500*time.Millisecond, func() bool {
 		return !c.Sessions.Has(ctx, name) || c.Sessions.PaneDead(ctx, name)
 	})
-	_ = c.Sessions.SwitchTo(ctx, c.Sessions.MainSession())
+	_ = c.Sessions.SwitchTo(ctx, c.Sessions.DashboardWindow())
 	if cerr != nil {
 		return false, cerr
 	}

@@ -41,7 +41,7 @@ func (h *Handoff) Consume() (*Control, error) {
 }
 
 // WaitConsume polls for control.json and consumes it when it appears. In the
-// daemon watch-model (独立セッション方式・Phase③ 3e) the controller launches an
+// daemon watch-model (独立ウィンドウ方式・Phase③ 3e) the controller launches an
 // interactive claude into a tmux session and does NOT block on process exit;
 // instead it watches for the brain's handoff here. Returns a non-nil Control
 // when found, (nil,nil) when `until` reports the session ended without a

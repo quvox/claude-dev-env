@@ -25,11 +25,29 @@ func TestSessionNames(t *testing.T) {
 	if got := m.MainSession(); got != "orch-hisol-work-main" {
 		t.Errorf("MainSession=%q", got)
 	}
-	if got := m.WallbounceSession(); got != "orch-hisol-work-wallbounce" {
-		t.Errorf("WallbounceSession=%q", got)
+	// Everything else is a WINDOW under the main session (session:window target).
+	if got := m.DashboardWindow(); got != "orch-hisol-work-main:dashboard" {
+		t.Errorf("DashboardWindow=%q", got)
 	}
-	if got := m.WorkerSession("t3"); got != "orch-hisol-work-w-t3" {
-		t.Errorf("WorkerSession=%q", got)
+	if got := m.WallbounceWindow(); got != "orch-hisol-work-main:wallbounce" {
+		t.Errorf("WallbounceWindow=%q", got)
+	}
+	if got := m.WorkerWindow("t3"); got != "orch-hisol-work-main:w-t3" {
+		t.Errorf("WorkerWindow=%q", got)
+	}
+}
+
+func TestSplitTarget(t *testing.T) {
+	cases := map[string][2]string{
+		"orch-p-main:w-t3":      {"orch-p-main", "w-t3"},
+		"orch-p-main:dashboard": {"orch-p-main", "dashboard"},
+		"orch-p-main":           {"orch-p-main", ""},
+	}
+	for in, want := range cases {
+		s, w := splitTarget(in)
+		if s != want[0] || w != want[1] {
+			t.Errorf("splitTarget(%q)=(%q,%q) want (%q,%q)", in, s, w, want[0], want[1])
+		}
 	}
 }
 
@@ -41,7 +59,7 @@ func TestNewSessionManager_UsesComposeProjectName(t *testing.T) {
 	}
 }
 
-func TestExpectedSessions(t *testing.T) {
+func TestExpectedWindows(t *testing.T) {
 	m := &SessionManager{Prefix: "orch-p"}
 	plan := &Plan{Tasks: []Task{
 		{ID: "t1", Status: TaskRunning},
@@ -49,20 +67,20 @@ func TestExpectedSessions(t *testing.T) {
 		{ID: "t3", Status: TaskWaitingHuman},
 		{ID: "t4", Status: TaskDone}, // not expected
 	}}
-	// wallbounce phase: main + wallbounce (+ any active workers)
-	wb := m.ExpectedSessions(PhaseWallbounce, nil)
-	if len(wb) != 2 || wb[0] != "orch-p-main" || wb[1] != "orch-p-wallbounce" {
-		t.Fatalf("wallbounce expected [main wallbounce], got %v", wb)
+	// wallbounce phase: the wallbounce window (dashboard is the controller's own).
+	wb := m.ExpectedWindows(PhaseWallbounce, nil)
+	if len(wb) != 1 || wb[0] != "orch-p-main:wallbounce" {
+		t.Fatalf("wallbounce expected [main:wallbounce], got %v", wb)
 	}
-	// executing phase: main + worker sessions for active tasks only
-	ex := m.ExpectedSessions(PhaseExecuting, plan)
-	want := map[string]bool{"orch-p-main": true, "orch-p-w-t1": true, "orch-p-w-t3": true}
+	// executing phase: worker windows for active tasks only.
+	ex := m.ExpectedWindows(PhaseExecuting, plan)
+	want := map[string]bool{"orch-p-main:w-t1": true, "orch-p-main:w-t3": true}
 	if len(ex) != len(want) {
-		t.Fatalf("executing expected 3 sessions, got %v", ex)
+		t.Fatalf("executing expected 2 windows, got %v", ex)
 	}
 	for _, n := range ex {
 		if !want[n] {
-			t.Fatalf("unexpected session %q in %v", n, ex)
+			t.Fatalf("unexpected window %q in %v", n, ex)
 		}
 	}
 }

@@ -8,22 +8,24 @@ import (
 	"strings"
 )
 
-// SessionManager creates and manages the orchestrator's per-component tmux
-// sessions for the independent-session architecture (docs/06 §4.2/§5.3/§5.9,
-// docs/impl/60「独立セッション方式（新アーキ）」):
+// SessionManager manages the orchestrator's tmux layout for the tmux-resident
+// architecture (docs/06 §4.2/§5.3/§5.9, docs/impl/60「独立ウィンドウ方式（新アーキ）」).
 //
-//	orch-<CNAME>-main        メインループ/ダッシュボード＝worker セレクタ（常設）
-//	orch-<CNAME>-wallbounce   壁打ち（対話 claude）
-//	orch-<CNAME>-w-<taskID>   worker ごと（保持シェル。claude -p → 介入対話 → 再 claude -p）
+// There is a SINGLE tmux session, `orch-<CNAME>-main`, and every component is a
+// WINDOW hanging under it (親子関係＝1 セッション・複数ウィンドウ):
 //
-// The controller runs as a detached daemon (it does not occupy the human's
-// terminal) and drives commands into these sessions, so a broken terminal or an
-// accidentally-closed session never takes work down: sessions are disposable
-// views rebuilt from state. Each session is created as a long-lived holder shell
-// (NOT `new-session "<cmd>"`, which would die when the command exits) so a
-// worker's `claude -p` can be followed by an interactive intervene `claude` in
-// the same session. All tmux operations are best-effort: on a host without tmux
-// (or non-TTY headless runs) they degrade to no-ops.
+//	orch-<CNAME>-main:dashboard   メインループ/ダッシュボード＝worker セレクタ（コントローラ本体）
+//	orch-<CNAME>-main:wallbounce  壁打ち（対話 claude）
+//	orch-<CNAME>-main:w-<taskID>  worker ごと（保持ウィンドウ。claude -p の tail → 介入対話 → …）
+//
+// The controller itself runs in the `dashboard` window; it opens/closes the
+// other windows and drives commands into them. Navigation is intra-session
+// (`select-window`), so `prefix+w` lists every worker and the number-key
+// selector switches windows. Each non-dashboard window is created with
+// remain-on-exit ON so an interactive claude exiting (/exit) does not destroy
+// the window — the controller can then drive claude -p → intervene → re-dispatch
+// in the same window. All tmux operations are best-effort: on a host without
+// tmux (or non-TTY headless runs) they degrade to no-ops.
 type SessionManager struct {
 	Prefix string // "orch-<CNAME>"
 }
@@ -54,66 +56,32 @@ func NewSessionManager() *SessionManager {
 	return &SessionManager{Prefix: "orch-" + normalizeCName(name)}
 }
 
-func (m *SessionManager) MainSession() string       { return m.Prefix + "-main" }
-func (m *SessionManager) WallbounceSession() string { return m.Prefix + "-wallbounce" }
-func (m *SessionManager) WorkerSession(taskID string) string {
-	return m.Prefix + "-w-" + taskID
+// dashboardWindowName is the controller's own window; the controller renames its
+// window to this on startup (SetupMainSession) so SwitchTo can return to it.
+const dashboardWindowName = "dashboard"
+
+// MainSession is the single tmux session everything hangs under.
+func (m *SessionManager) MainSession() string { return m.Prefix + "-main" }
+
+// DashboardWindow / WallbounceWindow / WorkerWindow return `session:window`
+// targets for the respective windows under the main session.
+func (m *SessionManager) DashboardWindow() string  { return m.MainSession() + ":" + dashboardWindowName }
+func (m *SessionManager) WallbounceWindow() string { return m.MainSession() + ":wallbounce" }
+func (m *SessionManager) WorkerWindow(taskID string) string {
+	return m.MainSession() + ":w-" + taskID
+}
+
+// splitTarget splits a `session:window` target into its parts.
+func splitTarget(target string) (session, window string) {
+	if i := strings.Index(target, ":"); i >= 0 {
+		return target[:i], target[i+1:]
+	}
+	return target, ""
 }
 
 // tmuxRun runs a tmux subcommand against the default server; success == nil err.
 func tmuxRun(ctx context.Context, args ...string) error {
 	return exec.CommandContext(ctx, "tmux", args...).Run()
-}
-
-// Has reports whether the named session exists.
-func (m *SessionManager) Has(ctx context.Context, name string) bool {
-	return tmuxRun(ctx, "has-session", "-t", name) == nil
-}
-
-// Ensure creates the session as a long-lived holder shell if absent, with mouse
-// disabled (docs/06 §5.9: mouse off avoids the mouse-as-keyboard corruption that
-// forces closing the terminal) and remain-on-exit ON so the session survives an
-// in-pane command exiting — the controller can then drive claude -p → intervene
-// → re-dispatch in one session (docs/impl/60「保持シェル」). The main session is
-// NOT created here (claude-dev orchestrate owns it with remain-on-exit OFF as a
-// liveness signal); Ensure is for wallbounce/worker sessions. Idempotent.
-func (m *SessionManager) Ensure(ctx context.Context, name string) error {
-	if m.Has(ctx, name) {
-		return nil
-	}
-	if err := tmuxRun(ctx, "new-session", "-d", "-s", name); err != nil {
-		return err
-	}
-	_ = tmuxRun(ctx, "set-option", "-t", name, "mouse", "off")
-	_ = tmuxRun(ctx, "set-option", "-t", name, "-w", "remain-on-exit", "on")
-	return nil
-}
-
-// PaneDead reports whether the named session's active pane has a dead process
-// (its command exited while remain-on-exit kept the pane). Used as the fallback
-// signal that an interactive claude ended without writing control.json. A
-// missing session or query error reads as NOT dead so WaitConsume keeps polling
-// (the Has() check in the caller handles a truly gone session).
-func (m *SessionManager) PaneDead(ctx context.Context, name string) bool {
-	out, err := exec.CommandContext(ctx, "tmux", "list-panes", "-t", name, "-F", "#{pane_dead}").Output()
-	if err != nil {
-		return false
-	}
-	return strings.Contains(string(out), "1")
-}
-
-// LaunchInteractive (re)ensures the session (holder shell + remain-on-exit),
-// injects an interactive claude via a launcher script into its pane, and
-// switches the attached client to it (独立セッション方式: 対話 claude をセッション内へ
-// 投入。docs/impl/60). Best-effort; no-op semantics when tmux is absent.
-func (m *SessionManager) LaunchInteractive(ctx context.Context, name, scriptPath string) error {
-	if err := m.Ensure(ctx, name); err != nil {
-		return err
-	}
-	if err := tmuxRun(ctx, "respawn-pane", "-k", "-t", name, "sh "+shellSingleQuote(scriptPath)); err != nil {
-		return err
-	}
-	return m.SwitchTo(ctx, name)
 }
 
 // tmuxAvailable reports whether tmux is on PATH. The session-based interactive
@@ -124,53 +92,129 @@ func tmuxAvailable() bool {
 	return err == nil
 }
 
-// Run injects a command into the session's holder pane, replacing whatever ran
-// before (`respawn-pane -k`). The session persists across commands, so the
-// controller can drive: `claude -p` (worker) -> interactive `claude` (intervene)
-// -> `claude -p` (re-dispatch) all in the same worker session.
-func (m *SessionManager) Run(ctx context.Context, name, command string) error {
-	if err := m.Ensure(ctx, name); err != nil {
+// SetupMainSession, run once at controller startup, disables mouse on the main
+// session (docs/06 §5.9: mouse off avoids the mouse-as-keyboard corruption) and
+// renames the controller's own window to `dashboard`. Best-effort; no-op without
+// tmux / outside a tmux pane.
+func (m *SessionManager) SetupMainSession(ctx context.Context) {
+	_ = tmuxRun(ctx, "set-option", "-t", m.MainSession(), "mouse", "off")
+	_ = tmuxRun(ctx, "rename-window", dashboardWindowName) // renames the current (controller's) window
+}
+
+// Has reports whether the target window exists. It lists the session's windows
+// and matches the window name exactly — NOT `display-message -t session:window`,
+// which silently falls back to the session's current window (returning success)
+// when the named window is absent, so it can never detect a missing window.
+func (m *SessionManager) Has(ctx context.Context, target string) bool {
+	sess, win := splitTarget(target)
+	if win == "" {
+		return tmuxRun(ctx, "has-session", "-t", sess) == nil
+	}
+	out, err := exec.CommandContext(ctx, "tmux", "list-windows", "-t", sess, "-F", "#{window_name}").Output()
+	if err != nil {
+		return false
+	}
+	for _, ln := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		if ln == win {
+			return true
+		}
+	}
+	return false
+}
+
+// Ensure creates the target window under the main session if absent, with
+// remain-on-exit ON so an in-window command exiting (interactive claude /exit)
+// leaves the window intact for the controller to respawn the next command.
+// Idempotent. The dashboard window is never created here (it is the controller's
+// own window, created by claude-dev orchestrate).
+func (m *SessionManager) Ensure(ctx context.Context, target string) error {
+	sess, win := splitTarget(target)
+	if m.Has(ctx, target) {
+		_ = tmuxRun(ctx, "set-option", "-t", target, "-w", "remain-on-exit", "on")
+		return nil
+	}
+	if err := tmuxRun(ctx, "new-window", "-d", "-t", sess, "-n", win); err != nil {
 		return err
 	}
-	return tmuxRun(ctx, "respawn-pane", "-k", "-t", name, command)
+	_ = tmuxRun(ctx, "set-option", "-t", target, "-w", "remain-on-exit", "on")
+	return nil
 }
 
-// Kill tears down a session (worker settle / cleanup). Best-effort.
-func (m *SessionManager) Kill(ctx context.Context, name string) error {
-	return tmuxRun(ctx, "kill-session", "-t", name)
+// PaneDead reports whether the target window's active pane has a dead process
+// (its command exited while remain-on-exit kept the pane). Used as the fallback
+// signal that an interactive claude ended without writing control.json. A
+// missing window or query error reads as NOT dead so WaitConsume keeps polling
+// (the Has() check in the caller handles a truly gone window).
+func (m *SessionManager) PaneDead(ctx context.Context, target string) bool {
+	out, err := exec.CommandContext(ctx, "tmux", "list-panes", "-t", target, "-F", "#{pane_dead}").Output()
+	if err != nil {
+		return false
+	}
+	return strings.Contains(string(out), "1")
 }
 
-// SwitchTo switches the attached client to the named session (worker selector
-// on the main session: docs/06 §5.3).
-func (m *SessionManager) SwitchTo(ctx context.Context, name string) error {
-	return tmuxRun(ctx, "switch-client", "-t", name)
+// LaunchInteractive (re)ensures the target window, injects an interactive claude
+// via a launcher script into its pane, and selects that window so the attached
+// client sees it (独立ウィンドウ方式: 対話 claude をウィンドウ内へ投入。docs/impl/60).
+// Best-effort; no-op semantics when tmux is absent.
+func (m *SessionManager) LaunchInteractive(ctx context.Context, target, scriptPath string) error {
+	if err := m.Ensure(ctx, target); err != nil {
+		return err
+	}
+	if err := tmuxRun(ctx, "respawn-pane", "-k", "-t", target, "sh "+shellSingleQuote(scriptPath)); err != nil {
+		return err
+	}
+	return m.SwitchTo(ctx, target)
 }
 
-// ExpectedSessions returns the set of sessions the controller should keep alive
-// for the given phase/plan (docs/06 §5.9 recovery): always the main session; the
-// wallbounce session while in wallbounce; and a worker session for every task
-// that has live work (running/review/revise or waiting_human). Pure/testable;
-// EnsureAll materializes them.
-func (m *SessionManager) ExpectedSessions(phase string, plan *Plan) []string {
-	names := []string{m.MainSession()}
+// Run injects a command into the target window's pane, replacing whatever ran
+// before (`respawn-pane -k`). The window persists across commands, so the
+// controller can drive: `tail -F` (view) -> interactive `claude` (intervene) ->
+// `tail -F` (re-dispatch view) all in the same worker window.
+func (m *SessionManager) Run(ctx context.Context, target, command string) error {
+	if err := m.Ensure(ctx, target); err != nil {
+		return err
+	}
+	return tmuxRun(ctx, "respawn-pane", "-k", "-t", target, command)
+}
+
+// Kill closes the target window (worker settle / cleanup). Best-effort. Never
+// call this on the dashboard window (it would kill the controller).
+func (m *SessionManager) Kill(ctx context.Context, target string) error {
+	return tmuxRun(ctx, "kill-window", "-t", target)
+}
+
+// SwitchTo selects the target window within the main session so the attached
+// client views it (worker selector / intervene navigation: docs/06 §5.3).
+func (m *SessionManager) SwitchTo(ctx context.Context, target string) error {
+	return tmuxRun(ctx, "select-window", "-t", target)
+}
+
+// ExpectedWindows returns the non-dashboard windows the controller should keep
+// alive for the given phase/plan (docs/06 §5.9 recovery): the wallbounce window
+// while in wallbounce; and a worker window for every task that has live work
+// (running/review/revise or waiting_human). The dashboard window is the
+// controller's own and is not listed. Pure/testable; EnsureAll materializes them.
+func (m *SessionManager) ExpectedWindows(phase string, plan *Plan) []string {
+	var targets []string
 	if phase == PhaseWallbounce {
-		names = append(names, m.WallbounceSession())
+		targets = append(targets, m.WallbounceWindow())
 	}
 	if plan != nil {
 		for i := range plan.Tasks {
 			switch plan.Tasks[i].Status {
 			case TaskRunning, TaskReview, TaskRevise, TaskWaitingHuman:
-				names = append(names, m.WorkerSession(plan.Tasks[i].ID))
+				targets = append(targets, m.WorkerWindow(plan.Tasks[i].ID))
 			}
 		}
 	}
-	return names
+	return targets
 }
 
-// EnsureAll (re)creates any missing expected sessions (recovery: docs/06 §5.9).
+// EnsureAll (re)creates any missing expected windows (recovery: docs/06 §5.9).
 // Best-effort; no-op when tmux is absent.
 func (m *SessionManager) EnsureAll(ctx context.Context, phase string, plan *Plan) {
-	for _, name := range m.ExpectedSessions(phase, plan) {
-		_ = m.Ensure(ctx, name)
+	for _, target := range m.ExpectedWindows(phase, plan) {
+		_ = m.Ensure(ctx, target)
 	}
 }
