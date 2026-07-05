@@ -29,8 +29,8 @@ func TestSessionNames(t *testing.T) {
 	if got := m.DashboardWindow(); got != "orch-hisol-work-main:dashboard" {
 		t.Errorf("DashboardWindow=%q", got)
 	}
-	if got := m.WallbounceWindow(); got != "orch-hisol-work-main:brainstorming" {
-		t.Errorf("WallbounceWindow=%q", got)
+	if got := m.BrainstormingWindow(); got != "orch-hisol-work-main:brainstorming" {
+		t.Errorf("BrainstormingWindow=%q", got)
 	}
 	if got := m.WorkerWindow("t3"); got != "orch-hisol-work-main:w-t3" {
 		t.Errorf("WorkerWindow=%q", got)
@@ -67,10 +67,10 @@ func TestExpectedWindows(t *testing.T) {
 		{ID: "t3", Status: TaskWaitingHuman},
 		{ID: "t4", Status: TaskDone}, // not expected
 	}}
-	// wallbounce phase: the wallbounce window (dashboard is the controller's own).
-	wb := m.ExpectedWindows(PhaseWallbounce, nil)
+	// brainstorming phase: the brainstorming window (dashboard is the controller's own).
+	wb := m.ExpectedWindows(PhaseBrainstorming, nil)
 	if len(wb) != 1 || wb[0] != "orch-p-main:brainstorming" {
-		t.Fatalf("wallbounce expected [main:wallbounce], got %v", wb)
+		t.Fatalf("brainstorming expected [main:brainstorming], got %v", wb)
 	}
 	// executing phase: worker windows for active tasks only.
 	ex := m.ExpectedWindows(PhaseExecuting, plan)

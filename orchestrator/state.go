@@ -44,9 +44,9 @@ func VMModePreamble() string {
 // Phase constants for the state machine. The former top-level "intervening"
 // phase is abolished: interventions are handled per-task inside "executing".
 const (
-	PhaseWallbounce = "wallbounce"
-	PhaseExecuting  = "executing"
-	PhaseDone       = "done"
+	PhaseBrainstorming = "brainstorming"
+	PhaseExecuting     = "executing"
+	PhaseDone          = "done"
 )
 
 // Task.Status constants.
@@ -63,10 +63,10 @@ const (
 
 // Control.Request constants (handoff requests from the interactive claude).
 const (
-	ReqExecute            = "execute"
-	ReqResume             = "resume"
-	ReqContinueWallbounce = "continue_wallbounce"
-	ReqAbort              = "abort"
+	ReqExecute               = "execute"
+	ReqResume                = "resume"
+	ReqContinueBrainstorming = "continue_brainstorming"
+	ReqAbort                 = "abort"
 )
 
 // NeedsHuman.Reason constants. trigger3 (stuck) is controller-detected and does
@@ -87,7 +87,7 @@ const (
 
 // State is the content of state.json.
 type State struct {
-	Phase       string `json:"phase"` // wallbounce|executing|done（intervening は廃止）
+	Phase       string `json:"phase"` // brainstorming|executing|done（intervening は廃止）
 	RunID       string `json:"run_id"`
 	CurrentTask string `json:"current_task"` // 最後に着手したタスクID（情報用・並行実行のため一意でない）
 	StartedAt   string `json:"started_at"`   // RFC3339
@@ -328,7 +328,7 @@ func (s *Store) SaveState(st *State) error {
 }
 
 // ResetRun discards the run state of a previous session so a new run can start
-// cleanly from wallbounce: it removes state.json, plan.json, control.json and
+// cleanly from brainstorming: it removes state.json, plan.json, control.json and
 // the open-intervention sidecar. Append-only logs (audit/assumptions/
 // interventions JSONL) and summary.md are kept as history. Missing files are
 // not an error.

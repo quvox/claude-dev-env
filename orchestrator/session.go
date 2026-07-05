@@ -15,7 +15,7 @@ import (
 // WINDOW hanging under it (親子関係＝1 セッション・複数ウィンドウ):
 //
 //	orch-<CNAME>-main:dashboard   メインループ/ダッシュボード＝worker セレクタ（コントローラ本体）
-//	orch-<CNAME>-main:wallbounce  壁打ち（対話 claude）
+//	orch-<CNAME>-main:brainstorming  ブレインストーミング（対話 claude）
 //	orch-<CNAME>-main:w-<taskID>  worker ごと（保持ウィンドウ。claude -p の tail → 介入対話 → …）
 //
 // The controller itself runs in the `dashboard` window; it opens/closes the
@@ -63,13 +63,13 @@ const dashboardWindowName = "dashboard"
 // MainSession is the single tmux session everything hangs under.
 func (m *SessionManager) MainSession() string { return m.Prefix + "-main" }
 
-// DashboardWindow / WallbounceWindow / WorkerWindow return `session:window`
+// DashboardWindow / BrainstormingWindow / WorkerWindow return `session:window`
 // targets for the respective windows under the main session.
 func (m *SessionManager) DashboardWindow() string { return m.MainSession() + ":" + dashboardWindowName }
 
-// WallbounceWindow is the 壁打ち window. Its tmux window NAME is "brainstorming"
-// (human-facing label; the internal identifiers keep the wallbounce name).
-func (m *SessionManager) WallbounceWindow() string { return m.MainSession() + ":brainstorming" }
+// BrainstormingWindow is the ブレインストーミング window. Its tmux window NAME is "brainstorming"
+// (human-facing label; the internal identifiers keep the brainstorming name).
+func (m *SessionManager) BrainstormingWindow() string { return m.MainSession() + ":brainstorming" }
 func (m *SessionManager) WorkerWindow(taskID string) string {
 	return m.MainSession() + ":w-" + taskID
 }
@@ -194,14 +194,14 @@ func (m *SessionManager) SwitchTo(ctx context.Context, target string) error {
 }
 
 // ExpectedWindows returns the non-dashboard windows the controller should keep
-// alive for the given phase/plan (docs/06 §5.9 recovery): the wallbounce window
-// while in wallbounce; and a worker window for every task that has live work
+// alive for the given phase/plan (docs/06 §5.9 recovery): the brainstorming window
+// while in brainstorming; and a worker window for every task that has live work
 // (running/review/revise or waiting_human). The dashboard window is the
 // controller's own and is not listed. Pure/testable; EnsureAll materializes them.
 func (m *SessionManager) ExpectedWindows(phase string, plan *Plan) []string {
 	var targets []string
-	if phase == PhaseWallbounce {
-		targets = append(targets, m.WallbounceWindow())
+	if phase == PhaseBrainstorming {
+		targets = append(targets, m.BrainstormingWindow())
 	}
 	if plan != nil {
 		for i := range plan.Tasks {

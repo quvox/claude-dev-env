@@ -795,9 +795,9 @@ code)
 # -----------------------------------------------------------------------------
 # AI オーケストレーターを新しい tmux ウィンドウで起動
 #   claude-dev orchestrate [<ゴール>] [--fresh]
-#   ゴールは任意（既定は壁打ちから開始）。
+#   ゴールは任意（既定はブレインストーミングから開始）。
 #   --fresh で前回の実行状態（state/plan/control・worktree/orch ブランチ）を
-#   破棄して壁打ちから新規開始する（中断した executing/intervening の再開を上書き）。
+#   破棄してブレインストーミングから新規開始する（中断した executing/intervening の再開を上書き）。
 #   worker の実行内容はダッシュボードの [d] キーでライブ表示できる。
 # -----------------------------------------------------------------------------
 orchestrate)
@@ -827,7 +827,7 @@ orchestrate)
     done
 
     # tmux 常駐方式（docs/06 §5.9 / docs/impl/10_cli.md）。生存判定は
-    # **コントローラプロセスの生存**で行う（has-session ではない）：worker/wallbounce
+    # **コントローラプロセスの生存**で行う（has-session ではない）：worker/brainstorming
     # ウィンドウが remain-on-exit on のため、コントローラ〔dashboard 窓〕が死んでも
     # セッションが延命し得る（空き殻セッション）。has-session だとそれを誤って生存と
     # 判定して壊れたセッションへ attach してしまう。
@@ -1160,8 +1160,8 @@ claude-dev - Claude Code 安全開発環境
   claude-dev start --kvm         KVM/QEMU デバイスを渡して起動（VM を動かす時のみ）
   claude-dev code                新しい tmux ウィンドウで Claude Code を起動
   claude-dev orchestrate [<ゴール>] [--fresh]
-                                 AI オーケストレーター（壁打ち→自律実行）を起動
-                                 （--fresh で前回の実行状態を破棄し壁打ちから再開）
+                                 AI オーケストレーター（ブレインストーミング→自律実行）を起動
+                                 （--fresh で前回の実行状態を破棄しブレインストーミングから再開）
   claude-dev attach [NAME]       既存セッションに接続
   claude-dev stop [NAME]         セッションを停止
   claude-dev list                実行中セッション一覧

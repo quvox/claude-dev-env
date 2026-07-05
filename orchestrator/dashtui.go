@@ -17,7 +17,7 @@ import (
 //     ONLY Enter navigates there (select-window; ⏸ → in-window intervene).
 //   - Event-driven diff rendering (bubbletea), not a periodic full clear.
 // The dashboard runs on the `dashboard` window's own PTY, independent of the
-// claude instances in the wallbounce/worker windows (separate panes), so there
+// claude instances in the brainstorming/worker windows (separate panes), so there
 // is no TTY conflict — the program keeps running while the human is switched to
 // another window.
 

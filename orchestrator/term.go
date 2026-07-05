@@ -10,7 +10,7 @@ import (
 
 // Terminal-mode handling.
 //
-// The interactive `claude` child (wallbounce/intervene) is a full-screen TUI
+// The interactive `claude` child (brainstorming/intervene) is a full-screen TUI
 // that switches the shared controlling terminal into a non-canonical ("raw")
 // mode and does NOT restore canonical mode when it exits. Because the
 // controller shares that same TTY, every line-buffered read it performs
@@ -63,8 +63,8 @@ func sttyRun(args ...string) bool {
 func printModeBanner(mode string) {
 	var msg string
 	switch mode {
-	case "wallbounce":
-		msg = "▶ 壁打ちモード：要件と plan を固め、済んだら /exit（Ctrl-D）で実行へ移ります"
+	case "brainstorming":
+		msg = "▶ ブレインストーミングモード：要件と plan を固め、済んだら /exit（Ctrl-D）で実行へ移ります"
 	case "intervene":
 		msg = "▶ 介入モード：要判断に回答し、済んだら /exit（Ctrl-D）でダッシュボードへ戻ります"
 	case "executing":
@@ -73,6 +73,34 @@ func printModeBanner(mode string) {
 		return
 	}
 	fmt.Fprintf(os.Stderr, "\n\x1b[1;36m%s\x1b[0m\n", msg)
+}
+
+// printBrainstormingHome renders a COMPLETE status screen in the dashboard
+// window while brainstorming runs in its own window (独立ウィンドウ方式・docs/06
+// §4.2). The controller then blocks in WaitConsume, so without this the dashboard
+// window would show only a stray banner and look "stuck mid-render". This gives
+// the human a finished screen that (a) confirms the dashboard is the home window
+// and (b) tells them how to reach the brainstorming conversation. Japanese
+// (docs/06 §5.7). Best-effort: no-op on a non-TTY.
+func printBrainstormingHome(goal string) {
+	if !isTTY() {
+		return
+	}
+	if strings.TrimSpace(goal) == "" {
+		goal = "（未確定 — ブレインストーミングで決めます）"
+	}
+	var b strings.Builder
+	b.WriteString("\x1b[2J\x1b[H") // clear + home: a complete, stable screen
+	b.WriteString("\x1b[1;36m● ブレインストーミング中（ダッシュボード）\x1b[0m\n")
+	fmt.Fprintf(&b, "goal: %s\n\n", oneline(goal, 72))
+	b.WriteString("対話は \x1b[1mbrainstorming\x1b[0m ウィンドウで行います。\n")
+	b.WriteString("  移動: \x1b[1mCtrl-b → w\x1b[0m でウィンドウ一覧 → brainstorming を選択\n")
+	b.WriteString("        （または \x1b[1mCtrl-b → 数字\x1b[0m でウィンドウ番号指定）\n\n")
+	b.WriteString("AI と検討して plan を固め、対話で \x1b[1m/exit\x1b[0m すると：\n")
+	b.WriteString("  ・plan が実行可能なら → 実行（ダッシュボード）へ自動遷移\n")
+	b.WriteString("  ・未確定なら → ここで 続ける / 終了 を選ぶメニューを表示\n\n")
+	b.WriteString("\x1b[2mこのウィンドウ（dashboard）が常にホームです。\x1b[0m\n")
+	fmt.Fprint(os.Stdout, b.String())
 }
 
 // menuItem is one selectable option in selectMenu.

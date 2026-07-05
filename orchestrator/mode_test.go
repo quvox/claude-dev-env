@@ -53,7 +53,7 @@ func TestWriteLaunchScript_NoPromptOmitsPositional(t *testing.T) {
 	dir := t.TempDir()
 	store, _ := NewStore(dir)
 	m := &Mode{Store: store, Workspace: dir}
-	script, err := m.WriteLaunchScript("wallbounce", "SYS", "")
+	script, err := m.WriteLaunchScript("brainstorming", "SYS", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -63,7 +63,7 @@ func TestWriteLaunchScript_NoPromptOmitsPositional(t *testing.T) {
 		t.Errorf("expected system prompt flag:\n%s", s)
 	}
 	// With an empty prompt, no trailing positional `"$(cat …prompt)"` is emitted.
-	if strings.Contains(s, "wallbounce.prompt") {
+	if strings.Contains(s, "brainstorming.prompt") {
 		t.Errorf("empty prompt must not be passed as positional:\n%s", s)
 	}
 }

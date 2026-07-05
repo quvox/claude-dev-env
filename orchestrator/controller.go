@@ -34,10 +34,10 @@ type Controller struct {
 	// unchanged when it is absent.
 	Sessions *SessionManager
 
-	// Confirm asks the human a wallbounce continuation question on the terminal
+	// Confirm asks the human a brainstorming continuation question on the terminal
 	// when control.json is missing/invalid. canExecute gates whether the "実行"
 	// option is offered at all (only when the plan is actually ready+lint-clean;
-	// otherwise 壁打ち is not finished and execute must not be presented). Returns
+	// otherwise ブレインストーミング is not finished and execute must not be presented). Returns
 	// one of "continue", "execute", "done". Injectable for tests/headless.
 	Confirm func(prompt string, canExecute bool) string
 
@@ -51,7 +51,7 @@ type Controller struct {
 // Run executes the full lifecycle starting from the persisted (or fresh) state.
 func (c *Controller) Run(ctx context.Context) error {
 	// tmux 常駐方式: コントローラは orch-<CNAME>-main セッションの中で回る。自分の
-	// ウィンドウを "dashboard" に改名し、mouse off を確定する（worker/壁打ちは同
+	// ウィンドウを "dashboard" に改名し、mouse off を確定する（worker/ブレインストーミングは同
 	// セッションの別ウィンドウとしてぶら下げる。docs/06 §4.2）。best-effort。
 	if c.Sessions != nil && tmuxAvailable() {
 		c.Sessions.SetupMainSession(ctx)
@@ -61,7 +61,7 @@ func (c *Controller) Run(ctx context.Context) error {
 		return err
 	}
 	if st == nil {
-		st = &State{Phase: PhaseWallbounce, RunID: newRunID()}
+		st = &State{Phase: PhaseBrainstorming, RunID: newRunID()}
 		if err := c.Store.SaveState(st); err != nil {
 			return err
 		}
@@ -78,8 +78,8 @@ func (c *Controller) Run(ctx context.Context) error {
 		default:
 		}
 		switch st.Phase {
-		case PhaseWallbounce:
-			if err := c.runWallbounce(ctx, st); err != nil {
+		case PhaseBrainstorming:
+			if err := c.runBrainstorming(ctx, st); err != nil {
 				return err
 			}
 		case PhaseExecuting:
@@ -100,22 +100,22 @@ func (c *Controller) Run(ctx context.Context) error {
 	}
 }
 
-// ---- wallbounce ----
+// ---- brainstorming ----
 
-func (c *Controller) runWallbounce(ctx context.Context, st *State) error {
-	printModeBanner("wallbounce")
+func (c *Controller) runBrainstorming(ctx context.Context, st *State) error {
+	printModeBanner("brainstorming")
 	var (
 		ctrl *Control
 		err  error
 	)
 	if c.Sessions != nil && tmuxAvailable() {
-		// tmux 常駐方式：壁打ちは wallbounce セッション内で動かし、control.json を
+		// tmux 常駐方式：ブレインストーミングは brainstorming セッション内で動かし、control.json を
 		// ポーリング監視する（自 pane＝main のダッシュボード枠を奪わない。docs/06 §4.2）。
-		ctrl = c.runWallbounceSession(ctx)
+		ctrl = c.runBrainstormingSession(ctx)
 	} else {
 		// Legacy fallback (no tmux / headless): foreground child in this pane.
-		if rerr := c.Mode.RunInteractive(ctx, c.Mode.WallbounceArgs()...); rerr != nil {
-			_ = c.Store.AppendAudit(AuditEntry{Event: "wallbounce_exit", Detail: map[string]any{"err": rerr.Error()}})
+		if rerr := c.Mode.RunInteractive(ctx, c.Mode.BrainstormingArgs()...); rerr != nil {
+			_ = c.Store.AppendAudit(AuditEntry{Event: "brainstorming_exit", Detail: map[string]any{"err": rerr.Error()}})
 		}
 		ctrl, err = c.Handoff.Consume()
 		if err != nil {
@@ -128,64 +128,71 @@ func (c *Controller) runWallbounce(ctx context.Context, st *State) error {
 		switch ctrl.Request {
 		case ReqExecute:
 			if plan != nil && plan.Ready && lintPlan(plan) == "" {
-				c.closeWallbounceSession()
+				c.closeBrainstormingSession()
 				return c.transition(st, PhaseExecuting)
 			}
 			// execute requested but plan not executable (not ready or a task
 			// lacks completion). Do NOT go silent and do NOT show the menu:
 			// explain on the terminal and hand the reason back to the brain, then
-			// stay in wallbounce so it fixes the plan next round (docs/06 §4.5/§8.1).
+			// stay in brainstorming so it fixes the plan next round (docs/06 §4.5/§8.1).
 			c.reportNotExecutable(plan)
 			return nil
 		case ReqAbort:
-			c.closeWallbounceSession()
+			c.closeBrainstormingSession()
 			return c.transition(st, PhaseDone)
-		case ReqContinueWallbounce:
-			return nil // stay in wallbounce; loop re-runs interactive
+		case ReqContinueBrainstorming:
+			return nil // stay in brainstorming; loop re-runs interactive
 		}
 	}
 
 	// No decisive control.json: ask the human via a cursor/number menu. The
 	// "実行" option is offered ONLY when the plan is genuinely executable (ready +
-	// every task has completion); otherwise 壁打ち is not finished, so we present
+	// every task has completion); otherwise ブレインストーミング is not finished, so we present
 	// only 続ける/終了 (docs/06 §4.5).
 	canExec := plan != nil && plan.Ready && lintPlan(plan) == ""
-	switch c.confirm("壁打ち: 次の操作を選んでください", canExec) {
+	switch c.confirm("ブレインストーミング: 次の操作を選んでください", canExec) {
 	case "execute":
 		if canExec {
-			c.closeWallbounceSession()
+			c.closeBrainstormingSession()
 			return c.transition(st, PhaseExecuting)
 		}
 		c.reportNotExecutable(plan)
 		return nil
 	case "done":
-		c.closeWallbounceSession()
+		c.closeBrainstormingSession()
 		return c.transition(st, PhaseDone)
 	default:
-		return nil // continue wallbounce
+		return nil // continue brainstorming
 	}
 }
 
-// runWallbounceSession launches the wallbounce brain inside the wallbounce tmux
-// session and watches control.json until the human /exits (独立ウィンドウ方式・
-// docs/06 §4.2/§5.9). It re-switches the attached client into the wallbounce
-// session each poll so a client attaching to main right after startup is pulled
-// into the conversation (there is nothing else to view during wallbounce).
-// Returns the consumed Control (nil if the human exited without a handoff, which
-// the caller resolves via the confirm menu).
-func (c *Controller) runWallbounceSession(ctx context.Context) *Control {
-	name := c.Sessions.WallbounceWindow()
-	script, err := c.Mode.WriteLaunchScript("wallbounce", c.Mode.wallbounceInstr(), "")
+// runBrainstormingSession launches the brainstorming brain in its OWN window and
+// watches control.json until the human /exits (独立ウィンドウ方式・docs/06 §4.2/§5.9).
+//
+// The dashboard window stays the HOME view: we launch the brainstorming claude
+// WITHOUT switching to its window (observed bug: the brainstorming window was
+// shown first on attach), keep the dashboard window active, and render a complete
+// status screen there (printBrainstormingHome) so it never looks "stuck
+// mid-render". The human navigates to the brainstorming window themselves. The
+// watch never forces the view. Returns the consumed Control (nil if the human
+// exited without a handoff, which the caller resolves via the confirm menu).
+func (c *Controller) runBrainstormingSession(ctx context.Context) *Control {
+	name := c.Sessions.BrainstormingWindow()
+	script, err := c.Mode.WriteLaunchScript("brainstorming", c.Mode.brainstormingInstr(), "")
 	if err != nil {
-		_ = c.Store.AppendAudit(AuditEntry{Event: "wallbounce_launch_error", Detail: map[string]any{"err": err.Error()}})
+		_ = c.Store.AppendAudit(AuditEntry{Event: "brainstorming_launch_error", Detail: map[string]any{"err": err.Error()}})
 		return nil
 	}
-	// LaunchInteractive select-window's the wallbounce window ONCE (initial pull);
-	// tmux attach then honors it as the active window. We must NOT re-switch every
-	// poll — doing so traps the attached client on wallbounce and prevents the human
-	// from navigating to the dashboard / other windows (observed bug). So the watch
-	// only checks for the handoff / window exit; it never forces the view.
-	_ = c.Sessions.LaunchInteractive(ctx, name, script)
+	// Run (not LaunchInteractive): create the brainstorming window with the claude
+	// but do NOT select-window to it — Ensure uses `new-window -d`, so the
+	// dashboard window remains current.
+	_ = c.Sessions.Run(ctx, name, "sh "+shellSingleQuote(script))
+	_ = c.Sessions.SwitchTo(ctx, c.Sessions.DashboardWindow()) // keep dashboard as home
+	goal := ""
+	if plan, _ := c.Store.LoadPlan(); plan != nil {
+		goal = plan.Goal
+	}
+	printBrainstormingHome(goal)
 	ctrl, _ := c.Handoff.WaitConsume(ctx, 500*time.Millisecond, func() bool {
 		return !c.Sessions.Has(ctx, name) || c.Sessions.PaneDead(ctx, name) // /exit without a handoff
 	})
@@ -193,11 +200,11 @@ func (c *Controller) runWallbounceSession(ctx context.Context) *Control {
 	return ctrl
 }
 
-// closeWallbounceSession tears down the wallbounce session (best-effort) when
-// leaving wallbounce (docs/06 §4.2: 実行フェーズでは不要なら閉じる).
-func (c *Controller) closeWallbounceSession() {
+// closeBrainstormingSession tears down the brainstorming session (best-effort) when
+// leaving brainstorming (docs/06 §4.2: 実行フェーズでは不要なら閉じる).
+func (c *Controller) closeBrainstormingSession() {
 	if c.Sessions != nil {
-		_ = c.Sessions.Kill(context.Background(), c.Sessions.WallbounceWindow())
+		_ = c.Sessions.Kill(context.Background(), c.Sessions.BrainstormingWindow())
 	}
 }
 
@@ -226,24 +233,24 @@ func (c *Controller) closeWorkerSession(taskID string) {
 
 // reportNotExecutable explains on the terminal (never silently) why execution
 // cannot start, records it to the audit log and Slack, and hands the reason to
-// the next wallbounce brain via handoff_note.md so it fixes the plan without the
+// the next brainstorming brain via handoff_note.md so it fixes the plan without the
 // human relaying it. The wording never asks the human to edit plan.json (that is
 // the brain's job — docs/06 §4.3/§4.5). Japanese (docs/06 §5.7).
 func (c *Controller) reportNotExecutable(plan *Plan) {
 	var reason, note string
 	switch {
 	case plan == nil || len(plan.Tasks) == 0:
-		reason = "plan がまだありません。壁打ち（対話）でゴールとタスクを固めてください。"
+		reason = "plan がまだありません。ブレインストーミング（対話）でゴールとタスクを固めてください。"
 		note = reason
 	case !plan.Ready:
-		reason = "plan がまだ ready ではありません。壁打ちで詰めてから実行してください。"
+		reason = "plan がまだ ready ではありません。ブレインストーミングで詰めてから実行してください。"
 		note = reason
 	default:
 		missing := lintPlan(plan)
 		if missing == "" {
 			return // actually executable; nothing to report
 		}
-		reason = fmt.Sprintf("各タスクに completion（受け入れ基準）が必要です。未設定: %s。壁打ちに戻って対話で completion を補ってください（plan.json は壁打ち脳が更新します）。", missing)
+		reason = fmt.Sprintf("各タスクに completion（受け入れ基準）が必要です。未設定: %s。ブレインストーミングに戻って対話で completion を補ってください（plan.json はブレインストーミング脳が更新します）。", missing)
 		note = fmt.Sprintf("前回の実行差し戻し理由: 次のタスクに completion が未設定でした: %s。各タスクに具体的な completion を必ず付与してから ready=true にして execute してください。", missing)
 	}
 	_ = c.Store.AppendAudit(AuditEntry{Event: "plan_not_executable", Detail: map[string]any{"reason": reason}})
@@ -262,7 +269,7 @@ func (c *Controller) confirm(prompt string, canExecute bool) string {
 	if c.Confirm != nil {
 		return c.Confirm(prompt, canExecute)
 	}
-	// Headless / no confirm hook: default to continuing wallbounce (safe; the
+	// Headless / no confirm hook: default to continuing brainstorming (safe; the
 	// human can re-attach). Never auto-execute.
 	return "continue"
 }
@@ -306,7 +313,7 @@ func (c *Controller) runExecuting(ctx context.Context, st *State) error {
 	)
 
 	// Dashboard: a bubbletea TUI on the `dashboard` window's own PTY (docs/06 §5.3).
-	// It runs independently of the claude instances in the wallbounce/worker windows
+	// It runs independently of the claude instances in the brainstorming/worker windows
 	// (separate panes), so it keeps rendering while the human is switched away — no
 	// stop/start dance needed. Only started on a TTY; headless/tests run the loop
 	// with no UI. User actions needing the controller arrive on `actions`; cursor

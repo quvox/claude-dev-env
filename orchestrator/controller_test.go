@@ -626,7 +626,7 @@ func countJSONL(t *testing.T, s *Store, name string) int {
 
 // TestReportNotExecutable_MissingCompletion verifies that a lint-failing plan
 // (a task lacks completion) is reported visibly: a handoff_note.md is written
-// for the next wallbounce brain and a Slack notice is emitted (docs/06 §4.5/§8.1).
+// for the next brainstorming brain and a Slack notice is emitted (docs/06 §4.5/§8.1).
 func TestReportNotExecutable_MissingCompletion(t *testing.T) {
 	ctrl, store := newTestController(t, testCfg(), &mockClaude{}, &mockGit{})
 	// Ready plan but t2 lacks a completion → lint fails on t2.

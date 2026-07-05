@@ -102,13 +102,13 @@ func TestBuildReviewPrompt_NoPolicyWhenAbsent(t *testing.T) {
 
 func TestModeArgs_IncludePolicyWhenPresent(t *testing.T) {
 	ws := t.TempDir()
-	writeOrchestratorMD(t, ws, "壁打ちでは必ず完了基準を確認。")
+	writeOrchestratorMD(t, ws, "ブレインストーミングでは必ず完了基準を確認。")
 	store, _ := NewStore(ws)
 	m := &Mode{Store: store, Workspace: ws}
 
-	wbArgs := m.WallbounceArgs()
+	wbArgs := m.BrainstormingArgs()
 	if !argsContainPolicy(wbArgs) {
-		t.Fatalf("wallbounce args should include policy: %v", wbArgs)
+		t.Fatalf("brainstorming args should include policy: %v", wbArgs)
 	}
 	// Seed a question so ResolveArgs has the instruction assembled.
 	_ = store.WriteQuestion("iv1", "詰まりました")
@@ -124,8 +124,8 @@ func TestModeArgs_NoPolicyWhenAbsent(t *testing.T) {
 	m := &Mode{Store: store, Workspace: ws}
 	// No ORCHESTRATOR.md and no instruction templates (localInstrDir unset, the
 	// baked /usr/local path won't exist in tests) -> no --append-system-prompt.
-	if argsContainPolicy(m.WallbounceArgs()) {
-		t.Fatalf("wallbounce args should not include policy when absent")
+	if argsContainPolicy(m.BrainstormingArgs()) {
+		t.Fatalf("brainstorming args should not include policy when absent")
 	}
 }
 
@@ -167,12 +167,12 @@ func TestVMModePreamble_PrependedInVMMode(t *testing.T) {
 	store, _ := NewStore(t.TempDir())
 	m := &Mode{Store: store, Workspace: t.TempDir()}
 	found := false
-	for _, a := range m.WallbounceArgs() {
+	for _, a := range m.BrainstormingArgs() {
 		if strings.Contains(a, "VM_DEV.md") {
 			found = true
 		}
 	}
 	if !found {
-		t.Fatalf("wallbounce args should include VM preamble in VM mode")
+		t.Fatalf("brainstorming args should include VM preamble in VM mode")
 	}
 }

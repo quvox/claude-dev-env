@@ -13,7 +13,7 @@ import (
 const instructionDir = "/usr/local/share/claude-orchestrator"
 
 // Mode owns the terminal foreground and switches what occupies it. Interactive
-// (wallbounce/intervene) exec's a child `claude` sharing the controller's TTY
+// (brainstorming/intervene) exec's a child `claude` sharing the controller's TTY
 // and blocks until it exits; execution mode renders the dashboard.
 type Mode struct {
 	Store     *Store
@@ -35,7 +35,7 @@ func (m *Mode) instructionPath(name string) string {
 // shares the controller's TTY, blocking until it exits. `extraArgs` are passed
 // verbatim. The controller loop naturally pauses while this runs.
 //
-// Wallbounce: launch with the wallbounce instruction.
+// Brainstorming: launch with the brainstorming instruction.
 // Intervene: fresh start (no --resume) with the intervention question seeded.
 func (m *Mode) RunInteractive(ctx context.Context, args ...string) error {
 	cmd := exec.CommandContext(ctx, claudePath(), args...)
@@ -58,11 +58,11 @@ func (m *Mode) RunInteractive(ctx context.Context, args ...string) error {
 	return err
 }
 
-// wallbounceInstr assembles the wallbounce --append-system-prompt instruction:
+// brainstormingInstr assembles the brainstorming --append-system-prompt instruction:
 // any consume-once lint-rejection note (handoff_note.md), the VM-mode preamble,
-// the project policy (ORCHESTRATOR.md, if any) and the baked wallbounce.md.
+// the project policy (ORCHESTRATOR.md, if any) and the baked brainstorming.md.
 // Shared by the legacy Args path and the session-launch path (docs/06 §4.5).
-func (m *Mode) wallbounceInstr() string {
+func (m *Mode) brainstormingInstr() string {
 	// Consume-once: read then delete the handoff note.
 	note, _ := m.Store.ReadAtomicSidecar("handoff_note.md")
 	_ = os.Remove(m.Store.path("handoff_note.md"))
@@ -71,14 +71,14 @@ func (m *Mode) wallbounceInstr() string {
 		preamble = "【前回の実行差し戻し（handoff_note）】\n" + strings.TrimSpace(note) +
 			"\n上記を最優先で解消し、全タスクに completion を付けてから実行してください。\n\n"
 	}
-	return preamble + VMModePreamble() + LoadProjectPolicy(m.Workspace) + readFileOr(m.instructionPath("wallbounce.md"), "")
+	return preamble + VMModePreamble() + LoadProjectPolicy(m.Workspace) + readFileOr(m.instructionPath("brainstorming.md"), "")
 }
 
-// WallbounceArgs returns the args for launching the wallbounce brain (legacy
+// BrainstormingArgs returns the args for launching the brainstorming brain (legacy
 // foreground path). The project policy is prepended to the instruction, passed
 // via --append-system-prompt.
-func (m *Mode) WallbounceArgs() []string {
-	if instr := m.wallbounceInstr(); instr != "" {
+func (m *Mode) BrainstormingArgs() []string {
+	if instr := m.brainstormingInstr(); instr != "" {
 		return []string{"--append-system-prompt", instr}
 	}
 	return []string{}
@@ -108,7 +108,7 @@ func shellSingleQuote(s string) string {
 
 // WriteLaunchScript writes a /bin/sh launcher for an interactive claude into the
 // store's sessions dir and returns the script path. key is a filesystem-safe
-// token (the tmux session suffix, e.g. "wallbounce" or "w-t3"). The script
+// token (the tmux session suffix, e.g. "brainstorming" or "w-t3"). The script
 // normalizes the environment (source VM env, put claude on PATH, strip the Slack
 // token so only the controller posts), cd's to the workspace, and exec's claude
 // with the system prompt and optional initial prompt read from sidecar files —

@@ -6,7 +6,7 @@ import (
 )
 
 // Handoff wraps the control.json protocol between the interactive claude
-// (wallbounce/intervene brain) and the controller. The interactive child
+// (brainstorming/intervene brain) and the controller. The interactive child
 // writes control.json atomically before exiting; the controller consumes it
 // (reads then deletes) when it regains the foreground.
 type Handoff struct {
@@ -29,7 +29,7 @@ func (h *Handoff) Consume() (*Control, error) {
 	}
 	// Validate request value; unknown requests are treated as absent.
 	switch c.Request {
-	case ReqExecute, ReqResume, ReqContinueWallbounce, ReqAbort:
+	case ReqExecute, ReqResume, ReqContinueBrainstorming, ReqAbort:
 	default:
 		_ = h.Store.DeleteControl()
 		return nil, nil
