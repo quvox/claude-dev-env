@@ -1369,6 +1369,17 @@ func AllDone(plan *Plan) bool {
 	return true
 }
 
+// countUndone returns how many tasks are not yet done (for the resume message).
+func countUndone(plan *Plan) int {
+	n := 0
+	for i := range plan.Tasks {
+		if plan.Tasks[i].Status != TaskDone {
+			n++
+		}
+	}
+	return n
+}
+
 // AllSettled reports whether no task can make further progress (every task is
 // done, failed, or blocked).
 func AllSettled(plan *Plan) bool {

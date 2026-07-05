@@ -338,22 +338,55 @@ func (s *Store) SaveState(st *State) error {
 	return writeJSONAtomic(s.path("state.json"), st)
 }
 
-// ResetRun discards the run state of a previous session so a new run can start
-// cleanly from brainstorming: it removes state.json, plan.json, control.json and
-// the open-intervention sidecar. Append-only logs (audit/assumptions/
-// interventions JSONL) and summary.md are kept as history. Missing files are
-// not an error.
-func (s *Store) ResetRun() error {
-	for _, name := range []string{"state.json", "plan.json", "control.json"} {
-		if err := os.Remove(s.path(name)); err != nil && !os.IsNotExist(err) {
+// ArchiveRun relocates the current run's state into
+// `.orchestrator/history/<run_id>/` so a new run can start cleanly WITHOUT
+// deleting the previous plan/state/history — they stay referenceable (docs/06
+// §4.3). This replaces the old ResetRun which os.Remove'd those files: the tool
+// must never delete run data on startup; only a manual `rm` removes files.
+//
+// It MOVES (os.Rename) state.json, plan.json, control.json, summary.md and the
+// open-intervention sidecar into the history dir. Append-only logs
+// (audit/assumptions/interventions JSONL) stay in place as the cumulative record.
+// <run_id> comes from the current state (fallback: a UTC timestamp). Missing
+// files are skipped (not an error). Called only when the previous run is fully
+// done (AllDone) or the human passed --fresh.
+func (s *Store) ArchiveRun() error {
+	runID := ""
+	if st, _ := s.LoadState(); st != nil {
+		runID = st.RunID
+	}
+	if runID == "" {
+		runID = "run-" + time.Now().UTC().Format("20060102-150405")
+	}
+	dir := s.path("history", runID)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	for _, name := range []string{"state.json", "plan.json", "control.json", "summary.md"} {
+		src := s.path(name)
+		if _, err := os.Stat(src); err != nil {
+			continue // missing: skip
+		}
+		if err := os.Rename(src, filepath.Join(dir, name)); err != nil {
 			return err
 		}
 	}
-	// Clear the per-task intervention queue too (new-model side-channel).
-	if err := os.Remove(s.path("intervention", "open.json")); err != nil && !os.IsNotExist(err) {
-		return err
+	// Per-task intervention queue (new-model side-channel).
+	if src := s.path("intervention", "open.json"); fileExistsPath(src) {
+		if err := os.MkdirAll(filepath.Join(dir, "intervention"), 0o755); err != nil {
+			return err
+		}
+		if err := os.Rename(src, filepath.Join(dir, "intervention", "open.json")); err != nil {
+			return err
+		}
 	}
 	return nil
+}
+
+// fileExistsPath reports whether path exists (helper for ArchiveRun).
+func fileExistsPath(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
 }
 
 // ---- intervention queue (intervention/open.json) ----

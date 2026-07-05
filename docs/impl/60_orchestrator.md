@@ -106,7 +106,8 @@ Makefile                           build-orchestrator / テストターゲット
 ├── intervention/open.json 未解決の要判断キュー（タスク単位・複数同時可。controller が所有）
 ├── intervention/<id>/    介入 1 件ごとの質問と回答（question.md / answer.md）
 ├── workers/<taskID>.log  worker ごとの生ログ
-└── worktrees/<taskID>/   worker 用 git worktree（git worktree add で作成）
+├── worktrees/<taskID>/   worker 用 git worktree（git worktree add で作成）
+└── history/<run_id>/     過去 run の退避（plan.json/state.json/control.json/open.json/summary.md）。新規開始/--fresh 時に ArchiveRun が os.Rename で移動＝参照可能に保つ。ツールは消さない（消すのは利用者の rm のみ。06 §4.3）
 ```
 
 ### 主要スキーマ
@@ -208,7 +209,7 @@ type AuditEntry   struct { TS, Event, TaskID string; Detail map[string]any; Usag
 run loop の擬似フロー：
 
 0. 起動時、`main.go` は `--workspace` を **`filepath.Abs` で絶対パスに正規化**する。Store のパス（worktree パス含む）はこれに基づき、`git` は `cmd.Dir=workspace` で実行されるため、相対 workspace だと worktree パスが二重ネスト（`…/ws/ws/.orchestrator/worktrees/…`）して `git worktree add` が exit 128 → 「既に checked out」で stuck 化する。本番の `/workspace`（絶対）では顕在化しないが、任意パス起動の堅牢性として必須（[docs/reviews/2026-07-01_orchestrator-e2e.md](../reviews/2026-07-01_orchestrator-e2e.md)）。
-1. 続いて `main.go` が `state.json` を読んで**再開か新規開始かを判定**する（§ 並行性・再開・エラー処理の「再開と新規開始の判定」）：中断された run（Phase=`executing`）のみ再開し、それ以外（不在／`done`／未知 Phase）または `--fresh` 指定時は実行状態を破棄して新規開始する。その後 `controller.go` の run loop は、新規開始なら Phase=brainstorming（RunID 採番）、再開なら永続化済みの Phase（executing）から動く。再開（executing）時は `plan.json`・`intervention/open.json` を正本とし、残存する `control.json` は無視して消す。
+1. 続いて `main.go` が `state.json`・`plan.json` を読んで**再開か新規開始かを判定**する（§ 並行性・再開・エラー処理の「再開と新規開始の判定」）：**判定基準は plan の完了状況**——未完了 plan が残れば継続（`plan.Ready` なら executing、未 ready なら brainstorming）、全タスク done か plan 不在なら新規開始、`--fresh` は明示新規。**自動リセットは全 done か `--fresh` 時のみ、かつ削除ではなく `history/` へアーカイブ**（plan/履歴は消さない）。その後 `controller.go` の run loop は、新規開始なら Phase=brainstorming（RunID 採番）、継続なら永続化済み/据え直した Phase から動く。再開（executing）時は `plan.json`・`intervention/open.json` を正本とし、残存する `control.json` は無視して消す。
 2. **brainstorming**：起動直前に**モードバナー**（§モード切替）を印字してから `mode.RunInteractive()` で対話 `claude` を前景に exec し、終了を待つ（人間が `/exit`／`Ctrl-D` で終了して初めて制御が戻る＝自動終了しない。06 §4.5/§5.4）。終了後 `control.json` を読む：
    - `execute` かつ `plan.Ready==true` かつ **lint clean**（全タスクに `completion` あり）→ executing へ。
    - `execute` だが **plan が実行不可**（`plan.Ready!=true` または lint 失敗）→ **メニューは出さず**、下記「実行不可の可視化」を行い、`runBrainstorming` 内部ループが `enterConversation=true` で brainstorming を継続（対話へ直接戻す）。脳が execute を書いたが未完成なので、次回ブレインストーミングで `handoff_note.md` を見て補完させる。
@@ -393,7 +394,17 @@ merge_strategy: merge
 
 - **並行性**：`executing` で依存解決済みタスクを `max_workers` まで goroutine 起動。各 worker は独立 worktree。共有状態（plan/Store/state/open.json）は排他制御し、作業ブランチへの統合（merge）は直列化する。長時間の外部呼び出し中はロックを保持しない（plan のスナップショットに対して実行）。**`waiting_human` のタスクは worker スロットを占有しない**ので、空いたスロットは他の `pending` タスクへ回る。
 - **トリガー発火＝タスク単位の保留（peer を止めない）**：トリガーは worker 起動**前**（条件1・pre-dispatch）または worker が結果を返した**後**（条件2/4/5・stuck・review_gate_defect）に評価される。いずれの時点でも当該タスクの worker は「まだ起動していない／既に完了している」ため、発火時に**走行中の worker を個別に kill する処理は不要**（per-task の中断 context は持たない）。発火したタスクは `waiting_human` にして `intervention/open.json` へ積むだけで、`openInterventionLocked` は他へ一切干渉しない。**全 worker を束ねる単一 context を発火で `runCancel()` する旧挙動は廃止**する（これが「1 件の判断要求で全 worker が止まり再開時にやり直しになる」根因だった）。複数タスクが同時に要判断になっても、それぞれが独立に `waiting_human` になるだけで、互いを止めない。`abort`（中止）だけは run 全体を畳む特例として全 worker を停止し done へ向かう。中間コミット猶予（`worker_grace_seconds`）は**中断（Ctrl-C/`[q]`）で走行中 worker を止める経路にのみ**適用される（介入の保留経路では worker は走っていない）。
-- **再開と新規開始の判定**：起動時に `state.json` を読み、**genuinely 中断された run（Phase=`executing`）のみ再開**する。それ以外（state.json 不在／Phase=`done`／未知の Phase）は**ブレインストーミングから新規開始**する（`main.go` の `isResumable`）。これにより、(a) 完了済みの run が Phase=`done` を残して次回起動が即終了する、(b) 古い `executing` 状態へ無言で再開してブレインストーミングを飛ばす、という 2 つの失敗を防ぐ。`--fresh` を付けると中断された run でも強制的に新規開始する（`Store.ResetRun()` で state/plan/control・intervention/open.json を削除し、`CleanOrchWorktrees` で前回の worktree と `orch/*` ブランチを撤去してからブレインストーミングへ）。新規開始時は標準出力に「🆕 新規セッションを開始します」、再開時は「↩️ 前回の executing フェーズから再開します」を表示し、挙動を可視化する。
+- **再開と新規開始の判定（plan の完了状況が基準。06 §4.3）**：起動時に `state.json`・`plan.json` を読み、**フェーズではなく plan の完了状況**で判定する（`main.go`。`--fresh` 指定時を除く）：
+  - **未完了の plan が残っている**（`plan.json` あり かつ `AllDone(plan)==false`）→ **その run を継続**する。`plan.Ready` なら Phase=`executing` に据えて残タスクから再開（executing 中断だけでなく、`abort` で `done` になったが未完了タスクが残るケースも継続＝「続きから」を既定にする）。`plan.Ready` 前（ブレインストーミング未完了）なら plan を保持して Phase=`brainstorming` を継続。
+  - **`AllDone(plan)==true`（真に完了）／`plan.json` 不在** → ブレインストーミングから**新規開始**。
+  - `--fresh` → 明示的に新規開始（現 run を退避してからブレインストーミングへ）。
+  - `--start-executing`＋ready な seed plan → 従来どおり executing で直接開始（退避しない。70）。
+- **データ保全の不変条件（重要。06 §4.3）**：**起動時の自動処理で plan・状態・履歴を `os.Remove` してはならない**。
+  - 現 run を片付けるのは **`AllDone` の run**（真に完了）または **`--fresh` 明示時**だけ。未完了 run を自動でリセットしない。
+  - 片付けは**削除ではなくアーカイブ**：`Store.ArchiveRun()` が `plan.json`・`state.json`・`control.json`・`intervention/open.json`（＋ `summary.md` のスナップショット）を `.orchestrator/history/<run_id>/` へ **`os.Rename` で退避**する（`run_id` は退避対象 state の RunID、無ければタイムスタンプ）。追記型ログ（`audit.jsonl`・`assumptions.jsonl`・`interventions.jsonl`）はそのまま残す。**旧 `ResetRun()`（`os.Remove` で plan/state/control/open を削除）は廃止**し `ArchiveRun()` に置換する。
+  - `CleanOrchWorktrees` は `--fresh` 時のみ（worktree と `orch/*` ブランチの撤去）。通常の新規開始では worktree も残す（作業復旧路）。
+  - **実ファイルを消すのは利用者が明示的に `rm` した時だけ**。
+  - 可視化：継続時「↩️ 未完了の plan から継続します（残り N タスク）」、新規時「🆕 新規セッションを開始します（前回 run は history/ に退避）」等を標準出力に表示。
 - **再開（executing）— 完了タスクを再実行しない**：`plan.json`・`intervention/open.json` を読み、`done` 以外のタスクから継続（06 §4.3、状態はファイルに永続）。正規化（`NormalizeForResume`）は**途中状態だけ**を対象とする：
   - `done`/`failed`/`blocked` は**一切触らない**（完了タスクは絶対に再実行しない）。
   - `waiting_human` は**保留のまま維持**（`open.json` のエントリと対応）。pending へ戻さない。
@@ -423,7 +434,7 @@ docker-proxy と同方式のマルチステージで `claude-orchestrator` を b
 
 ## CLI 連携（claude-dev orchestrate）
 
-正本は [10_cli.md](10_cli.md)。契約（tmux 常駐方式）：`claude-dev orchestrate [<ゴール>] [--fresh]` は実行中コンテナに対し、**`claude-orchestrator` プロセスの生存（`pgrep`）で判定**する（`has-session` ではない＝`remain-on-exit on` の worker/brainstorming 窓が空き殻セッションを延命させ誤検出するため。06 §5.9）——**生存中** なら `docker exec -it -u <user> <name> tmux attach -t orch-<CNAME>-main`（コントローラ常駐中）、**不在** なら延命した空き殻セッションを `kill-session` してから新しい `orch-<CNAME>-main` を `new-session -d -n dashboard` で作りその中で `claude-orchestrator --workspace /workspace …` を起こして（状態から resume）から attach する。セッション名は `--print-main-session` で本体から得る。コンテナ起動は従来どおり `claude-dev start`。ゴール引数は任意（既定はブレインストーミングから開始、06 §5.1）。`--fresh` はそのままバイナリへ渡す（前回の実行状態を破棄してブレインストーミングから新規開始）。worker 出力は各 worker ウィンドウで直接確認（カーソル選択→Enter で切替、または `Ctrl-b w`／`Ctrl-b 数字`）。`[d]` は dashboard 内のログ tail トグルとして存置（別ウィンドウ直視と併存）。廃止は `--workers-window`／Config B のみ。**これが単一コマンド復旧（06 §5.9）**。`<CNAME>` は正規化コンテナ名（`session.go` の `normalizeCName`）。
+正本は [10_cli.md](10_cli.md)。契約（tmux 常駐方式）：`claude-dev orchestrate [<ゴール>] [--fresh]` は実行中コンテナに対し、**`claude-orchestrator` プロセスの生存（`pgrep`）で判定**する（`has-session` ではない＝`remain-on-exit on` の worker/brainstorming 窓が空き殻セッションを延命させ誤検出するため。06 §5.9）——**生存中** なら `docker exec -it -u <user> <name> tmux attach -t orch-<CNAME>-main`（コントローラ常駐中）、**不在** なら延命した空き殻セッションを `kill-session` してから新しい `orch-<CNAME>-main` を `new-session -d -n dashboard` で作りその中で `claude-orchestrator --workspace /workspace …` を起こして（状態から resume）から attach する。セッション名は `--print-main-session` で本体から得る。コンテナ起動は従来どおり `claude-dev start`。ゴール引数は任意（既定はブレインストーミングから開始、06 §5.1）。`--fresh` はそのままバイナリへ渡す（前回 run を `history/` へ退避〔削除しない〕してブレインストーミングから新規開始。06 §4.3）。worker 出力は各 worker ウィンドウで直接確認（カーソル選択→Enter で切替、または `Ctrl-b w`／`Ctrl-b 数字`）。`[d]` は dashboard 内のログ tail トグルとして存置（別ウィンドウ直視と併存）。廃止は `--workers-window`／Config B のみ。**これが単一コマンド復旧（06 §5.9）**。`<CNAME>` は正規化コンテナ名（`session.go` の `normalizeCName`）。
 
 バイナリ直叩きのフラグ（オーケストレーター開発・自己検証で使用。[70_sample-project.md](70_sample-project.md)／[docs/07_self-verification.md](../07_self-verification.md)）：
 

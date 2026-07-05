@@ -67,30 +67,64 @@ func run(workspace, instrDir, goal string, fresh, startExec bool) error {
 	// two failure modes: (a) a finished run leaving Phase=done so the next launch
 	// exits immediately, and (b) silently skipping brainstorming into a stale
 	// executing run. --fresh forces a clean start even from an interrupted run.
+	// Resume/new decision is based on the PLAN's completion, not the phase
+	// (docs/06 §4.3): an unfinished plan (some task not done) is CONTINUED —
+	// whether it was interrupted mid-executing or ended via `abort` with pending
+	// tasks left. Only a fully-done plan (or no plan) starts fresh. Crucially we
+	// NEVER delete plan/state/history on startup: ArchiveRun MOVES them to
+	// history/ so they stay referenceable; only a manual `rm` deletes.
 	prev, _ := store.LoadState()
+	plan, _ := store.LoadPlan()
+	unfinished := plan != nil && !AllDone(plan)
 	switch {
-	case !fresh && isResumable(prev):
-		fmt.Printf("↩️  前回の %s フェーズから再開します\n", prev.Phase)
-	case !fresh && startExec && seedPlanReady(store):
-		// Verification affordance: a ready seed plan.json is present and no run is
-		// in progress. Begin directly in executing, WITHOUT resetting (which would
-		// delete the seed plan). docs/impl/70_sample-project.md.
+	case fresh:
+		// Explicit reset: archive the current run (do NOT delete), remove worktrees
+		// + orch/* branches, and start fresh from brainstorming.
+		fmt.Println("🆕 --fresh: 前回 run を history/ に退避して新規セッションを開始します")
+		CleanOrchWorktrees(context.Background(), workspace, store.path("worktrees"))
+		if err := store.ArchiveRun(); err != nil {
+			return fmt.Errorf("archive run: %w", err)
+		}
+	case startExec && seedPlanReady(store):
+		// Verification affordance: a ready seed plan.json is present. Begin directly
+		// in executing WITHOUT archiving (would move the seed plan). docs/impl/70.
 		if err := store.SaveState(&State{Phase: PhaseExecuting, RunID: newRunID()}); err != nil {
 			return fmt.Errorf("seed state: %w", err)
 		}
 		fmt.Println("▶ seed plan から直接 executing で開始します（--start-executing）")
-	default:
-		switch {
-		case fresh && isResumable(prev):
-			fmt.Println("🆕 前回の実行状態を破棄して新規セッションを開始します（--fresh）")
-		case startExec:
-			fmt.Println("⚠ --start-executing は ready な seed plan が無いためブレインストーミングから開始します")
-		default:
-			fmt.Println("🆕 新規セッションを開始します（ブレインストーミングから）")
+	case unfinished && plan.Ready:
+		// Unfinished executable plan → continue the remaining tasks (executing).
+		st := prev
+		if st == nil {
+			st = &State{RunID: newRunID()}
 		}
-		CleanOrchWorktrees(context.Background(), workspace, store.path("worktrees"))
-		if err := store.ResetRun(); err != nil {
-			return fmt.Errorf("reset run: %w", err)
+		st.Phase = PhaseExecuting
+		if err := store.SaveState(st); err != nil {
+			return fmt.Errorf("resume state: %w", err)
+		}
+		fmt.Printf("↩️  未完了の plan から継続します（残り %d タスク。中断/中止からの続き）\n", countUndone(plan))
+	case unfinished && !plan.Ready:
+		// Plan not ready yet (brainstorming unfinished) → keep the plan, continue
+		// brainstorming rather than discarding it.
+		st := prev
+		if st == nil {
+			st = &State{RunID: newRunID()}
+		}
+		st.Phase = PhaseBrainstorming
+		if err := store.SaveState(st); err != nil {
+			return fmt.Errorf("resume state: %w", err)
+		}
+		fmt.Println("↩️  ブレインストーミングを継続します（未確定の plan を保持）")
+	default:
+		// No plan, or every task done (genuinely complete) → start fresh. Archive a
+		// completed prior run (move to history/, never delete).
+		if prev != nil || plan != nil {
+			fmt.Println("🆕 新規セッションを開始します（前回 run は history/ に退避）")
+			if err := store.ArchiveRun(); err != nil {
+				return fmt.Errorf("archive run: %w", err)
+			}
+		} else {
+			fmt.Println("🆕 新規セッションを開始します（ブレインストーミングから）")
 		}
 	}
 
@@ -175,12 +209,6 @@ func terminalConfirm(prompt string, canExecute bool) string {
 	return selectMenu(prompt, items, 0)
 }
 
-// isResumable reports whether a loaded state represents a genuinely interrupted
-// run that should be resumed rather than restarted from brainstorming. Only
-// executing is resumable (the former top-level intervening phase is abolished).
-func isResumable(st *State) bool {
-	return st != nil && st.Phase == PhaseExecuting
-}
 
 // seedPlanReady reports whether a ready seed plan.json is present (used by the
 // --start-executing verification affordance).
