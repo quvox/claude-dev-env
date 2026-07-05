@@ -174,3 +174,9 @@
 - 修正（`session.go`/`controller.go`）：`SessionManager.sessionOverride` を追加し、`DetectSession(ctx)` が `$TMUX` 有り時に `tmux display-message -p '#{session_name}'` で実行中セッション名を取得して束縛。`MainSession()` はそれを優先返却。コントローラは `Run` 冒頭（`SetupMainSession` の前）で `DetectSession` を呼ぶ。`--print-main-session` は tmux 外実行なので従来どおり正準名 `orch-<CNAME>-main` を返し、ラッパのセッション作成と互換。
 - 検証：実機で「`main` という名前のセッション内でコントローラ起動」を再現→ brainstorming ウィンドウが**同じ `main` セッション**に作られ、ホームで Enter→brainstorming が active になることを確認。正準 `orch-hisol-work-main` 経路も従来どおり動作。`go build`/`go test ./...` pass。配布イメージ再ビルド。
 - 設計同期：`60_orchestrator.md`（命名と管理／実装構成の `session.go` 節に `DetectSession`・`sessionOverride` を追記）。
+
+## 2026-07-05（追補：worker ログを Claude Code 風の可読表示に整形）
+- 背景：worker ウィンドウ／`[d]` 詳細が worker の生 stream-json をそのまま `tail -F` していたため「JSON が流れるだけで理解できない」。
+- 修正（新規 `streamlog.go`／`worker.go`）：`ExecClaude.RunPrompt` の `io.MultiWriter` を「生 stream-json → バッファ（結果解析用）」＋「`workers/<taskID>.log` → `streamPrettyWriter`（整形）」に変更。`streamPrettyWriter` は改行区切りでイベントを受け、`formatStreamLine` が Claude Code 風へ整形：`assistant` text は本文、`tool_use` は `⏺ <ツール名>(<主要引数の要約>)`（Bash→command／Read・Write・Edit→file_path／Grep・Glob→pattern／他→主要フィールドか短縮 JSON）、`tool_result` は `  ⎿ <先頭短縮＋(N 行)>`、`result` は区切り＋完了。パース不能行はそのまま出力（欠落なし）。結果解析（`ParseWorkerResult`）は生バッファを使うので整形は解析に非影響（ログは表示専用）。
+- 検証：`streamlog_test.go`（各イベント種別の整形・部分行バッファリング）pass。実機の生 worker ログ（`t2.log`, 191 行）を通し、`⏺ Bash(...)`／`⏺ Read(path)`／`  ⎿ … (N 行)`／地の文が読める形になることを目視確認。`go test ./...` は環境依存でハングする既存の対話テスト `TestIntervene_ResolveApprovesIrreversible`（実 claude を `RunInteractive` で起動＝本変更と無関係・clean tree でも同様）以外は pass。配布イメージ再ビルド。
+- 設計同期：`60_orchestrator.md`（worker ディスパッチ step3・`[d]` 節・実装構成に `streamlog.go` を追記）。

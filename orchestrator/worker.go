@@ -382,9 +382,12 @@ func (e ExecClaude) RunPrompt(ctx context.Context, dir, model, prompt, logPath s
 	if logPath != "" {
 		// Truncate+create the log up front and tee live so the detail view shows
 		// progress as it streams (CombinedOutput would only reveal it at the end).
+		// The RAW stream-json goes to buf (for ParseWorkerResult); the log file
+		// receives a Claude-Code-like readable rendering via streamPrettyWriter so
+		// the worker window / [d] view is human-readable, not raw JSON (streamlog.go).
 		if f, ferr := os.Create(logPath); ferr == nil {
 			defer f.Close()
-			w = io.MultiWriter(&buf, f)
+			w = io.MultiWriter(&buf, newStreamPrettyWriter(f))
 		}
 	}
 	cmd.Stdout = w
