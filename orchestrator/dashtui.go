@@ -59,11 +59,16 @@ func newDashProgram(ctx context.Context, st *DashboardState, store *Store, sessi
 
 func (m dashModel) Init() tea.Cmd { return dashTick() }
 
-// selectable returns the navigable worker rows (running/review/revise or
-// ⏸ waiting_human), in display order, read under the state lock.
+// selectable returns the navigable rows under the state lock. In brainstorming
+// it is a single row (the brainstorming window) so navigation is the SAME
+// cursor-select gesture as executing (no raw `Ctrl-_ w`). In executing it is the
+// active worker rows (running/review/revise or ⏸ waiting_human).
 func (m dashModel) selectable() []selRow {
 	m.st.mu.Lock()
 	defer m.st.mu.Unlock()
+	if m.st.Phase == PhaseBrainstorming {
+		return []selRow{{status: PhaseBrainstorming}}
+	}
 	var rows []selRow
 	for _, t := range m.st.Tasks {
 		switch t.Status {
@@ -99,9 +104,14 @@ func (m dashModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "enter":
 			if m.cursor >= 0 && m.cursor < len(rows) {
 				r := rows[m.cursor]
-				if r.status == TaskWaitingHuman {
-					m.send(dashAction{kind: "resolve", taskID: r.id}) // in-window intervene
-				} else if m.sessions != nil {
+				switch {
+				case r.status == TaskWaitingHuman:
+					m.send(dashAction{kind: "resolve", taskID: r.id}) // in-window intervene (no tmux needed)
+				case m.sessions == nil:
+					// no tmux: cannot switch the view
+				case r.status == PhaseBrainstorming:
+					_ = m.sessions.SwitchTo(context.Background(), m.sessions.BrainstormingWindow())
+				default:
 					_ = m.sessions.SwitchTo(context.Background(), m.sessions.WorkerWindow(r.id)) // view only
 				}
 			}
@@ -136,6 +146,30 @@ func (m dashModel) View() string {
 	s := m.st
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	// Brainstorming home: the SAME cursor-select TUI, with the brainstorming
+	// window as the single navigable target (Enter で移動). No raw `Ctrl-_ w`.
+	if s.Phase == PhaseBrainstorming {
+		goal := oneline(s.Goal, 56)
+		if strings.TrimSpace(goal) == "" {
+			goal = "（未確定 — ブレインストーミングで決めます）"
+		}
+		var b strings.Builder
+		b.WriteString(dashHeadStyle.Render("● ブレインストーミング中（ダッシュボード＝ホーム）"))
+		b.WriteByte('\n')
+		fmt.Fprintf(&b, "goal: %s\n\n", goal)
+		item := "brainstorming ウィンドウで AI と対話する"
+		if m.cursor == 0 {
+			b.WriteString(dashCursorStyle.Render("❯ " + item))
+		} else {
+			b.WriteString("  " + item)
+		}
+		b.WriteString("\n\n")
+		b.WriteString(dashHintStyle.Render("Enter でそのウィンドウへ移動 → AI と検討して plan を固める\n"))
+		b.WriteString(dashHintStyle.Render("対話で /exit すると：実行可能なら実行モードへ／未確定ならここで 続ける・終了 を選ぶ\n"))
+		b.WriteString(dashHintStyle.Render("↑↓/jk 選択 · Enter 移動"))
+		return b.String()
+	}
 
 	var b strings.Builder
 	if banner := readVMHealthBanner(); banner != "" {

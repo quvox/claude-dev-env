@@ -96,3 +96,21 @@ func TestDashQuit_SendsQuit(t *testing.T) {
 		t.Fatal("q did not emit quit")
 	}
 }
+
+func TestDashView_BrainstormingIsCursorSelect(t *testing.T) {
+	st := &DashboardState{Phase: PhaseBrainstorming, Goal: "g"}
+	m := dashModel{st: st, actions: make(chan dashAction, 4)}
+	rows := m.selectable()
+	if len(rows) != 1 || rows[0].status != PhaseBrainstorming {
+		t.Fatalf("brainstorming selectable = %+v, want 1 brainstorming row", rows)
+	}
+	out := m.View()
+	for _, want := range []string{"ブレインストーミング中", "brainstorming ウィンドウ", "❯", "Enter 移動"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("brainstorming View missing %q:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "Ctrl-_ → w") || strings.Contains(out, "Ctrl-b") {
+		t.Errorf("brainstorming View still instructs raw tmux nav (should be cursor-select):\n%s", out)
+	}
+}

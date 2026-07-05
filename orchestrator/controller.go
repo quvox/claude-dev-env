@@ -170,12 +170,12 @@ func (c *Controller) runBrainstorming(ctx context.Context, st *State) error {
 // watches control.json until the human /exits (独立ウィンドウ方式・docs/06 §4.2/§5.9).
 //
 // The dashboard window stays the HOME view: we launch the brainstorming claude
-// WITHOUT switching to its window (observed bug: the brainstorming window was
-// shown first on attach), keep the dashboard window active, and render a complete
-// status screen there (printBrainstormingHome) so it never looks "stuck
-// mid-render". The human navigates to the brainstorming window themselves. The
-// watch never forces the view. Returns the consumed Control (nil if the human
-// exited without a handoff, which the caller resolves via the confirm menu).
+// WITHOUT switching to its window (keep the dashboard active) and run the
+// bubbletea dashboard TUI there in the brainstorming phase — the SAME
+// cursor-select UI as executing, offering the brainstorming window as the single
+// navigable target (↑↓/Enter, not raw `Ctrl-_ w`). The watch never forces the
+// view. Returns the consumed Control (nil if the human exited without a handoff,
+// which the caller resolves via the confirm menu).
 func (c *Controller) runBrainstormingSession(ctx context.Context) *Control {
 	name := c.Sessions.BrainstormingWindow()
 	script, err := c.Mode.WriteLaunchScript("brainstorming", c.Mode.brainstormingInstr(), "")
@@ -185,17 +185,31 @@ func (c *Controller) runBrainstormingSession(ctx context.Context) *Control {
 	}
 	// Run (not LaunchInteractive): create the brainstorming window with the claude
 	// but do NOT select-window to it — Ensure uses `new-window -d`, so the
-	// dashboard window remains current.
+	// dashboard window remains current (home).
 	_ = c.Sessions.Run(ctx, name, "sh "+shellSingleQuote(script))
-	_ = c.Sessions.SwitchTo(ctx, c.Sessions.DashboardWindow()) // keep dashboard as home
-	goal := ""
+	_ = c.Sessions.SwitchTo(ctx, c.Sessions.DashboardWindow())
+
+	// Dashboard TUI in the brainstorming phase: the SAME cursor-select UI as
+	// executing (docs/06 §5.3). It offers the brainstorming window as the single
+	// navigable target — the human moves there with ↑↓/Enter, NOT raw `Ctrl-_ w`
+	// (consistency was the point). Runs on the dashboard window's PTY, independent
+	// of the claude in the brainstorming window.
+	dash := &DashboardState{Phase: PhaseBrainstorming}
 	if plan, _ := c.Store.LoadPlan(); plan != nil {
-		goal = plan.Goal
+		dash.Goal = plan.Goal
 	}
-	printBrainstormingHome(goal)
+	actions := make(chan dashAction, 8)
+	var prog *tea.Program
+	if isTTY() {
+		prog = newDashProgram(ctx, dash, c.Store, c.Sessions, actions)
+		go func() { _, _ = prog.Run() }()
+	}
 	ctrl, _ := c.Handoff.WaitConsume(ctx, 500*time.Millisecond, func() bool {
 		return !c.Sessions.Has(ctx, name) || c.Sessions.PaneDead(ctx, name) // /exit without a handoff
 	})
+	if prog != nil {
+		prog.Quit()
+	}
 	_ = c.Sessions.SwitchTo(ctx, c.Sessions.DashboardWindow())
 	return ctrl
 }
@@ -297,7 +311,7 @@ func (c *Controller) runExecuting(ctx context.Context, st *State) error {
 
 	printModeBanner("executing")
 
-	dash := &DashboardState{Goal: plan.Goal}
+	dash := &DashboardState{Phase: PhaseExecuting, Goal: plan.Goal}
 	syncDashboard(dash, plan)
 	c.refreshInterventionCount(dash)
 

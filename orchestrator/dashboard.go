@@ -56,7 +56,11 @@ func readVMHealthBanner() string {
 
 // DashboardState is a snapshot the controller publishes for the TUI to render.
 type DashboardState struct {
-	mu                sync.Mutex
+	mu sync.Mutex
+	// Phase is the current run phase ("brainstorming"|"executing"). The TUI is
+	// cursor-select in BOTH: brainstorming offers the brainstorming window as the
+	// single navigable target; executing offers the worker windows.
+	Phase             string
 	Goal              string
 	Tasks             []DashTask
 	LastSummary       string
