@@ -199,6 +199,16 @@ func (c *Controller) runBrainstormingSession(ctx context.Context, enterConversat
 		_ = c.Store.AppendAudit(AuditEntry{Event: "brainstorming_launch_error", Detail: map[string]any{"err": err.Error()}})
 		return nil
 	}
+	// Discard any residual control.json BEFORE launching the brain. `.orchestrator/`
+	// lives on the persistent /workspace mount, so a control.json left by a prior
+	// run/session (e.g. a killed process, or a previous brain's `abort`) survives
+	// container recreation. WaitConsume calls Consume() on its FIRST tick (handoff.go),
+	// so without this the new brainstorming session would instantly consume that stale
+	// handoff and, if it was `abort`, transition straight to done in seconds ("続ける
+	// を選んでも何もできない" — the run ends before the human can interact). The brain's
+	// decision must come from THIS session, so only its post-launch write should count.
+	_ = c.Handoff.DiscardStale()
+
 	// Run (not LaunchInteractive): create/revive the brainstorming window with the
 	// claude (Ensure uses `new-window -d`, so it does not steal focus).
 	//
