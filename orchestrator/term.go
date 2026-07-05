@@ -10,7 +10,7 @@ import (
 
 // Terminal-mode handling.
 //
-// The interactive `claude` child (wallbounce/intervene) is a full-screen TUI
+// The interactive `claude` child (brainstorming/intervene) is a full-screen TUI
 // that switches the shared controlling terminal into a non-canonical ("raw")
 // mode and does NOT restore canonical mode when it exits. Because the
 // controller shares that same TTY, every line-buffered read it performs
@@ -63,8 +63,8 @@ func sttyRun(args ...string) bool {
 func printModeBanner(mode string) {
 	var msg string
 	switch mode {
-	case "wallbounce":
-		msg = "▶ 壁打ちモード：要件と plan を固め、済んだら /exit（Ctrl-D）で実行へ移ります"
+	case "brainstorming":
+		msg = "▶ ブレインストーミングモード：要件と plan を固め、済んだら /exit（Ctrl-D）で実行へ移ります"
 	case "intervene":
 		msg = "▶ 介入モード：要判断に回答し、済んだら /exit（Ctrl-D）でダッシュボードへ戻ります"
 	case "executing":
@@ -74,6 +74,11 @@ func printModeBanner(mode string) {
 	}
 	fmt.Fprintf(os.Stderr, "\n\x1b[1;36m%s\x1b[0m\n", msg)
 }
+
+// (printBrainstormingHome removed: the brainstorming home is now rendered by the
+// bubbletea dashboard TUI in the brainstorming phase — the SAME cursor-select UI
+// as executing, so navigation to the brainstorming window is Enter, not raw
+// `Ctrl-_ w`. See dashtui.go View()/selectable() and controller.runBrainstormingSession.)
 
 // menuItem is one selectable option in selectMenu.
 type menuItem struct {

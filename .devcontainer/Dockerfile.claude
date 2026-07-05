@@ -9,14 +9,16 @@
 # 認証情報はボリュームマウントで管理
 # =============================================================================
 # =============================================================================
-# orchestrator ビルドステージ（AI オーケストレーター / Go・stdlib のみ）
+# orchestrator ビルドステージ（AI オーケストレーター / Go）
+# 依存（bubbletea/lipgloss ＝ダッシュボード TUI）は vendoring で取り込む
+# （ビルド時ネットワーク非依存・再現性。docs/impl/60）。
 # =============================================================================
 FROM golang:1.24-alpine AS orch-builder
 WORKDIR /app
-COPY orchestrator/go.mod ./
-RUN go mod download
+COPY orchestrator/go.mod orchestrator/go.sum ./
+COPY orchestrator/vendor/ ./vendor/
 COPY orchestrator/*.go ./
-RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /claude-orchestrator .
+RUN CGO_ENABLED=0 go build -ldflags="-s -w" -mod=vendor -o /claude-orchestrator .
 
 FROM ubuntu:24.04 AS base
 

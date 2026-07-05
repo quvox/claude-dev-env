@@ -2,6 +2,13 @@
 
 > 対応文書: `docs/impl/60_orchestrator.md`
 
+## 2026-07-05（「続ける」＝対話に直接戻す／ブレインストーミングホームの階段状崩れ修正）
+- 背景：人間から「『1.続ける』を選んで Enter しても brainstorming ウィンドウに移動しない（ホームに戻され再選択が要る）／そもそも窓が無いように見える」との指摘。クリーン再現では「続ける」で brainstorming 窓は復活していた（`done` で消えていたのは別要因）が、(a) ホーム画面の下部ヒント行が右へ階段状にずれる描画バグ、(b)「続ける＝対話に戻る」という期待と実挙動（ホームで再選択）が不一致、の2点が真の問題だった。
+- 着地の分岐（`controller.go`）：`runBrainstormingSession(ctx, enterConversation)` に着地フラグを追加。初回起動は `false`＝`SwitchTo(DashboardWindow)`（ホーム＝カーソル選択式）、`continue`／実行不可差し戻しは `true`＝`SwitchTo(BrainstormingWindow)`（対話へ直接戻す）。`runBrainstorming` を**内部ループ**化し、continue/実行不可のたびに `enterConversation=true` で再入場、`execute`（実行可）/`abort`/`done` でのみ遷移する（従来は `return nil` で外側ループへ戻していた）。
+- 階段状崩れ修正（`dashtui.go` View ブレインストーミング分岐）：ヒント行を `lipgloss.Render("…\n")` と改行込みで描いていたのを、**改行を `Render` の外**（`WriteByte('\n')`）に出して各行のテキストだけをスタイルする形へ。styled セグメントに `\n` が入ると bubbletea の行差分が崩れ後続行が右へずれるため。
+- 検証：`go build`/`go test ./...` pass。実機（hisol-work）でクリーン起動→ホーム描画が全行 col0（崩れ無し）、`/exit` 相当→確認メニュー正常（❯1.続ける/2.終了）、`1`（続ける）→**brainstorming 窓が active**（対話へ直接復帰・claude 稼働）を確認。配布イメージ再ビルド。
+- 設計同期：`06_orchestration.md`（§4.5「1.続ける」＝対話に戻る＝`select-window`、§5.1/§8 の起動フローを「カーソル選択→Enter・以後の続けるは対話へ直接戻る」に更新、旧 `Ctrl-b w` 記述を除去）、`60_orchestrator.md`（ブレインストーミング着地の分岐・内部ループ・`printBrainstormingHome` 廃止＝bubbletea View 化を反映）。
+
 ## 2026-06-29（可観測性・中断の再開可能化・完了検証・Config B 廃止／設計↔実装の総点検）
 - 背景：実機運用で「ずっと待機中に見える／`[d]` で何も出ない／`[q]` で worker が消えて復元不能」となり使い物にならなかった。原因はダッシュボード設計と中断セマンティクスの不備。併せて設計↔実装の不整合と未実装機能を総点検した。
 - ダッシュボード（`dashboard.go`）：タスクが running になった時点で `syncDashboard` を呼ぶよう変更し、状態ラベル（待機中/実行中/…）・経過時間・試行回数を表示。`syncDashboard` は running の開始時刻を引き継いで経過時間が伸びるようにした。`[d]` を no-op から「実行中 worker のログ末尾をライブ表示するトグル」に実装（`renderDetail`/`tailFile`）。`NewDashboard` は `Store` を受け取る。
@@ -144,3 +151,51 @@
 - 指示テンプレ：wallbounce.md（plan.json タスクスキーマに completion 追加＝必須化・自己検証で全completion揃うまで ready/execute しない・/exit 案内・handoff_note 反映・plan.json を人間編集させない・選択肢番号・日本語）、intervene.md（キュー進捗の口頭明示・answer.md 記録後 /exit・番号・日本語）。
 - 設計↔実装仕様・実装仕様内の整合性を独立多エージェントで徹底確認し、メニュー起動条件の二重定義・worker 言語前提の食い違い・§13 誤参照・テスト一覧漏れ等を是正。
 - 検証: go build/vet 緑、gofmt 済み、go test（-race 含む）全緑（term_test.go の selectMenu/resolveMenu/buildQuestion 連番、controller_test の reportNotExecutable/handoff_note を追加）。対話メニューの実機 TTY E2E は次段階（自己検証サンプルで attach 確認）。
+
+## 2026-07-05（独立セッション方式の実装仕様＋構成要素の実装）
+- 「独立セッション方式（新アーキ）」節を追加（デーモン化・session.go・保持シェル・worker セッション・セレクタ・介入のセッション内対話・単一コマンド復旧・mouse off）。全体構成のモジュール表・カバー・実装状況を更新。06↔60・実装↔60 を独立エージェントで徹底確認し、保持シェル方式/pre-dispatch セッション/ResolveArgs 二重契約/命名(<CNAME>)/旧新ラベリング等を是正。
+- 実装（構成要素・go build/vet/test -race 緑・gofmt 済み）：session.go（SessionManager・命名・Ensure保持シェル+mouse off・Run/Kill/Has/SwitchTo・ExpectedSessions/EnsureAll）、daemon.go（pidfile群）、handoff.go WaitConsume（control.json 監視）、controller.go の worker セッション結線（open/closeWorkerSession・nil ガード）と介入 per-worker（reconcileOne/resolveOne）、mode.go ResolveArgsOne、dashboard.go セレクタ（selectableWorkerID/SwitchTo）、main.go で Sessions 注入。単体テスト追加。
+- 未実装（最終結線＝要・実機 E2E）：コントローラのデーモン化、RunInteractive→セッション launch+WaitConsume 置換、claude-dev orchestrate 改修、selector からの介入対話起動、pre-dispatch セッション生成。現行の対話・実行の既定動作は旧単一ウィンドウ方式のまま、その上に worker セッションのビュー＋セレクタが加わった状態。
+
+## 2026-07-05（独立ウィンドウ方式：1 セッション＋ウィンドウ）
+- 「独立セッション方式」→「独立ウィンドウ方式」へ改訂。session.go を window API（`MainSession`＋`DashboardWindow`/`WallbounceWindow`/`WorkerWindow`、`new-window`/`kill-window`/`select-window`/`list-windows`、`SetupMainSession`〔自窓を dashboard へ改名＋mouse off〕、`remain-on-exit on`〔dashboard は off〕、`splitTarget`）へ書き換え。`Has` は `list-windows` で窓名を厳密照合（`display-message -t session:window` が窓不在でも現窓へフォールバックし誤って成功を返す落とし穴を回避＝実機で判明・修正）。
+- controller/dashboard/mode/main を window ターゲットへ結線。`ReqAbort` でも `closeWallbounceSession` を呼ぶよう対称化。`[d]`（ダッシュボード内 tail）と番号キー（個別ウィンドウ切替）は併存（置換ではない）と明記。
+- 未使用の `daemon.go`（setsid デーモン用 pidfile。tmux 常駐方式では has-session が主機構）を削除。旧称・旧命名のコードコメントを刷新。
+- 独立2エージェントで design↔impl↔code を徹底確認し、front matter/責務表/§実装状況の「セッション」語誤用・`ResolveArgsOne`→`IntervenePrompt`・テスト帰属・`-n dashboard` 正本整合を是正。`go build`/`vet`/`gofmt`/`go test -race` 全緑。
+
+## 2026-07-05（生存判定：has-session → pgrep〔コントローラプロセス〕）
+- 復旧/二重起動防止の生存判定を has-session から「claude-orchestrator プロセスの生存」へ変更（06 §5.9）。claude-dev orchestrate（10_cli 正本）を、コンテナ内 pgrep で cmdline が claude-orchestrator で始まるプロセス（tmux 起動ラッパを除外）を判定→生存なら attach／不在なら空き殻セッションを kill-session してから new-session -n dashboard で起こし直し(resume)、へ改修。self-kill は不採用（clean done は dashboard 窓 remain-on-exit off でセッション自然消滅、空き殻は中断/クラッシュ時のみ＝pgrep 判定で吸収）。Go コード変更なし。§80/§87/実装状況/10_cli を更新。独立2エージェントで design↔impl 整合確認。実機 E2E：空き殻状態で has-session=TRUE のところ pgrep=ABSENT を確認、復旧で resume まで確認。
+
+## 2026-07-05（ダッシュボード＝bubbletea カーソル選択 TUI）
+- dashboard.go を共有状態＋純ヘルパに縮小し、dashtui.go（新規・bubbletea dashModel）でカーソル選択式 TUI を実装。controller の実行ループは isTTY 時に newDashProgram（WithAltScreen＋WithContext）を起動し、旧 render/renderString/readKeys/Dashboard/KeyEvent/startDash/stopDash/数字キー即移動/選択番号‹k› を撤去。ユーザ操作は actions チャネル（resolve/intervene/quit）＋モデル内（カーソル/[p]/[d]）。bubbletea/lipgloss を go.mod に追加し vendoring（vendor/）で取り込み、Dockerfile.claude を -mod=vendor に更新。テスト：TestDashView_RendersTasksAndCursor 他（dashtui_test.go）。旧 render テストは撤去。go build/vet/test -race 全緑。実機で TUI 描画＋カーソル移動を確認。
+
+## 2026-07-05（追補：コントローラが実行中セッション名を検出＝Enter 無反応の根治）
+- 背景：実機で「ホームで Enter を押しても brainstorming に移動しない／何もできない」。調査の結果、コントローラが `main` という名前のセッション内で走っていたのに、`SessionManager` は自セッション名を `orch-<CNAME>-main` と決め打ちしていたため、ウィンドウ生成・`select-window` がすべて**人間が attach している `main` とは別のセッション**（`orch-…-main`）に向かい、Enter が空振りしていた（`claude-dev start` が既定で作る `main` セッションと衝突）。
+- 修正（`session.go`/`controller.go`）：`SessionManager.sessionOverride` を追加し、`DetectSession(ctx)` が `$TMUX` 有り時に `tmux display-message -p '#{session_name}'` で実行中セッション名を取得して束縛。`MainSession()` はそれを優先返却。コントローラは `Run` 冒頭（`SetupMainSession` の前）で `DetectSession` を呼ぶ。`--print-main-session` は tmux 外実行なので従来どおり正準名 `orch-<CNAME>-main` を返し、ラッパのセッション作成と互換。
+- 検証：実機で「`main` という名前のセッション内でコントローラ起動」を再現→ brainstorming ウィンドウが**同じ `main` セッション**に作られ、ホームで Enter→brainstorming が active になることを確認。正準 `orch-hisol-work-main` 経路も従来どおり動作。`go build`/`go test ./...` pass。配布イメージ再ビルド。
+- 設計同期：`60_orchestrator.md`（命名と管理／実装構成の `session.go` 節に `DetectSession`・`sessionOverride` を追記）。
+
+## 2026-07-05（追補：worker ログを Claude Code 風の可読表示に整形）
+- 背景：worker ウィンドウ／`[d]` 詳細が worker の生 stream-json をそのまま `tail -F` していたため「JSON が流れるだけで理解できない」。
+- 修正（新規 `streamlog.go`／`worker.go`）：`ExecClaude.RunPrompt` の `io.MultiWriter` を「生 stream-json → バッファ（結果解析用）」＋「`workers/<taskID>.log` → `streamPrettyWriter`（整形）」に変更。`streamPrettyWriter` は改行区切りでイベントを受け、`formatStreamLine` が Claude Code 風へ整形：`assistant` text は本文、`tool_use` は `⏺ <ツール名>(<主要引数の要約>)`（Bash→command／Read・Write・Edit→file_path／Grep・Glob→pattern／他→主要フィールドか短縮 JSON）、`tool_result` は `  ⎿ <先頭短縮＋(N 行)>`、`result` は区切り＋完了。パース不能行はそのまま出力（欠落なし）。結果解析（`ParseWorkerResult`）は生バッファを使うので整形は解析に非影響（ログは表示専用）。
+- 検証：`streamlog_test.go`（各イベント種別の整形・部分行バッファリング）pass。実機の生 worker ログ（`t2.log`, 191 行）を通し、`⏺ Bash(...)`／`⏺ Read(path)`／`  ⎿ … (N 行)`／地の文が読める形になることを目視確認。`go test ./...` は環境依存でハングする既存の対話テスト `TestIntervene_ResolveApprovesIrreversible`（実 claude を `RunInteractive` で起動＝本変更と無関係・clean tree でも同様）以外は pass。配布イメージ再ビルド。
+- 設計同期：`60_orchestrator.md`（worker ディスパッチ step3・`[d]` 節・実装構成に `streamlog.go` を追記）。
+
+## 2026-07-05（追補：review_gate_defect＝レビュア出力の形式不遵守を根治）
+- 背景：実機 w-t3 が「ゲート側の不具合」（`review_gate_defect`）で要判断になった。レビュア（sonnet-5）の最終 `result` を確認すると、規定の構造化 JSON ではなく**英語の散文の結論**（"Review complete — no critical or major findings. …"）だった。レビュー自体は合格判定なのに、JSON を 1 行も出さなかったため `ParseReviewResult` が解析不能→`review_format_error_limit`（既定 2）連続で `review_gate_defect` に昇格＝**合格が人間介入へ誤昇格**していた。ゲート機構（レビュア出力のパース契約）の頑健性不足。
+- 修正（`review.go`）：
+  - `reviewGuide` を強化＝「自動ゲートが JSON としてパースする／散文で答えると false gate defect になる。最終メッセージは JSON オブジェクト 1 個のみ・散文の結論やコードフェンス禁止・合格は `{"findings":[]}`」を明示。
+  - `findReviewResultJSON` を頑健化＝(a) 最終行の厳密一致を優先、(b) 失敗時は ```json フェンスや散文中に埋もれた `{...}` を、文字列リテラル内 `}` を無視するブレース対応スキャン（新規 `findJSONObjects`）で拾い、`findings` キーを持つ最後のオブジェクトを採用。共通判定は `tryReviewResult`（`findings` キー必須＝無関係な JSON を弾く）。
+- 検証：`review_parse_test.go`（厳密／散文後の JSON／フェンス／同一行前置／文字列内 `}`／純散文は失敗／findings 無しオブジェクトは棄却）pass。純散文（今回の t3 の生ログ相当）は依然パース不能＝安全側で人間へ（誤って合格扱いにしない）。指示強化で次回以降は JSON を確実に出させ誤昇格を抑止。`go test`（既存の対話ハングテスト除く）pass。配布イメージ再ビルド。
+- 設計同期：`60_orchestrator.md` §品質ゲート項目4（レビュア指示強化・パーサ頑健化）。
+
+## 2026-07-05（追補：介入解決後に run が恒久停止する競合を根治）
+- 背景：実機 w-t3 で要判断に回答し `/exit` した直後、pane は死ぬが閉じず・dashboard も変わらず・以降進まなくなった。調査：`intervention_resolved` は記録され `open.json` は空・`answer.md` も正しく書かれていたのに、plan.json の t3 は `waiting_human` のまま、コントローラは生存（idle）。
+- 原因：`resolveInterventionInSession` が `resolveOne`（ディスクから別コピーを `LoadPlan`→`reconcileOne`→`SavePlan`）を呼んでいたため、`runExecuting` が保持する**共有メモリの `plan`（t3=waiting_human）と乖離**。ループは (1) t3 が pending に戻ったと気づかず再ディスパッチせず、(2) 次の `SavePlan` でディスクの pending を waiting_human に上書きし戻す → 回答直後に恒久停止。
+- 修正（`controller.go`）：`resolveInterventionInSession(ctx, plan, taskID)` に共有 `plan` を渡し、`planMu` 下で `reconcileOne(plan,…)`＋`SavePlan(plan)` を実行（`resolveInterventions` レガシー経路と同じ正しいパターンに統一）。呼び出し側は解決直後に `syncDashboard`＋`refreshInterventionCount` で即時反映。`resolveOne` は単体テストで使用中のため保持。
+- 検証：`go build`／`go test`（既存の対話ハングテスト除く）pass。設計 `60_orchestrator.md`（介入＝worker ウィンドウ内で対話の項に「共有 plan へ突合」の必須事項を明記）。配布イメージ再ビルド。
+
+## 2026-07-05（追補：tmux mouse を on にしてスクロール可能に）
+- 背景：worker/介入の対話 claude（全画面 TUI）の pane でホイールのスクロールアップ/ダウンが使えず非常に不便との要望。原因は `SetupMainSession` とラッパが `mouse off` を設定していたため（マウス→キー入力化による状態破壊を避ける保守的判断だった）。
+- 修正：`session.go:SetupMainSession` とラッパ `claude-dev`（orchestrate 起動経路）の `mouse off`→`mouse on` に変更。耐障害性は「クライアント破壊でもセッション＝コントローラは tmux サーバ上で生存し再 attach で復旧」（§5.9）で担保されるため、run は失われない。ダッシュボード（bubbletea）はマウスを要求しないので、その窓でのホイールは tmux コピーモード（スクロールバック閲覧）になり、キーボード操作（↑↓/Enter）には影響しない。
+- 設計同期：`06_orchestration.md`（§5.2 のマウス項・§5.9 の mouse 項を on に）、`60_orchestrator.md`（session.go 記述・CLI 記述の mouse を on に）。配布イメージ再ビルド。

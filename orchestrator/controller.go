@@ -9,6 +9,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 // errSuspended is returned by the executing loop when the human presses [q]
@@ -26,10 +28,18 @@ type Controller struct {
 	Reviewer *Reviewer
 	Notifier Notifier
 
-	// Confirm asks the human a wallbounce continuation question on the terminal
-	// when control.json is missing/invalid. Returns one of "continue",
-	// "execute", "done". Injectable for tests/headless.
-	Confirm func(prompt string) string
+	// Sessions manages the per-component tmux sessions (独立ウィンドウ方式・
+	// docs/impl/60「独立ウィンドウ方式（新アーキ）」). nil in tests/headless: all
+	// session hooks below are nil-guarded and best-effort, so behavior is
+	// unchanged when it is absent.
+	Sessions *SessionManager
+
+	// Confirm asks the human a brainstorming continuation question on the terminal
+	// when control.json is missing/invalid. canExecute gates whether the "実行"
+	// option is offered at all (only when the plan is actually ready+lint-clean;
+	// otherwise ブレインストーミング is not finished and execute must not be presented). Returns
+	// one of "continue", "execute", "done". Injectable for tests/headless.
+	Confirm func(prompt string, canExecute bool) string
 
 	// planMu guards all reads/writes of *Plan and Store mutations during the
 	// concurrent execution phase. mergeMu serializes integrate() so concurrent
@@ -40,12 +50,23 @@ type Controller struct {
 
 // Run executes the full lifecycle starting from the persisted (or fresh) state.
 func (c *Controller) Run(ctx context.Context) error {
+	// tmux 常駐方式: コントローラは orch-<CNAME>-main セッションの中で回る。自分の
+	// ウィンドウを "dashboard" に改名し、mouse off を確定する（worker/ブレインストーミングは同
+	// セッションの別ウィンドウとしてぶら下げる。docs/06 §4.2）。best-effort。
+	if c.Sessions != nil && tmuxAvailable() {
+		// Bind to the session we are ACTUALLY running in BEFORE any window op, so
+		// dashboard/brainstorming/worker targets can never point at a different
+		// session than the one the human is attached to (e.g. the default `main`
+		// session). Otherwise Enter→brainstorming would silently no-op (docs/06 §4.2).
+		c.Sessions.DetectSession(ctx)
+		c.Sessions.SetupMainSession(ctx)
+	}
 	st, err := c.Store.LoadState()
 	if err != nil {
 		return err
 	}
 	if st == nil {
-		st = &State{Phase: PhaseWallbounce, RunID: newRunID()}
+		st = &State{Phase: PhaseBrainstorming, RunID: newRunID()}
 		if err := c.Store.SaveState(st); err != nil {
 			return err
 		}
@@ -62,8 +83,8 @@ func (c *Controller) Run(ctx context.Context) error {
 		default:
 		}
 		switch st.Phase {
-		case PhaseWallbounce:
-			if err := c.runWallbounce(ctx, st); err != nil {
+		case PhaseBrainstorming:
+			if err := c.runBrainstorming(ctx, st); err != nil {
 				return err
 			}
 		case PhaseExecuting:
@@ -84,75 +105,211 @@ func (c *Controller) Run(ctx context.Context) error {
 	}
 }
 
-// ---- wallbounce ----
+// ---- brainstorming ----
 
-func (c *Controller) runWallbounce(ctx context.Context, st *State) error {
-	printModeBanner("wallbounce")
-	if err := c.Mode.RunInteractive(ctx, c.Mode.WallbounceArgs()...); err != nil {
-		// Interactive session ending non-zero (e.g. /exit) is not fatal; we
-		// still inspect control.json.
-		_ = c.Store.AppendAudit(AuditEntry{Event: "wallbounce_exit", Detail: map[string]any{"err": err.Error()}})
-	}
-	ctrl, err := c.Handoff.Consume()
-	if err != nil {
-		return err
-	}
-	plan, _ := c.Store.LoadPlan()
+func (c *Controller) runBrainstorming(ctx context.Context, st *State) error {
+	// enterConversation controls the landing window for the NEXT session launch:
+	// first arrival → dashboard home (cursor-select); every 続ける/continue →
+	// straight back into the brainstorming conversation (docs/06 §4.2).
+	enterConversation := false
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+		printModeBanner("brainstorming")
+		var (
+			ctrl *Control
+			err  error
+		)
+		if c.Sessions != nil && tmuxAvailable() {
+			// tmux 常駐方式：ブレインストーミングは brainstorming ウィンドウ内で動かし、control.json を
+			// ポーリング監視する（自 pane＝main のダッシュボード枠を奪わない。docs/06 §4.2）。
+			ctrl = c.runBrainstormingSession(ctx, enterConversation)
+		} else {
+			// Legacy fallback (no tmux / headless): foreground child in this pane.
+			if rerr := c.Mode.RunInteractive(ctx, c.Mode.BrainstormingArgs()...); rerr != nil {
+				_ = c.Store.AppendAudit(AuditEntry{Event: "brainstorming_exit", Detail: map[string]any{"err": rerr.Error()}})
+			}
+			ctrl, err = c.Handoff.Consume()
+			if err != nil {
+				return err
+			}
+		}
+		enterConversation = false
+		plan, _ := c.Store.LoadPlan()
+		canExec := plan != nil && plan.Ready && lintPlan(plan) == ""
 
-	if ctrl != nil {
-		switch ctrl.Request {
-		case ReqExecute:
-			if plan != nil && plan.Ready && lintPlan(plan) == "" {
+		if ctrl != nil {
+			switch ctrl.Request {
+			case ReqExecute:
+				if canExec {
+					c.closeBrainstormingSession()
+					return c.transition(st, PhaseExecuting)
+				}
+				// execute requested but plan not executable (not ready or a task
+				// lacks completion). Do NOT go silent and do NOT show the menu:
+				// explain on the terminal and hand the reason back to the brain, then
+				// re-enter the conversation so it fixes the plan (docs/06 §4.5/§8.1).
+				c.reportNotExecutable(plan)
+				enterConversation = true
+				continue
+			case ReqAbort:
+				c.closeBrainstormingSession()
+				return c.transition(st, PhaseDone)
+			case ReqContinueBrainstorming:
+				enterConversation = true
+				continue // stay in brainstorming; re-enter the conversation
+			}
+		}
+
+		// No decisive control.json: ask the human via a cursor/number menu. The
+		// "実行" option is offered ONLY when the plan is genuinely executable (ready +
+		// every task has completion); otherwise ブレインストーミング is not finished, so we present
+		// only 続ける/終了 (docs/06 §4.5).
+		switch c.confirm("ブレインストーミング: 次の操作を選んでください", canExec) {
+		case "execute":
+			if canExec {
+				c.closeBrainstormingSession()
 				return c.transition(st, PhaseExecuting)
 			}
-			// execute requested but plan not executable (not ready or a task
-			// lacks completion). Do NOT go silent and do NOT show the menu:
-			// explain on the terminal and hand the reason back to the brain, then
-			// stay in wallbounce so it fixes the plan next round (docs/06 §4.5/§8.1).
 			c.reportNotExecutable(plan)
-			return nil
-		case ReqAbort:
+			enterConversation = true
+			continue
+		case "done":
+			c.closeBrainstormingSession()
 			return c.transition(st, PhaseDone)
-		case ReqContinueWallbounce:
-			return nil // stay in wallbounce; loop re-runs interactive
+		default:
+			enterConversation = true
+			continue // 続ける：対話に戻る
 		}
+	}
+}
+
+// runBrainstormingSession launches the brainstorming brain in its OWN window and
+// watches control.json until the human /exits (独立ウィンドウ方式・docs/06 §4.2/§5.9).
+//
+// The dashboard window stays the HOME view: we launch the brainstorming claude
+// WITHOUT switching to its window (keep the dashboard active) and run the
+// bubbletea dashboard TUI there in the brainstorming phase — the SAME
+// cursor-select UI as executing, offering the brainstorming window as the single
+// navigable target (↑↓/Enter, not raw `Ctrl-_ w`). The watch never forces the
+// view. Returns the consumed Control (nil if the human exited without a handoff,
+// which the caller resolves via the confirm menu).
+func (c *Controller) runBrainstormingSession(ctx context.Context, enterConversation bool) *Control {
+	name := c.Sessions.BrainstormingWindow()
+	script, err := c.Mode.WriteLaunchScript("brainstorming", c.Mode.brainstormingInstr(), "")
+	if err != nil {
+		_ = c.Store.AppendAudit(AuditEntry{Event: "brainstorming_launch_error", Detail: map[string]any{"err": err.Error()}})
+		return nil
+	}
+	// Discard any residual control.json BEFORE launching the brain. `.orchestrator/`
+	// lives on the persistent /workspace mount, so a control.json left by a prior
+	// run/session (e.g. a killed process, or a previous brain's `abort`) survives
+	// container recreation. WaitConsume calls Consume() on its FIRST tick (handoff.go),
+	// so without this the new brainstorming session would instantly consume that stale
+	// handoff and, if it was `abort`, transition straight to done in seconds ("続ける
+	// を選んでも何もできない" — the run ends before the human can interact). The brain's
+	// decision must come from THIS session, so only its post-launch write should count.
+	_ = c.Handoff.DiscardStale()
+
+	// Run (not LaunchInteractive): create/revive the brainstorming window with the
+	// claude (Ensure uses `new-window -d`, so it does not steal focus).
+	//
+	// Landing (docs/06 §4.2): 「続ける」= 対話に戻る, so on a continue re-entry we
+	// select-window straight into the brainstorming conversation — the human asked
+	// for 続ける to land them back in the chat, not on the home. On first arrival we
+	// keep the dashboard as home (cursor-select) so the human orients before entering.
+	_ = c.Sessions.Run(ctx, name, "sh "+shellSingleQuote(script))
+	if enterConversation {
+		_ = c.Sessions.SwitchTo(ctx, name)
+	} else {
+		_ = c.Sessions.SwitchTo(ctx, c.Sessions.DashboardWindow())
 	}
 
-	// No decisive control.json: ask the human via a cursor/number menu.
-	switch c.confirm("壁打ち: 次の操作を選んでください") {
-	case "execute":
-		if plan != nil && plan.Ready && lintPlan(plan) == "" {
-			return c.transition(st, PhaseExecuting)
-		}
-		c.reportNotExecutable(plan)
-		return nil
-	case "done":
-		return c.transition(st, PhaseDone)
-	default:
-		return nil // continue wallbounce
+	// Dashboard TUI in the brainstorming phase: the SAME cursor-select UI as
+	// executing (docs/06 §5.3). It offers the brainstorming window as the single
+	// navigable target — the human moves there with ↑↓/Enter, NOT raw `Ctrl-_ w`
+	// (consistency was the point). Runs on the dashboard window's PTY, independent
+	// of the claude in the brainstorming window.
+	dash := &DashboardState{Phase: PhaseBrainstorming}
+	if plan, _ := c.Store.LoadPlan(); plan != nil {
+		dash.Goal = plan.Goal
 	}
+	actions := make(chan dashAction, 8)
+	var prog *tea.Program
+	if isTTY() {
+		prog = newDashProgram(ctx, dash, c.Store, c.Sessions, actions)
+		go func() { _, _ = prog.Run() }()
+	}
+	ctrl, _ := c.Handoff.WaitConsume(ctx, 500*time.Millisecond, func() bool {
+		return !c.Sessions.Has(ctx, name) || c.Sessions.PaneDead(ctx, name) // /exit without a handoff
+	})
+	// Tear the TUI down and WAIT for bubbletea to finish restoring the terminal
+	// BEFORE any plain output follows (the confirm menu / banners). Without the
+	// Wait, bubbletea's async teardown races selectMenu and leaves the terminal in
+	// raw mode (OPOST/ONLCR off) → plain `\n` output staircases (garbled display).
+	if prog != nil {
+		prog.Quit()
+		prog.Wait()
+	}
+	ttyRestoreSane() // ensure sane line discipline (ONLCR on) for the follow-up menu
+	_ = c.Sessions.SwitchTo(ctx, c.Sessions.DashboardWindow())
+	return ctrl
+}
+
+// closeBrainstormingSession tears down the brainstorming session (best-effort) when
+// leaving brainstorming (docs/06 §4.2: 実行フェーズでは不要なら閉じる).
+func (c *Controller) closeBrainstormingSession() {
+	if c.Sessions != nil {
+		_ = c.Sessions.Kill(context.Background(), c.Sessions.BrainstormingWindow())
+	}
+}
+
+// openWorkerSession creates this worker's tmux session (holder shell) and shows
+// its live log via `tail -F` (独立ウィンドウ方式・docs/impl/60). Best-effort and
+// nil-guarded: no-op when Sessions is unset (tests/headless) or tmux is absent.
+// The session persists across the worker's claude -p → intervene → re-dispatch;
+// only closeWorkerSession (on settle) tears it down.
+func (c *Controller) openWorkerSession(taskID string) {
+	if c.Sessions == nil {
+		return
+	}
+	name := c.Sessions.WorkerWindow(taskID)
+	_ = c.Sessions.Run(context.Background(), name, "tail -n +1 -F "+c.Store.WorkerLogPath(taskID))
+}
+
+// closeWorkerSession tears down this worker's session (called when the task
+// settles: done/failed/blocked). waiting_human tasks keep their session for the
+// in-session intervention (Phase③ 3c).
+func (c *Controller) closeWorkerSession(taskID string) {
+	if c.Sessions == nil {
+		return
+	}
+	_ = c.Sessions.Kill(context.Background(), c.Sessions.WorkerWindow(taskID))
 }
 
 // reportNotExecutable explains on the terminal (never silently) why execution
 // cannot start, records it to the audit log and Slack, and hands the reason to
-// the next wallbounce brain via handoff_note.md so it fixes the plan without the
+// the next brainstorming brain via handoff_note.md so it fixes the plan without the
 // human relaying it. The wording never asks the human to edit plan.json (that is
 // the brain's job — docs/06 §4.3/§4.5). Japanese (docs/06 §5.7).
 func (c *Controller) reportNotExecutable(plan *Plan) {
 	var reason, note string
 	switch {
 	case plan == nil || len(plan.Tasks) == 0:
-		reason = "plan がまだありません。壁打ち（対話）でゴールとタスクを固めてください。"
+		reason = "plan がまだありません。ブレインストーミング（対話）でゴールとタスクを固めてください。"
 		note = reason
 	case !plan.Ready:
-		reason = "plan がまだ ready ではありません。壁打ちで詰めてから実行してください。"
+		reason = "plan がまだ ready ではありません。ブレインストーミングで詰めてから実行してください。"
 		note = reason
 	default:
 		missing := lintPlan(plan)
 		if missing == "" {
 			return // actually executable; nothing to report
 		}
-		reason = fmt.Sprintf("各タスクに completion（受け入れ基準）が必要です。未設定: %s。壁打ちに戻って対話で completion を補ってください（plan.json は壁打ち脳が更新します）。", missing)
+		reason = fmt.Sprintf("各タスクに completion（受け入れ基準）が必要です。未設定: %s。ブレインストーミングに戻って対話で completion を補ってください（plan.json はブレインストーミング脳が更新します）。", missing)
 		note = fmt.Sprintf("前回の実行差し戻し理由: 次のタスクに completion が未設定でした: %s。各タスクに具体的な completion を必ず付与してから ready=true にして execute してください。", missing)
 	}
 	_ = c.Store.AppendAudit(AuditEntry{Event: "plan_not_executable", Detail: map[string]any{"reason": reason}})
@@ -167,11 +324,11 @@ func (c *Controller) reportNotExecutable(plan *Plan) {
 	_ = c.Store.WriteAtomicSidecar("handoff_note.md", note)
 }
 
-func (c *Controller) confirm(prompt string) string {
+func (c *Controller) confirm(prompt string, canExecute bool) string {
 	if c.Confirm != nil {
-		return c.Confirm(prompt)
+		return c.Confirm(prompt, canExecute)
 	}
-	// Headless / no confirm hook: default to continuing wallbounce (safe; the
+	// Headless / no confirm hook: default to continuing brainstorming (safe; the
 	// human can re-attach). Never auto-execute.
 	return "continue"
 }
@@ -199,7 +356,7 @@ func (c *Controller) runExecuting(ctx context.Context, st *State) error {
 
 	printModeBanner("executing")
 
-	dash := &DashboardState{Goal: plan.Goal}
+	dash := &DashboardState{Phase: PhaseExecuting, Goal: plan.Goal}
 	syncDashboard(dash, plan)
 	c.refreshInterventionCount(dash)
 
@@ -214,27 +371,21 @@ func (c *Controller) runExecuting(ctx context.Context, st *State) error {
 		inflight = map[string]bool{}
 	)
 
-	// Dashboard lifecycle: it owns the TTY (raw key mode) during executing, but
-	// must yield the terminal while an interactive resolve session is foreground.
-	var (
-		d       *Dashboard
-		dcancel context.CancelFunc
-	)
-	startDash := func() {
-		d = NewDashboard(dash, c.Store)
-		var dctx context.Context
-		dctx, dcancel = context.WithCancel(ctx)
-		go d.Run(dctx)
+	// Dashboard: a bubbletea TUI on the `dashboard` window's own PTY (docs/06 §5.3).
+	// It runs independently of the claude instances in the brainstorming/worker windows
+	// (separate panes), so it keeps rendering while the human is switched away — no
+	// stop/start dance needed. Only started on a TTY; headless/tests run the loop
+	// with no UI. User actions needing the controller arrive on `actions`; cursor
+	// movement, [p] pause (toggles dash.Paused) and [d] detail are handled in-model.
+	actions := make(chan dashAction, 8)
+	var prog *tea.Program
+	if isTTY() {
+		prog = newDashProgram(ctx, dash, c.Store, c.Sessions, actions)
+		go func() { _, _ = prog.Run() }()
+		// Quit + Wait so bubbletea fully restores the terminal on any exit path
+		// (suspend/error), avoiding a raw-mode residue for whatever prints next.
+		defer func() { prog.Quit(); prog.Wait() }()
 	}
-	stopDash := func() {
-		if dcancel != nil {
-			dcancel()
-			dcancel = nil
-		}
-		ttyRestoreSane()
-	}
-	startDash()
-	defer stopDash()
 
 	scheduleTick := func() {
 		var notifies []string
@@ -254,6 +405,10 @@ func (c *Controller) runExecuting(ctx context.Context, st *State) error {
 				if msg := c.openInterventionLocked(plan, t, r); msg != "" {
 					notifies = append(notifies, msg)
 				}
+				// 独立ウィンドウ方式: pre-dispatch で ⏸ になったタスクにも worker
+				// セッションを起こし、セレクタから介入対話へ切り替えられるようにする
+				// （⏸ のタスクには必ずセッションが在る不変条件。docs/06 §4.2）。
+				c.openWorkerSession(t.ID)
 				continue
 			}
 			// Reserve the slot. A resume continues the SAME attempt/session; a
@@ -274,6 +429,7 @@ func (c *Controller) runExecuting(ctx context.Context, st *State) error {
 			attempt := t.Attempts
 			_ = c.Store.SavePlan(plan)
 			_ = c.Store.AppendAudit(AuditEntry{Event: "dispatch", TaskID: taskID, Detail: map[string]any{"attempt": attempt}})
+			c.openWorkerSession(taskID) // 独立セッション: この worker のビュー（ログ tail）を起こす
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
@@ -281,8 +437,15 @@ func (c *Controller) runExecuting(ctx context.Context, st *State) error {
 				c.planMu.Lock()
 				delete(inflight, taskID)
 				_ = c.Store.SavePlan(plan)
+				settled := false
+				if ft := findTask(plan, taskID); ft != nil {
+					settled = ft.Status == TaskDone || ft.Status == TaskFailed || ft.Status == TaskBlocked
+				}
 				syncDashboard(dash, plan)
 				c.planMu.Unlock()
+				if settled {
+					c.closeWorkerSession(taskID) // settle でセッションを閉じる（waiting_human は残す）
+				}
 			}()
 		}
 		syncDashboard(dash, plan)
@@ -305,30 +468,32 @@ func (c *Controller) runExecuting(ctx context.Context, st *State) error {
 		return errSuspended
 	}
 
+	var lastEnsure time.Time // throttle periodic session recovery (docs/06 §5.9)
 	for {
 		select {
 		case <-ctx.Done():
 			// Signal (Ctrl-C) or parent cancel: clean, resumable suspend (same as
 			// [q]). Workers get their RunOpts grace window before force-kill.
 			return suspend()
-		case k := <-d.Keys:
-			switch k {
-			case KeyPause:
-				dash.Set(func(s *DashboardState) { s.Paused = !s.Paused })
-				continue
-			case KeyDetail:
-				dash.Set(func(s *DashboardState) { s.Detail = !s.Detail })
-				continue
-			case KeyQuit:
+		case a := <-actions:
+			// User actions from the TUI (docs/06 §5.3). Cursor/[p]/[d] are handled
+			// in the model; only these reach the controller.
+			switch a.kind {
+			case "quit":
 				return suspend()
-			case KeyIntervene:
-				if c.openInterventionCount() == 0 {
-					continue
+			case "resolve", "intervene":
+				// Enter on a ⏸ worker (resolve, carries taskID) or [i] (intervene =
+				// first open). Both open the intervention in that worker's window;
+				// the dashboard stays live, peers keep running.
+				taskID := a.taskID
+				if a.kind == "intervene" {
+					items := c.Store.LoadOpenInterventions().Items
+					if len(items) == 0 {
+						continue
+					}
+					taskID = items[0].TaskID
 				}
-				// Resolve interventions on demand. Peers keep running as background
-				// processes while the interactive session holds the foreground.
-				stopDash()
-				aborted, rerr := c.resolveInterventions(ctx, st, plan)
+				aborted, rerr := c.resolveInterventionInSession(ctx, plan, taskID)
 				if rerr != nil {
 					workerCancel()
 					wg.Wait()
@@ -339,10 +504,36 @@ func (c *Controller) runExecuting(ctx context.Context, st *State) error {
 					wg.Wait()
 					return c.transition(st, PhaseDone)
 				}
-				startDash()
+				// Reflect the resolution immediately: the shared `plan` now has the
+				// task back to pending, so refresh the dashboard and let the next
+				// scheduleTick re-dispatch it (the count comes from open.json).
+				c.planMu.Lock()
+				syncDashboard(dash, plan)
+				c.planMu.Unlock()
+				c.refreshInterventionCount(dash)
 				continue
 			}
 		default:
+		}
+
+		// 独立ウィンドウ方式: 誤って閉じられた worker セッションを実行中なら再構築
+		// する（復旧。docs/06 §5.9）。tmux 呼び出しを抑えるため数秒に一度だけ。
+		if c.Sessions != nil && time.Since(lastEnsure) > 5*time.Second {
+			lastEnsure = time.Now()
+			c.planMu.Lock()
+			var active []string
+			for i := range plan.Tasks {
+				switch plan.Tasks[i].Status {
+				case TaskRunning, TaskReview, TaskRevise, TaskWaitingHuman:
+					active = append(active, plan.Tasks[i].ID)
+				}
+			}
+			c.planMu.Unlock()
+			for _, tid := range active {
+				if !c.Sessions.Has(ctx, c.Sessions.WorkerWindow(tid)) {
+					c.openWorkerSession(tid)
+				}
+			}
 		}
 
 		if dashPaused(dash) {
@@ -380,7 +571,11 @@ func (c *Controller) runExecuting(ctx context.Context, st *State) error {
 	_ = c.Store.SavePlan(plan)
 	syncDashboard(dash, plan)
 	c.planMu.Unlock()
-	stopDash()
+	if prog != nil {
+		prog.Quit() // tear down the TUI before the (headless) completion check
+		prog.Wait() // wait for full terminal restore (avoids raw-mode residue)
+	}
+	ttyRestoreSane()
 
 	return c.verifyCompletion(ctx, st, plan)
 }
@@ -659,26 +854,117 @@ func (c *Controller) resolveInterventions(ctx context.Context, st *State, plan *
 	c.planMu.Lock()
 	defer c.planMu.Unlock()
 	for _, it := range q.Items {
-		ans, _ := c.Store.ReadAnswer(it.ID)
-		if strings.TrimSpace(ans) == "" {
-			continue // still unanswered: leave it open
-		}
-		_ = c.Store.AppendIntervention(Intervention{ID: it.ID, TaskID: it.TaskID, Answer: ans})
-		_ = c.Store.RemoveOpenIntervention(it.ID)
-		if t := findTask(plan, it.TaskID); t != nil && t.Status != TaskDone {
-			if t.Irreversible {
-				t.IrrevApproved = true // approved: pre-dispatch trigger1 won't re-fire
-			}
-			t.Status = TaskPending
-			t.OpenInterventionID = ""
-			// Re-approach with the human's guidance as a fresh attempt.
-			t.SessionID = ""
-			t.ResumeSession = false
-		}
-		_ = c.Store.AppendAudit(AuditEntry{Event: "intervention_resolved", TaskID: it.TaskID, Detail: map[string]any{"id": it.ID}})
+		c.reconcileOne(plan, it.ID, it.TaskID)
 	}
 	_ = c.Store.SavePlan(plan)
 	return false, nil
+}
+
+// reconcileOne applies a single answered intervention: if answer.md is non-empty,
+// it records the answer, removes the entry from the open queue, and returns the
+// task to pending for a fresh re-dispatch (docs/06 §5.5). Returns true when it
+// was resolved (an answer was present); false leaves the intervention open (the
+// human exited before recording — safe, per docs/06 §5.2③). Caller MUST hold
+// planMu. Shared by the batch path (resolveInterventions) and the per-worker
+// session path (resolveOne / selector, Phase③ 3d).
+func (c *Controller) reconcileOne(plan *Plan, id, taskID string) bool {
+	ans, _ := c.Store.ReadAnswer(id)
+	if strings.TrimSpace(ans) == "" {
+		return false
+	}
+	_ = c.Store.AppendIntervention(Intervention{ID: id, TaskID: taskID, Answer: ans})
+	_ = c.Store.RemoveOpenIntervention(id)
+	if t := findTask(plan, taskID); t != nil && t.Status != TaskDone {
+		if t.Irreversible {
+			t.IrrevApproved = true // approved: pre-dispatch trigger1 won't re-fire
+		}
+		t.Status = TaskPending
+		t.OpenInterventionID = ""
+		// Re-approach with the human's guidance as a fresh attempt.
+		t.SessionID = ""
+		t.ResumeSession = false
+	}
+	_ = c.Store.AppendAudit(AuditEntry{Event: "intervention_resolved", TaskID: taskID, Detail: map[string]any{"id": id}})
+	return true
+}
+
+// resolveOne reconciles a single intervention after its in-session dialogue
+// (独立ウィンドウ方式・per-worker。docs/06 §5.5). It locks, loads the plan,
+// reconciles the one entry, and saves. Returns true if resolved. Used by the
+// worker-selector path (Phase③ 3d) after the human answers in that worker's
+// session; the intervene launch + handoff watch land with the daemon watch-model
+// (Phase③ 3e).
+func (c *Controller) resolveOne(id, taskID string) bool {
+	c.planMu.Lock()
+	defer c.planMu.Unlock()
+	plan, err := c.Store.LoadPlan()
+	if err != nil || plan == nil {
+		return false
+	}
+	if c.reconcileOne(plan, id, taskID) {
+		_ = c.Store.SavePlan(plan)
+		return true
+	}
+	return false
+}
+
+// resolveInterventionInSession runs a single intervention inside its worker's
+// tmux session (独立ウィンドウ方式・docs/06 §5.3/§6.3): it injects the intervene
+// brain (seeded with that one question) into orch-<CNAME>-main:w-<taskID>, switches
+// the client there, watches control.json until the human /exits, switches back
+// to main, then reconciles the answer (→ pending → re-dispatch). Peers keep
+// running; the dashboard stays live in main. Returns aborted=true if the human
+// requested abort. When the task has no open intervention it just views the
+// session. Requires c.Sessions (guarded by callers).
+func (c *Controller) resolveInterventionInSession(ctx context.Context, plan *Plan, taskID string) (bool, error) {
+	if c.Sessions == nil {
+		return false, nil
+	}
+	name := c.Sessions.WorkerWindow(taskID)
+	id := c.openIDForTask(taskID)
+	if id == "" {
+		_ = c.Sessions.SwitchTo(ctx, name) // nothing to resolve: just show it
+		return false, nil
+	}
+	sys, prompt := c.Mode.IntervenePrompt(id)
+	script, err := c.Mode.WriteLaunchScript("w-"+taskID, sys, prompt)
+	if err != nil {
+		_ = c.Store.AppendAudit(AuditEntry{Event: "intervene_launch_error", TaskID: taskID, Detail: map[string]any{"err": err.Error()}})
+		return false, nil
+	}
+	printModeBanner("intervene")
+	_ = c.Sessions.LaunchInteractive(ctx, name, script)
+	ctrl, cerr := c.Handoff.WaitConsume(ctx, 500*time.Millisecond, func() bool {
+		return !c.Sessions.Has(ctx, name) || c.Sessions.PaneDead(ctx, name)
+	})
+	_ = c.Sessions.SwitchTo(ctx, c.Sessions.DashboardWindow())
+	if cerr != nil {
+		return false, cerr
+	}
+	if ctrl != nil && ctrl.Request == ReqAbort {
+		return true, nil
+	}
+	// Reconcile answer.md INTO THE SHARED in-memory plan (the one the scheduler
+	// loop uses), not a freshly-loaded copy. Otherwise the loop keeps its stale
+	// plan (task still waiting_human): it never re-dispatches the task AND its
+	// next SavePlan overwrites the on-disk pending back to waiting_human — the run
+	// gets permanently stuck right after the human answers (observed on w-t3).
+	c.planMu.Lock()
+	if c.reconcileOne(plan, id, taskID) {
+		_ = c.Store.SavePlan(plan)
+	}
+	c.planMu.Unlock()
+	return false, nil
+}
+
+// openIDForTask returns the open intervention id for a task, or "" if none.
+func (c *Controller) openIDForTask(taskID string) string {
+	for _, it := range c.Store.LoadOpenInterventions().Items {
+		if it.TaskID == taskID {
+			return it.ID
+		}
+	}
+	return ""
 }
 
 // lintPlan returns a comma-joined list of task IDs missing a task-specific

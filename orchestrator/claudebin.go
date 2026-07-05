@@ -14,7 +14,7 @@ import (
 // native installer puts `claude` in $HOME/.local/bin and adds that directory to
 // PATH only in the *interactive* shell rc (.zshrc), so a non-interactive launch
 // does NOT have it on PATH. A bare exec.Command("claude", …) then fails with
-// "executable file not found in $PATH", which would break wallbounce, intervene
+// "executable file not found in $PATH", which would break brainstorming, intervene
 // and every worker/reviewer. We therefore resolve claude explicitly and make
 // sure its directory is on PATH for the child process.
 

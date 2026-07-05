@@ -1,6 +1,6 @@
 ---
-summary: AI オーケストレーター（Go 製コントローラ）の実装仕様。外部制御ループ・状態ストア・モード切替・worker 並行ディスパッチ・品質ゲート・介入・判断基準・Slack 通知・ビルド配置を定める。設計の意図は docs/06_orchestration.md を参照。
-keywords: [ オーケストレーター, Go, 制御ループ, 状態ストア, worker, 介入, 並行実行 ]
+summary: AI オーケストレーター（Go 製コントローラ）の実装仕様。tmux 常駐方式（コントローラは orch-<CNAME>-main セッション内で常駐）と独立ウィンドウ（ブレインストーミング/worker/介入）・ウィンドウ管理と復旧・状態ストア・worker 並行ディスパッチ・品質ゲート・介入・判断基準・Slack 通知・ビルド配置を定める。設計の意図は docs/06_orchestration.md を参照。
+keywords: [ オーケストレーター, Go, tmux, セッション管理, 状態ストア, 介入, 並行実行 ]
 ---
 
 # 実装仕様: orchestrator/（AI オーケストレーター）
@@ -9,28 +9,30 @@ keywords: [ オーケストレーター, Go, 制御ループ, 状態ストア, w
 
 ## 要件（なぜ必要か）
 
-人間がオーケストレーター（進行管理）を兼ねるとプロジェクト並列度が上げられない。そこで、プロジェクトごとに「壁打ち（検討）」と「実行（自律）」の 2 モードを持つ単一のコントローラを置き、人間は壁打ちと例外対応（介入）だけに関与する。コントローラは**外部制御ループ**としてループを所有し（Stop-hook の力技は採らない）、worker（`claude -p`）へ委譲し、結果を統合・レビューし、介入トリガー該当時のみ人間を呼ぶ。詳細根拠は 06 を参照。
+人間がオーケストレーター（進行管理）を兼ねるとプロジェクト並列度が上げられない。そこで、プロジェクトごとに「ブレインストーミング（検討）」と「実行（自律）」の 2 モードを持つ単一のコントローラを置き、人間はブレインストーミングと例外対応（介入）だけに関与する。コントローラは**外部制御ループ**としてループを所有し（Stop-hook の力技は採らない）、worker（`claude -p`）へ委譲し、結果を統合・レビューし、介入トリガー該当時のみ人間を呼ぶ。詳細根拠は 06 を参照。
 
 ## カバーするコード
 
 ```
 orchestrator/                      ← 本書が正本（Go コンポーネント）
-├── go.mod                         module github.com/quvox/claude-dev-env/orchestrator。docker-proxy 同様の独立モジュールで**外部依存なし（stdlib のみ）**。go.work は用いない。`go.mod` の `go 1.22` は最小言語版で、ビルドは golang:1.24-alpine（docker-proxy と同一慣習）
+├── go.mod / go.sum / vendor/      独立モジュール。ダッシュボード TUI 用に **`bubbletea`/`lipgloss` へ依存**（従来の stdlib のみ方針を本 UI に限り変更）。依存は **vendoring（`vendor/`）** で取り込み、イメージビルドはネットワーク非依存（`-mod=vendor`）。go.work は用いない。ビルドは golang:1.24-alpine
 ├── main.go                        エントリ。引数解析（--fresh 等）・再開/新規判定・状態ストア初期化・モードブートストラップ
 ├── controller.go                  状態機械と run loop（中核）
 ├── state.go                       状態ストアの読み書きとスキーマ（JSON/JSONL）
-├── mode.go                        前景所有とモード切替（対話 claude の exec / ダッシュボード描画 / WallbounceArgs での handoff_note 前置）
+├── mode.go                        モード切替（対話 claude の exec / BrainstormingArgs での handoff_note 前置）。新アーキでは exec 先が該当 tmux ウィンドウ
+├── session.go（新規・新アーキ）    tmux ウィンドウ管理（1 セッション配下：生成/終了/存在確認/再構築/mouse on/worker 選択切替/対話 claude のウィンドウ内投入）
 ├── term.go                        端末モード制御（stty による raw/カノニカル切替・復元）＋ selectMenu（矢印/番号選択メニュー）＋ printModeBanner（モード遷移バナー）
 ├── claudebin.go                   claude 実行ファイルの解決と子プロセス環境（PATH 補完）
-├── handoff.go                     壁打ち↔実行↔介入の受け渡しプロトコル（control.json）
+├── handoff.go                     ブレインストーミング↔実行↔介入の受け渡しプロトコル（control.json）
 ├── worker.go                      worker ディスパッチ（claude -p）・worktree 管理・構造化出力
 ├── review.go                      品質ゲート（レビュー改訂ループ）
 ├── trigger.go                     介入トリガー判定
 ├── slack.go                       Slack 通知（chat.postMessage 直接 POST）
-├── dashboard.go                   実行モードのステータス表示（TTY 描画）
+├── dashboard.go                   実行モードの共有状態（DashboardState）と純ヘルパ
+├── dashtui.go（新規）             実行モードのダッシュボード＝カーソル選択式 TUI（bubbletea）
 ├── config.go                      設定・環境変数の読み込みと既定値
 ├── instructions/                  対話 claude 用テンプレート（イメージに同梱）
-│   ├── wallbounce.md              壁打ち脳の instruction
+│   ├── brainstorming.md              ブレインストーミング脳の instruction
 │   └── intervene.md               介入対応の instruction（question.md を前置して起動）
 └── *_test.go                      trigger / state / plan / controller（並行・介入・lint 差し戻し）/ term（selectMenu）の単体テスト（§テスト方針）
 
@@ -44,41 +46,58 @@ Makefile                           build-orchestrator / テストターゲット
 
 ## 全体構成と責務
 
-`claude-orchestrator` は単一プロセス。`main.go` が状態ストアを開き、現在の `Phase` に応じて `controller.go` の run loop に入る。run loop は端末の前景を所有し、モードに応じて前景の中身を差し替える（06 §4）。
+`claude-orchestrator` は単一プロセス。`main.go` が状態ストアを開き、現在の `Phase` に応じて `controller.go` の run loop を駆動する。
+
+> **アーキテクチャ改訂（本改訂・実装は Phase③。tmux 常駐方式）**: コントローラは **`orch-<CNAME>-main` tmux セッション内で常駐**し（「常駐の器」は tmux サーバ＝クライアント全終了でもセッション保持）、ブレインストーミング・各 worker・介入を**同一セッション配下の独立した tmux ウィンドウ**として起こして制御する（06 §4.1/§4.2/§5.3/§5.9）。対話（ブレインストーミング/介入）は自分の pane ではなく該当ウィンドウ内で起動し、`control.json` のポーリングで `/exit` を検知する（自前景をブロックしない）。旧「run loop が端末前景を所有しモードで差し替える単一ウィンドウ方式」は廃止。詳細は下記「### 独立ウィンドウ方式（新アーキ）」。**現行のコード実装は tmux 常駐方式（実装済み）**。以降の本文で「`RunInteractive` で前景に exec」等と書かれた箇所は、**tmux が無い（headless/テスト）場合のフォールバック挙動**であり、実 tmux 環境では対話 claude は該当ウィンドウ内へ投入される（§実装状況が最新の成果物像）。
 
 | モジュール | 責務 |
 |---|---|
-| controller | 状態機械（wallbounce/executing/done）と run loop の駆動。介入は executing 内のタスク単位イベントとして処理 |
+| controller | 状態機械（brainstorming/executing/done）と run loop の駆動。介入は executing 内のタスク単位イベントとして処理。**（新アーキ）`orch-<CNAME>-main` セッションの `dashboard` ウィンドウで常駐し、ブレインストーミング/worker/介入の tmux ウィンドウ群を生成・終了・復旧する** |
 | state | `/workspace/.orchestrator/` 以下のファイル群の読み書き。監査ログ追記 |
-| mode | 壁打ち/介入＝対話 `claude` を子プロセスで exec（stdio を TTY に接続）／実行＝dashboard 描画 |
-| handoff | 対話 claude（壁打ち脳）からの遷移要求を `control.json` 経由で受け取る |
-| worker | タスクを `claude -p` で worktree 上に実行し、構造化結果を回収 |
+| mode | ブレインストーミング/介入＝対話 `claude` を子プロセスで exec。**（新アーキ）exec 先は該当 tmux ウィンドウ（brainstorming / w-<taskID>）内** |
+| session（新規・新アーキ） | tmux ウィンドウ（`orch-<project>-main` 配下の `dashboard`/`brainstorming`/`w-<taskID>`）の生成（new-window）・終了（kill-window）・存在確認（list-windows）・再構築・`mouse on`・worker 選択切替（select-window）・対話 claude のウィンドウ内投入 |
+| handoff | 対話 claude（ブレインストーミング脳）からの遷移要求を `control.json` 経由で受け取る |
+| worker | タスクを `claude -p` で worktree 上に実行し、構造化結果を回収。**（実装済み構成要素）各 worker に専用ウィンドウを起こしログを `tail -F` でライブ表示（実行・結果回収は従来経路のまま＝ウィンドウはビュー）。将来は `claude -p` 自体をウィンドウ内へ投入** |
 | review | 実装 worker と別 worker による独立レビューと改訂ループ |
 | trigger | 各ステップ（worker 起動前/実行後）で介入要否を明示的コードで判定 |
 | slack | サマリ・介入アラートを Slack へ送る（発信源はコントローラに一本化） |
-| dashboard | 実行モードの進捗・worker 状態・直近サマリを TTY に描画 |
+| dashboard / dashtui | 実行モードのダッシュボード＝**カーソル選択式 TUI（bubbletea・dashtui.go）**。`dashboard.go` は共有状態（DashboardState）と純ヘルパ、`dashtui.go` はモデル/描画/入力。**勝手にウィンドウを動かさず**、カーソル（↑↓/jk）で worker を選び **Enter で確定**したときだけ当該ウィンドウへ `select-window`（⏸ は介入）。毎秒全消去の旧描画は廃止（イベント駆動・差分描画。06 §5.3） |
 | config | trigger 回数・モデル・並行度・最大レビュー周回などの設定 |
 
 ### 頭脳の所在（Claude か Go か）
 
 オーケストレーターの「頭脳」（推論・判断）は**すべて Claude** が担う。Go コードは推論しない——ループの所有・順序付け・状態管理・ディスパッチ・機械的なトリガー判定（カウンタ／ハードルール）・Slack・描画という**決定論的な配管**に徹する（06 §3.1 の「L1 推論ループは自作せず Claude から借りる」の具体化）。
 
-- **壁打ち脳** ＝ 対話 `claude`：ゴール分解と計画（`plan.json`）の作成
+- **ブレインストーミング脳** ＝ 対話 `claude`：ゴール分解と計画（`plan.json`）の作成
 - **worker 脳** ＝ `claude -p`：各タスクの実装・レビュー
 - **適応判断** ＝ 分岐点（レビュー失敗時の再試行/エスカレーション等）でのみ `claude -p` を呼ぶ
 
 したがって「タスクをどう分解するか」「何を実装するか」「指摘が妥当か」はすべて Claude の判断であり、Go は「次にどのタスクを誰へ渡し、いつ止めて人間を呼ぶか」という**段取り**だけを決める。
 
+### 独立ウィンドウ方式（新アーキ。設計 06 §4.1/§4.2/§5.3/§5.9。実装済み）
+
+コントローラを `orch-<CNAME>-main` セッションの `dashboard` ウィンドウで常駐させ、他コンポーネント（ブレインストーミング／各 worker／介入）を**同じセッション配下の tmux ウィンドウ**に分離する。以下が実装仕様。
+
+- **tmux 常駐（setsid デーモンにはしない）**：`claude-orchestrator` は `claude-dev orchestrate` が起こす `orch-<CNAME>-main` セッションの `dashboard` ウィンドウで動き、その pane にダッシュボードを描画する。常駐性は tmux サーバが担保する——tmux クライアント（端末）が全終了しても切り離されたセッションは保持され、コントローラは走り続ける。よって setsid での完全デタッチ／`controller.log`／ダッシュボードの別プロセス化は**行わない**（完全デーモン化は端末を持てずダッシュボードを別プロセス＋ファイル IPC に分離する必要が生じ複雑化するため。06 §4.1 の判断）。**二重起動防止・復旧の生存判定は `claude-orchestrator` プロセスの生存**（`pgrep`。`has-session` ではない）：worker/brainstorming ウィンドウが `remain-on-exit on` のため、コントローラ〔`dashboard` 窓〕が死んでもセッションが空き殻として延命し得る＝`has-session` は生存信号にならない（06 §5.9）。判定は当該コンテナ内で `pgrep -f 'claude-orchestrator --workspace'` の結果から **cmdline が `claude-orchestrator` で始まるプロセス**だけを拾う（`tmux new-session …` 起動ラッパも同文字列を含むため除外）。`dashboard` ウィンドウは `remain-on-exit off`（他窓が無ければコントローラ終了でセッションも自然消滅＝正常完了 done の経路）。空き殻が残るのは `remain-on-exit on` 窓が在るまま中断/クラッシュした時のみ。tmux サーバごと落ちた場合はプロセスもセッションも消え、いずれも `.orchestrator/` の状態から resume（下記・復旧）。
+- **命名と管理（`session.go`）**：唯一のセッション `orch-<CNAME>-main`、その配下のウィンドウを `session:window` ターゲットで表す——`orch-<CNAME>-main:dashboard`／`:brainstorming`／`:w-<taskID>`（`<CNAME>`＝正規化コンテナ名 `normalizeCName`）。**ただしセッション名は決め打ちにせず、コントローラ起動時に `DetectSession` が自分の実行中セッション名を `tmux display-message -p '#{session_name}'` で取得して束縛する**（`MainSession()` はその実測名を返す。tmux 外＝`--print-main-session` プローブでは取得せず正準名 `orch-<CNAME>-main` を返す＝ラッパがセッション作成に使う値）。これは、コントローラが正準名以外のセッション（例：`claude-dev start` が作る既定 `main`、あるいは入れ子起動）で走った場合に、ウィンドウ操作先が**人間が attach しているのと別のセッション**を指して `select-window`/`new-window` が空振りし、Enter→brainstorming が無反応になる不具合を防ぐため（実機で判明）。`--print-main-session` は tmux 外実行なので正準名のまま＝ラッパ互換。コントローラ起動時に `SetupMainSession` が**自分のウィンドウを `dashboard` に改名**し、セッションに `mouse on`（全ウィンドウ波及。worker/介入の対話 claude でホイールスクロールを使うため）を設定。ウィンドウ生成は `tmux new-window -d -t <session> -n <win>`、終了は `tmux kill-window -t <target>`、切替は `tmux select-window -t <target>`（同一セッション内なので `switch-client` ではない）。**存在確認は `tmux list-windows -F '#{window_name}'` で窓名を厳密照合**する（`display-message -t session:window` は窓が無くてもセッションの現ウィンドウにフォールバックして成功を返すため、存在判定に使えない＝実機で判明した落とし穴）。
+- **worker/brainstorming ウィンドウは「保持ウィンドウ」（`remain-on-exit on`）**：ウィンドウ内のコマンド（`claude -p` の tail ／対話 claude）が `/exit` で終了しても**ウィンドウは残る**ので、コントローラが `respawn-pane -k -t <target> "<cmd>"` で次のコマンドを投入できる：worker ウィンドウは `tail -F`（ビュー）→（要判断なら）対話 `claude`（介入）→再び `tail -F`（再ディスパッチのビュー）を順に投入。ライブ出力はそのウィンドウで直接見える（`prefix+w`／番号キーで到達）。※ダッシュボード内の `[d]` tail 表示は併存（`[d]`＝ダッシュボードで各 worker ログ末尾を一覧、番号キー＝個別 worker ウィンドウへ直接切替）。**タスク settle（done/failed/blocked）でコントローラが `kill-window`** する（メインセッションは常駐＝閉じない）。作業保全は従来どおり worktree。※worker の `claude -p` 自体はコントローラの子プロセスとして実行し結果を構造化回収する（ウィンドウはログ tail のビュー）。
+- **ウィンドウの生成タイミング（事前審査トリガーを含む）**：`orch-<CNAME>-main:w-<taskID>` は、そのタスクが**dispatch されるとき、または pre-dispatch トリガー（条件1＝後戻り不可の事前審査）で `waiting_human` として保留されるとき**に生成する（＝⏸ になったタスクには必ずウィンドウが在る）。これによりセレクタから切り替える先のウィンドウが存在する。
+- **ダッシュボード＝カーソル選択式 TUI（`dashboard` ウィンドウ）**：`orch-<CNAME>-main:dashboard` で `bubbletea` の TUI（`dashtui.go` の `dashModel`）が稼働 worker と要判断（⏸）を一覧描画する。**カーソル（↑↓/jk）で選び Enter で確定したときだけ移動**（勝手に動かさない）：実行中等はモデルが直接 `select-window`（ビュー切替）、⏸ は `actions` チャネルへ送りコントローラが当該ウィンドウで介入対話を起こす。`p`＝一時停止（`dash.Paused` トグル）・`d`＝出力 tail トグル（モデル内）・`q`＝中断・`i`＝先頭の要判断を介入。描画はイベント駆動・差分（毎秒全消去は廃止）。
+- **介入＝当該 worker ウィンドウ内で対話**：要判断になったら、人間がセレクタで ⏸ を選ぶと、**その worker のウィンドウへ対話 `claude`（介入）を投入**し `select-window` で表示する（当該 1 件のみを seed）。回答（`answer.md`＋タスク更新＋`control.json`）後 `/exit` で `resolveInterventionInSession` が突合し、`dashboard` へ切替、次 tick で再ディスパッチ。**重要：突合は `reconcileOne` を通じて `runExecuting` が保持する共有メモリの `plan` に対して行い、その場で `SavePlan` する**（`resolveOne` のようにディスクから別コピーを load/save してはならない）。さもないとスケジューラループは古い `plan`〔タスク＝`waiting_human`〕を持ち続け、(1) 当該タスクを再ディスパッチしない、(2) 次回 `SavePlan` でディスクの `pending` を `waiting_human` に上書きし戻す＝**人間が回答した直後に run が恒久停止**する（実機 w-t3 で観測）。**1 セッション/ウィンドウに全件 seed する旧方式は廃止し、要判断は worker ウィンドウ単位で個別処理**する。
+- **ブレインストーミング（着地はフェーズで分岐）**：コントローラは `orch-<CNAME>-main:brainstorming` ウィンドウを **`Run`（`new-window -d`）で起こす**（自分の pane では起動しない）。**脳を起動する直前に `Handoff.DiscardStale()` で残存 `control.json` を破棄**する（`.orchestrator/` は永続 `/workspace` マウント上にあり、前回 run が残した `control.json`〔killed プロセス等〕がコンテナ再作成後も残る。`WaitConsume` は初回 tick でまず `Consume()` するため、破棄しないと古い handoff を即消費し、`abort` なら数秒で done に落ちる＝「続けるを選んでも何もできない」の一因になり得る。今回のセッションで脳が書いた handoff のみ消費させる）。**着地ウィンドウは `runBrainstormingSession(ctx, enterConversation)` の引数で決める**——初回起動は `enterConversation=false` で `SwitchTo(DashboardWindow)`＝dashboard をホーム（カーソル選択式）に保ち、人間がカーソルで選び Enter で brainstorming 窓へ入る。以後の**「続ける」／実行不可差し戻しは `enterConversation=true`** で `SwitchTo(BrainstormingWindow)`＝**そのまま対話へ戻す**（「続ける＝対話に戻る」の期待に合わせる。ホームで再選択させない）。ホーム画面は `dashtui.go` の bubbletea View がブレインストーミング用に描画する（`printBrainstormingHome` は廃止。移動は `Ctrl-_ w` ではなくカーソル＋Enter）。`Handoff.WaitConsume`（`control.json` ポーリング＋`until`＝brainstorming ウィンドウ消滅/`pane_dead`。**毎ポーリングでの `select-window` は行わない**）で人間の `/exit` を待ち、戻ったら bubbletea を `Quit`＋`Wait`（端末復元を待ってからメニュー印字＝階段状崩れ対策）→ `dashboard` ウィンドウへ戻してメニュー（§handoff/§制御フロー step2）や実行遷移を行う。`runBrainstorming` は**内部ループ**で、continue/実行不可のたびに `enterConversation=true` で再入場し、`execute`（実行可）/`abort`/`done` でのみ遷移する。
+- **単一コマンド復旧（`claude-dev orchestrate`）**：(1) コントローラプロセス生存 → `tmux attach -t orch-<CNAME>-main` するだけ。(2) 不在（クラッシュ・`[q]` 中断・tmux サーバ死）→ 延命した空き殻セッションが在れば `kill-session` してから、新しい `orch-<CNAME>-main` を `new-session -n dashboard` で作りその中で `claude-orchestrator` を起こす（状態から resume＝§4.3：executing の中断のみ継続、done/無しはブレインストーミング新規）→ 起動後コントローラが不足ウィンドウ（実行中タスクの `w-<taskID>`／ブレインストーミング中なら `brainstorming`）を再構築 → その後 attach。人間はこれ一発で端末破壊・中断・クラッシュから復旧する。コントローラは executing ループで数秒に一度、実行中/⏸ タスクの worker ウィンドウが消えていれば `openWorkerSession` で再作成する（誤 kill 復旧・06 §5.9）。
+- **失われないことの担保**：ゴール/仕様=`docs/`、運用状態=`.orchestrator/`、実装=worktree コミット。tmux セッション/クライアントは使い捨てビュー。
+
 ## 状態ストアのファイル構成
 
-プロジェクト内 `/workspace/.orchestrator/` に置き、永続化・再開・監査を担う。`.gitignore` に `/.orchestrator/` を追加する（成果物ではなく運用状態のため）。壁打ちで固めた**仕様そのもの**は CLAUDE.md の規約に従い通常どおり `docs/`（実装仕様ドキュメント）へ書く。`.orchestrator/` は実行の運用状態を持つ。**原則（06 §4.3）：`.orchestrator/` 配下（`plan.json`・`control.json`・`state.json`・`handoff_note.md` 等）は壁打ち脳／介入脳／コントローラが読み書きする機械所有の内部状態であり、人間は手で編集しない。コントローラ・脳が出す文言も人間にこれらの編集を促してはならない**（修正が要る時は壁打ち＝対話へ誘導）。
+プロジェクト内 `/workspace/.orchestrator/` に置き、永続化・再開・監査を担う。`.gitignore` に `/.orchestrator/` を追加する（成果物ではなく運用状態のため）。ブレインストーミングで固めた**仕様そのもの**は CLAUDE.md の規約に従い通常どおり `docs/`（実装仕様ドキュメント）へ書く。`.orchestrator/` は実行の運用状態を持つ。**原則（06 §4.3）：`.orchestrator/` 配下（`plan.json`・`control.json`・`state.json`・`handoff_note.md` 等）はブレインストーミング脳／介入脳／コントローラが読み書きする機械所有の内部状態であり、人間は手で編集しない。コントローラ・脳が出す文言も人間にこれらの編集を促してはならない**（修正が要る時はブレインストーミング＝対話へ誘導）。
 
 ```
 /workspace/.orchestrator/
 ├── state.json            現在の Phase・RunID・現在タスク・タイムスタンプ
-├── plan.json             タスク計画（壁打ちの成果。タスク配列）
+├── plan.json             タスク計画（ブレインストーミングの成果。タスク配列）
 ├── control.json          対話 claude → コントローラへの遷移要求（handoff）
-├── handoff_note.md        lint 差し戻し理由の申し送り（コントローラが書き、次回壁打ち instruction 先頭へ前置後に削除。機械所有・人間非編集）
+├── handoff_note.md        lint 差し戻し理由の申し送り（コントローラが書き、次回ブレインストーミング instruction 先頭へ前置後に削除。機械所有・人間非編集）
 ├── summary.md            最新の状況サマリ（Slack 送信内容と同一）
 ├── assumptions.jsonl     置いた仮定（軽微判断）の追記ログ
 ├── interventions.jsonl   介入イベントと解決の追記ログ
@@ -94,7 +113,7 @@ Makefile                           build-orchestrator / テストターゲット
 ```go
 // state.json
 type State struct {
-    Phase       string `json:"phase"`        // "wallbounce"|"executing"|"done"（intervening は廃止）
+    Phase       string `json:"phase"`        // "brainstorming"|"executing"|"done"（intervening は廃止）
     RunID       string `json:"run_id"`
     CurrentTask string `json:"current_task"` // 最後に着手したタスクID（情報用。並行実行のため一意ではない）
     StartedAt   string `json:"started_at"`   // RFC3339（コントローラが刻む）
@@ -105,7 +124,7 @@ type State struct {
 type Plan struct {
     Goal           string `json:"goal"`            // ゴールの要約（完了基準は completion へ）
     Completion     string `json:"completion"`      // プラン全体の完了基準（タスク採点には使わない。§品質ゲート）
-    Ready          bool   `json:"ready"`           // 壁打ちで実行可と確定したか
+    Ready          bool   `json:"ready"`           // ブレインストーミングで実行可と確定したか
     Tasks          []Task `json:"tasks"`
 }
 type Task struct {
@@ -143,7 +162,7 @@ type NeedsHuman struct {
 
 // control.json（対話 claude → コントローラ）
 type Control struct {
-    Request        string `json:"request"`        // "execute"|"resume"|"continue_wallbounce"|"abort"
+    Request        string `json:"request"`        // "execute"|"resume"|"continue_brainstorming"|"abort"
     InterventionID string `json:"intervention_id,omitempty"` // 任意。介入対応で 1 件のみ解決した場合のヒント。複数解決時は controller が answer.md の有無で再照合する
     TS             string `json:"ts"`
 }
@@ -174,12 +193,12 @@ type AuditEntry   struct { TS, Event, TaskID string; Detail map[string]any; Usag
 `controller.go` の状態遷移は 06 §2.2 に対応する。
 
 ```
-[wallbounce] ──control.execute──▶ [executing] ──全タスク settled & 要判断 0──▶ [done]
+[brainstorming] ──control.execute──▶ [executing] ──全タスク settled & 要判断 0──▶ [done]
                                     │  ▲
               タスクが要判断に該当     │  │ 人間が [i] で回答 → 該当タスクを再ディスパッチ
                                     ▼  │
               そのタスクのみ waiting_human（介入キューへ）。他タスクは executing 内で継続
-（abort は wallbounce／介入対応中いずれからも done へ）
+（abort は brainstorming／介入対応中いずれからも done へ）
 
 **最上位状態としての `intervening` は廃止**した（06 §2.2）。介入は `executing` の内部イベントとして、タスク単位で処理する。実行モードを離脱しないため、判断待ち以外の worker は止まらない。
 ```
@@ -187,18 +206,18 @@ type AuditEntry   struct { TS, Event, TaskID string; Detail map[string]any; Usag
 run loop の擬似フロー：
 
 0. 起動時、`main.go` は `--workspace` を **`filepath.Abs` で絶対パスに正規化**する。Store のパス（worktree パス含む）はこれに基づき、`git` は `cmd.Dir=workspace` で実行されるため、相対 workspace だと worktree パスが二重ネスト（`…/ws/ws/.orchestrator/worktrees/…`）して `git worktree add` が exit 128 → 「既に checked out」で stuck 化する。本番の `/workspace`（絶対）では顕在化しないが、任意パス起動の堅牢性として必須（[docs/reviews/2026-07-01_orchestrator-e2e.md](../reviews/2026-07-01_orchestrator-e2e.md)）。
-1. 続いて `main.go` が `state.json` を読んで**再開か新規開始かを判定**する（§ 並行性・再開・エラー処理の「再開と新規開始の判定」）：中断された run（Phase=`executing`）のみ再開し、それ以外（不在／`done`／未知 Phase）または `--fresh` 指定時は実行状態を破棄して新規開始する。その後 `controller.go` の run loop は、新規開始なら Phase=wallbounce（RunID 採番）、再開なら永続化済みの Phase（executing）から動く。再開（executing）時は `plan.json`・`intervention/open.json` を正本とし、残存する `control.json` は無視して消す。
-2. **wallbounce**：起動直前に**モードバナー**（§モード切替）を印字してから `mode.RunInteractive()` で対話 `claude` を前景に exec し、終了を待つ（人間が `/exit`／`Ctrl-D` で終了して初めて制御が戻る＝自動終了しない。06 §4.5/§5.4）。終了後 `control.json` を読む：
+1. 続いて `main.go` が `state.json` を読んで**再開か新規開始かを判定**する（§ 並行性・再開・エラー処理の「再開と新規開始の判定」）：中断された run（Phase=`executing`）のみ再開し、それ以外（不在／`done`／未知 Phase）または `--fresh` 指定時は実行状態を破棄して新規開始する。その後 `controller.go` の run loop は、新規開始なら Phase=brainstorming（RunID 採番）、再開なら永続化済みの Phase（executing）から動く。再開（executing）時は `plan.json`・`intervention/open.json` を正本とし、残存する `control.json` は無視して消す。
+2. **brainstorming**：起動直前に**モードバナー**（§モード切替）を印字してから `mode.RunInteractive()` で対話 `claude` を前景に exec し、終了を待つ（人間が `/exit`／`Ctrl-D` で終了して初めて制御が戻る＝自動終了しない。06 §4.5/§5.4）。終了後 `control.json` を読む：
    - `execute` かつ `plan.Ready==true` かつ **lint clean**（全タスクに `completion` あり）→ executing へ。
-   - `execute` だが **plan が実行不可**（`plan.Ready!=true` または lint 失敗）→ **メニューは出さず**、下記「実行不可の可視化」を行って壁打ちへ差し戻す（`return nil`）。脳が execute を書いたが未完成なので、次回壁打ちで `handoff_note.md` を見て補完させる。
-   - `continue_wallbounce` → **メニューは出さず** Phase=wallbounce のまま `RunInteractive()` を再実行（脳が明示的に継続を選んだため。`return nil`）。
+   - `execute` だが **plan が実行不可**（`plan.Ready!=true` または lint 失敗）→ **メニューは出さず**、下記「実行不可の可視化」を行ってブレインストーミングへ差し戻す（`return nil`）。脳が execute を書いたが未完成なので、次回ブレインストーミングで `handoff_note.md` を見て補完させる。
+   - `continue_brainstorming` → **メニューは出さず** Phase=brainstorming のまま `RunInteractive()` を再実行（脳が明示的に継続を選んだため。`return nil`）。
    - `abort` → done。
    - `control.json` 無・不明 → **終了後の選択メニュー**（下記。決定的な handoff が無いので人間に方向を確認）。
-   - **終了後の選択メニュー**：`term.go` の `selectMenu`（矢印↑↓で移動＋Enter 確定、**番号キーは即確定**、各項目に一行説明。非 TTY は既定 **続ける** を返し勝手に実行しない）で「**1. 続ける / 2. 実行 / 3. 終了**」を提示。戻り値のマッピング＝`continue`→Phase=wallbounce のまま `RunInteractive()` 再実行／`execute`→再 lint し clean なら executing・不可なら「実行不可の可視化」して wallbounce 維持／`done`→done（06 §4.5 の値対応 continue_wallbounce/execute/abort）。
-   - **実行不可の可視化（無言で戻らない。06 §4.5/§8.1）**：lint 失敗（or Ready 未確定）で壁打ちへ戻す際、`reportNotExecutable(plan, missing)` が **理由を端末（stderr）へ明示**し、`audit.jsonl` へ記録し、`Notifier`（Slack）にも送る。文言は**人間に `plan.json` を編集させない**（「壁打ちに戻って対話で `completion` を補ってください」等の対話誘導のみ）。さらに理由を **次回壁打ち脳へ引き渡す**ため `.orchestrator/handoff_note.md`（機械所有・人間非編集）へ書き、`mode.WallbounceArgs()` がその内容を次回 instruction 先頭に前置する（消費後に削除）。
+   - **終了後の選択メニュー**：`term.go` の `selectMenu`（矢印↑↓で移動＋Enter 確定、**番号キーは即確定**、各項目に一行説明。非 TTY は既定 **続ける** を返し勝手に実行しない）を提示。**`実行` は plan が実行可能（`ready` かつ全 completion）＝`canExecute` のときだけ含める**（`terminalConfirm(prompt, canExecute)`）：可なら「1. 続ける / 2. 実行 / 3. 終了」、不可なら「1. 続ける / 2. 終了」（ブレインストーミング未完了で実行を提示しない）。戻り値のマッピング＝`continue`→`runBrainstorming` 内部ループが `enterConversation=true` で brainstorming 窓を起こし直し対話へ直接戻す／`execute`→再 lint し clean なら executing・不可なら「実行不可の可視化」して `enterConversation=true` で brainstorming 継続／`done`→done（06 §4.5 の値対応 continue_brainstorming/execute/abort）。
+   - **実行不可の可視化（無言で戻らない。06 §4.5/§8.1）**：lint 失敗（or Ready 未確定）でブレインストーミングへ戻す際、`reportNotExecutable(plan, missing)` が **理由を端末（stderr）へ明示**し、`audit.jsonl` へ記録し、`Notifier`（Slack）にも送る。文言は**人間に `plan.json` を編集させない**（「ブレインストーミングに戻って対話で `completion` を補ってください」等の対話誘導のみ）。さらに理由を **次回ブレインストーミング脳へ引き渡す**ため `.orchestrator/handoff_note.md`（機械所有・人間非編集）へ書き、`mode.BrainstormingArgs()` がその内容を次回 instruction 先頭に前置する（消費後に削除）。
 3. **executing（スケジューラ・ループ）**：`dashboard` を前景に出し、ループを所有し続ける。1 tick ごとに：
    - 依存解決済みの `pending` タスクを並行度 `max_workers` まで起動。各タスクは pipeline：`worker 実装 → review → (重大指摘あり) revise → … → done`。各ステップで `trigger.Evaluate()`（条件1は worker 起動前、条件2/3/4/5〔stuck 含む〕は実行後）。
-   - **トリガー発火はそのタスクだけに作用する**：当該 worker を停止（停止前に中間コミット猶予）、タスクを `waiting_human` にし `intervention/open.json` へ積む。**他 worker・ループは止めない**（旧 `runCancel()` による全停止は廃止）。
+   - **トリガー発火はそのタスクだけに作用する**：発火タスクを `waiting_human` にして `intervention/open.json` へ積むだけ（トリガーは worker 起動前〔条件1〕か結果返却後〔条件2-5〕に評価されるため、発火時点で当該 worker は未起動または完了済み＝個別 kill も中間コミット猶予も不要。猶予は Ctrl-C/`[q]` 中断経路のみ＝§並行性）。**他 worker・ループは止めない**（旧 `runCancel()` による全停止は廃止）。
    - `[i]` キー（または `--resolve`）で人間が要判断に対応する時だけ、ループを止めずに（背景 worker は走らせたまま）対話 `claude` を前景に exec し、`open.json` 全件を seed。戻ったら回答済みエントリを解決し該当タスクを `pending` へ戻す。
    - `[p]`/`[q]` キー、SIGINT/SIGTERM の扱いは §モード切替・§並行性で定義。
    - **終了判定**：未解決の `waiting_human`／`open.json` エントリが 1 件でも残る間は run を終了しない。判断待ちが 0 かつ全タスク settled になったら完了検証（5）へ。
@@ -207,57 +226,59 @@ run loop の擬似フロー：
 
 ## モード切替の実装（前景所有・子プロセス）
 
+> **本節の「前景 exec／`[i]` 全件 seed」は tmux 無し時のフォールバック挙動の記述**。実 tmux 環境（現行の既定）では独立ウィンドウ方式（§「独立ウィンドウ方式（新アーキ）」）が動く＝対話 claude の投入先は該当 tmux ウィンドウ（brainstorming / w-<taskID> の保持ウィンドウ）、介入は ⏸ 選択で当該 1 件のみを対応（`IntervenePrompt`＋`WriteLaunchScript`）。最新の成果物像は §実装状況。
+
 `mode.go` がコントローラの「前景の差し替え」を担う（06 §4.2）。
 
-> **claude の実行ファイル解決（`claudebin.go`）**：オーケストレーターは `claude-dev orchestrate` から tmux ウィンドウの**非対話シェル（`zsh -c`）**で起動される。Claude Code のネイティブ導入先 `~/.local/bin` は**対話シェルの rc（`.zshrc`）でしか PATH に入らない**ため、非対話起動では `claude` が PATH に無く、素朴な `exec.Command("claude", …)` は「executable file not found」で失敗して壁打ち・介入・worker・レビュアの**すべてが動かない**。これを避けるため、対話モードと worker/レビュアの双方で `claudePath()`（`exec.LookPath`→無ければ `$HOME/.local/bin/claude` にフォールバック）で絶対パス解決し、子プロセスの環境は `claudeChildEnv()`（`SLACK_BOT_TOKEN` を除去しつつ claude の bin ディレクトリを PATH に補完）で渡す。
+> **claude の実行ファイル解決（`claudebin.go`）**：オーケストレーターは `claude-dev orchestrate` から tmux ウィンドウの**非対話シェル（`zsh -c`）**で起動される。Claude Code のネイティブ導入先 `~/.local/bin` は**対話シェルの rc（`.zshrc`）でしか PATH に入らない**ため、非対話起動では `claude` が PATH に無く、素朴な `exec.Command("claude", …)` は「executable file not found」で失敗してブレインストーミング・介入・worker・レビュアの**すべてが動かない**。これを避けるため、対話モードと worker/レビュアの双方で `claudePath()`（`exec.LookPath`→無ければ `$HOME/.local/bin/claude` にフォールバック）で絶対パス解決し、子プロセスの環境は `claudeChildEnv()`（`SLACK_BOT_TOKEN` を除去しつつ claude の bin ディレクトリを PATH に補完）で渡す。
 
-- **モード遷移バナー（UX。06 §5.4）**：各モードへ入る直前に、`term.go` の `printModeBanner(mode)` が端末へ一行のラベル付きバナー（現在モード名＋抜け方）を印字する。対話 claude は代替スクリーンで画面を占有するため**起動直前に印字**し、対話中は隠れるが `/exit` 後に scrollback として再表示される。少なくとも次を出す：壁打ち入場「▶ 壁打ちモード。要件と plan を固め、済んだら `/exit` で実行へ」／介入入場「▶ 介入モード。要判断に回答し、済んだら `/exit` でダッシュボードへ戻る」／実行入場「▶ 実行モード（ダッシュボード）」。**終了メニュー**（続ける/実行/終了）は `selectMenu` 自身がタイトルと各項目の説明を表示するため、専用の printModeBanner は出さない（06 §5.4 の4モードのうち終了メニューは selectMenu が自己説明）。実装は日本語（06 §5.7）。
-- **対話モード（壁打ち/介入）** `RunInteractive(ctx)`：`exec.Command(claudePath(), args...)` を生成し、`Stdin/Stdout/Stderr = os.Stdin/os.Stdout/os.Stderr`（同一 TTY を共有）。`cmd.Run()` で**子の終了までブロック**する。これによりコントローラのループは自然に停止し、壁打ち/介入中は実行が止まる。**対話モードから制御を戻す唯一の操作は子 claude の終了（`/exit`／`Ctrl-D`）**（自動では戻らない。06 §4.5/§5.4）。
+- **モード遷移バナー（UX。06 §5.4）**：各モードへ入る直前に、`term.go` の `printModeBanner(mode)` が端末へ一行のラベル付きバナー（現在モード名＋抜け方）を印字する。対話 claude は代替スクリーンで画面を占有するため**起動直前に印字**し、対話中は隠れるが `/exit` 後に scrollback として再表示される。少なくとも次を出す：ブレインストーミング入場「▶ ブレインストーミングモード。要件と plan を固め、済んだら `/exit` で実行へ」／介入入場「▶ 介入モード。要判断に回答し、済んだら `/exit` でダッシュボードへ戻る」／実行入場「▶ 実行モード（ダッシュボード）」。**終了メニュー**（続ける/実行/終了）は `selectMenu` 自身がタイトルと各項目の説明を表示するため、専用の printModeBanner は出さない（06 §5.4 の4モードのうち終了メニューは selectMenu が自己説明）。実装は日本語（06 §5.7）。
+- **対話モード（ブレインストーミング/介入）** `RunInteractive(ctx)`：`exec.Command(claudePath(), args...)` を生成し、`Stdin/Stdout/Stderr = os.Stdin/os.Stdout/os.Stderr`（同一 TTY を共有）。`cmd.Run()` で**子の終了までブロック**する。これによりコントローラのループは自然に停止し、ブレインストーミング/介入中は実行が止まる。**対話モードから制御を戻す唯一の操作は子 claude の終了（`/exit`／`Ctrl-D`）**（自動では戻らない。06 §4.5/§5.4）。
   - **Ctrl-C（SIGINT）の授受**：対話 claude が前景（プロセスグループ前景）を占有する間、Ctrl-C はまず子 claude に届く。`main.go` の SIGINT ハンドラは ctx を cancel するため、子終了後にループは中断（suspend＝再開可）へ入る。すなわち **`/exit`＝そのモードだけ抜けてループへ戻る**、**Ctrl-C＝run 全体のクリーン中断**、と役割が分かれる（06 §5.2③）。**子の対話 `claude`（全画面 TUI）は共有 TTY を非カノニカル（raw）モードに切り替え、終了時にカノニカルへ戻さない**。コントローラは同じ TTY を使うため、`cmd.Run()` 復帰直後に `ttyRestoreSane()`（`term.go`）で**カノニカルな健全状態へ復元**する。これを怠ると、以降の行バッファ読み取り（`terminalConfirm` の確認入力、ダッシュボードのキー入力）が、raw モードでは Enter が `\n` ではなく `\r` を送るため `\n` を待ち続けて**永久にブロック**する。
-  - 壁打ち：引数なしの対話起動＋オーケストレーター脳の instruction を投入（§ instruction 注入）。
+  - ブレインストーミング：引数なしの対話起動＋オーケストレーター脳の instruction を投入（§ instruction 注入）。
   - 介入対応（`[i]` 押下時のみ）：`--resume` は使わず**フレッシュ起動**し、`intervention/open.json` の全件と各 `intervention/<id>/question.md` を初期プロンプト/コンテキストとして渡す（06 §6.2 ノブ1=フレッシュ再構成、ノブ3=常駐セッションを使わず controller が毎回新規 exec）。**旧「ノブ2=先に起動して待たせる」は廃止**——トリガー発火で自動起動して全実行をブロックする旧挙動をやめ、人間が `[i]` を押した時にオンデマンド起動する（06 §6.3）。複数件あればまとめて提示し、1 件ずつ回答させる（`ResolveArgs` が全 `open.json` の question を「`===== 介入 <id> =====`」区切りで seed）。コントローラは `cmd.Run()` でその終了までブロックするが、**背景の worker 子プロセスは前景占有中も走り続ける**。
     - **キューのナビゲーション（06 §5.5）**：複数件のとき `intervene.md` が進捗を口頭で明示する規約を持つ——各件冒頭「いま『<タスク名>』(k/N 件目) に回答中」、記録後「記録しました。次は『<次のタスク名>』(k+1/N)」、全件終了「全 N 件回答済み。`/exit` で戻ってください」。人間が「今どれ／次へ」を把握できるようにする。
     - **途中 exit の堅牢性（06 §5.2③）**：`resolveInterventions` の再突合は、各 open エントリについて `answer.md` が**非空のものだけ**を確定（`interventions.jsonl` 追記・`open.json` から除去・タスクを `pending` へ）し、**未回答（answer.md 空）は open のまま残す**。ゆえに途中 `/exit` は安全（未回答は消えず、再度 `[i]` で継続）。「回答した」の確定条件は**脳が `answer.md` に書いた時点**（口頭のみで記録前に exit すると未回答扱い）。
     - **abort**：介入脳が `control.json` に `abort` を書いて終了した場合、`resolveInterventions` は `aborted=true` を返し run を done へ（単なる離脱ではない）。
-- **実行モード** `RunDashboard(ctx)`：`dashboard.go` が ANSI で TTY を再描画しつつ、`worker.go` の goroutine 群を監督する。**ヘッダに現在モード（`● 実行中`／`⏸ 一時停止`）を明示**する（06 §5.4）。各タスク行は `待機中/実行中/レビュー中/修正中/要判断/完了/失敗/ブロック` のラベルと、実行中タスクの経過時間・試行回数を表示する（タスクが running になった時点で `syncDashboard` を呼ぶため「ずっと待機中に見える」ことはない）。`要判断`（`waiting_human`）は ⏸ で示す。**要判断は件数だけでなく開いているキューの一覧（タスク名）を表示**し（`open.json` の各 TaskID→タスク名）、`[i]` で対応する導線を示す（06 §5.5／§5.2②）。キー操作：
-  - **VM 資源逼迫バナー（VM モード時）**：`render()` は描画のたびに `vm-healthd` の health ファイル（`$HOME/.claude-dev-vm/health`。正本 [80_vm-mode.md](80_vm-mode.md) §7.2）をベストエフォートで読み、`STATE=WARN` かつ `TS` が新しい（既定 120 秒以内）ときだけ画面上部へ赤の警告バナー（`⚠ VM資源逼迫（QEMU CPU …% / 上限 …%）…`）を出す。ファイルが無い／VM モードでない／鮮度切れ・パース失敗時は何も出さない（読取専用・エラーは無視）。**controller ループは非改変**で、追加は `dashboard.go`（`render` と補助 `readVMHealthBanner`）に限定する。
-  - **`d`（worker 出力）**：詳細表示をトグルする。ON の間は実行中 worker の出力ログ（`workers/<taskID>.log`）の末尾をライブ表示する（`dashboard.go` の `renderDetail`/`tailFile`）。worker は出力をログへ**ストリーム書き込み**する（§ worker ディスパッチ）ので、完了を待たずに進捗が見える。
+- **実行モード**：`dashtui.go` の bubbletea TUI（`dashModel`）が `dashboard` ウィンドウで差分描画し、controller が `worker.go` の goroutine 群を監督する。**ヘッダに現在モード（`● 実行中`／`⏸ 一時停止`）を明示**する（06 §5.4）。各タスク行は `待機中/実行中/レビュー中/修正中/要判断/完了/失敗/ブロック` のラベルと、実行中タスクの経過時間・試行回数を表示する（タスクが running になった時点で `syncDashboard` を呼ぶため「ずっと待機中に見える」ことはない）。`要判断`（`waiting_human`）は ⏸ で示す。**要判断は件数だけでなく開いているキューの一覧（タスク名）を表示**し（`open.json` の各 TaskID→タスク名）、`[i]` で対応する導線を示す（06 §5.5／§5.2②）。キー操作：
+  - **VM 資源逼迫バナー（VM モード時）**：`dashtui.go` の `View()` は描画のたびに `dashboard.go:readVMHealthBanner` を呼び、`vm-healthd` の health ファイル（`$HOME/.claude-dev-vm/health`。正本 [80_vm-mode.md](80_vm-mode.md) §7.2）をベストエフォートで読み、`STATE=WARN` かつ `TS` が新しい（既定 120 秒以内）ときだけ画面上部へ赤の警告バナー（`⚠ VM資源逼迫（QEMU CPU …% / 上限 …%）…`）を出す。ファイルが無い／VM モードでない／鮮度切れ・パース失敗時は何も出さない（読取専用・エラーは無視）。**controller ループは非改変**で、バナー文字列は `dashboard.go:readVMHealthBanner` が返し描画は `dashtui.go` の `View` が行う。
+  - **`d`（worker 出力）**：詳細表示をトグルする。ON の間は実行中 worker の出力ログ（`workers/<taskID>.log`）の末尾をライブ表示する（`dashtui.go` の `detailTails`/`tailFile`）。worker は出力をログへ**ストリーム書き込み**する（§ worker ディスパッチ）ので、完了を待たずに進捗が見える。ログは生 stream-json ではなく **Claude Code 風に整形済み**（`streamlog.go`。§ worker ディスパッチ step3）なので、worker ウィンドウの `tail -F` でも `[d]` でも人間が読める。
   - **`p`（一時停止）**：新規スケジューリングを止める／再開するトグル（実行中 worker は走り続ける）。
   - **`i`（介入対応）**：`intervention/open.json` に未解決の要判断がある時だけ意味を持つ。対話 `claude` を前景に exec し、溜まっている要判断をまとめて回答させる（上記「介入対応」）。**他 worker は前景占有中も走り続ける**。回答済みタスクは executing で再ディスパッチされる。
   - **`q`（中断）/ Ctrl-C**：実行中 worker に**中間コミットの猶予**（`worker_grace_seconds`、既定 10 秒）を与えて停止し、**状態を `executing` のまま保存して終了する（done にしない）**。次回 `claude-dev orchestrate` は中断点から再開する（`controller.go` は `errSuspended` を返し `Run` がクリーン終了＝終了コード 0。`log.Fatal` しない。worktree のコミットと `session_id` は保全）。SIGINT/SIGTERM も同一経路で処理し、`[q]` と等価のクリーン中断とする。中断は破壊的ではない。
   
-  キー読み取り（`dashboard.go` の `readKeys`）は **`term.go` の `rawKeyMode()` で TTY を自前で非カノニカル・no-echo（`stty -icanon -echo min 0 time 1`）に設定**し、1 バイトずつ読む（Enter 不要・即時反応）。`VMIN=0/VTIME=1` により無入力時の `os.Stdin.Read` は約 0.1 秒ごとに `(0, io.EOF)` を返すので、`ctx` キャンセルを取りこぼさず、stdin にブロックしたまま残る goroutine も生じない。終了時は `ttyRestoreSane()` でカノニカルへ復元する。`isig` は無効化しないため Ctrl-C は引き続きコントローラのシグナルハンドラへ届く。`main.go` は経路によらず（正常終了・エラー・シグナル）`defer ttyRestoreSane()` で最終的に端末を健全状態へ戻す。これらの端末制御は `stty` 呼び出しのみで実現し、外部 Go モジュールを増やさない（stdlib のみ方針を維持）。
+  実行モードのキー入力は **bubbletea が管理**する（生モード・代替スクリーンの設定/復元も bubbletea が担当。`WithContext(ctx)` で ctx キャンセル時に自動終了、`WithAltScreen` で復帰時に元画面へ戻す）。`term.go` の `rawKeyMode()`/`ttyRestoreSane()`（`stty`）は**ブレインストーミング後の確認メニュー（`selectMenu`。bubbletea 非経路）と、対話 claude〔brainstorming/intervene〕からの復帰時の端末復元**に用いる。`isig` は無効化しないため Ctrl-C はコントローラのシグナルハンドラへ届く。`main.go` は経路によらず `defer ttyRestoreSane()` で最終的に端末を健全状態へ戻す。
 
 ### instruction 注入
 
-対話モードの `claude` は「オーケストレーター脳」として振る舞う必要がある。起動時に専用 instruction（役割・介入トリガー・サマリ方針・`control.json`/`plan.json` への書き出し規約）を与える。instruction はイメージ同梱のテンプレート（例 `/usr/local/share/claude-orchestrator/wallbounce.md`）を `mode.go` が `claude` の初期コンテキストへ渡す。テンプレートの正本は `orchestrator/instructions/wallbounce.md`・`intervene.md`（リポジトリ同梱＝カバーするコード §・[40_devcontainer.md](40_devcontainer.md) でイメージへ COPY）。規約の詳細は §「判断基準…の所在」。
+対話モードの `claude` は「オーケストレーター脳」として振る舞う必要がある。起動時に専用 instruction（役割・介入トリガー・サマリ方針・`control.json`/`plan.json` への書き出し規約）を与える。instruction はイメージ同梱のテンプレート（例 `/usr/local/share/claude-orchestrator/brainstorming.md`）を `mode.go` が `claude` の初期コンテキストへ渡す。テンプレートの正本は `orchestrator/instructions/brainstorming.md`・`intervene.md`（リポジトリ同梱＝カバーするコード §・[40_devcontainer.md](40_devcontainer.md) でイメージへ COPY）。規約の詳細は §「判断基準…の所在」。
 
 ### 判断基準（介入トリガー・仮定方針・サマリ方針）の所在
 
 オーケストレーターに与える**判断基準は、プロジェクトの `CLAUDE.md` には置かない**。次に明文化する（環境リポジトリでバージョン管理し、イメージに同梱）：
 
-- **共通の定性ポリシー**：`orchestrator/instructions/wallbounce.md`（壁打ち脳）・`intervene.md`（介入脳）に、介入トリガー 5 条件・「軽微判断は最も妥当な仮定を置いて進め記録する」方針・状況サマリ定型・**開発フロー**（要件/設計/ユースケース → 整合性確認 → 実装仕様 → 実装 → ユースケース動作確認 → レビュー〔結果は `docs/reviews/`〕。CLAUDE.md と整合）を記述する。`plan.json` はこの開発フローを反映してタスク化する。**各タスクには `completion`（そのタスク単体で判定可能な完了基準。担当対象・唯一の成果物パス・満たすべき構造・責務外の明示）を必ず付与する**よう壁打ち脳に指示する（§品質ゲート 8.1。未設定はプラン検証で弾く）。加えて次の UX 規約を両テンプレへ明記する（06 §5.4–5.7）：
-  - **`wallbounce.md`**：(1) **completion 自己検証**——全タスクに `completion` が揃うまで `plan.Ready=true` にせず `execute` handoff を書かない（completion 欠落のまま実行を提示しない。06 §8.1）。(2) 実行に足る状態になったら人間へ**「`/exit` で終了すると実行に移る」旨を明示**（06 §4.5）。(3) `handoff_note.md`（前回 lint 差し戻し理由）が前置されていたら、その不足 `completion` を最優先で補う。(4) **人間に `plan.json` 等の編集を促さない**（対話で詰める。06 §4.3）。
+- **共通の定性ポリシー**：`orchestrator/instructions/brainstorming.md`（ブレインストーミング脳）・`intervene.md`（介入脳）に、介入トリガー 5 条件・「軽微判断は最も妥当な仮定を置いて進め記録する」方針・状況サマリ定型・**開発フロー**（要件/設計/ユースケース → 整合性確認 → 実装仕様 → 実装 → ユースケース動作確認 → レビュー〔結果は `docs/reviews/`〕。CLAUDE.md と整合）を記述する。`plan.json` はこの開発フローを反映してタスク化する。**各タスクには `completion`（そのタスク単体で判定可能な完了基準。担当対象・唯一の成果物パス・満たすべき構造・責務外の明示）を必ず付与する**ようブレインストーミング脳に指示する（§品質ゲート 8.1。未設定はプラン検証で弾く）。加えて次の UX 規約を両テンプレへ明記する（06 §5.4–5.7）：
+  - **`brainstorming.md`**：(1) **completion 自己検証**——全タスクに `completion` が揃うまで `plan.Ready=true` にせず `execute` handoff を書かない（completion 欠落のまま実行を提示しない。06 §8.1）。(2) 実行に足る状態になったら人間へ**「`/exit` で終了すると実行に移る」旨を明示**（06 §4.5）。(3) `handoff_note.md`（前回 lint 差し戻し理由）が前置されていたら、その不足 `completion` を最優先で補う。(4) **人間に `plan.json` 等の編集を促さない**（対話で詰める。06 §4.3）。
   - **`intervene.md`**：(1) **キュー進捗の口頭明示**（「いま『<タスク名>』(k/N)…／記録しました。次は…／全 N 件回答済み。`/exit` で戻る」。06 §5.5）。(2) 回答は `answer.md` に記録して初めて確定する旨と、済んだら `/exit` で戻る旨を人間へ伝える。
   - **両テンプレ共通**：(a) **人間に選択を求めるときは選択肢に必ず番号を付す**（`1. 2. 3.`。番号回答を受理。06 §5.6）。(b) **人間の判断・入力を求めるテキストは日本語**で提示する（内部作業は英語可。06 §5.7）。**役割分担**：worker は `needs_human` を日本語で起票するのが第一義（上記 worker 向け(d)）、介入脳は**保険**として万一英語で来ても日本語化して提示する（二重化。どちらが正かではなく、両方で「人間向けは日本語」を担保）。
 - **worker 向けの判断ルール**：`worker.go` の `workerResultGuide`（worker プロンプトに付加）に、(a)「軽微は仮定して `assumptions` に記録／重大のみ `needs_human` でエスカレーション」、(b)**意味のある区切りで worktree に逐次コミットする**（中断時の作業保全。§worker ディスパッチ 5）、(c) 後戻り不可操作（push/deploy/削除/外部送信）は行わずエスカレーションする、(d) **`needs_human` の `question`／`options` は日本語で書く**（人間向けに提示されるため。これが第一義。06 §5.7）、を worker 視点で記述する。
 - **定量しきい値**（`stuck_limit` 等）は config（§設定）で調整する。
-- **プロジェクト固有の判断基準**（任意）：プロジェクトルートの `ORCHESTRATOR.md`（**コミット対象**。gitignore される `.orchestrator/` 運用状態とは別）。存在すれば、壁打ち/介入の対話 instruction と worker/reviewer プロンプトの先頭に `mode.go`／`worker.go`／`review.go` が prepend する。CLAUDE.md とは独立で、CLAUDE.md には判断基準を書かない。
+- **プロジェクト固有の判断基準**（任意）：プロジェクトルートの `ORCHESTRATOR.md`（**コミット対象**。gitignore される `.orchestrator/` 運用状態とは別）。存在すれば、ブレインストーミング/介入の対話 instruction と worker/reviewer プロンプトの先頭に `mode.go`／`worker.go`／`review.go` が prepend する。CLAUDE.md とは独立で、CLAUDE.md には判断基準を書かない。
 - **VM モード対応（正本 [80_vm-mode.md](80_vm-mode.md) / [docs/08_vm-mode.md](../08_vm-mode.md)）**：
-  - **VM_DEV.md 前置（発見導線2）**：VM モード（環境変数 `CLAUDE_DEV_VM=1`）のとき、`LoadProjectPolicy`（`ORCHESTRATOR.md` 前置）と同じ仕組みで、壁打ち/介入 instruction と worker/reviewer プロンプトの先頭に **VM モードの短いポインタ**（「docker はゲスト VM daemon（`DOCKER_HOST` 設定済）を指す・bind mount の source は `/workspace` 配下のみ・詳細は `/workspace/VM_DEV.md`」）を prepend する。実装は `state.go` の `VMModePreamble()`（`CLAUDE_DEV_VM=1` のとき定型文を返し、それ以外は空）を `mode.go`／`worker.go`／`review.go` の各プロンプト先頭で `LoadProjectPolicy` と並べて前置。CLAUDE.md には触れない。
+  - **VM_DEV.md 前置（発見導線2）**：VM モード（環境変数 `CLAUDE_DEV_VM=1`）のとき、`LoadProjectPolicy`（`ORCHESTRATOR.md` 前置）と同じ仕組みで、ブレインストーミング/介入 instruction と worker/reviewer プロンプトの先頭に **VM モードの短いポインタ**（「docker はゲスト VM daemon（`DOCKER_HOST` 設定済）を指す・bind mount の source は `/workspace` 配下のみ・詳細は `/workspace/VM_DEV.md`」）を prepend する。実装は `state.go` の `VMModePreamble()`（`CLAUDE_DEV_VM=1` のとき定型文を返し、それ以外は空）を `mode.go`／`worker.go`／`review.go` の各プロンプト先頭で `LoadProjectPolicy` と並べて前置。CLAUDE.md には触れない。
   - **ゲスト `DOCKER_HOST` の継承**：orchestrator は `claude-dev orchestrate` が source した `/etc/claude-dev/vm.env` によりゲストの `DOCKER_HOST` を持ち、worker は `claudeChildEnv()`（`os.Environ()` 由来）でそれを継ぐ。よって Go 側の追加実装は不要（`DOCKER_HOST` を明示操作しない）。
 
 CLAUDE.md に置かない理由：CLAUDE.md は worker を含む Claude Code 全般への指示であり、オーケストレーターのガバナンス（いつ人間を呼ぶか）を混在させると worker にも波及して責務が濁るため。オーケストレーター脳は自分の instruction（＋将来のプロジェクト固有 policy）だけを読む。
 
-## 壁打ち/介入の受け渡しプロトコル（handoff）
+## ブレインストーミング/介入の受け渡しプロトコル（handoff）
 
 対話 `claude` は前景の子プロセスであり、コントローラと**ファイル経由**で受け渡す（プロセス間でメモリ共有しない）。
 
-- 壁打ち脳は決定を `plan.json` に書き、実行可と判断したら `plan.Ready=true` にし、`control.json` に `{"request":"execute"}` を書いてからセッションを終了する（人間が `/exit`、または instruction が終了を促す）。
+- ブレインストーミング脳は決定を `plan.json` に書き、実行可と判断したら `plan.Ready=true` にし、`control.json` に `{"request":"execute"}` を書いてからセッションを終了する（人間が `/exit`、または instruction が終了を促す）。
 - 介入時は、対話脳が回答を `intervention/<id>/answer.md` と該当タスクへ反映し、`control.json` に `{"request":"resume","intervention_id":"<id>"}` を書いて終了する。
-- 書き込みは原子的に行う（一時ファイル → rename）。コントローラは前景を取り戻した直後に `control.json` を読み、**消費後に `controller.go` が削除する**。`control.json` が無い/不正な場合はコントローラが端末で**カーソル選択メニュー**で確認する（プロンプト依存にしない安全側。§制御フロー step2・06 §4.5）。再開時（Phase=executing）は `plan.json` を正本とし、残存する `control.json` は無視して消す（壁打ち直後のクラッシュも `plan.Ready` と `plan.json` の整合だけで判断する）。
+- 書き込みは原子的に行う（一時ファイル → rename）。コントローラは前景を取り戻した直後に `control.json` を読み、**消費後に `controller.go` が削除する**。`control.json` が無い/不正な場合はコントローラが端末で**カーソル選択メニュー**で確認する（プロンプト依存にしない安全側。§制御フロー step2・06 §4.5）。再開時（Phase=executing）は `plan.json` を正本とし、残存する `control.json` は無視して消す（ブレインストーミング直後のクラッシュも `plan.Ready` と `plan.json` の整合だけで判断する）。
 - **要判断 question の整形（`buildQuestion`）**：seed する質問は「`# 要判断: <タスク名>` → トリガー → このタスクの `completion` → 質問本文」で構成し、**選択肢がある場合は `1.` `2.` `3.` の連番**で出力する（`- ` の無番号箇条書きにしない。06 §5.6）。人間向けに提示される文字列であり**日本語**とする（06 §5.7）。
-- **lint 差し戻し理由の申し送り（`handoff_note.md`）**：`.orchestrator/handoff_note.md`（機械所有・人間非編集）にコントローラ（`reportNotExecutable`）が実行不可理由（未設定 `completion` のタスク一覧等）を書き、次回 `mode.WallbounceArgs()` が instruction 先頭へ前置する。消費後に削除。これにより人間が内容を中継せずとも壁打ち脳が欠けた `completion` を補える（06 §4.5）。
+- **lint 差し戻し理由の申し送り（`handoff_note.md`）**：`.orchestrator/handoff_note.md`（機械所有・人間非編集）にコントローラ（`reportNotExecutable`）が実行不可理由（未設定 `completion` のタスク一覧等）を書き、次回 `mode.BrainstormingArgs()` が instruction 先頭へ前置する。消費後に削除。これにより人間が内容を中継せずともブレインストーミング脳が欠けた `completion` を補える（06 §4.5）。
 
 ## worker ディスパッチ
 
@@ -265,7 +286,7 @@ CLAUDE.md に置かない理由：CLAUDE.md は worker を含む Claude Code 全
 
 1. **worktree 準備**：`git worktree add .orchestrator/worktrees/<taskID> -b orch/<taskID>`（ベースは現在の作業ブランチ）。タスクはこの worktree を CWD として走る（ファイル競合防止、06 §4.4）。ディレクトリが既存なら再利用、ディレクトリは無いがブランチ `orch/<taskID>` が残っている場合は `git worktree add <path> orch/<taskID>`（`-b` なし）で**再接続**する（`-b` 重複エラーで再試行ループに陥らない）。
 2. **プロンプト構築**：`Task.Description` ＋ 状態ストアから必要文脈（関連 docs/実装仕様の該当箇所、先行タスクの結果サマリ、制約・既決事項）を**過不足なく**注入（NFR-2）。巨大リポジトリ全体は渡さない。
-3. **起動**：`claude -p "<prompt>" --output-format stream-json --verbose [--model <m>] --permission-mode <mode> [--session-id <new>|--resume <saved>]`、CWD=worktree。出力は `io.MultiWriter` でバッファと `workers/<taskID>.log` へ**ライブ tee**する。`stream-json`（`-p` では `--verbose` が必須）はイベントを 1 行ずつ逐次出力するため、ログが実行中に伸び、ダッシュボードの `[d]` 詳細表示が worker の進捗をリアルタイムに見せられる（`--output-format json` だと完了まで何も出ずログが空に見える）。**`--permission-mode` は明示的に渡す**（既定 `bypassPermissions`、`config.worker_permission_mode` で変更可・空文字で無指定）。ヘッドレス worker は権限プロンプトに答える人間がいないため、非対話モードを明示しないと全 Write/Bash が拒否され worker が無言で何もしなくなる。bypass の安全性はコンテナ隔離・FW・proxy・instruction 制約で担保（06 §10）。`claude` 実行ファイルは `claudePath()` で解決（PATH→`$HOME/.local/bin/claude`）し、PATH を補完した環境（`claudeChildEnv()`）で起動する。レビュア（`claude -p`）も同じ runner を共有し同モードで起動する（`git diff` 実行に Bash 権限が要るため）。
+3. **起動**：`claude -p "<prompt>" --output-format stream-json --verbose [--model <m>] --permission-mode <mode> [--session-id <new>|--resume <saved>]`、CWD=worktree。出力は `io.MultiWriter` で **(a) 生 stream-json を貯めるバッファ**（結果解析＝`ParseWorkerResult` 用）と **(b) `workers/<taskID>.log` へ書く整形ライタ `streamPrettyWriter`（`streamlog.go`）** の両方へライブに流す。`stream-json`（`-p` では `--verbose` が必須）はイベントを 1 行ずつ逐次出力するため、ログが実行中に伸び、ダッシュボードの `[d]` 詳細表示や worker ウィンドウの `tail -F` が worker の進捗をリアルタイムに見せられる（`--output-format json` だと完了まで何も出ずログが空に見える）。**ログは生 JSON をそのまま書かず、Claude Code に近い可読表現へ整形**する（`streamlog.go:formatStreamLine`）：`assistant` の text ブロックはそのまま本文として、`tool_use` は `⏺ <ツール名>(<主要引数の要約>)`（Bash→command／Read・Write・Edit→file_path／Grep・Glob→pattern／他→主要フィールドか短縮 JSON）、`tool_result` は `  ⎿ <先頭を短縮＋（N 行）>`、最終 `result` は区切り＋「✓ 完了」。パース不能な行はそのまま出す（欠落させない）。結果解析は (a) の生バッファを使うのでこの整形は解析に影響しない（ログは表示専用）。**`--permission-mode` は明示的に渡す**（既定 `bypassPermissions`、`config.worker_permission_mode` で変更可・空文字で無指定）。ヘッドレス worker は権限プロンプトに答える人間がいないため、非対話モードを明示しないと全 Write/Bash が拒否され worker が無言で何もしなくなる。bypass の安全性はコンテナ隔離・FW・proxy・instruction 制約で担保（06 §10）。`claude` 実行ファイルは `claudePath()` で解決（PATH→`$HOME/.local/bin/claude`）し、PATH を補完した環境（`claudeChildEnv()`）で起動する。レビュア（`claude -p`）も同じ runner を共有し同モードで起動する（`git diff` 実行に Bash 権限が要るため）。
    - **セッション継続（中断からの再開で白紙やり直しを防ぐ）**：worker 起動時、`stream-json` の初期 `system`/`init` イベントに含まれる `session_id` を捕捉し `Task.SessionID` に保存する（新規 Attempt は `--session-id <uuid>` で採番してもよい）。中断後の再開で**同一 Attempt を続行**する場合（`Task.SessionID` が非空かつ Attempts を増やさない再開）は `--resume <session-id>` を付けて起動し、worker は前回の続きから作業する。**別アプローチでの再試行（新しい Attempt）に入るときは `Task.SessionID` を空に戻し**、新規セッションで始める（前回の失敗文脈は feedback として別途プロンプトへ渡す）。`--resume` が失敗した場合（セッション喪失等）は新規セッションへフォールバックし audit へ記録する。
 4. **結果回収**：stdout の JSON を `WorkerResult` にデコード。worker・レビュア双方 `stream-json` で起動するため、`ParseWorkerResult`／`ParseReviewResult` はいずれも **stream-json の最終 result イベント → single envelope → bare の順**で内側 JSON を取り出す（レビュア側の stream-json 非対応は実機検証で発見・修正済み。[docs/reviews/2026-07-01_orchestrator-e2e.md](../reviews/2026-07-01_orchestrator-e2e.md)）。`Usage` を `audit.jsonl` に記録。`NeedsHuman` が非 nil なら trigger へ（人間に直接問わせない＝06 §7）。`NeedsHuman.Options` は worker が提示する**候補データ**であり、worker 自身がレンダリングするのではなく、controller が介入対応の対話モードで select→submit として人間に提示する（06 §7 と矛盾しない）。`WorkerResult.Assumptions`（軽微な仮定）は controller が `assumptions.jsonl` に追記する。
 5. **取り込み**：worker は worktree 内で実装し、**意味のある区切りで逐次コミット**したうえで最終的にもコミットする（中間コミット方針は `workerResultGuide` に明記。中断されてもコミット済み分が保全される）。レビュー合格後、**controller** が worktree のコミットを作業ブランチへ統合する（`merge`/`rebase` は `config.merge_strategy`。git 操作は orchestrator ユーザが実行し、worker の bypass とは独立）。コンフリクト・クラッシュ・タイムアウトは当該 Attempt の失敗として次の Attempt へ（§試行回数とエスカレーション）。
@@ -279,7 +300,7 @@ CLAUDE.md に置かない理由：CLAUDE.md は worker を含む Claude Code 全
 1. 実装 worker と**別の** worker をレビュアとして起動（フェーズ 1 は同じ Claude、フェーズ 2 で Codex＝別ベンダー。06 §8/§11）。
 2. レビュー入力は worktree の diff。観点を分ける：①要件充足・動作 ②セキュリティ・エラー処理・保守性（FR-9）。両観点のチェックリストを **1 回のレビュー呼び出し**に与え、findings を観点タグ付きで返させる（観点ごとに別呼び出しはしない）。
 3. **採点基準は当該タスクの `Task.Completion` のみ**（プラン全体のゴールや兄弟タスクの責務で減点しない）。`Task.Completion` 空時に `Plan.Completion`/`Plan.Goal` へフォールバックする旧挙動は**禁止**（プラン検証で空タスクを弾く前提。06 §8.1）。レビュアプロンプトには「全体網羅・他観点・統合・後始末は別タスクの担当であり、本タスクの採点に含めない」旨を明記する。
-4. **レビュア出力は構造化出力で受ける**（findings[]：`severity`(`critical`|`major`|`minor`), file, message, aspect）。散文中の JSON を正規表現で拾う方式は補助フォールバックに留める。06 §8.2。**現状の実装は JSON 最終行方式＋パース失敗の構造的ハンドリング**で、tool による厳密なスキーマ強制は将来強化点（§実装状況）。
+4. **レビュア出力は構造化出力で受ける**（findings[]：`severity`(`critical`|`major`|`minor`), file, message, aspect）。**レビュア指示（`reviewGuide`）は「最終出力は JSON オブジェクト 1 個のみ・散文の結論を書かない・合格は `{"findings":[]}`」を強く固定**する（散文で結論を書くとパース不能→合格が誤って `review_gate_defect` として人間へ昇格するため。実機で観測された誤昇格の対策）。パーサ `findReviewResultJSON` は (a) 最終行が JSON の厳密一致を優先し、(b) 失敗時は ```json フェンス除去・散文中に埋もれた `{...}`（文字列リテラル内の `}` を無視するブレース対応スキャン `findJSONObjects`）から **`findings` キーを持つ最後のオブジェクト**を拾うフォールバックを持つ。06 §8.2。tool による厳密なスキーマ強制は将来強化点（§実装状況）。
 5. **重大** severity（`critical`/`major`）が残る間は実装 worker へ差し戻し（revise）、`max_review_rounds`（既定 3）まで反復する（この間 `Attempts` は増やさない。§試行回数とエスカレーション）。
 6. **フォーマット違反（パース不能）と内容不合格を区別する**（06 §8.2/§8.3）：
    - パース不能なら `Task.ReviewFormatErrors++`。**実装は完了しているので worker を再ディスパッチ（実作業のやり直し）せず、レビュー工程のみ再試行**する。
@@ -316,11 +337,11 @@ CLAUDE.md に置かない理由：CLAUDE.md は worker を含む Claude Code 全
 
 `slack.go`：`net/http` で `https://slack.com/api/chat.postMessage` に `Authorization: Bearer $SLACK_BOT_TOKEN` で JSON POST。`SLACK_BOT_TOKEN` 未設定なら no-op、送信失敗は握りつぶしてログのみ（既存 `sendslackmsg.sh` と同じ堅牢性方針）。`SLACK_CHANNEL`（既定は既存と同値）を宛先にする。これらの環境変数はホスト `~/.claude/settings.json` の `env` から entrypoint 経由でコンテナへ渡る（[30_scripts.md](30_scripts.md) §連携）。
 
-送信契機：(a) 実行モードでサマリ更新時（`summary.md` 更新と同時）、(b) **タスクが要判断に該当し介入キューへ積まれた時**（要判断アラート「要判断 N 件。巡回時に attach し `[i]` で対応を」。run は止まらない旨を含意）、(c) 完了時。**発信源はコントローラに一本化**し、worker・壁打ち中の対話 claude は送らない（06 §9）。worker・壁打ち/介入の対話 claude いずれにも `SLACK_BOT_TOKEN` を渡さないことで技術的に封じる（加えて対話 claude は instruction でも抑止）。トークンは controller のみが保持して送信する。
+送信契機：(a) 実行モードでサマリ更新時（`summary.md` 更新と同時）、(b) **タスクが要判断に該当し介入キューへ積まれた時**（要判断アラート「要判断 N 件。巡回時に attach し `[i]` で対応を」。run は止まらない旨を含意）、(c) 完了時。**発信源はコントローラに一本化**し、worker・ブレインストーミング中の対話 claude は送らない（06 §9）。worker・ブレインストーミング/介入の対話 claude いずれにも `SLACK_BOT_TOKEN` を渡さないことで技術的に封じる（加えて対話 claude は instruction でも抑止）。トークンは controller のみが保持して送信する。
 
 ## ステータス・ダッシュボード
 
-`dashboard.go` は 06 §5.2 ② の画面を描画する：**ヘッダに現在モード（`● 実行中`／`⏸ 一時停止`）**、goal、各タスクの `[i/n] worker X (claude): 状態ラベル 経過時間 (試行N)`（`waiting_human` は ⏸ 要判断ラベル）、直近サマリ、仮定カウント・**未解決の要判断件数と一覧（`intervention/open.json` の各 TaskID→タスク名。件数だけでなくどのタスクが待っているかを列挙。06 §5.5）**・実行中数、キーヒント（`[d]`/`[p]`/`[i]`/`[q]`）。worker の実行内容は `[d]` 詳細表示でログ末尾をライブ確認できる（別ウィンドウ＝旧 Config B は廃止し、`[d]` に一本化した）。`[i]` は未解決の要判断がある時のみ有効。単一ウィンドウ構成（Config A）のみ。人間向け表示はすべて日本語（06 §5.7）。
+`dashtui.go`（`View`）は 06 §5.2 ② の画面を描画する（共有状態 `DashboardState` と純ヘルパ〔`selectableWorker`・`statusLabel`・`readVMHealthBanner` 等〕は `dashboard.go`）：**ヘッダに現在モード（`● 実行中`／`⏸ 一時停止`）**、goal、各タスクの `[i/n] worker X (claude): 状態ラベル 経過時間 (試行N)`（`waiting_human` は ⏸ 要判断ラベル）、直近サマリ、仮定カウント・**未解決の要判断件数と一覧（`intervention/open.json` の各 TaskID→タスク名。件数だけでなくどのタスクが待っているかを列挙。06 §5.5）**・実行中数、キーヒント（`[d]`/`[p]`/`[i]`/`[q]`）。worker の実行内容は `[d]` 詳細表示でログ末尾をライブ確認できる（別ウィンドウ＝旧 Config B は廃止し、`[d]` に一本化した）。`[i]` は未解決の要判断がある時のみ有効。人間向け表示はすべて日本語（06 §5.7）。**（この段落は旧・全消去再描画方式の記述。現行は `dashtui.go` の bubbletea カーソル選択式 TUI＝`orch-<CNAME>-main:dashboard` ウィンドウで描画。カーソル↑↓/jk＋Enter で移動〔⏸ は介入・実行中はウィンドウ直視〕、`d` で出力 tail トグル。数字キー即移動は廃止。§「独立ウィンドウ方式（新アーキ）」／§実装状況）**
 
 ## 設定（config / env）
 
@@ -357,7 +378,7 @@ merge_strategy: merge
 
 - **並行性**：`executing` で依存解決済みタスクを `max_workers` まで goroutine 起動。各 worker は独立 worktree。共有状態（plan/Store/state/open.json）は排他制御し、作業ブランチへの統合（merge）は直列化する。長時間の外部呼び出し中はロックを保持しない（plan のスナップショットに対して実行）。**`waiting_human` のタスクは worker スロットを占有しない**ので、空いたスロットは他の `pending` タスクへ回る。
 - **トリガー発火＝タスク単位の保留（peer を止めない）**：トリガーは worker 起動**前**（条件1・pre-dispatch）または worker が結果を返した**後**（条件2/4/5・stuck・review_gate_defect）に評価される。いずれの時点でも当該タスクの worker は「まだ起動していない／既に完了している」ため、発火時に**走行中の worker を個別に kill する処理は不要**（per-task の中断 context は持たない）。発火したタスクは `waiting_human` にして `intervention/open.json` へ積むだけで、`openInterventionLocked` は他へ一切干渉しない。**全 worker を束ねる単一 context を発火で `runCancel()` する旧挙動は廃止**する（これが「1 件の判断要求で全 worker が止まり再開時にやり直しになる」根因だった）。複数タスクが同時に要判断になっても、それぞれが独立に `waiting_human` になるだけで、互いを止めない。`abort`（中止）だけは run 全体を畳む特例として全 worker を停止し done へ向かう。中間コミット猶予（`worker_grace_seconds`）は**中断（Ctrl-C/`[q]`）で走行中 worker を止める経路にのみ**適用される（介入の保留経路では worker は走っていない）。
-- **再開と新規開始の判定**：起動時に `state.json` を読み、**genuinely 中断された run（Phase=`executing`）のみ再開**する。それ以外（state.json 不在／Phase=`done`／未知の Phase）は**壁打ちから新規開始**する（`main.go` の `isResumable`）。これにより、(a) 完了済みの run が Phase=`done` を残して次回起動が即終了する、(b) 古い `executing` 状態へ無言で再開して壁打ちを飛ばす、という 2 つの失敗を防ぐ。`--fresh` を付けると中断された run でも強制的に新規開始する（`Store.ResetRun()` で state/plan/control・intervention/open.json を削除し、`CleanOrchWorktrees` で前回の worktree と `orch/*` ブランチを撤去してから壁打ちへ）。新規開始時は標準出力に「🆕 新規セッションを開始します」、再開時は「↩️ 前回の executing フェーズから再開します」を表示し、挙動を可視化する。
+- **再開と新規開始の判定**：起動時に `state.json` を読み、**genuinely 中断された run（Phase=`executing`）のみ再開**する。それ以外（state.json 不在／Phase=`done`／未知の Phase）は**ブレインストーミングから新規開始**する（`main.go` の `isResumable`）。これにより、(a) 完了済みの run が Phase=`done` を残して次回起動が即終了する、(b) 古い `executing` 状態へ無言で再開してブレインストーミングを飛ばす、という 2 つの失敗を防ぐ。`--fresh` を付けると中断された run でも強制的に新規開始する（`Store.ResetRun()` で state/plan/control・intervention/open.json を削除し、`CleanOrchWorktrees` で前回の worktree と `orch/*` ブランチを撤去してからブレインストーミングへ）。新規開始時は標準出力に「🆕 新規セッションを開始します」、再開時は「↩️ 前回の executing フェーズから再開します」を表示し、挙動を可視化する。
 - **再開（executing）— 完了タスクを再実行しない**：`plan.json`・`intervention/open.json` を読み、`done` 以外のタスクから継続（06 §4.3、状態はファイルに永続）。正規化（`NormalizeForResume`）は**途中状態だけ**を対象とする：
   - `done`/`failed`/`blocked` は**一切触らない**（完了タスクは絶対に再実行しない）。
   - `waiting_human` は**保留のまま維持**（`open.json` のエントリと対応）。pending へ戻さない。
@@ -386,14 +407,13 @@ docker-proxy と同方式のマルチステージで `claude-orchestrator` を b
 
 ## CLI 連携（claude-dev orchestrate）
 
-正本は [10_cli.md](10_cli.md)。契約のみ：既存 `cmd_code`（`tmux new-window -t main "claude"`）と同系統で、`claude-dev orchestrate [<ゴール>] [--fresh]` は実行中コンテナに対し
-`docker exec -it -u <user> <name> tmux new-window -t main "claude-orchestrator …"` → `tmux attach` する。コンテナ起動は従来どおり `claude-dev start`。ゴール引数は任意（既定は壁打ちから開始、06 §5.1）。`--fresh` はそのままバイナリへ渡す（前回の実行状態を破棄して壁打ちから新規開始）。単一ウィンドウ構成のみ（worker 出力はダッシュボードの `[d]` で確認）。
+正本は [10_cli.md](10_cli.md)。契約（tmux 常駐方式）：`claude-dev orchestrate [<ゴール>] [--fresh]` は実行中コンテナに対し、**`claude-orchestrator` プロセスの生存（`pgrep`）で判定**する（`has-session` ではない＝`remain-on-exit on` の worker/brainstorming 窓が空き殻セッションを延命させ誤検出するため。06 §5.9）——**生存中** なら `docker exec -it -u <user> <name> tmux attach -t orch-<CNAME>-main`（コントローラ常駐中）、**不在** なら延命した空き殻セッションを `kill-session` してから新しい `orch-<CNAME>-main` を `new-session -d -n dashboard` で作りその中で `claude-orchestrator --workspace /workspace …` を起こして（状態から resume）から attach する。セッション名は `--print-main-session` で本体から得る。コンテナ起動は従来どおり `claude-dev start`。ゴール引数は任意（既定はブレインストーミングから開始、06 §5.1）。`--fresh` はそのままバイナリへ渡す（前回の実行状態を破棄してブレインストーミングから新規開始）。worker 出力は各 worker ウィンドウで直接確認（カーソル選択→Enter で切替、または `Ctrl-b w`／`Ctrl-b 数字`）。`[d]` は dashboard 内のログ tail トグルとして存置（別ウィンドウ直視と併存）。廃止は `--workers-window`／Config B のみ。**これが単一コマンド復旧（06 §5.9）**。`<CNAME>` は正規化コンテナ名（`session.go` の `normalizeCName`）。
 
 バイナリ直叩きのフラグ（オーケストレーター開発・自己検証で使用。[70_sample-project.md](70_sample-project.md)／[docs/07_self-verification.md](../07_self-verification.md)）：
 
 - `--workspace <dir>`：対象リポジトリのルート（既定は CWD）。サンプルへ向けるのに使う。
 - `--instructions <dir>`：instruction テンプレートの上書きディレクトリ（既定はイメージ同梱）。ローカルの `orchestrator/instructions` を使う高速ループ用。
-- `--start-executing`（**本改訂で追加する検証専用 affordance**）：`.orchestrator/plan.json` が `Ready=true` で存在する時だけ、壁打ちを飛ばして直接 `executing` から開始する。ready な seed plan が無ければ無効（通常の壁打ち開始へフォールバック）。決定論的な非対話検証（S1〜S5）のために用意し、通常運用の既定挙動（壁打ち開始）は変えない。
+- `--start-executing`（**本改訂で追加する検証専用 affordance**）：`.orchestrator/plan.json` が `Ready=true` で存在する時だけ、ブレインストーミングを飛ばして直接 `executing` から開始する。ready な seed plan が無ければ無効（通常のブレインストーミング開始へフォールバック）。決定論的な非対話検証（S1〜S5）のために用意し、通常運用の既定挙動（ブレインストーミング開始）は変えない。
 
 ## テスト方針
 
@@ -416,7 +436,7 @@ docker-proxy と同方式のマルチステージで `claude-orchestrator` を b
 | 状態ストアのファイル構成 | 本書「状態ストアのファイル構成」で確定（`/workspace/.orchestrator/`） |
 | 行き詰まり時の「別アプローチ」自動化範囲 | 失敗情報を付帯して worker を再ディスパッチ（別アプローチ）。最大 `stuck_limit` 回まで Attempt を重ね、なお未解決なら trigger 3（§試行回数とエスカレーション） |
 | Slack 双方向（軽微選択の非同期化） | フェーズ 1 は一方向通知のみ。双方向は将来検討 |
-| オーケストレーター用 LLM 選定 | worker/reviewer は config（既定 `sonnet`）。壁打ち脳は対話 `claude` の設定に従う |
+| オーケストレーター用 LLM 選定 | worker/reviewer は config（既定 `sonnet`）。ブレインストーミング脳は対話 `claude` の設定に従う |
 | 介入の単位（peer を止めるか） | **タスク単位**。発火タスクのみ `waiting_human`、peer は継続。最上位 `intervening` 状態は廃止（06 §2.2/§6） |
 | 中断・再開でのやり直し | done は再実行しない／worker の中間コミット＋`--resume` セッション再開で作業保全／Ctrl-C はクリーン中断（06 §4.3） |
 | レビュー誤採点・パース失敗 | タスク固有 `completion` で採点・構造化出力・フォーマット違反は実作業を再実行せずゲート不具合介入（06 §8） |
@@ -431,8 +451,9 @@ docker-proxy と同方式のマルチステージで `claude-orchestrator` を b
 - 外部制御ループと状態機械、状態ストア一式（state/plan/control/summary/assumptions/interventions/audit、intervention/<id>/、workers/<id>.log、worktrees/<id>/）。
 - 再開と新規開始の判定（中断 run のみ再開、done/不在/未知は新規）、`--fresh`、`CleanOrchWorktrees`。
 - 端末モード制御（`term.go`：raw/カノニカル復元）、`claude` 実行ファイル解決と PATH 補完（`claudebin.go`）。
-- 壁打ち/介入の対話 `claude` 起動（instruction 注入・`ORCHESTRATOR.md` 前置）、handoff（control.json）、`control.json` 不在時の端末確認（続ける/実行/終了。**本改訂でテキスト入力から矢印/番号のカーソル選択 `selectMenu` へ置換**＝下記 UX 改修）。
+- ブレインストーミング/介入の対話 `claude` 起動（instruction 注入・`ORCHESTRATOR.md` 前置）、handoff（control.json）、`control.json` 不在時の端末確認（続ける/実行/終了。**本改訂でテキスト入力から矢印/番号のカーソル選択 `selectMenu` へ置換**＝下記 UX 改修）。
 - worker 並行ディスパッチ（`max_workers`）、worktree 生成/再接続、`claude -p`（`stream-json --verbose`・`--permission-mode`・ライブ tee）、結果解析、作業ブランチ統合（merge/rebase）。
+- `streamlog.go`：`streamPrettyWriter`（改行区切りで stream-json を 1 行ずつ受け、`formatStreamLine` で Claude Code 風の可読テキストへ整形して下流〔ログファイル〕へ書く io.Writer。部分行はバッファ）と `formatStreamLine`（`assistant` text／`tool_use`＝`⏺ 名前(要約)`／`tool_result`＝`  ⎿ …`／`result`＝区切り＋完了。未知/パース不能はそのまま）。worker・レビュアのログ表示専用で、結果解析には関与しない。
 - 品質ゲート（review→revise、`max_review_rounds`）、介入トリガー 5 条件、Slack 通知（コントローラ一本化）。
 - ダッシュボード：状態ラベル・経過時間・試行回数、`[d]` ライブ worker 出力、`[p]` 一時停止、`[q]` 中断。
 - 完了時の助言的な自然言語完了検証（`checkCompletion`、ブロックしない）。
@@ -444,10 +465,24 @@ docker-proxy と同方式のマルチステージで `claude-orchestrator` を b
 - **自己検証のためのサンプルサブプロジェクト**：[70_sample-project.md](70_sample-project.md)／[docs/07_self-verification.md](../07_self-verification.md)。`examples/orch-sample/`・`scripts/orch-sample.sh`・Makefile `orch-sample`／`build-orchestrator -o` を実装。
 
 **本改訂で実装済み（オーケストレーター UX 改修。`go build`/`vet`/`test`〔-race 含む〕緑・gofmt 済み。06 §4.3/§4.5/§5.4–5.7/§8.1）**：
-- `term.go`：`selectMenu`（矢印↑↓＋Enter／番号即確定・各項目説明・非TTY既定=続ける。v1 のテキスト `terminalConfirm` を置換）と `printModeBanner`（壁打ち/介入/実行の入場バナー）。
-- `controller.go`：`reportNotExecutable`（実行不可を端末＋audit＋Slack へ明示・無言差し戻し廃止）と `.orchestrator/handoff_note.md`（次回壁打ちへ理由前置。人間非編集）。メニューは `control.json` 無/不明時のみ、`execute` だが実行不可は理由表示で壁打ち直帰。
+- `term.go`：`selectMenu`（矢印↑↓＋Enter／番号即確定・各項目説明・非TTY既定=続ける。v1 のテキスト `terminalConfirm` を置換）と `printModeBanner`（ブレインストーミング/介入/実行の入場バナー）。
+- `controller.go`：`reportNotExecutable`（実行不可を端末＋audit＋Slack へ明示・無言差し戻し廃止）と `.orchestrator/handoff_note.md`（次回ブレインストーミングへ理由前置。人間非編集）。メニューは `control.json` 無/不明時のみ、`execute` だが実行不可は理由表示でブレインストーミング直帰。
 - `buildQuestion`：選択肢を `1.` 連番で整形・日本語。ダッシュボード：ヘッダにモード明示＋要判断の一覧（タスク名）。
-- 指示テンプレ（別途 §「判断基準…の所在」）：`wallbounce.md`（completion 自己検証で ready/execute を出す前に全 completion を揃える・`/exit` 案内・handoff_note 反映・plan.json を人間に編集させない）、`intervene.md`（キュー進捗の口頭明示・answer.md 記録後 `/exit`）、両者共通（選択肢は番号付き・人間向けは日本語）。`worker.go` の `needs_human` は日本語起票。
+- 指示テンプレ（別途 §「判断基準…の所在」）：`brainstorming.md`（completion 自己検証で ready/execute を出す前に全 completion を揃える・`/exit` 案内・handoff_note 反映・plan.json を人間に編集させない）、`intervene.md`（キュー進捗の口頭明示・answer.md 記録後 `/exit`）、両者共通（選択肢は番号付き・人間向けは日本語）。`worker.go` の `needs_human` は日本語起票。
+
+**本改訂で独立ウィンドウ方式を実装（tmux 常駐方式。06 §4.1/§4.2/§5.3/§5.9・本書「独立ウィンドウ方式（新アーキ）」）**：
+
+*実装・単体テスト済み（`go build`/`vet` 緑・gofmt 済み・`go test -race` 全緑）*：
+- `session.go`：`SessionManager`。唯一のセッション `MainSession()`（既定＝`orch-<CNAME>-main`。ただし `DetectSession` が起動時に実測したセッション名＝`sessionOverride` があればそれを返す）、その配下のウィンドウを `DashboardWindow()`/`BrainstormingWindow()`/`WorkerWindow(taskID)`（`session:window` ターゲット）で表す。`DetectSession`〔`$TMUX` 有り時に `tmux display-message -p '#{session_name}'` で実行中セッション名を取得し束縛。tmux 外は no-op＝`--print-main-session` は正準名を返す〕・`SetupMainSession`〔起動時に自窓を `dashboard` に改名＋セッションへ `mouse on`〕・`Ensure`〔`new-window -d`＋`remain-on-exit on`。冪等〕・`Run`〔`respawn-pane -k` 投入〕・`Kill`〔`kill-window`〕・`Has`〔**`list-windows -F '#{window_name}'` で窓名を厳密照合**。`display-message` は窓不在でも現窓へフォールバックし成功を返すため使わない＝実機で判明した落とし穴〕・`SwitchTo`〔`select-window`〕・`PaneDead`〔`/exit` 検知の副信号〕・`LaunchInteractive`〔保持ウィンドウへ対話 claude を投入し `select-window`〕・`ExpectedWindows`/`EnsureAll`〔復旧〕・`splitTarget`・`tmuxAvailable`。`remain-on-exit on` により対話 claude の `/exit` 後もウィンドウが残り、`tail`→介入→再ディスパッチを同一ウィンドウで駆動できる。テスト：命名正規化・ウィンドウターゲット名（`TestSessionNames`）・`TestSplitTarget`・`TestExpectedWindows`。
+- 対話のウィンドウ内投入（`mode.go`）：`brainstormingInstr`/`interveneInstr`（instruction 組立）・`IntervenePrompt`（1件の system/prompt ペア）・`WriteLaunchScript(key,sys,prompt)`（`.orchestrator/sessions/<key>.sh` に launcher を生成。VM env source・claude を PATH・`SLACK_BOT_TOKEN` strip・`cd` workspace・巨大 prompt は `.sys`/`.prompt` sidecar から `$(cat …)` で読む＝argv/quoting 肥大回避）・`shellSingleQuote`。テスト：`TestWriteLaunchScript`・`TestWriteLaunchScript_NoPromptOmitsPositional`・`TestShellSingleQuote`。
+- ブレインストーミングのウィンドウ化（`controller.go`）：`runBrainstorming` は**内部ループ**で、tmux 有り時 `runBrainstormingSession(ctx, enterConversation)`（brainstorming 窓を `Sessions.Run`〔`new-window -d`〕で起こし → 着地は `enterConversation` 依存〔初回=`SwitchTo(DashboardWindow)`＝ホーム、続ける/実行不可差し戻し=`SwitchTo(BrainstormingWindow)`＝対話へ直接戻す〕→ bubbletea ホーム描画（dashtui.go）→ `WaitConsume(until=!Has||PaneDead)` で `/exit` を待つ → `prog.Quit()`＋`Wait()`＋`ttyRestoreSane()` で端末復元後 `dashboard` へ）。**初回はカーソル選択式ホーム、`continue`／実行不可差し戻しは対話へ直接戻す**（`enterConversation=true`）。ループは `execute`（実行可）/`abort`/`done` でのみ抜け、continue/実行不可は `enterConversation=true` で `continue`。`LaunchInteractive`＝select-window する版は介入経路〔worker 窓〕でのみ使用。実行/終了遷移時に `closeBrainstormingSession`。tmux 無し（headless/テスト）は従来の `RunInteractive` 前景フォールバック（`RunInteractive` は当該フォールバック専用として残す）。
+- 介入のセッション化（`controller.go`）：`resolveInterventionInSession(taskID)`＝当該 `w-<taskID>` へ `LaunchInteractive`→`WaitConsume`→`main` 復帰→`resolveOne`（回答突合→pending→次 tick で再ディスパッチ）。ダッシュボードは `main` で生きたまま（`stopDash` しない）、peer も継続。executing ループは `d.Resolve`（⏸ 選択）と `[i]`（先頭要判断、tmux 有り時は同経路／無し時は従来 `resolveInterventions` バッチ）で起動。`openIDForTask` で open キューから id 解決。
+- worker ウィンドウ結線（`controller.go`）：dispatch と **pre-dispatch ⏸ 化**の両方で `openWorkerSession`（ログ tail のライブ表示。⏸ タスクに必ずウィンドウが在る不変条件）、settle で `closeWorkerSession`（`waiting_human` は残す）。executing ループは数秒に一度 `EnsureAll` 相当の点検で、実行中タスクの消えた worker ウィンドウを `openWorkerSession` で再構築（誤 kill 復旧・06 §5.9）。`main.go` は `Sessions` を常に注入。
+- ダッシュボード＝カーソル選択式 TUI（`dashtui.go`・bubbletea）：`dashModel`（Init/Update/View）。カーソル（↑↓/jk）で選択、Enter で確定＝実行中はモデルが `select-window`／⏸ は `actions` チャネルへ `{resolve,taskID}`。`p`（`dash.Paused` トグル）・`d`（出力 tail トグル・モデル内）・`i`（先頭介入）・`q`（中断）。`newDashProgram` を controller が `isTTY()` 時のみ起動（`WithAltScreen`＋`WithContext(ctx)`）、非 TTY/テストは UI なし。旧 `render`/`renderString`/`readKeys`/`Dashboard`/`KeyEvent`/数字キー即移動/選択番号 `‹k›` は廃止。テスト：`TestDashView_RendersTasksAndCursor`・`TestDashCursor_MovesAndClamps`・`TestDashEnter_OnWaitingHumanSendsResolve`・`TestDashQuit_SendsQuit`（dashtui_test.go）、`TestSelectableWorkerID`/`TestSelectableWorkerStatus`。
+- handoff 監視：`Handoff.WaitConsume`（control.json をポーリング＋`until` で /exit 検知）。テスト：出現検知・until 終了。
+- CLI（`claude-dev orchestrate`）：`--print-main-session` で本体からメインセッション名を得て、**コントローラプロセス生存**（`pgrep` で cmdline が `claude-orchestrator` で始まるものを判定。tmux 起動ラッパを除外）で分岐——生存→`attach` のみ／不在→空き殻セッションを `kill-session`→新 `orch-<CNAME>-main`（`new-session -n dashboard`）で `claude-orchestrator` 起動（resume）→`mouse on`→attach（→[10_cli.md](10_cli.md)）。`has-session` は空き殻を誤検出するため使わない。従来の `tmux new-window -t main` 直起動は廃止。
+
+*残（実機 E2E で最終確認）*：実 tmux＋実 claude の対話が必要なため自動テストでは検証不能。S1〜S5（[docs/07_self-verification.md](../07_self-verification.md)）を実機で確認し `docs/reviews/` に記録する（ブレインストーミング→execute 遷移、⏸ 選択→当該ウィンドウで介入→再ディスパッチ、端末 close→再 attach 復旧、worker ウィンドウ誤 kill→再構築）。
 
 > **残（実機 E2E）**: 実 `claude -p` を用いた S1〜S5（[docs/07_self-verification.md](../07_self-verification.md)）の動作確認は、`make build-orchestrator && make orch-sample SEED=1` 後に `orchestrator/orchestrator --workspace workspace/orch-sample --instructions orchestrator/instructions --start-executing` で実施し、結果を `docs/reviews/` に記録する。
 

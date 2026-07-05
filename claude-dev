@@ -567,7 +567,9 @@ start)
             docker exec -u "$CUSER" "$NAME" tmux new-session -d -s main 2>/dev/null || true
             sleep 0.5
         fi
-        docker exec -it -u "$CUSER" "$NAME" tmux attach -t main
+        if [ "${CLAUDE_DEV_NO_ATTACH:-0}" != 1 ]; then
+            docker exec -it -u "$CUSER" "$NAME" tmux attach -t main
+        fi
         exit 0
     fi
 
@@ -762,7 +764,11 @@ start)
     echo "✅ 起動完了（Ctrl-_ D で切断、claude-dev start で再接続）"
     _url=$(get_novnc_url "$NAME")
     [ -n "$_url" ] && echo "🖥️  noVNC: $_url"
-    docker exec -it -u "$CUSER" "$NAME" tmux attach -t main
+    # CLAUDE_DEV_NO_ATTACH=1 のときは attach せず戻る（orchestrate がコンテナだけ
+    # 起こしてから orch セッションへ attach するため）。
+    if [ "${CLAUDE_DEV_NO_ATTACH:-0}" != 1 ]; then
+        docker exec -it -u "$CUSER" "$NAME" tmux attach -t main
+    fi
     ;;
 
 # -----------------------------------------------------------------------------
@@ -789,18 +795,25 @@ code)
 # -----------------------------------------------------------------------------
 # AI オーケストレーターを新しい tmux ウィンドウで起動
 #   claude-dev orchestrate [<ゴール>] [--fresh]
-#   ゴールは任意（既定は壁打ちから開始）。
+#   ゴールは任意（既定はブレインストーミングから開始）。
 #   --fresh で前回の実行状態（state/plan/control・worktree/orch ブランチ）を
-#   破棄して壁打ちから新規開始する（中断した executing/intervening の再開を上書き）。
+#   破棄してブレインストーミングから新規開始する（中断した executing/intervening の再開を上書き）。
 #   worker の実行内容はダッシュボードの [d] キーでライブ表示できる。
 # -----------------------------------------------------------------------------
 orchestrate)
     require_setup
     NAME=$(container_name)
 
+    # コンテナ未起動なら、まず起動してから（attach せずに）orchestrator へ進む。
+    # start の全ロジック（認証コピー/マウント/VNC/VM/tmux 起動待ち）を再利用し、
+    # 最後の main への attach だけ CLAUDE_DEV_NO_ATTACH=1 で抑止する。
     if ! is_running "$NAME"; then
-        echo "❌ コンテナが起動していません: claude-dev start を先に実行"
-        exit 1
+        echo "🚀 コンテナが未起動のため起動します（claude-dev start 相当）..."
+        CLAUDE_DEV_NO_ATTACH=1 "$SCRIPT_PATH" start || { echo "❌ コンテナ起動に失敗しました"; exit 1; }
+        if ! is_running "$NAME"; then
+            echo "❌ コンテナが起動できませんでした（VM モードは provision に時間がかかることがあります。少し待って再実行してください）"
+            exit 1
+        fi
     fi
 
     shift  # "orchestrate" を除去
@@ -813,20 +826,59 @@ orchestrate)
         esac
     done
 
-    # コンテナ内コマンドを組み立てる（workspace は /workspace 固定）
-    _cmd="claude-orchestrator --workspace /workspace"
-    [ -n "$_fresh" ] && _cmd="$_cmd $_fresh"
-    if [ -n "$_goal" ]; then
-        _esc=$(printf '%s' "$_goal" | sed 's/"/\\"/g')
-        _cmd="$_cmd \"$_esc\""
-    fi
-    # VM モード: 非対話起動は rc を読まないため、ゲストの DOCKER_HOST を明示的に引き継ぐ
-    # （VM 未起動時は vm.env が無く、既定の proxy 経路にフォールバック）。worker は
-    # claudeChildEnv でこれを継承する。
-    _cmd="[ -f /etc/claude-dev/vm.env ] && . /etc/claude-dev/vm.env; $_cmd"
+    # tmux 常駐方式（docs/06 §5.9 / docs/impl/10_cli.md）。生存判定は
+    # **コントローラプロセスの生存**で行う（has-session ではない）：worker/brainstorming
+    # ウィンドウが remain-on-exit on のため、コントローラ〔dashboard 窓〕が死んでも
+    # セッションが延命し得る（空き殻セッション）。has-session だとそれを誤って生存と
+    # 判定して壊れたセッションへ attach してしまう。
+    #   1) コントローラが常駐すべきメインセッション名を本体から取得
+    #   2) コントローラプロセス生存 → attach のみ
+    #   3) 不在 → 空き殻セッションを kill してから新 main で起こし直し（resume）→ attach
+    _sess=$(docker exec -u "$CUSER" "$NAME" claude-orchestrator --print-main-session 2>/dev/null | tr -d '\r\n')
+    [ -n "$_sess" ] || _sess="orch-main"
 
-    docker exec -it -u "$CUSER" "$NAME" tmux new-window -t main -c /workspace "$_cmd"
-    docker exec -it -u "$CUSER" "$NAME" tmux attach -t main
+    # コントローラプロセス（claude-orchestrator --workspace）が生きているか。
+    # tmux new-session ランチャの cmdline にも同文字列が載るため、cmdline が
+    # claude-orchestrator で始まるプロセス（＝本体。tmux 起動ラッパを除く）だけを見る。
+    _orch_alive() {
+        docker exec -u "$CUSER" "$NAME" sh -c '
+            for p in $(pgrep -f "claude-orchestrator --workspace" 2>/dev/null); do
+                cmd=$(tr "\0" " " < /proc/$p/cmdline 2>/dev/null)
+                case "$cmd" in
+                    claude-orchestrator*|/*/claude-orchestrator*) exit 0 ;;
+                esac
+            done
+            exit 1
+        ' 2>/dev/null
+    }
+
+    if _orch_alive; then
+        echo "↩️  コントローラは常駐中です（$_sess）。接続します"
+        docker exec -it -u "$CUSER" "$NAME" tmux attach -t "$_sess"
+    else
+        # コントローラ不在。延命した空き殻セッションが残っていれば掃除する。
+        docker exec -u "$CUSER" "$NAME" tmux kill-session -t "$_sess" 2>/dev/null || true
+
+        # コンテナ内コマンドを組み立てる（workspace は /workspace 固定）
+        _cmd="claude-orchestrator --workspace /workspace"
+        [ -n "$_fresh" ] && _cmd="$_cmd $_fresh"
+        if [ -n "$_goal" ]; then
+            _esc=$(printf '%s' "$_goal" | sed 's/"/\\"/g')
+            _cmd="$_cmd \"$_esc\""
+        fi
+        # VM モード: 非対話起動は rc を読まないため、ゲストの DOCKER_HOST を明示的に
+        # 引き継ぐ（VM 未起動時は vm.env が無く既定の proxy 経路へフォールバック）。
+        _cmd="[ -f /etc/claude-dev/vm.env ] && . /etc/claude-dev/vm.env; $_cmd"
+
+        # コントローラ本体を main セッションの dashboard ウィンドウで常駐させる
+        # （dashboard 窓は remain-on-exit off。生存判定はプロセスで行う＝上記）。
+        docker exec -u "$CUSER" "$NAME" tmux new-session -d -s "$_sess" -n dashboard -c /workspace "$_cmd"
+        # mouse on: worker/介入の対話 claude でホイールスクロールを使えるように
+        # （耐障害性はクライアント破壊でもセッション＝コントローラ生存で担保。docs/06 §5.9）。
+        # コントローラ起動時の SetupMainSession でも on を確定するが、attach 前に先行設定する。
+        docker exec -u "$CUSER" "$NAME" tmux set-option -t "$_sess" mouse on
+        docker exec -it -u "$CUSER" "$NAME" tmux attach -t "$_sess"
+    fi
     ;;
 
 # -----------------------------------------------------------------------------
@@ -1111,8 +1163,8 @@ claude-dev - Claude Code 安全開発環境
   claude-dev start --kvm         KVM/QEMU デバイスを渡して起動（VM を動かす時のみ）
   claude-dev code                新しい tmux ウィンドウで Claude Code を起動
   claude-dev orchestrate [<ゴール>] [--fresh]
-                                 AI オーケストレーター（壁打ち→自律実行）を起動
-                                 （--fresh で前回の実行状態を破棄し壁打ちから再開）
+                                 AI オーケストレーター（ブレインストーミング→自律実行）を起動
+                                 （--fresh で前回の実行状態を破棄しブレインストーミングから再開）
   claude-dev attach [NAME]       既存セッションに接続
   claude-dev stop [NAME]         セッションを停止
   claude-dev list                実行中セッション一覧

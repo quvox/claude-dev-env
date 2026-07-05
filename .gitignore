@@ -5,3 +5,6 @@ workspace/
 
 # orchestrator のローカルビルド生成物（イメージ用は Dockerfile でビルド）
 /orchestrator/orchestrator
+
+# orchestrator の実行時運用状態（成果物ではない。docs/impl/60_orchestrator.md）
+/.orchestrator/

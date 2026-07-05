@@ -1,6 +1,6 @@
 // Command claude-orchestrator is the per-project AI orchestrator: a single
 // process that owns the terminal foreground and drives a state machine
-// (wallbounce -> executing -> done), delegating implementation to headless
+// (brainstorming -> executing -> done), delegating implementation to headless
 // `claude -p` workers on git worktrees, gating quality with an independent
 // reviewer, and escalating to the human per-task (waiting_human) only on
 // intervention triggers. See docs/impl/60_orchestrator.md (the source of truth) and
@@ -24,10 +24,18 @@ func main() {
 	var (
 		workspace = flag.String("workspace", defaultWorkspace(), "project workspace root")
 		instrDir  = flag.String("instructions", "", "override instruction template dir (dev/test)")
-		fresh     = flag.Bool("fresh", false, "discard leftover run state and start a new session from wallbounce")
-		startExec = flag.Bool("start-executing", false, "verification-only: if a ready seed plan.json exists, skip wallbounce and begin in executing")
+		fresh     = flag.Bool("fresh", false, "discard leftover run state and start a new session from brainstorming")
+		startExec = flag.Bool("start-executing", false, "verification-only: if a ready seed plan.json exists, skip brainstorming and begin in executing")
+		printSess = flag.Bool("print-main-session", false, "print the controller's main tmux session name (orch-<CNAME>-main) and exit")
 	)
 	flag.Parse()
+
+	// claude-dev orchestrate calls this to learn the session name to has-session/
+	// attach against (tmux 常駐方式・docs/impl/10_cli.md). Print and exit.
+	if *printSess {
+		fmt.Println(NewSessionManager().MainSession())
+		return
+	}
 
 	goal := strings.TrimSpace(strings.Join(flag.Args(), " "))
 
@@ -55,9 +63,9 @@ func run(workspace, instrDir, goal string, fresh, startExec bool) error {
 
 	// Decide whether the leftover state is resumable. Only a genuinely
 	// interrupted run (executing) is resumed; a finished (done),
-	// absent, or unrecognized state starts fresh from wallbounce. This prevents
+	// absent, or unrecognized state starts fresh from brainstorming. This prevents
 	// two failure modes: (a) a finished run leaving Phase=done so the next launch
-	// exits immediately, and (b) silently skipping wallbounce into a stale
+	// exits immediately, and (b) silently skipping brainstorming into a stale
 	// executing run. --fresh forces a clean start even from an interrupted run.
 	prev, _ := store.LoadState()
 	switch {
@@ -76,9 +84,9 @@ func run(workspace, instrDir, goal string, fresh, startExec bool) error {
 		case fresh && isResumable(prev):
 			fmt.Println("🆕 前回の実行状態を破棄して新規セッションを開始します（--fresh）")
 		case startExec:
-			fmt.Println("⚠ --start-executing は ready な seed plan が無いため壁打ちから開始します")
+			fmt.Println("⚠ --start-executing は ready な seed plan が無いためブレインストーミングから開始します")
 		default:
-			fmt.Println("🆕 新規セッションを開始します（壁打ちから）")
+			fmt.Println("🆕 新規セッションを開始します（ブレインストーミングから）")
 		}
 		CleanOrchWorktrees(context.Background(), workspace, store.path("worktrees"))
 		if err := store.ResetRun(); err != nil {
@@ -87,7 +95,7 @@ func run(workspace, instrDir, goal string, fresh, startExec bool) error {
 	}
 
 	// If a goal is supplied and no plan exists yet, seed a minimal plan so the
-	// wallbounce brain has a starting point (it may overwrite plan.json).
+	// brainstorming brain has a starting point (it may overwrite plan.json).
 	if goal != "" {
 		if p, _ := store.LoadPlan(); p == nil {
 			_ = store.SavePlan(&Plan{Goal: goal, Ready: false})
@@ -122,6 +130,7 @@ func run(workspace, instrDir, goal string, fresh, startExec bool) error {
 		Reviewer: reviewer,
 		Notifier: notifier,
 		Confirm:  terminalConfirm,
+		Sessions: NewSessionManager(),
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -142,20 +151,32 @@ func run(workspace, instrDir, goal string, fresh, startExec bool) error {
 }
 
 // terminalConfirm asks the human on the terminal when control.json is missing
-// or unclear, via a cursor/number-selectable menu (docs/06 §4.5/§5.6). On a
-// non-TTY it returns "continue" (never auto-executes). Returns one of
-// "continue"/"execute"/"done" (mapped by the controller to
-// continue_wallbounce/execute/abort). Japanese labels (docs/06 §5.7).
-func terminalConfirm(prompt string) string {
-	return selectMenu(prompt, []menuItem{
-		{Value: "continue", Label: "1. 続ける", Desc: "対話（壁打ち）に戻って要件・plan をさらに詰める（plan は保持）"},
-		{Value: "execute", Label: "2. 実行", Desc: "plan の各タスクを worker に並行ディスパッチして実装を進める（要 ready＋全 completion）"},
-		{Value: "done", Label: "3. 終了", Desc: "このオーケストレーション実行を終了する"},
-	}, 0)
+// or unclear, via a cursor/number-selectable menu (docs/06 §4.5/§5.6). The "実行"
+// option is offered ONLY when canExecute (the plan is ready + every task has
+// completion); otherwise ブレインストーミング is not finished so only 続ける/終了 are shown —
+// execute must not be presented for an unfinished plan. On a non-TTY it returns
+// "continue" (never auto-executes). Returns "continue"/"execute"/"done" (mapped
+// by the controller to continue_brainstorming/execute/abort). Japanese (docs/06 §5.7).
+func terminalConfirm(prompt string, canExecute bool) string {
+	items := []menuItem{
+		{Value: "continue", Label: "1. 続ける", Desc: "対話（ブレインストーミング）に戻って要件・plan をさらに詰める（plan は保持）"},
+	}
+	if canExecute {
+		items = append(items,
+			menuItem{Value: "execute", Label: "2. 実行", Desc: "plan の各タスクを worker に並行ディスパッチして実装を進める（ready＋全 completion 済み）"},
+			menuItem{Value: "done", Label: "3. 終了", Desc: "このオーケストレーション実行を終了する"},
+		)
+	} else {
+		// ブレインストーミングが実行に足りていない（未 ready／completion 欠け）: 実行は出さない。
+		items = append(items,
+			menuItem{Value: "done", Label: "2. 終了", Desc: "このオーケストレーション実行を終了する"},
+		)
+	}
+	return selectMenu(prompt, items, 0)
 }
 
 // isResumable reports whether a loaded state represents a genuinely interrupted
-// run that should be resumed rather than restarted from wallbounce. Only
+// run that should be resumed rather than restarted from brainstorming. Only
 // executing is resumable (the former top-level intervening phase is abolished).
 func isResumable(st *State) bool {
 	return st != nil && st.Phase == PhaseExecuting

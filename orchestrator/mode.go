@@ -13,7 +13,7 @@ import (
 const instructionDir = "/usr/local/share/claude-orchestrator"
 
 // Mode owns the terminal foreground and switches what occupies it. Interactive
-// (wallbounce/intervene) exec's a child `claude` sharing the controller's TTY
+// (brainstorming/intervene) exec's a child `claude` sharing the controller's TTY
 // and blocks until it exits; execution mode renders the dashboard.
 type Mode struct {
 	Store     *Store
@@ -35,7 +35,7 @@ func (m *Mode) instructionPath(name string) string {
 // shares the controller's TTY, blocking until it exits. `extraArgs` are passed
 // verbatim. The controller loop naturally pauses while this runs.
 //
-// Wallbounce: launch with the wallbounce instruction.
+// Brainstorming: launch with the brainstorming instruction.
 // Intervene: fresh start (no --resume) with the intervention question seeded.
 func (m *Mode) RunInteractive(ctx context.Context, args ...string) error {
 	cmd := exec.CommandContext(ctx, claudePath(), args...)
@@ -58,14 +58,12 @@ func (m *Mode) RunInteractive(ctx context.Context, args ...string) error {
 	return err
 }
 
-// WallbounceArgs returns the args for launching the wallbounce brain. The
-// project policy (ORCHESTRATOR.md, if any) is prepended to the front of the
-// instruction, which is passed via --append-system-prompt.
-func (m *Mode) WallbounceArgs() []string {
-	args := []string{}
-	// Prepend any lint-rejection note from the previous handoff so the brain
-	// fixes the missing completions without the human relaying it (docs/06 §4.5).
-	// Consume-once: read then delete.
+// brainstormingInstr assembles the brainstorming --append-system-prompt instruction:
+// any consume-once lint-rejection note (handoff_note.md), the VM-mode preamble,
+// the project policy (ORCHESTRATOR.md, if any) and the baked brainstorming.md.
+// Shared by the legacy Args path and the session-launch path (docs/06 §4.5).
+func (m *Mode) brainstormingInstr() string {
+	// Consume-once: read then delete the handoff note.
 	note, _ := m.Store.ReadAtomicSidecar("handoff_note.md")
 	_ = os.Remove(m.Store.path("handoff_note.md"))
 	preamble := ""
@@ -73,11 +71,82 @@ func (m *Mode) WallbounceArgs() []string {
 		preamble = "【前回の実行差し戻し（handoff_note）】\n" + strings.TrimSpace(note) +
 			"\n上記を最優先で解消し、全タスクに completion を付けてから実行してください。\n\n"
 	}
-	instr := preamble + VMModePreamble() + LoadProjectPolicy(m.Workspace) + readFileOr(m.instructionPath("wallbounce.md"), "")
-	if instr != "" {
-		args = append(args, "--append-system-prompt", instr)
+	return preamble + VMModePreamble() + LoadProjectPolicy(m.Workspace) + readFileOr(m.instructionPath("brainstorming.md"), "")
+}
+
+// BrainstormingArgs returns the args for launching the brainstorming brain (legacy
+// foreground path). The project policy is prepended to the instruction, passed
+// via --append-system-prompt.
+func (m *Mode) BrainstormingArgs() []string {
+	if instr := m.brainstormingInstr(); instr != "" {
+		return []string{"--append-system-prompt", instr}
 	}
-	return args
+	return []string{}
+}
+
+// interveneInstr assembles the intervene --append-system-prompt instruction
+// (VM-mode preamble + project policy + baked intervene.md). Shared by the batch
+// (ResolveArgs) and per-worker (ResolveArgsOne / IntervenePrompt) paths.
+func (m *Mode) interveneInstr() string {
+	return VMModePreamble() + LoadProjectPolicy(m.Workspace) + readFileOr(m.instructionPath("intervene.md"), "")
+}
+
+// IntervenePrompt returns the (system prompt, initial prompt) pair for resolving
+// a single intervention in its worker session (独立ウィンドウ方式・docs/06 §6.3).
+// The initial prompt is that intervention's question.md.
+func (m *Mode) IntervenePrompt(id string) (sys, prompt string) {
+	sys = m.interveneInstr()
+	prompt, _ = m.Store.ReadQuestion(id)
+	return sys, prompt
+}
+
+// shellSingleQuote wraps s in single quotes for safe embedding in a /bin/sh
+// command line (used for launcher script paths and env values).
+func shellSingleQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
+// WriteLaunchScript writes a /bin/sh launcher for an interactive claude into the
+// store's sessions dir and returns the script path. key is a filesystem-safe
+// token (the tmux session suffix, e.g. "brainstorming" or "w-t3"). The script
+// normalizes the environment (source VM env, put claude on PATH, strip the Slack
+// token so only the controller posts), cd's to the workspace, and exec's claude
+// with the system prompt and optional initial prompt read from sidecar files —
+// avoiding multi-KB argv/quoting through tmux (独立ウィンドウ方式・docs/impl/60).
+func (m *Mode) WriteLaunchScript(key, sysPrompt, prompt string) (string, error) {
+	dir := m.Store.path("sessions")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", err
+	}
+	sysFile := filepath.Join(dir, key+".sys")
+	promptFile := filepath.Join(dir, key+".prompt")
+	scriptFile := filepath.Join(dir, key+".sh")
+	if err := writeAtomic(sysFile, []byte(sysPrompt)); err != nil {
+		return "", err
+	}
+	if err := writeAtomic(promptFile, []byte(prompt)); err != nil {
+		return "", err
+	}
+	var b strings.Builder
+	b.WriteString("#!/bin/sh\n")
+	b.WriteString("[ -f /etc/claude-dev/vm.env ] && . /etc/claude-dev/vm.env\n")
+	if bin := localBinDir(); bin != "" {
+		fmt.Fprintf(&b, "export PATH=%s:\"$PATH\"\n", shellSingleQuote(bin))
+	}
+	b.WriteString("unset SLACK_BOT_TOKEN\n")
+	fmt.Fprintf(&b, "cd %s 2>/dev/null || true\n", shellSingleQuote(m.Workspace))
+	fmt.Fprintf(&b, "exec %s", shellSingleQuote(claudePath()))
+	if strings.TrimSpace(sysPrompt) != "" {
+		fmt.Fprintf(&b, " --append-system-prompt \"$(cat %s)\"", shellSingleQuote(sysFile))
+	}
+	if strings.TrimSpace(prompt) != "" {
+		fmt.Fprintf(&b, " \"$(cat %s)\"", shellSingleQuote(promptFile))
+	}
+	b.WriteString("\n")
+	if err := os.WriteFile(scriptFile, []byte(b.String()), 0o755); err != nil {
+		return "", err
+	}
+	return scriptFile, nil
 }
 
 // ResolveArgs returns the args for launching the intervention brain to resolve
@@ -103,6 +172,22 @@ func (m *Mode) ResolveArgs(ids []string) []string {
 	}
 	if s := b.String(); s != "" {
 		args = append(args, s)
+	}
+	return args
+}
+
+// ResolveArgsOne builds intervene args for a SINGLE intervention (独立ウィンドウ方式:
+// 各 worker セッションで1件ずつ対応。docs/06 §5.5/§6.3、docs/impl/60「独立ウィンドウ方式」).
+// Unlike ResolveArgs (batch), it seeds only that one question — the queue-wide
+// "which/next" is shown by the main selector, so the intervene brain focuses on
+// its single item.
+func (m *Mode) ResolveArgsOne(id string) []string {
+	args := []string{}
+	if instr := m.interveneInstr(); instr != "" {
+		args = append(args, "--append-system-prompt", instr)
+	}
+	if q, _ := m.Store.ReadQuestion(id); q != "" {
+		args = append(args, q)
 	}
 	return args
 }
