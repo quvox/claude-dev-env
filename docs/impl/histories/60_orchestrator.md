@@ -155,3 +155,6 @@
 - controller/dashboard/mode/main を window ターゲットへ結線。`ReqAbort` でも `closeWallbounceSession` を呼ぶよう対称化。`[d]`（ダッシュボード内 tail）と番号キー（個別ウィンドウ切替）は併存（置換ではない）と明記。
 - 未使用の `daemon.go`（setsid デーモン用 pidfile。tmux 常駐方式では has-session が主機構）を削除。旧称・旧命名のコードコメントを刷新。
 - 独立2エージェントで design↔impl↔code を徹底確認し、front matter/責務表/§実装状況の「セッション」語誤用・`ResolveArgsOne`→`IntervenePrompt`・テスト帰属・`-n dashboard` 正本整合を是正。`go build`/`vet`/`gofmt`/`go test -race` 全緑。
+
+## 2026-07-05（生存判定：has-session → pgrep〔コントローラプロセス〕）
+- 復旧/二重起動防止の生存判定を has-session から「claude-orchestrator プロセスの生存」へ変更（06 §5.9）。claude-dev orchestrate（10_cli 正本）を、コンテナ内 pgrep で cmdline が claude-orchestrator で始まるプロセス（tmux 起動ラッパを除外）を判定→生存なら attach／不在なら空き殻セッションを kill-session してから new-session -n dashboard で起こし直し(resume)、へ改修。self-kill は不採用（clean done は dashboard 窓 remain-on-exit off でセッション自然消滅、空き殻は中断/クラッシュ時のみ＝pgrep 判定で吸収）。Go コード変更なし。§80/§87/実装状況/10_cli を更新。独立2エージェントで design↔impl 整合確認。実機 E2E：空き殻状態で has-session=TRUE のところ pgrep=ABSENT を確認、復旧で resume まで確認。

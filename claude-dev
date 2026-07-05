@@ -813,17 +813,39 @@ orchestrate)
         esac
     done
 
-    # tmux 常駐方式（docs/06 §5.9 / docs/impl/10_cli.md）：
+    # tmux 常駐方式（docs/06 §5.9 / docs/impl/10_cli.md）。生存判定は
+    # **コントローラプロセスの生存**で行う（has-session ではない）：worker/wallbounce
+    # ウィンドウが remain-on-exit on のため、コントローラ〔dashboard 窓〕が死んでも
+    # セッションが延命し得る（空き殻セッション）。has-session だとそれを誤って生存と
+    # 判定して壊れたセッションへ attach してしまう。
     #   1) コントローラが常駐すべきメインセッション名を本体から取得
-    #   2) has-session 真＝常駐中 → attach のみ
-    #   3) 偽 → 新 main セッションでコントローラを起こし（状態から resume）→ attach
+    #   2) コントローラプロセス生存 → attach のみ
+    #   3) 不在 → 空き殻セッションを kill してから新 main で起こし直し（resume）→ attach
     _sess=$(docker exec -u "$CUSER" "$NAME" claude-orchestrator --print-main-session 2>/dev/null | tr -d '\r\n')
     [ -n "$_sess" ] || _sess="orch-main"
 
-    if docker exec -u "$CUSER" "$NAME" tmux has-session -t "$_sess" 2>/dev/null; then
+    # コントローラプロセス（claude-orchestrator --workspace）が生きているか。
+    # tmux new-session ランチャの cmdline にも同文字列が載るため、cmdline が
+    # claude-orchestrator で始まるプロセス（＝本体。tmux 起動ラッパを除く）だけを見る。
+    _orch_alive() {
+        docker exec -u "$CUSER" "$NAME" sh -c '
+            for p in $(pgrep -f "claude-orchestrator --workspace" 2>/dev/null); do
+                cmd=$(tr "\0" " " < /proc/$p/cmdline 2>/dev/null)
+                case "$cmd" in
+                    claude-orchestrator*|/*/claude-orchestrator*) exit 0 ;;
+                esac
+            done
+            exit 1
+        ' 2>/dev/null
+    }
+
+    if _orch_alive; then
         echo "↩️  コントローラは常駐中です（$_sess）。接続します"
         docker exec -it -u "$CUSER" "$NAME" tmux attach -t "$_sess"
     else
+        # コントローラ不在。延命した空き殻セッションが残っていれば掃除する。
+        docker exec -u "$CUSER" "$NAME" tmux kill-session -t "$_sess" 2>/dev/null || true
+
         # コンテナ内コマンドを組み立てる（workspace は /workspace 固定）
         _cmd="claude-orchestrator --workspace /workspace"
         [ -n "$_fresh" ] && _cmd="$_cmd $_fresh"
@@ -835,9 +857,9 @@ orchestrate)
         # 引き継ぐ（VM 未起動時は vm.env が無く既定の proxy 経路へフォールバック）。
         _cmd="[ -f /etc/claude-dev/vm.env ] && . /etc/claude-dev/vm.env; $_cmd"
 
-        # コントローラ本体を main セッション内で常駐させる（remain-on-exit off の既定＝
-        # コントローラ pane が死ねばセッションも消え、has-session が生存信号になる）。
-        docker exec -u "$CUSER" "$NAME" tmux new-session -d -s "$_sess" -c /workspace "$_cmd"
+        # コントローラ本体を main セッションの dashboard ウィンドウで常駐させる
+        # （dashboard 窓は remain-on-exit off。生存判定はプロセスで行う＝上記）。
+        docker exec -u "$CUSER" "$NAME" tmux new-session -d -s "$_sess" -n dashboard -c /workspace "$_cmd"
         docker exec -u "$CUSER" "$NAME" tmux set-option -t "$_sess" mouse off
         docker exec -it -u "$CUSER" "$NAME" tmux attach -t "$_sess"
     fi
