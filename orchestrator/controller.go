@@ -54,6 +54,11 @@ func (c *Controller) Run(ctx context.Context) error {
 	// ウィンドウを "dashboard" に改名し、mouse off を確定する（worker/ブレインストーミングは同
 	// セッションの別ウィンドウとしてぶら下げる。docs/06 §4.2）。best-effort。
 	if c.Sessions != nil && tmuxAvailable() {
+		// Bind to the session we are ACTUALLY running in BEFORE any window op, so
+		// dashboard/brainstorming/worker targets can never point at a different
+		// session than the one the human is attached to (e.g. the default `main`
+		// session). Otherwise Enter→brainstorming would silently no-op (docs/06 §4.2).
+		c.Sessions.DetectSession(ctx)
 		c.Sessions.SetupMainSession(ctx)
 	}
 	st, err := c.Store.LoadState()

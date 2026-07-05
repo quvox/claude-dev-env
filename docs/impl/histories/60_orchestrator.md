@@ -168,3 +168,9 @@
 
 ## 2026-07-05（ダッシュボード＝bubbletea カーソル選択 TUI）
 - dashboard.go を共有状態＋純ヘルパに縮小し、dashtui.go（新規・bubbletea dashModel）でカーソル選択式 TUI を実装。controller の実行ループは isTTY 時に newDashProgram（WithAltScreen＋WithContext）を起動し、旧 render/renderString/readKeys/Dashboard/KeyEvent/startDash/stopDash/数字キー即移動/選択番号‹k› を撤去。ユーザ操作は actions チャネル（resolve/intervene/quit）＋モデル内（カーソル/[p]/[d]）。bubbletea/lipgloss を go.mod に追加し vendoring（vendor/）で取り込み、Dockerfile.claude を -mod=vendor に更新。テスト：TestDashView_RendersTasksAndCursor 他（dashtui_test.go）。旧 render テストは撤去。go build/vet/test -race 全緑。実機で TUI 描画＋カーソル移動を確認。
+
+## 2026-07-05（追補：コントローラが実行中セッション名を検出＝Enter 無反応の根治）
+- 背景：実機で「ホームで Enter を押しても brainstorming に移動しない／何もできない」。調査の結果、コントローラが `main` という名前のセッション内で走っていたのに、`SessionManager` は自セッション名を `orch-<CNAME>-main` と決め打ちしていたため、ウィンドウ生成・`select-window` がすべて**人間が attach している `main` とは別のセッション**（`orch-…-main`）に向かい、Enter が空振りしていた（`claude-dev start` が既定で作る `main` セッションと衝突）。
+- 修正（`session.go`/`controller.go`）：`SessionManager.sessionOverride` を追加し、`DetectSession(ctx)` が `$TMUX` 有り時に `tmux display-message -p '#{session_name}'` で実行中セッション名を取得して束縛。`MainSession()` はそれを優先返却。コントローラは `Run` 冒頭（`SetupMainSession` の前）で `DetectSession` を呼ぶ。`--print-main-session` は tmux 外実行なので従来どおり正準名 `orch-<CNAME>-main` を返し、ラッパのセッション作成と互換。
+- 検証：実機で「`main` という名前のセッション内でコントローラ起動」を再現→ brainstorming ウィンドウが**同じ `main` セッション**に作られ、ホームで Enter→brainstorming が active になることを確認。正準 `orch-hisol-work-main` 経路も従来どおり動作。`go build`/`go test ./...` pass。配布イメージ再ビルド。
+- 設計同期：`60_orchestrator.md`（命名と管理／実装構成の `session.go` 節に `DetectSession`・`sessionOverride` を追記）。

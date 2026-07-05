@@ -27,7 +27,8 @@ import (
 // in the same window. All tmux operations are best-effort: on a host without
 // tmux (or non-TTY headless runs) they degrade to no-ops.
 type SessionManager struct {
-	Prefix string // "orch-<CNAME>"
+	Prefix          string // "orch-<CNAME>"
+	sessionOverride string // the tmux session the controller is ACTUALLY running in (detected at runtime)
 }
 
 var sessionTokenRe = regexp.MustCompile(`[^a-z0-9_-]+`)
@@ -61,7 +62,38 @@ func NewSessionManager() *SessionManager {
 const dashboardWindowName = "dashboard"
 
 // MainSession is the single tmux session everything hangs under.
-func (m *SessionManager) MainSession() string { return m.Prefix + "-main" }
+func (m *SessionManager) MainSession() string {
+	if m.sessionOverride != "" {
+		return m.sessionOverride
+	}
+	return m.Prefix + "-main"
+}
+
+// DetectSession binds the manager to the tmux session the controller is ACTUALLY
+// running in (queried live), instead of assuming the canonical `orch-<CNAME>-main`
+// name. The `claude-dev` wrapper normally creates the session with exactly that
+// canonical name (it asks `--print-main-session`), so they match. But if the
+// controller ever ends up in a differently-named session — e.g. the default
+// `main` session from `claude-dev start`, or a nested launch — every window
+// target (`<session>:brainstorming` etc.) would otherwise point at the WRONG
+// session, so `select-window`/`new-window` operate on a session the attached
+// human is not viewing and navigation (Enter → brainstorming) silently does
+// nothing. Binding to the real session name makes the controller correct
+// regardless of how it was launched. No-op outside tmux (e.g. the
+// `--print-main-session` probe runs via docker exec without $TMUX), so that path
+// keeps returning the canonical name the wrapper needs to create the session.
+func (m *SessionManager) DetectSession(ctx context.Context) {
+	if os.Getenv("TMUX") == "" {
+		return
+	}
+	out, err := exec.CommandContext(ctx, "tmux", "display-message", "-p", "#{session_name}").Output()
+	if err != nil {
+		return
+	}
+	if s := strings.TrimSpace(string(out)); s != "" {
+		m.sessionOverride = s
+	}
+}
 
 // DashboardWindow / BrainstormingWindow / WorkerWindow return `session:window`
 // targets for the respective windows under the main session.
