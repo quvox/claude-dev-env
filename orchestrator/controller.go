@@ -172,13 +172,14 @@ func (c *Controller) runWallbounceSession(ctx context.Context) *Control {
 		_ = c.Store.AppendAudit(AuditEntry{Event: "wallbounce_launch_error", Detail: map[string]any{"err": err.Error()}})
 		return nil
 	}
+	// LaunchInteractive select-window's the wallbounce window ONCE (initial pull);
+	// tmux attach then honors it as the active window. We must NOT re-switch every
+	// poll — doing so traps the attached client on wallbounce and prevents the human
+	// from navigating to the dashboard / other windows (observed bug). So the watch
+	// only checks for the handoff / window exit; it never forces the view.
 	_ = c.Sessions.LaunchInteractive(ctx, name, script)
 	ctrl, _ := c.Handoff.WaitConsume(ctx, 500*time.Millisecond, func() bool {
-		if !c.Sessions.Has(ctx, name) || c.Sessions.PaneDead(ctx, name) {
-			return true // /exit without a handoff
-		}
-		_ = c.Sessions.SwitchTo(ctx, name) // pull any freshly-attached client in
-		return false
+		return !c.Sessions.Has(ctx, name) || c.Sessions.PaneDead(ctx, name) // /exit without a handoff
 	})
 	_ = c.Sessions.SwitchTo(ctx, c.Sessions.DashboardWindow())
 	return ctrl
