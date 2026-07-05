@@ -207,9 +207,15 @@ func (c *Controller) runBrainstormingSession(ctx context.Context) *Control {
 	ctrl, _ := c.Handoff.WaitConsume(ctx, 500*time.Millisecond, func() bool {
 		return !c.Sessions.Has(ctx, name) || c.Sessions.PaneDead(ctx, name) // /exit without a handoff
 	})
+	// Tear the TUI down and WAIT for bubbletea to finish restoring the terminal
+	// BEFORE any plain output follows (the confirm menu / banners). Without the
+	// Wait, bubbletea's async teardown races selectMenu and leaves the terminal in
+	// raw mode (OPOST/ONLCR off) → plain `\n` output staircases (garbled display).
 	if prog != nil {
 		prog.Quit()
+		prog.Wait()
 	}
+	ttyRestoreSane() // ensure sane line discipline (ONLCR on) for the follow-up menu
 	_ = c.Sessions.SwitchTo(ctx, c.Sessions.DashboardWindow())
 	return ctrl
 }
@@ -337,7 +343,9 @@ func (c *Controller) runExecuting(ctx context.Context, st *State) error {
 	if isTTY() {
 		prog = newDashProgram(ctx, dash, c.Store, c.Sessions, actions)
 		go func() { _, _ = prog.Run() }()
-		defer prog.Quit()
+		// Quit + Wait so bubbletea fully restores the terminal on any exit path
+		// (suspend/error), avoiding a raw-mode residue for whatever prints next.
+		defer func() { prog.Quit(); prog.Wait() }()
 	}
 
 	scheduleTick := func() {
@@ -519,7 +527,9 @@ func (c *Controller) runExecuting(ctx context.Context, st *State) error {
 	c.planMu.Unlock()
 	if prog != nil {
 		prog.Quit() // tear down the TUI before the (headless) completion check
+		prog.Wait() // wait for full terminal restore (avoids raw-mode residue)
 	}
+	ttyRestoreSane()
 
 	return c.verifyCompletion(ctx, st, plan)
 }
