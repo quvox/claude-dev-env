@@ -91,7 +91,7 @@ VM を扱うために agent（Claude/orchestrator/worker）が知るべき情報
   - トラブルシュート（dockerd 未起動時の確認、virtiofs マウント確認、ログの場所）。
 - **発見（CLAUDE.md 非侵襲の導線）**:
   1. 起動時に端末へバナー表示（「VM モード有効。制御情報は `VM_DEV.md`」）。
-  2. **orchestrator は worker/壁打ちプロンプト先頭に `VM_DEV.md` へのポインタを前置**（既存の `ORCHESTRATOR.md` 前置と同じ仕組み。CLAUDE.md には触れない）。
+  2. **orchestrator は worker/ブレインストーミングプロンプト先頭に `VM_DEV.md` へのポインタを前置**（既存の `ORCHESTRATOR.md` 前置と同じ仕組み。CLAUDE.md には触れない）。
   3. `claude-dev` が対話 claude 起動時に `--append-system-prompt` で「VM モード: `VM_DEV.md` 参照」の 1 行を注入（任意・CLAUDE.md 非侵襲）。
 
 ### 3.7 ゲスト資源逼迫の警告（vm-healthd）
@@ -101,7 +101,7 @@ VM を扱うために agent（Claude/orchestrator/worker）が知るべき情報
 - **誤検知の扱い**: この方式は「正当な重い処理」と「スラッシング」を CPU だけでは厳密に区別できない。一過性のビルド等を拾わないよう**低め閾値＋長め継続窓**で判定し、警告文言は「逼迫の可能性」とし `vm status` での確認を促す（断定しない）。閾値・窓は環境変数で調整可能（正本は [docs/impl/80_vm-mode.md](impl/80_vm-mode.md) §7.2）。
 - **警告の出し先（2系統）**:
   1. **tmux バナー** — tmux のステータス行に常時表示（level 追従で set/clear）＋ WARN 遷移時にフラッシュ通知。人間が noVNC/端末で即認識できる。
-  2. **orchestrator** — 実行モードのダッシュボード描画時に監視状態を読み、逼迫時は画面上部に警告バナーを出す。worker/壁打ちが資源逼迫を認識できる。
+  2. **orchestrator** — 実行モードのダッシュボード描画時に監視状態を読み、逼迫時は画面上部に警告バナーを出す。worker/ブレインストーミングが資源逼迫を認識できる。
 - **CLAUDE.md 非侵襲**の方針は §3.6 と同じ（追記しない）。現況は `vm status` にも表示する。
 
 ## 4. ライフサイクル
