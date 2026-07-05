@@ -180,3 +180,11 @@
 - 修正（新規 `streamlog.go`／`worker.go`）：`ExecClaude.RunPrompt` の `io.MultiWriter` を「生 stream-json → バッファ（結果解析用）」＋「`workers/<taskID>.log` → `streamPrettyWriter`（整形）」に変更。`streamPrettyWriter` は改行区切りでイベントを受け、`formatStreamLine` が Claude Code 風へ整形：`assistant` text は本文、`tool_use` は `⏺ <ツール名>(<主要引数の要約>)`（Bash→command／Read・Write・Edit→file_path／Grep・Glob→pattern／他→主要フィールドか短縮 JSON）、`tool_result` は `  ⎿ <先頭短縮＋(N 行)>`、`result` は区切り＋完了。パース不能行はそのまま出力（欠落なし）。結果解析（`ParseWorkerResult`）は生バッファを使うので整形は解析に非影響（ログは表示専用）。
 - 検証：`streamlog_test.go`（各イベント種別の整形・部分行バッファリング）pass。実機の生 worker ログ（`t2.log`, 191 行）を通し、`⏺ Bash(...)`／`⏺ Read(path)`／`  ⎿ … (N 行)`／地の文が読める形になることを目視確認。`go test ./...` は環境依存でハングする既存の対話テスト `TestIntervene_ResolveApprovesIrreversible`（実 claude を `RunInteractive` で起動＝本変更と無関係・clean tree でも同様）以外は pass。配布イメージ再ビルド。
 - 設計同期：`60_orchestrator.md`（worker ディスパッチ step3・`[d]` 節・実装構成に `streamlog.go` を追記）。
+
+## 2026-07-05（追補：review_gate_defect＝レビュア出力の形式不遵守を根治）
+- 背景：実機 w-t3 が「ゲート側の不具合」（`review_gate_defect`）で要判断になった。レビュア（sonnet-5）の最終 `result` を確認すると、規定の構造化 JSON ではなく**英語の散文の結論**（"Review complete — no critical or major findings. …"）だった。レビュー自体は合格判定なのに、JSON を 1 行も出さなかったため `ParseReviewResult` が解析不能→`review_format_error_limit`（既定 2）連続で `review_gate_defect` に昇格＝**合格が人間介入へ誤昇格**していた。ゲート機構（レビュア出力のパース契約）の頑健性不足。
+- 修正（`review.go`）：
+  - `reviewGuide` を強化＝「自動ゲートが JSON としてパースする／散文で答えると false gate defect になる。最終メッセージは JSON オブジェクト 1 個のみ・散文の結論やコードフェンス禁止・合格は `{"findings":[]}`」を明示。
+  - `findReviewResultJSON` を頑健化＝(a) 最終行の厳密一致を優先、(b) 失敗時は ```json フェンスや散文中に埋もれた `{...}` を、文字列リテラル内 `}` を無視するブレース対応スキャン（新規 `findJSONObjects`）で拾い、`findings` キーを持つ最後のオブジェクトを採用。共通判定は `tryReviewResult`（`findings` キー必須＝無関係な JSON を弾く）。
+- 検証：`review_parse_test.go`（厳密／散文後の JSON／フェンス／同一行前置／文字列内 `}`／純散文は失敗／findings 無しオブジェクトは棄却）pass。純散文（今回の t3 の生ログ相当）は依然パース不能＝安全側で人間へ（誤って合格扱いにしない）。指示強化で次回以降は JSON を確実に出させ誤昇格を抑止。`go test`（既存の対話ハングテスト除く）pass。配布イメージ再ビルド。
+- 設計同期：`60_orchestrator.md` §品質ゲート項目4（レビュア指示強化・パーサ頑健化）。

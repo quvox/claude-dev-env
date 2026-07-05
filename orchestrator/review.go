@@ -60,10 +60,17 @@ SCOPE RULE (important): score ONLY against "This task's completion criteria"
 below. Do NOT deduct for anything that is another task's responsibility —
 whole-project coverage, other modules/aspects, integration, or cleanup are OUT
 OF SCOPE for this task and must NOT produce critical/major findings here.
-Print a single JSON object on the final line, nothing after it:
-{"findings":[{"severity":"critical|major|minor","file":string,"message":string,"aspect":"requirements|security"}],"usage":{"input_tokens":int,"output_tokens":int}|null}
 Use severity critical/major only for issues that block acceptance of THIS task's
-completion criteria.`
+completion criteria.
+
+OUTPUT FORMAT — MANDATORY. The automated gate parses your reply as JSON; if you
+answer in prose the whole task is escalated to a human as a false "gate defect".
+So your VERY LAST message must be EXACTLY ONE JSON object and NOTHING ELSE —
+no prose conclusion, no summary sentence, no markdown code fence, no text before
+or after it. The JSON object IS your conclusion; do not also describe it in words.
+  - If nothing blocks acceptance, output exactly: {"findings":[]}
+  - Otherwise: {"findings":[{"severity":"critical|major|minor","file":"path","message":"...","aspect":"requirements|security"}]}
+Put the entire object on a single line.`
 
 // Review runs a single reviewer pass on the task worktree.
 func (rv *Reviewer) Review(ctx context.Context, p *Plan, t *Task) (*ReviewResult, error) {
@@ -225,23 +232,91 @@ func ParseReviewResult(out []byte) (*ReviewResult, error) {
 // findReviewResultJSON scans lines from the end for a single-line JSON object
 // that has a "findings" field and decodes it (an empty findings array is valid).
 func findReviewResultJSON(text string) *ReviewResult {
+	// Fast path: a line that is exactly the JSON object (the instructed format).
 	lines := strings.Split(strings.TrimRight(text, "\n"), "\n")
 	for i := len(lines) - 1; i >= 0; i-- {
 		line := strings.TrimSpace(lines[i])
-		if !strings.HasPrefix(line, "{") || !strings.HasSuffix(line, "}") {
-			continue
+		if rr := tryReviewResult(line); rr != nil {
+			return rr
 		}
-		var probe map[string]json.RawMessage
-		if err := json.Unmarshal([]byte(line), &probe); err != nil {
-			continue
-		}
-		if _, ok := probe["findings"]; !ok {
-			continue
-		}
-		var rr ReviewResult
-		if err := json.Unmarshal([]byte(line), &rr); err == nil {
-			return &rr
+	}
+	// Tolerant path: the model wrapped the object in a ```json fence or prepended
+	// prose on the same line (e.g. `Result: {"findings":[]}`). Scan the whole text
+	// for the LAST balanced {...} block that contains a "findings" key and parses.
+	for _, cand := range findJSONObjects(text) {
+		if rr := tryReviewResult(cand); rr != nil {
+			return rr
 		}
 	}
 	return nil
+}
+
+// tryReviewResult parses s as a ReviewResult if it is a JSON object carrying a
+// "findings" key (rejecting unrelated objects). Returns nil otherwise.
+func tryReviewResult(s string) *ReviewResult {
+	s = strings.TrimSpace(s)
+	if !strings.HasPrefix(s, "{") || !strings.HasSuffix(s, "}") {
+		return nil
+	}
+	var probe map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(s), &probe); err != nil {
+		return nil
+	}
+	if _, ok := probe["findings"]; !ok {
+		return nil
+	}
+	var rr ReviewResult
+	if err := json.Unmarshal([]byte(s), &rr); err != nil {
+		return nil
+	}
+	return &rr
+}
+
+// findJSONObjects returns every brace-balanced {...} substring in text, in order
+// of their closing brace (so the caller can prefer later/last matches). Brace
+// counting ignores braces inside JSON string literals (with escape handling), so
+// objects that contain `}` inside string values are captured whole. Best-effort:
+// it is only used as a fallback when the strict line match fails.
+func findJSONObjects(text string) []string {
+	var out []string
+	depth := 0
+	start := -1
+	inStr := false
+	esc := false
+	for i := 0; i < len(text); i++ {
+		c := text[i]
+		if inStr {
+			switch {
+			case esc:
+				esc = false
+			case c == '\\':
+				esc = true
+			case c == '"':
+				inStr = false
+			}
+			continue
+		}
+		switch c {
+		case '"':
+			inStr = true
+		case '{':
+			if depth == 0 {
+				start = i
+			}
+			depth++
+		case '}':
+			if depth > 0 {
+				depth--
+				if depth == 0 && start >= 0 {
+					out = append(out, text[start:i+1])
+					start = -1
+				}
+			}
+		}
+	}
+	// Prefer the last object first (the reviewer's conclusion comes last).
+	for l, r := 0, len(out)-1; l < r; l, r = l+1, r-1 {
+		out[l], out[r] = out[r], out[l]
+	}
+	return out
 }
