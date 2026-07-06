@@ -35,5 +35,6 @@
 | [docs/impl/90_ghcr-workflow.md](docs/impl/90_ghcr-workflow.md) | GHCR へイメージ(claude/claude-vnc/docker-proxy)を毎日・マルチアーキ(amd64/arm64)で push する GitHub Actions ワークフロー(.github/workflows/ghcr-images.yml)の実装仕様。prepare→build(matrix, push-by-digest)→merge(imagetools) の3ジョブと YYYYMMDDHHmm+latest タグを定める。 | GitHubActions, GHCR, buildx, マルチアーキ, push-by-digest, imagetools, タグ |
 | [docs/reviews/2026-06-28_orchestrator-tty-fix.md](docs/reviews/2026-06-28_orchestrator-tty-fix.md) | レビュー: オーケストレーター 端末モード不具合の修正 |  |
 | [docs/reviews/2026-07-01_orchestrator-e2e.md](docs/reviews/2026-07-01_orchestrator-e2e.md) | オーケストレーター 実機 E2E 動作確認（自己検証サンプル） |  |
+| [docs/reviews/2026-07-06_login-settings-json.md](docs/reviews/2026-07-06_login-settings-json.md) | レビュー: login の settings.json 生成不具合の修正（クォート/ブレース展開） |  |
 
-_計 27 件_
+_計 28 件_
