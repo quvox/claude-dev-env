@@ -114,6 +114,7 @@ claude-dev start --vm-fresh # VM モード＋ゲストを白紙 provision やり
 - Web アプリのポートマッピングは行わない（`claude-dev forward` で必要なときに動的にフォワード）
 - プロジェクトごとに専用 ssh-agent を起動し、使う鍵を登録する。鍵リストは `<プロジェクト>/.claude-dev.yaml` の `ssh_keys` **のみ**を見る（グローバル設定へのフォールバックなし。未指定なら SSH 転送なし）。ディレクトリ単位で鍵を切り替えられる
 - `~/.gitconfig` があればコンテナに共有（読み取り専用）
+- `~/.config/gh` があればコンテナに共有（読み取り専用）＝ ホストで `gh auth login` 済みなら、コンテナ内でも `gh`（GitHub CLI）が認証済みで使える
 - SSH agent ソケット・`~/.ssh/known_hosts`・`~/.ssh/config` をコンテナに共有（読み取り専用。秘密鍵はマウントしない）
 - Docker Socket Proxy コンテナ（`claude-dev-docker-proxy`）が未起動なら自動起動する
 - `--kvm` 指定時のみ、ホストに存在する `/dev/kvm`（および `/dev/vhost-net` / `/dev/net/tun`）を `--device` でコンテナに渡す。既定では渡さない（通常は Chrome 操作のみで十分）。コンテナ内で VM を動かす時だけ `--kvm` を付ける（詳細・セキュリティ上の含意は [docs/03_security.md](03_security.md) を参照）

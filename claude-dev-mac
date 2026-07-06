@@ -733,6 +733,13 @@ start)
         GITCONFIG_OPT="-v ${HOME}/.gitconfig:${CHOME}/.gitconfig:ro"
     fi
 
+    # ~/.config/gh があればマウント（読み取り専用）＝ gh の認証（hosts.yml の oauth トークン）と
+    # 設定を共有し、コンテナ内でも gh が認証済みで使える。RO なのでホストの認証は書き換わらない。
+    GH_CONFIG_OPT=""
+    if [ -d "${HOME}/.config/gh" ]; then
+        GH_CONFIG_OPT="-v ${HOME}/.config/gh:${CHOME}/.config/gh:ro"
+    fi
+
     # Docker Socket Proxy 経由で Docker API を利用（生ソケットはマウントしない）
     # macOS/Docker Desktop のソケットは /var/run/docker.sock または ~/.docker/run/docker.sock
     DOCKER_OPTS=""
@@ -801,6 +808,7 @@ start)
         -v "${BASE_DIR}/scripts/tmux.conf:${CHOME}/.tmux.conf:ro" \
         -v "${BASE_DIR}/CLAUDE.md:${CHOME}/CLAUDE.md:ro" \
         $GITCONFIG_OPT \
+        $GH_CONFIG_OPT \
         $SSH_OPTS \
         $DOCKER_OPTS \
         $NOVNC_PORT_OPT \

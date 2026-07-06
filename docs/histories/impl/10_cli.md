@@ -13,3 +13,6 @@
 - SSH 鍵の解決を**プロジェクト直下 `<project_dir>/.claude-dev.yaml` の `ssh_keys` のみ**に簡素化。グローバル `~/.config/claude-dev.yaml` へのフォールバックと雛形自動生成を廃止し、定数 `USER_CONFIG` を削除。
   - `load_ssh_keys_from_config <project_dir>` は当該プロジェクトの `.claude-dev.yaml` だけを `_parse_ssh_keys_yaml` で読む（`SSH_CONFIG_SOURCE` は常にそのパス）。
   - `ensure_ssh_agent` の鍵0件メッセージを、`.claude-dev.yaml` に `ssh_keys:` を記述するよう促す案内に変更。
+
+## 2026-07-06（追補: gh 認証の共有）
+- `start` に `GH_CONFIG_OPT` を追加。ホストに `~/.config/gh` があれば `${CHOME}/.config/gh` へ RO マウントし、コンテナ内でも GitHub CLI `gh` が認証済み（`hosts.yml` の oauth トークン）で使えるようにした（`gh` 本体はイメージに同梱＝[40_devcontainer.md](../../impl/40_devcontainer.md)）。

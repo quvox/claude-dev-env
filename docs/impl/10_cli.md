@@ -101,6 +101,7 @@ GHCR のビルド済みイメージを取得してローカルビルドを省く
 7. **.gitignore 追記**: プロジェクトの `.gitignore` に `.claude` が無ければ追記（無く `.git` がある場合は新規作成）。
 8. **マウント/オプション組み立て**:
    - `GITCONFIG_OPT`: `~/.gitconfig` があれば RO マウント
+   - `GH_CONFIG_OPT`: `~/.config/gh` ディレクトリがあれば `${CHOME}/.config/gh` へ RO マウント（GitHub CLI `gh` の認証＝`hosts.yml` の oauth トークンと設定を共有し、コンテナ内でも `gh` が認証済みで使える。RO なのでホストの認証は書き換わらない）
    - `DOCKER_OPTS`: ソケットがあれば `ensure_docker_proxy_container` 後 `DOCKER_HOST=tcp://<proxy>:2375`
    - `SSH_OPTS`: `ensure_ssh_agent`（引数 `PROJECT_DIR` / `NAME`）が用意した**プロジェクト専用 agent** のソケットを `/tmp/ssh-agent.sock`（RO）転送 + `SSH_AUTH_SOCK` 設定（鍵 0 件で `SSH_AUTH_SOCK` が空なら転送しない）。`known_hosts` を RO マウント。`~/.ssh/config` は `IdentityFile`/`IdentitiesOnly`/`IdentityAgent` 行を `sed` で除去した一時ファイルを RO マウント（`IdentityAgent` はホスト固有 agent パスがコンテナ内で `SSH_AUTH_SOCK` を上書きするのを防ぐため。ホストの config 実体は不変）
    - `NOVNC_PORT_OPT`（VNC 時のみ）: 空き noVNC ポートを `find_available_novnc_port` で確保し `-p <port>:6080` + `VOL_CHROME` を `~/.chrome-profile` にマウント
