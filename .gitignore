@@ -8,3 +8,6 @@ workspace/
 
 # orchestrator の実行時運用状態（成果物ではない。docs/impl/60_orchestrator.md）
 /.orchestrator/
+
+# プロジェクト直下の claude-dev 設定（ユーザー固有の SSH 鍵選択。マシン依存・成果物ではない）
+/.claude-dev.yaml
