@@ -11,7 +11,7 @@ keywords: [ CLI, コマンドリファレンス, claude-dev, orchestrate, ポー
 
 操作は **Makefile**（セットアップ・ビルド・管理）と **claude-dev CLI**（日常の開発操作）の 2 系統で提供される。
 
-> **macOS について**: macOS では CLI 本体は `claude-dev-mac`（`make install` が `claude-dev` として配置）を使う。コマンド名・サブコマンド体系は本リファレンスと同一。差分は VM/KVM 非対応（`--vm`/`--kvm` はエラー）と、`forward`/`ports`/`list` の案内が SSH トンネルではなく `http://localhost:<host-port>` 直結になる点のみ。詳細は [docs/09_macos-support.md](09_macos-support.md)。
+> **macOS について**: macOS では CLI 本体は `claude-dev-mac`（`make install` が `claude-dev` として配置）を使う。コマンド名・サブコマンド体系は本リファレンスと同一。主な差分は、(1) VM/KVM 非対応（`--vm`/`--kvm` はエラー）、(2) `forward`/`ports`/`list` の案内が SSH トンネルではなく `http://localhost:<host-port>` 直結、(3) SSH agent 転送方式が socat TCP ブリッジ（Linux は専用 agent ソケットの直 bind mount）になる点。`claude-dev ssh-keys`（鍵の対話選択／`reset`）は**両 OS 共通**。詳細は [docs/09_macos-support.md](09_macos-support.md)。
 
 ### Makefile ターゲット一覧
 
@@ -112,8 +112,9 @@ claude-dev start --vm-fresh # VM モード＋ゲストを白紙 provision やり
 - イメージが存在しなければ自動ビルド
 - 共有ボリュームに認証情報があれば `/workspace/.claude/` にコピーする（無い場合もコンテナは起動する。未ログインなら起動後の `claude` でログインを求められる）
 - Web アプリのポートマッピングは行わない（`claude-dev forward` で必要なときに動的にフォワード）
-- ssh-agent が未起動なら自動起動し、鍵が未登録なら `ssh-add` を実行（`~/.config/claude-dev.yaml` から鍵リストを読み込み）
+- プロジェクトごとに専用 ssh-agent を起動し、使う鍵を登録する。鍵リストは `<プロジェクト>/.claude-dev.yaml` の `ssh_keys` **のみ**を見る（グローバル設定へのフォールバックなし。未指定なら SSH 転送なし）。ディレクトリ単位で鍵を切り替えられる
 - `~/.gitconfig` があればコンテナに共有（読み取り専用）
+- `~/.config/gh` があればコンテナに共有（読み取り専用）＝ ホストで `gh auth login` 済みなら、コンテナ内でも `gh`（GitHub CLI）が認証済みで使える
 - SSH agent ソケット・`~/.ssh/known_hosts`・`~/.ssh/config` をコンテナに共有（読み取り専用。秘密鍵はマウントしない）
 - Docker Socket Proxy コンテナ（`claude-dev-docker-proxy`）が未起動なら自動起動する
 - `--kvm` 指定時のみ、ホストに存在する `/dev/kvm`（および `/dev/vhost-net` / `/dev/net/tun`）を `--device` でコンテナに渡す。既定では渡さない（通常は Chrome 操作のみで十分）。コンテナ内で VM を動かす時だけ `--kvm` を付ける（詳細・セキュリティ上の含意は [docs/03_security.md](03_security.md) を参照）
@@ -268,6 +269,20 @@ claude-dev list
 ```
 
 VNC なしコンテナでは `noVNC:` 行は表示されない（`(VNC なし)` のような行は出力されない）。最後に Docker Socket Proxy コンテナの稼働状態が表示される。
+
+---
+
+#### `claude-dev ssh-keys [reset]`
+
+**カレントプロジェクト**でコンテナへ転送する SSH 鍵（`./.claude-dev.yaml` の `ssh_keys`）を管理する。Linux / macOS 共通。
+
+```bash
+claude-dev ssh-keys          # ~/.ssh の鍵を対話選択して ./.claude-dev.yaml に保存
+claude-dev ssh-keys reset    # このプロジェクトの選択を初期化
+```
+
+- 引数なし: `~/.ssh/id_*` を一覧表示し、番号（カンマ/空白区切り、`a`=全部、`n`=なし）で選択→カレントディレクトリの `.claude-dev.yaml` に保存。手書きでも同じ `ssh_keys:` 形式で設定できる。
+- `reset`: `./.claude-dev.yaml` の `ssh_keys` を除去（`ssh_keys` だけのファイルは削除、他の記述は残す）し、このプロジェクトの専用 ssh-agent を停止・削除（登録済み鍵をクリア。macOS はブリッジ socat も停止）。再設定は `claude-dev ssh-keys` で選択するか `.claude-dev.yaml` を作成する。
 
 ---
 

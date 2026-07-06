@@ -3,7 +3,7 @@
 # =============================================================================
 # ベース: Ubuntu 24.04
 # 言語: Node.js (fnm), Python3 (venv), Go, Rust
-# ツール: git, tmux, zsh, vim, make, gcc, curl, wget, etc.
+# ツール: git, gh (GitHub CLI), tmux, zsh, vim, make, gcc, curl, wget, etc.
 # Claude Code CLI
 # ブラックリスト方式ファイアウォール
 # 認証情報はボリュームマウントで管理
@@ -83,6 +83,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" > /etc/apt/sources.list.d/docker.list \
     && apt-get update \
     && apt-get install -y --no-install-recommends docker-ce-cli docker-compose-plugin \
+    && rm -rf /var/lib/apt/lists/* \
+    # --- GitHub CLI (gh)（公式 APT リポジトリ。arch は dpkg で自動判定＝amd64/arm64 両対応）---
+    && curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg -o /etc/apt/keyrings/githubcli-archive-keyring.gpg \
+    && chmod a+r /etc/apt/keyrings/githubcli-archive-keyring.gpg \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" > /etc/apt/sources.list.d/github-cli.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends gh \
     && rm -rf /var/lib/apt/lists/*
 
 # --- Chromium: Playwright 経由でインストール（後段）---

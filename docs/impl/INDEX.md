@@ -6,7 +6,7 @@
 |---|---|---|
 | [00_overview.md](00_overview.md) | リポジトリ全体 | 実装全体の俯瞰。コンポーネントの責務・制御フロー・Docker リソース命名・ルート設定ファイル・設計上の不変条件。 |
 | [10_cli.md](10_cli.md) | `claude-dev` | ホスト側 CLI（Linux 版）の実装仕様。ヘルパー関数・サブコマンド・コンテナ起動引数。 |
-| [11_cli-mac.md](11_cli-mac.md) | `claude-dev-mac` | ホスト側 CLI（macOS 版）の実装仕様。Linux 版との差分（SSH agent 魔法ソケット・Docker ソケット検出・VM/KVM 拒否・ポート直結・ネイティブアーキ）。設計は [../09_macos-support.md](../09_macos-support.md)。 |
+| [11_cli-mac.md](11_cli-mac.md) | `claude-dev-mac` | ホスト側 CLI（macOS 版）の実装仕様。Linux 版との差分（SSH agent の転送が socat TCP ブリッジ・Docker ソケット検出・VM/KVM 拒否・ポート直結・ネイティブアーキ）。鍵解決やローカル `.claude-dev.yaml`・`ssh-keys` サブコマンドは両 OS 共通（10_cli.md 正本）。設計は [../09_macos-support.md](../09_macos-support.md)。 |
 | [20_makefile.md](20_makefile.md) | `Makefile` | セットアップ・ビルド・メンテナンスのターゲット仕様とマルチステージビルド構成（OS 判定での CLI 選択を含む）。 |
 | [30_scripts.md](30_scripts.md) | `scripts/`（hook・tmux.conf 等） | `scripts/` の構成概要と hook スクリプト（save_prompt.sh / sendslackmsg.sh）・tmux.conf・dood-portsync 等の実装仕様。 |
 | [31_entrypoint.md](31_entrypoint.md) | `scripts/entrypoint-claude.sh` | Claude コンテナの ENTRYPOINT。UID/GID 追従・認証共有・MCP 設定・VNC/Chrome 起動・tmux セッション開始。 |

@@ -57,19 +57,22 @@ make install          # PATH 登録のみ
 
 ## SSH 鍵の設定
 
-`claude-dev start` 時に ssh-agent に登録する SSH 鍵を `~/.config/claude-dev.yaml` で管理する。初回実行時に `~/.ssh/id_*` を検出して自動生成される。
+`claude-dev start` 時にコンテナへ転送する SSH 鍵は、**プロジェクト直下の `.claude-dev.yaml` の `ssh_keys` だけ**で指定する（グローバル設定・自動生成・フォールバックはない）。ディレクトリごとに異なる鍵を使える。
 
 ```yaml
-# ~/.config/claude-dev.yaml
+# <プロジェクト>/.claude-dev.yaml
 ssh_keys:
-  - ~/.ssh/id_ed25519
-  - ~/.ssh/id_rsa
-  # 不要な鍵はコメントアウトまたは削除
+  - ~/.ssh/id_ed25519        # このプロジェクトで使う鍵
+  # 複数指定可。不要な鍵は削除
 ```
 
-- パスフレーズなしの鍵は自動で追加される
-- パスフレーズ付きの鍵は対話的に入力を求められる
-- コンテナには秘密鍵ファイルを渡さず、SSH agent ソケットのみ転送される
+- `claude-dev` はプロジェクトごとに**専用 ssh-agent**（`~/.claude-dev/agents/<ディレクトリ名>.sock`）を起動し、そのプロジェクトの `ssh_keys` の鍵**だけ**を登録・転送する。よって別プロジェクトの鍵はコンテナから見えない。
+- `.claude-dev.yaml` が無い/`ssh_keys` が空のディレクトリでは **SSH 転送なし**で起動する（案内メッセージが出る）。
+- パスフレーズなしの鍵は自動追加、パスフレーズ付きは初回登録時のみ対話入力（既登録の鍵は再入力不要）。
+- コンテナには秘密鍵ファイルを渡さず、SSH agent ソケット（mac は socat TCP ブリッジ）のみ転送する。
+- 記載するのは鍵ファイルの**パスのみ**（秘密情報は含まない）。リポジトリにコミットするかは運用次第（コミットしたくなければ `.gitignore` に追加）。
+
+> **ヒント**: `claude-dev ssh-keys`（Linux / macOS 共通）を実行すると `~/.ssh` の鍵を対話選択して、カレントプロジェクトの `.claude-dev.yaml` を生成できる。`claude-dev ssh-keys reset` でその選択と専用 agent を初期化する。
 
 ## 基本的な使い方
 
