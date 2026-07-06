@@ -968,7 +968,7 @@ ssh-keys)
             done
             rm -f "$LEGACY_BRIDGE_PID_FILE" "$LEGACY_BRIDGE_PORT_FILE" \
                   "$LEGACY_AGENT_PID_FILE" "$LEGACY_AGENT_SOCK" 2>/dev/null || true
-            echo "✅ このプロジェクト（${NAME}）の SSH 鍵選択をリセットしました。次回 claude-dev start で再選択（または .claude-dev.yaml を作成）してください"
+            echo "✅ このプロジェクト（${NAME}）の SSH 鍵選択をリセットしました。再設定は 'claude-dev ssh-keys' で選択するか .claude-dev.yaml を作成してください"
             ;;
         ""|select)
             select_ssh_keys_interactive

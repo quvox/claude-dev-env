@@ -84,6 +84,61 @@ load_ssh_keys_from_config() {
     _parse_ssh_keys_yaml "$project_config"
 }
 
+# ~/.ssh/id_*（.pub 除く）を DISCOVERED_KEYS に列挙
+discover_ssh_keys() {
+    DISCOVERED_KEYS=()
+    local f
+    for f in "$HOME"/.ssh/id_*; do
+        case "$f" in *.pub) continue ;; esac
+        [ -f "$f" ] && DISCOVERED_KEYS+=("$f")
+    done
+}
+
+# 選択鍵をプロジェクト直下の .claude-dev.yaml に書き出す（引数=ファイルパス, 鍵パス群）
+write_project_ssh_keys() {
+    local file="$1"; shift
+    {
+        echo "# claude-dev プロジェクト設定（このプロジェクトで使う SSH 鍵。claude-dev が管理します）"
+        echo "# 再選択は 'claude-dev ssh-keys'、初期化は 'claude-dev ssh-keys reset'"
+        echo "ssh_keys:"
+        local k
+        for k in "$@"; do echo "  - $k"; done
+    } > "$file"
+}
+
+# ~/.ssh の鍵を対話選択し、カレントプロジェクトの .claude-dev.yaml に保存。SSH_KEY_LIST にも反映
+select_ssh_keys_interactive() {
+    local file="$(pwd)/${PROJECT_CONFIG_NAME}"
+    discover_ssh_keys
+    if [ ${#DISCOVERED_KEYS[@]} -eq 0 ]; then
+        echo "⚠️  ~/.ssh に鍵ファイル（id_*）が見つかりません。SSH 転送なしで続行します。"
+        write_project_ssh_keys "$file"
+        SSH_KEY_LIST=()
+        return 0
+    fi
+    echo "利用可能な SSH 鍵:"
+    local i=1 k
+    for k in "${DISCOVERED_KEYS[@]}"; do echo "  $i) $k"; i=$((i + 1)); done
+    printf "このプロジェクトで使う鍵を選択 (番号をカンマ/空白区切り, a=全部, n=なし): "
+    local ans=""; read -r ans || ans=""
+    local chosen=() tok
+    case "$ans" in
+        a|A|all|ALL) chosen=("${DISCOVERED_KEYS[@]}") ;;
+        n|N|none|NONE|"") chosen=() ;;
+        *)
+            for tok in $(echo "$ans" | tr ',' ' '); do
+                case "$tok" in ''|*[!0-9]*) continue ;; esac
+                if [ "$tok" -ge 1 ] && [ "$tok" -le ${#DISCOVERED_KEYS[@]} ]; then
+                    chosen+=("${DISCOVERED_KEYS[$((tok - 1))]}")
+                fi
+            done
+            ;;
+    esac
+    write_project_ssh_keys "$file" "${chosen[@]}"
+    echo "✅ SSH 鍵の選択を保存しました: $file（${#chosen[@]} 件）"
+    SSH_KEY_LIST=("${chosen[@]}")
+}
+
 # プロジェクト専用 ssh-agent を起動/再利用し、解決した鍵だけを登録する。
 # ホストの環境 agent は使わない（ディレクトリごとに見える鍵を隔離するため）。
 # 引数: <project_dir> <name>。成功後 SSH_AUTH_SOCK を専用ソケットに固定する。
@@ -1060,6 +1115,40 @@ list)
     ;;
 
 # -----------------------------------------------------------------------------
+# SSH 鍵の選択（対話）/ 初期化（対象はカレントプロジェクト）
+#   claude-dev ssh-keys          鍵を対話選択して ./.claude-dev.yaml に保存
+#   claude-dev ssh-keys reset    このプロジェクトの選択を初期化（./.claude-dev.yaml の ssh_keys 除去＋専用 agent 停止）
+# -----------------------------------------------------------------------------
+ssh-keys)
+    NAME=$(container_name)
+    _proj_config="$(pwd)/${PROJECT_CONFIG_NAME}"
+    case "${2:-}" in
+        reset)
+            # カレントプロジェクトの .claude-dev.yaml から ssh_keys セクションを除去
+            # （他の記述は残す。ssh_keys だけになれば空になるのでファイルごと削除）
+            if [ -f "$_proj_config" ]; then
+                _tmp=$(mktemp)
+                grep -vE '^ssh_keys:|^[[:space:]]*-[[:space:]]|^# claude-dev プロジェクト設定|^# 再選択は' "$_proj_config" > "$_tmp" 2>/dev/null || true
+                if grep -qE '[^[:space:]]' "$_tmp" 2>/dev/null; then mv "$_tmp" "$_proj_config"; else rm -f "$_tmp" "$_proj_config"; fi
+            fi
+            # このプロジェクトの専用 agent を停止・削除（登録済み鍵をクリア）
+            _sock="${DEV_AGENT_DIR}/${NAME}.sock"
+            _pid="${DEV_AGENT_DIR}/${NAME}.pid"
+            [ -f "$_pid" ] && kill "$(cat "$_pid" 2>/dev/null)" 2>/dev/null || true
+            rm -f "$_sock" "$_pid"
+            echo "✅ このプロジェクト（${NAME}）の SSH 鍵選択をリセットしました。再設定は 'claude-dev ssh-keys' で選択するか .claude-dev.yaml を作成してください"
+            ;;
+        ""|select)
+            select_ssh_keys_interactive
+            ;;
+        *)
+            echo "使い方: claude-dev ssh-keys [reset]"
+            exit 1
+            ;;
+    esac
+    ;;
+
+# -----------------------------------------------------------------------------
 # Claude Code アップグレード
 # -----------------------------------------------------------------------------
 upgrade)
@@ -1160,6 +1249,10 @@ claude-dev - Claude Code 安全開発環境
   claude-dev attach [NAME]       既存セッションに接続
   claude-dev stop [NAME]         セッションを停止
   claude-dev list                実行中セッション一覧
+
+SSH 鍵（カレントプロジェクトの .claude-dev.yaml）:
+  claude-dev ssh-keys            使う鍵を対話選択して保存
+  claude-dev ssh-keys reset      このプロジェクトの鍵選択を初期化
 
 ポートフォワード:
   claude-dev forward <PORT> [NAME]    ポートを動的に追加

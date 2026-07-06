@@ -16,3 +16,9 @@
 
 ## 2026-07-06（追補: gh 認証の共有）
 - `start` に `GH_CONFIG_OPT` を追加。ホストに `~/.config/gh` があれば `${CHOME}/.config/gh` へ RO マウントし、コンテナ内でも GitHub CLI `gh` が認証済み（`hosts.yml` の oauth トークン）で使えるようにした（`gh` 本体はイメージに同梱＝[40_devcontainer.md](../../impl/40_devcontainer.md)）。
+
+## 2026-07-06（追補: ssh-keys サブコマンドを Linux 版にも追加）
+- macOS 版と同じ `ssh-keys` サブコマンドを Linux `claude-dev` に追加（両 OS 共通仕様に）。
+  - ヘルパー `discover_ssh_keys` / `write_project_ssh_keys` / `select_ssh_keys_interactive` を移植（対話選択はカレントプロジェクトの `.claude-dev.yaml` に保存）。
+  - `ssh-keys`（引数なし/`select`）＝対話選択、`ssh-keys reset`＝カレントプロジェクトの `.claude-dev.yaml` の ssh_keys 除去（ssh_keys だけなら削除／他記述は残す）＋そのプロジェクトの専用 agent（`${DEV_AGENT_DIR}/<name>.{sock,pid}`）を停止・削除。
+  - `help` 出力に ssh-keys の項を追加。macOS 版との差分は reset がブリッジ socat も止める点のみ（Linux にブリッジは無い）。

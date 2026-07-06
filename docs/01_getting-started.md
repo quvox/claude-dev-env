@@ -72,7 +72,7 @@ ssh_keys:
 - コンテナには秘密鍵ファイルを渡さず、SSH agent ソケット（mac は socat TCP ブリッジ）のみ転送する。
 - 記載するのは鍵ファイルの**パスのみ**（秘密情報は含まない）。リポジトリにコミットするかは運用次第（コミットしたくなければ `.gitignore` に追加）。
 
-> **ヒント（macOS）**: `claude-dev ssh-keys` を実行すると `~/.ssh` の鍵を対話選択して、カレントプロジェクトの `.claude-dev.yaml` を生成できる。`claude-dev ssh-keys reset` でその選択と専用 agent を初期化する。
+> **ヒント**: `claude-dev ssh-keys`（Linux / macOS 共通）を実行すると `~/.ssh` の鍵を対話選択して、カレントプロジェクトの `.claude-dev.yaml` を生成できる。`claude-dev ssh-keys reset` でその選択と専用 agent を初期化する。
 
 ## 基本的な使い方
 

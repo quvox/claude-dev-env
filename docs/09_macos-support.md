@@ -1,5 +1,5 @@
 ---
-summary: macOS（Docker Desktop）上で Claude Code 安全開発環境を動かすための設計文書。Linux 版 claude-dev の OS 依存箇所を洗い出し、macOS 版 CLI（claude-dev-mac）での解決方針（SSH agent はプロジェクト（ディレクトリ）ごとの専用 agent＋socat TCP ブリッジで転送＝鍵はプロジェクト設定 .claude-dev.yaml の ssh_keys のみ（グローバルへのフォールバックなし）・ssh-keys で対話選択してローカルに保存・Docker ソケット検出・VM/KVM 非対応・ポート直結・Apple Silicon の arm64 ネイティブ対応＝Playwright Chromium／gcloud アーキ写像・install は sudo symlink）を定める。
+summary: macOS（Docker Desktop）上で Claude Code 安全開発環境を動かすための設計文書。Linux 版 claude-dev の OS 依存箇所を洗い出し、macOS 版 CLI（claude-dev-mac）での解決方針（SSH agent はプロジェクト（ディレクトリ）ごとの専用 agent＋socat TCP ブリッジで転送＝鍵はプロジェクト設定 .claude-dev.yaml の ssh_keys のみ（グローバルへのフォールバックなし。鍵解決・ssh-keys サブコマンドは両 OS 共通）・Docker ソケット検出・VM/KVM 非対応・ポート直結・Apple Silicon の arm64 ネイティブ対応＝Playwright Chromium／gcloud アーキ写像・install は sudo symlink）を定める。
 keywords: [ macOS, Docker Desktop, claude-dev-mac, SSHエージェント, arm64, ポートフォワード, VM非対応 ]
 ---
 

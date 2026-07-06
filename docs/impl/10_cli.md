@@ -51,6 +51,9 @@ claude-dev      （単一の bash スクリプト）
 | 関数 | 責務 |
 |------|------|
 | `load_ssh_keys_from_config <project_dir>` | 使う鍵リストを **`<project_dir>/.claude-dev.yaml` の `ssh_keys:` からのみ**読み込み `SSH_KEY_LIST` 配列へ格納する。グローバル設定（`~/.config/claude-dev.yaml`）へのフォールバックや雛形自動生成は**行わない**（ローカル設定だけを見る）。採用元（＝そのプロジェクトの `.claude-dev.yaml` パス）は `SSH_CONFIG_SOURCE` に記録。YAML は簡易パース（`ssh_keys:` 開始 → リストアイテム `- path` を読み、`~` を `$HOME` 展開、コメント除去）。 |
+| `discover_ssh_keys` | `~/.ssh/id_*`（`.pub` 除く）を `DISCOVERED_KEYS` に列挙（`ssh-keys` の対話選択で使う）。 |
+| `write_project_ssh_keys <file> <keys...>` | 選択鍵をプロジェクト直下の `.claude-dev.yaml`（`<file>`）に書き出す（claude-dev 所有ファイルとして再生成）。 |
+| `select_ssh_keys_interactive` | `discover_ssh_keys` を番号付きで提示し、カンマ/空白区切り番号 / `a`=全部 / `n`(または空)=なし で選択→`write_project_ssh_keys "$(pwd)/.claude-dev.yaml"` で**カレントプロジェクトの `.claude-dev.yaml`** に保存し `SSH_KEY_LIST` に反映。 |
 | `ensure_ssh_agent <project_dir> <name>` | `load_ssh_keys_from_config` で鍵を解決し、**プロジェクト専用 ssh-agent**（`${DEV_AGENT_DIR}/<name>.sock`）を起動/再利用して**解決した鍵だけ**を登録する。ホストの環境 agent（`$SSH_AUTH_SOCK`）は使わない（ディレクトリごとに見える鍵を隔離するため）。登録前に `ssh-add -l` の指紋と各鍵の指紋（`ssh-keygen -lf`、パスフレーズ不要）を突き合わせ、**既に登録済みの鍵はスキップ**（パスフレーズ再入力回避）。未登録分はまずパスフレーズなし（`SSH_ASKPASS=/bin/false SSH_ASKPASS_REQUIRE=force`）で一括 `ssh-add`、失敗分のみ対話追加。存在しない鍵は警告してスキップ。最後に転送用の `SSH_AUTH_SOCK` を専用ソケットへ固定する。鍵が 0 件（`.claude-dev.yaml` が無い/`ssh_keys:` が空）なら `SSH_AUTH_SOCK` を空にして SSH 転送せず、`.claude-dev.yaml` に `ssh_keys:` を記述するよう案内する。 |
 | `project_name` | カレントディレクトリ名を小文字化し `[^a-z0-9._-]` を `-` へ置換した文字列を返す。 |
 | `container_name` | `project_name` と同値（コンテナ名 = ディレクトリ名）。 |
@@ -143,6 +146,14 @@ NAME（省略時カレント）が稼働中なら `tmux attach -t main`。
 
 ### `list`
 全 Claude コンテナ（`ancestor` フィルタ）を列挙し NAME / STATUS / WORKSPACE / noVNC URL / 各フォワードを表示。最後にプロキシコンテナの稼働状態を表示。
+
+### `ssh-keys [reset]`
+対象は**カレントプロジェクト**（`NAME=container_name`、設定は `$(pwd)/.claude-dev.yaml`）。
+- 引数なし / `select`: `select_ssh_keys_interactive` を実行し、`~/.ssh/id_*` を対話選択して**カレントの `.claude-dev.yaml`** に保存（手書きでも同形式で可）。
+- `reset`: カレントの `.claude-dev.yaml` から `ssh_keys` セクションを除去（`grep -vE` で `ssh_keys:` 行・リスト項目・管理用コメントを削除。`ssh_keys` だけのファイルは残らず削除、他の記述があれば残す）し、**このプロジェクト（`<NAME>`）の専用 agent** を停止・削除（`${DEV_AGENT_DIR}/<NAME>.pid` を kill し `.sock`/`.pid` を削除＝登録済み鍵をクリア）。再設定は `ssh-keys` で選択するか `.claude-dev.yaml` を作成する（`start` 自体は対話選択しない）。
+- その他の引数: 使い方を表示して `exit 1`。
+
+macOS 版（[11_cli-mac.md](11_cli-mac.md) D1）も同名・同挙動。差分は reset がブリッジ socat も停止する点のみ（Linux にブリッジは無い）。
 
 ### `upgrade`
 `IMG_CLAUDE`（base）・`IMG_CLAUDE_VNC`（vnc）・`IMG_DOCKER_PROXY` を `--no-cache` で再ビルド。反映は `stop`→`start`。
