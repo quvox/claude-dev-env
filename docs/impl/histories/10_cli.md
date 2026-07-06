@@ -23,3 +23,8 @@
 
 ## 2026-07-04（整合性確認による調整）
 - 実装仕様内の徹底整合確認を受け、`--vm` 説明の `vm` ヘルパー列挙に欠落していた `portsync` を追加（status に health 表示含む旨も明記）。80_vm-mode.md の列挙と一致させた。
+
+## 2026-07-06（login の settings.json 生成のクォート不具合修正）
+- `login` の一時コンテナ内 `settings.json` 生成を `su -c "..."` 内から root 部（`su` 前）へ移動し、`\"` エスケープの二重引用符で生成して `chown` する仕様に変更。
+- 旧実装（su 内の `echo '{\"...\"}'`）は、`docker run ... -c '...'` のホスト側シングルクォートを echo のシングルクォートが閉じてしまい、露出した JSON がホストシェルのエスケープ消費とブレース展開を受けて引数が 2 つに分裂、生成ファイルが `permissions:{defaultMode:bypassPermissions}`（不正 JSON）になる不具合があった（macOS 実機の login コンテナで確認。Linux 版も同一コード）。
+- login 節に「クォート制約」（-c スクリプト内でシングルクォート使用禁止）の注記を追加。claude-dev / claude-dev-mac の両方に同一修正。

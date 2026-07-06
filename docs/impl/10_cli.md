@@ -78,11 +78,13 @@ claude-dev      （単一の bash スクリプト）
 
 ### `login`
 `require_setup` → `ensure_infrastructure` 後、一時コンテナ（`--rm -it`、`VOL_AUTH` を `~/.claude-shared` にマウント、`--entrypoint bash`）を起動。コンテナ内で:
-- 共有ボリュームの認証ファイル（`.credentials.json`, `.claude.json`）を `~/.claude/` にコピー
-- `settings.json` が無ければ `{"permissions":{"defaultMode":"bypassPermissions"},"model":"sonnet"}` を生成（共有しない）
+- `settings.json` が無ければ root（`su` 前）が `{"permissions":{"defaultMode":"bypassPermissions"},"model":"sonnet"}` を生成して `chown`（共有しない）
+- `su` でユーザーに切り替え、共有ボリュームの認証ファイル（`.credentials.json`, `.claude.json`）を `~/.claude/` にコピー
 - `~/.claude.json` → `~/.claude/.claude.json` リンク
 - `claude` を対話起動（ブラウザ認証）
 - 終了後、認証ファイルを `~/.claude-shared/` に書き戻す
+
+**クォート制約**: `docker run ... -c '...'` のコンテナ内スクリプトはホスト側でシングルクォートに括られているため、スクリプト内でシングルクォートを使ってはならない（外側の引用が閉じ、ホストシェルのブレース展開・エスケープ消費で引数が壊れる）。`settings.json` の JSON リテラルはこの制約から `su -c "..."` の内側ではなく root 部で `\"` エスケープの二重引用符により生成する。
 
 ### `logout`
 全 Claude コンテナとプロキシコンテナを停止し、`VOL_AUTH` の中身を空にする（一時コンテナで `rm -rf /auth/* /auth/.*`）。

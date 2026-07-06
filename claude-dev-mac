@@ -541,6 +541,14 @@ login)
             mkdir -p "$CHOME/.claude"
             chown "$CUSER":"$CUSER" "$CHOME/.claude"
 
+            # settings.json はローカルに作成（共有しない）
+            # この -c スクリプト全体がホスト側でシングルクォートに括られているため、
+            # 内部でシングルクォートを使うと外側の引用が閉じて JSON が壊れる（ブレース展開）
+            if [ ! -f "$CHOME/.claude/settings.json" ]; then
+                echo "{\"permissions\":{\"defaultMode\":\"bypassPermissions\"},\"model\":\"sonnet\"}" > "$CHOME/.claude/settings.json"
+                chown "$CUSER":"$CUSER" "$CHOME/.claude/settings.json"
+            fi
+
             su "$CUSER" -s /bin/bash -l -c "
                 # 共有ボリュームに認証情報があれば ~/.claude/ にコピー
                 for f in .credentials.json .claude.json; do
@@ -548,10 +556,6 @@ login)
                         cp ~/.claude-shared/\$f ~/.claude/\$f
                     fi
                 done
-                # settings.json はローカルに作成（共有しない）
-                if [ ! -f ~/.claude/settings.json ]; then
-                    echo '{\"permissions\":{\"defaultMode\":\"bypassPermissions\"},\"model\":\"sonnet\"}' > ~/.claude/settings.json
-                fi
                 # ~/.claude.json（ホーム直下）へのリンク
                 if [ -f ~/.claude/.claude.json ]; then
                     ln -sf ~/.claude/.claude.json ~/.claude.json
