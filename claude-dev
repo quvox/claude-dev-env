@@ -289,6 +289,39 @@ require_setup() {
     fi
 }
 
+# 起動に必要なホストコマンドを確認し、無ければ導入方法を案内して終了する。
+check_host_deps() {
+    local missing=() c
+    for c in docker jq; do
+        command -v "$c" >/dev/null 2>&1 || missing+=("$c")
+    done
+    [ ${#missing[@]} -eq 0 ] && return 0
+    echo "❌ 起動に必要なコマンドが見つかりません: ${missing[*]}" >&2
+    echo "   👉 導入してから再実行してください:" >&2
+    for c in "${missing[@]}"; do
+        case "$c" in
+            docker) echo "      Docker Engine を導入してください（PREPARATION.md 参照）" >&2 ;;
+            *)      echo "      sudo apt-get install -y $c" >&2 ;;
+        esac
+    done
+    exit 1
+}
+
+# <project_dir>/.claude-dev.yaml が無ければ SSH 鍵選択を促し（TTY 時）、無選択/非対話
+# なら ssh_keys 空配列で作成する。既存ファイルは尊重して何もしない（起動のたびに聞かない）。
+ensure_project_config() {
+    local project_dir="$1"
+    local cfg="${project_dir}/${PROJECT_CONFIG_NAME}"
+    [ -f "$cfg" ] && return 0
+    if [ -t 0 ]; then
+        echo "🔧 このプロジェクトに ${PROJECT_CONFIG_NAME} がありません。コンテナへ転送する SSH 鍵を選択します（不要なら n）。"
+        select_ssh_keys_interactive
+    else
+        write_project_ssh_keys "$cfg"
+        echo "🔧 ${PROJECT_CONFIG_NAME} を作成しました（ssh_keys 空＝SSH 転送なし。'claude-dev ssh-keys' で後から選択可）"
+    fi
+}
+
 # Docker リソースの準備
 ensure_infrastructure() {
     docker network create "$NETWORK" 2>/dev/null || true
@@ -571,9 +604,11 @@ pull)
 # プロジェクト開始（カレントディレクトリ）
 # -----------------------------------------------------------------------------
 start)
+    check_host_deps
     require_setup
     NAME=$(container_name)
     PROJECT_DIR="$(pwd)"
+    ensure_project_config "$PROJECT_DIR"
     shift || true
 
     # フラグ解析

@@ -44,7 +44,7 @@ claude-dev      （単一の bash スクリプト）
 | `IMG_CLAUDE` / `IMG_CLAUDE_VNC` / `IMG_DOCKER_PROXY` | `claude-dev-claude` / `-vnc` / `-docker-proxy` | イメージ名 |
 | `DOCKER_PROXY_CONTAINER` | `claude-dev-docker-proxy` | プロキシコンテナ名 |
 | `DEV_DIR` / `DEV_AGENT_DIR` | `${HOME}/.claude-dev` / `${HOME}/.claude-dev/agents` | プロジェクト専用 ssh-agent の作業ディレクトリとソケット/PID 置き場（`<name>.sock` / `<name>.pid`、`<name>` = `container_name`） |
-| `PROJECT_CONFIG_NAME` | `.claude-dev.yaml` | **このプロジェクトで使う SSH 鍵**を定義する、プロジェクト直下（`<PROJECT_DIR>/.claude-dev.yaml`）の設定ファイル名。SSH 鍵は**このファイルの `ssh_keys:` のみ**を見る（グローバル設定へのフォールバック・自動生成はしない） |
+| `PROJECT_CONFIG_NAME` | `.claude-dev.yaml` | **このプロジェクトで使う SSH 鍵**を定義する、プロジェクト直下（`<PROJECT_DIR>/.claude-dev.yaml`）の設定ファイル名。SSH 鍵は**このファイルの `ssh_keys:` のみ**を見る（グローバル設定へのフォールバックはしない）。**ファイルが無い初回 `start` では `ensure_project_config` が作成する**（TTY は鍵選択を促し、非 TTY は空 `ssh_keys:`）。鍵の推測・グローバルからの流用はしない |
 
 ## ヘルパー関数
 
@@ -63,6 +63,8 @@ claude-dev      （単一の bash スクリプト）
 | `find_available_novnc_port` | `NOVNC_BASE_PORT` から +100 の範囲で、既存コンテナが公開していない空きポートを返す（見つからなければ基準値）。 |
 | `find_available_host_port` | `FWD_PORT_BASE` から +900 の範囲で空きホストポートを返す。 |
 | `require_setup` | `IMG_CLAUDE` / `IMG_CLAUDE_VNC` が無ければ `docker build`（`--target base` / `--target vnc`、`USERNAME`/`USER_UID`/`USER_GID` を build-arg で渡す）で自動ビルド。 |
+| `check_host_deps` | **起動に必要なホストコマンドを確認**し、無ければ導入方法を案内して `exit 1`。Linux 版の必須は `docker`・`jq`（`docker` は PREPARATION.md を、その他は `sudo apt-get install -y <cmd>` を案内）。`start` の冒頭（`require_setup` の前）で呼ぶ。macOS 版は加えて `socat`（SSH ブリッジ必須）を要求し `brew install` を案内（11_cli-mac.md）。 |
+| `ensure_project_config <project_dir>` | **`<project_dir>/.claude-dev.yaml` が無いときだけ**、TTY なら `select_ssh_keys_interactive` で SSH 鍵選択を促し、非 TTY なら `write_project_ssh_keys`（引数なし）で `ssh_keys:` 空配列のファイルを作る。**既存ファイルは尊重して何もしない**（起動のたびに聞かない）。`start` で `PROJECT_DIR` 確定後・鍵解決前に呼ぶ。 |
 | `ensure_infrastructure` | ネットワークと 4 ボリュームを冪等に作成。 |
 | `get_novnc_url <name>` | `docker port <name> 6080` のホストポートから `http://localhost:<port>/vnc.html?autoconnect=true` を組み立てて返す（VNC なしなら空）。 |
 | `image_version <image\|id>` | イメージのバージョン表記を返す。`io.github.quvox.claude-dev.version` ラベル（CI=`YYYYMMDDHHmm` / ローカルビルド=`local`）を優先し、無ければ `unknown`。あわせて短縮イメージ ID と作成日時（`Created`）を付す（例 `202607042010 (id abc123…, built 2026-07-04 08:20)`）。専用ラベルキーを使うのは OCI 標準 `org.opencontainers.image.version` が ubuntu ベースで `24.04` に衝突するため（Dockerfile は両キーへ焼く）。 |
@@ -93,7 +95,7 @@ claude-dev      （単一の bash スクリプト）
 GHCR のビルド済みイメージを取得してローカルビルドを省く。`.env` の `CLAUDE_DEV_REGISTRY`（既定 `ghcr.io/quvox`）と `CLAUDE_DEV_IMAGE_TAG`（既定 `latest`。引数 `TAG` で上書き）から、`${REG}/claude-dev-claude`・`-claude-vnc`・`-docker-proxy` の各 `:TAG` を `docker pull` し、**ローカル名（`claude-dev-claude` 等）へ `docker tag` で retag** する。以降 `start`/`require_setup` は retag 済みイメージを使い自動ビルドしない。少なくとも 1 つ成功すれば完了メッセージ、全失敗なら private 用の `docker login ghcr.io` を案内して `exit 1`。Docker が対象アーキの manifest を自動選択する（Apple Silicon=arm64 / Linux=amd64）。GHCR への push は GitHub Actions が担う（[90_ghcr-workflow.md](90_ghcr-workflow.md)、設計 [../10_ghcr-images.md](../10_ghcr-images.md)）。
 
 ### `start [--no-vnc] [--kvm] [--vm] [--vm-fresh]`
-本 CLI の中核。`NAME=container_name`、`PROJECT_DIR=$(pwd)`。`--no-vnc` で `USE_VNC=0`、`--kvm` で `USE_KVM=1`（既定 `0`）。
+本 CLI の中核。**冒頭で `check_host_deps`**（必要ホストコマンドの確認。無ければ導入案内して `exit 1`）→ `require_setup`。`NAME=container_name`、`PROJECT_DIR=$(pwd)`。`PROJECT_DIR` 確定後・鍵解決前に **`ensure_project_config "$PROJECT_DIR"`**（`.claude-dev.yaml` 不在なら SSH 鍵選択を促す／非 TTY は空 `ssh_keys:` で作成。既存は尊重）。`--no-vnc` で `USE_VNC=0`、`--kvm` で `USE_KVM=1`（既定 `0`）。
 
 > **`--vm`（VM モード。実装済み・要イメージ再ビルド反映。正本: [80_vm-mode.md](80_vm-mode.md) / [docs/08_vm-mode.md](../08_vm-mode.md)）**: `--kvm` を含意し、`CLAUDE_DEV_VM=1` とゲスト qcow2 キャッシュ用ボリューム・アプリポート（`VM_PORTS`）をコンテナへ渡す。コンテナ内でゲスト VM（QEMU+virtiofs）を起動し、その中のネイティブ Docker を `DOCKER_HOST` 経由で使う。`/dev/kvm` がホストに無ければ警告して中止。VM 制御用の `vm` ヘルパー（`status`〔health 表示含む〕/`shell`/`restart`/`down`/`rebuild`/`portsync`/`logs`）はコンテナ内コマンドとして提供する。**`--vm-fresh`**（`--vm` 含意）はコンテナ作成前にゲスト用ボリューム `claude-dev-vm-<name>` を破棄して再 provision する（稼働中コンテナには効かず、`stop` 後に実行するか稼働中は `vm rebuild` を使う）。
 
