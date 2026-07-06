@@ -61,14 +61,27 @@ CHOME="/home/${CUSER}"
 # ヘルパー関数
 # =============================================================================
 
-# --- ユーザー設定ファイル / SSH（方式D: 専用 agent＋socat TCP ブリッジ）---
+# --- 設定/作業ディレクトリ / SSH（方式D: 専用 agent＋socat TCP ブリッジ）---
 # 設計 docs/09_macos-support.md §1 / 実装仕様 docs/impl/11_cli-mac.md D1
-USER_CONFIG="${HOME}/.config/claude-dev.yaml"
 DEV_DIR="${HOME}/.claude-dev"
-DEV_AGENT_SOCK="${DEV_DIR}/ssh-agent.sock"
-DEV_AGENT_PID_FILE="${DEV_DIR}/ssh-agent.pid"
-DEV_BRIDGE_PID_FILE="${DEV_DIR}/ssh-bridge.pid"
-DEV_BRIDGE_PORT_FILE="${DEV_DIR}/ssh-bridge.port"
+DEV_AGENT_DIR="${DEV_DIR}/agents"               # プロジェクト専用 agent/ブリッジのソケット・PID 置き場（<name>.sock/.pid/.bridge.pid/.bridge.port）
+PROJECT_CONFIG_NAME=".claude-dev.yaml"          # プロジェクト直下の設定ファイル名（このプロジェクトで使う SSH 鍵）
+# 後方互換: 旧・単一 agent/ブリッジのファイル（reset で掃除する）
+LEGACY_AGENT_SOCK="${DEV_DIR}/ssh-agent.sock"
+LEGACY_AGENT_PID_FILE="${DEV_DIR}/ssh-agent.pid"
+LEGACY_BRIDGE_PID_FILE="${DEV_DIR}/ssh-bridge.pid"
+LEGACY_BRIDGE_PORT_FILE="${DEV_DIR}/ssh-bridge.port"
+
+# プロジェクト（name）ごとの agent/ブリッジのファイルパスを stdout に返す
+# 用途: sock|pid|bpid|bport
+dev_agent_path() {
+    case "$2" in
+        sock)  echo "${DEV_AGENT_DIR}/$1.sock" ;;
+        pid)   echo "${DEV_AGENT_DIR}/$1.pid" ;;
+        bpid)  echo "${DEV_AGENT_DIR}/$1.bridge.pid" ;;
+        bport) echo "${DEV_AGENT_DIR}/$1.bridge.port" ;;
+    esac
+}
 
 # ~/.ssh/id_*（.pub 除く）を DISCOVERED_KEYS に列挙
 discover_ssh_keys() {
@@ -80,15 +93,10 @@ discover_ssh_keys() {
     done
 }
 
-# config に ssh_keys セクションがあるか（=選択済み）
-config_has_ssh_selection() {
-    [ -f "$USER_CONFIG" ] && grep -qE '^ssh_keys:' "$USER_CONFIG"
-}
-
-# config の ssh_keys を SSH_KEY_LIST に読み込む（自動生成はしない）
-load_config_ssh_keys() {
-    SSH_KEY_LIST=()
-    [ -f "$USER_CONFIG" ] || return 0
+# 指定 YAML の ssh_keys: を SSH_KEY_LIST に読み込む（追記。~→$HOME 展開・コメント除去）
+_parse_ssh_keys_yaml() {
+    local config="$1"
+    [ -f "$config" ] || return 0
     local line val in_section=0
     while IFS= read -r line; do
         case "$line" in \#*|"") continue ;; esac
@@ -100,34 +108,46 @@ load_config_ssh_keys() {
             val="${val/#\~/$HOME}"
             [ -n "$val" ] && SSH_KEY_LIST+=("$val")
         fi
-    done < "$USER_CONFIG"
+    done < "$config"
 }
 
-# 選択鍵を config に書き出す（引数=鍵パス群。claude-dev が所有するファイル）
-write_config_ssh_keys() {
-    mkdir -p "$(dirname "$USER_CONFIG")"
+# 使う鍵を <project_dir>/.claude-dev.yaml の ssh_keys からのみ解決して
+# SSH_KEY_LIST / SSH_CONFIG_SOURCE を設定する（グローバル config へのフォールバックや
+# 対話選択・自動生成はしない＝ローカル設定だけを見る）。
+resolve_ssh_keys_for_start() {
+    local project_dir="$1"
+    local project_config="${project_dir}/${PROJECT_CONFIG_NAME}"
+    SSH_KEY_LIST=()
+    SSH_CONFIG_SOURCE="$project_config"
+    _parse_ssh_keys_yaml "$project_config"
+}
+
+# 選択鍵をプロジェクト直下の .claude-dev.yaml に書き出す（引数=ファイルパス, 鍵パス群）
+write_project_ssh_keys() {
+    local file="$1"; shift
     {
-        echo "# claude-dev 設定ファイル（このファイルは claude-dev が管理します）"
-        echo "# ssh_keys: コンテナへ転送する SSH 鍵。再選択は 'claude-dev ssh-keys'、初期化は 'claude-dev ssh-keys reset'"
+        echo "# claude-dev プロジェクト設定（このプロジェクトで使う SSH 鍵。claude-dev が管理します）"
+        echo "# 再選択は 'claude-dev ssh-keys'、初期化は 'claude-dev ssh-keys reset'"
         echo "ssh_keys:"
         local k
         for k in "$@"; do echo "  - $k"; done
-    } > "$USER_CONFIG"
+    } > "$file"
 }
 
-# ~/.ssh の鍵を対話選択し config に保存。結果を SSH_KEY_LIST にも反映
+# ~/.ssh の鍵を対話選択し、カレントプロジェクトの .claude-dev.yaml に保存。SSH_KEY_LIST にも反映
 select_ssh_keys_interactive() {
+    local file="$(pwd)/${PROJECT_CONFIG_NAME}"
     discover_ssh_keys
     if [ ${#DISCOVERED_KEYS[@]} -eq 0 ]; then
         echo "⚠️  ~/.ssh に鍵ファイル（id_*）が見つかりません。SSH 転送なしで続行します。"
-        write_config_ssh_keys
+        write_project_ssh_keys "$file"
         SSH_KEY_LIST=()
         return 0
     fi
     echo "利用可能な SSH 鍵:"
     local i=1 k
     for k in "${DISCOVERED_KEYS[@]}"; do echo "  $i) $k"; i=$((i + 1)); done
-    printf "コンテナで使う鍵を選択 (番号をカンマ/空白区切り, a=全部, n=なし): "
+    printf "このプロジェクトで使う鍵を選択 (番号をカンマ/空白区切り, a=全部, n=なし): "
     local ans=""; read -r ans || ans=""
     local chosen=() tok
     case "$ans" in
@@ -142,29 +162,46 @@ select_ssh_keys_interactive() {
             done
             ;;
     esac
-    write_config_ssh_keys "${chosen[@]}"
-    echo "✅ SSH 鍵の選択を保存しました: $USER_CONFIG（${#chosen[@]} 件）"
+    write_project_ssh_keys "$file" "${chosen[@]}"
+    echo "✅ SSH 鍵の選択を保存しました: $file（${#chosen[@]} 件）"
     SSH_KEY_LIST=("${chosen[@]}")
 }
 
-# 専用 ssh-agent（~/.claude-dev/ssh-agent.sock）を起動し、選択鍵を ssh-add する
-# SSH_KEY_LIST を事前に用意しておくこと。成功で 0。
+# プロジェクト専用 ssh-agent（~/.claude-dev/agents/<name>.sock）を起動/再利用し、
+# SSH_KEY_LIST の鍵だけを ssh-add する。引数: <name>。成功で 0。
 ensure_dedicated_agent() {
-    mkdir -p "$DEV_DIR"
+    local name="${1:-default}"
+    local sock pidfile
+    sock=$(dev_agent_path "$name" sock)
+    pidfile=$(dev_agent_path "$name" pid)
+    mkdir -p "$DEV_AGENT_DIR"
+    chmod 700 "$DEV_DIR" "$DEV_AGENT_DIR" 2>/dev/null || true
     local rc=0
-    SSH_AUTH_SOCK="$DEV_AGENT_SOCK" ssh-add -l >/dev/null 2>&1 || rc=$?
-    if [ "$rc" -eq 2 ] || [ ! -S "$DEV_AGENT_SOCK" ]; then
-        rm -f "$DEV_AGENT_SOCK"
+    SSH_AUTH_SOCK="$sock" ssh-add -l >/dev/null 2>&1 || rc=$?
+    if [ "$rc" -eq 2 ] || [ ! -S "$sock" ]; then
+        rm -f "$sock"
         local out
-        out=$(ssh-agent -a "$DEV_AGENT_SOCK" 2>/dev/null) || {
+        out=$(ssh-agent -a "$sock" 2>/dev/null) || {
             echo "⚠️  専用 ssh-agent の起動に失敗しました"; return 1; }
-        echo "$out" | sed -n 's/.*SSH_AGENT_PID=\([0-9][0-9]*\).*/\1/p' | head -1 > "$DEV_AGENT_PID_FILE"
+        echo "$out" | sed -n 's/.*SSH_AGENT_PID=\([0-9][0-9]*\).*/\1/p' | head -1 > "$pidfile"
+        echo "🔑 プロジェクト専用 ssh-agent を起動しました（$name）"
     fi
-    # 選択鍵を追加（重複 add は無害。パスフレーズ付きは対話で一度だけ）
-    local key need_pp=()
+    # 既登録鍵の指紋（パスフレーズ再入力を避けるため突き合わせる）
+    local loaded_fps
+    loaded_fps="$(SSH_AUTH_SOCK="$sock" ssh-add -l 2>/dev/null | awk '{print $2}')"
+    # 存在チェック → 既登録スキップ → パスフレーズなし一括 → 残りを対話追加
+    local key keys=() need_pp=()
     for key in "${SSH_KEY_LIST[@]}"; do
         [ -f "$key" ] || { echo "⚠️  ${key}: 見つかりません（スキップ）"; continue; }
-        if SSH_AUTH_SOCK="$DEV_AGENT_SOCK" SSH_ASKPASS=/bin/false SSH_ASKPASS_REQUIRE=force ssh-add "$key" 2>/dev/null; then
+        local fp
+        fp="$(ssh-keygen -lf "$key" 2>/dev/null | awk '{print $2}')"
+        if [ -n "$fp" ] && printf '%s\n' "$loaded_fps" | grep -qxF "$fp"; then
+            continue   # 既に登録済み
+        fi
+        keys+=("$key")
+    done
+    for key in "${keys[@]}"; do
+        if SSH_AUTH_SOCK="$sock" SSH_ASKPASS=/bin/false SSH_ASKPASS_REQUIRE=force ssh-add "$key" 2>/dev/null; then
             :
         else
             need_pp+=("$key")
@@ -173,7 +210,7 @@ ensure_dedicated_agent() {
     if [ ${#need_pp[@]} -gt 0 ]; then
         echo "🔑 パスフレーズ付きの鍵を専用 agent に追加します（初回のみ入力）:"
         for key in "${need_pp[@]}"; do
-            SSH_AUTH_SOCK="$DEV_AGENT_SOCK" ssh-add "$key" || echo "⚠️  ${key}: 追加できませんでした（スキップ）"
+            SSH_AUTH_SOCK="$sock" ssh-add "$key" || echo "⚠️  ${key}: 追加できませんでした（スキップ）"
         done
     fi
     return 0
@@ -188,38 +225,46 @@ find_free_local_port() {
     echo 9700
 }
 
-# 専用 agent への host socat ブリッジを起動し、使用中ポートを標準出力に返す
-# socat が無い/起動失敗なら非0を返す（呼び出し側は SSH 転送をスキップ）
+# プロジェクト専用 agent への host socat ブリッジを起動し、使用中ポートを標準出力に返す
+# 引数: <name>。socat が無い/起動失敗なら非0を返す（呼び出し側は SSH 転送をスキップ）
 ensure_ssh_bridge() {
+    local name="${1:-default}"
+    local sock bpid bport
+    sock=$(dev_agent_path "$name" sock)
+    bpid=$(dev_agent_path "$name" bpid)
+    bport=$(dev_agent_path "$name" bport)
     if ! command -v socat >/dev/null 2>&1; then
         echo "⚠️  socat が見つかりません。SSH agent 転送には socat が必要です。" >&2
         echo "    👉 導入してください:  brew install socat" >&2
         echo "    （導入後に 'claude-dev start' を再実行してください。今回は SSH agent 転送なしで続行します）" >&2
         return 1
     fi
-    mkdir -p "$DEV_DIR"
-    # 既存ブリッジが生きていればその port を再利用
-    if [ -f "$DEV_BRIDGE_PID_FILE" ] && [ -f "$DEV_BRIDGE_PORT_FILE" ] \
-       && kill -0 "$(cat "$DEV_BRIDGE_PID_FILE" 2>/dev/null)" 2>/dev/null; then
-        cat "$DEV_BRIDGE_PORT_FILE"
+    mkdir -p "$DEV_AGENT_DIR"
+    # 既存ブリッジ（このプロジェクト用）が生きていればその port を再利用
+    if [ -f "$bpid" ] && [ -f "$bport" ] \
+       && kill -0 "$(cat "$bpid" 2>/dev/null)" 2>/dev/null; then
+        cat "$bport"
         return 0
     fi
     local port="${CLAUDE_DEV_SSH_BRIDGE_PORT:-}"
     [ -n "$port" ] || port=$(find_free_local_port)
-    nohup socat "TCP-LISTEN:${port},bind=127.0.0.1,fork,reuseaddr" "UNIX-CONNECT:${DEV_AGENT_SOCK}" >/dev/null 2>&1 &
-    echo $! > "$DEV_BRIDGE_PID_FILE"
-    echo "$port" > "$DEV_BRIDGE_PORT_FILE"
+    nohup socat "TCP-LISTEN:${port},bind=127.0.0.1,fork,reuseaddr" "UNIX-CONNECT:${sock}" >/dev/null 2>&1 &
+    echo $! > "$bpid"
+    echo "$port" > "$bport"
     echo "$port"
 }
 
-# 稼働中 claude コンテナが 0 ならブリッジ socat を停止（専用 agent は残す）
-stop_ssh_bridge_if_idle() {
-    local count
-    count=$(docker ps --filter "ancestor=$IMG_CLAUDE" --filter "ancestor=$IMG_CLAUDE_VNC" -q 2>/dev/null | wc -l)
-    if [ "$count" -eq 0 ] && [ -f "$DEV_BRIDGE_PID_FILE" ]; then
-        kill "$(cat "$DEV_BRIDGE_PID_FILE" 2>/dev/null)" 2>/dev/null || true
-        rm -f "$DEV_BRIDGE_PID_FILE" "$DEV_BRIDGE_PORT_FILE"
-        echo "🔌 SSH ブリッジを停止しました（Claude コンテナなし）"
+# 指定プロジェクトのブリッジ socat を停止（専用 agent は残す＝鍵保持・TCP 露出なし）
+# 引数: <name>
+stop_ssh_bridge() {
+    local name="${1:-default}"
+    local bpid bport
+    bpid=$(dev_agent_path "$name" bpid)
+    bport=$(dev_agent_path "$name" bport)
+    if [ -f "$bpid" ]; then
+        kill "$(cat "$bpid" 2>/dev/null)" 2>/dev/null || true
+        rm -f "$bpid" "$bport"
+        echo "🔌 SSH ブリッジを停止しました（$name）"
     fi
 }
 
@@ -700,24 +745,22 @@ start)
     # macOS の Unix ソケットはコンテナへ直接マウントできず、Docker Desktop 魔法ソケットは
     # 利用者の鍵がある agent を転送しないため、専用 agent を鍵ファイルから構築して転送する。
     SSH_OPTS=""
-    # 鍵の選択（未選択なら対話選択して config 保存。以後は config を使う）
-    if config_has_ssh_selection; then
-        load_config_ssh_keys
-    else
-        select_ssh_keys_interactive
-    fi
+    # 鍵の解決（ディレクトリ単位）: <PROJECT_DIR>/.claude-dev.yaml の ssh_keys のみを見る
+    # （グローバルへのフォールバック・対話選択・自動生成はしない。無ければ 0 件＝SSH 転送なし）
+    resolve_ssh_keys_for_start "$PROJECT_DIR"
     _valid_keys=0
     for _k in "${SSH_KEY_LIST[@]}"; do [ -f "$_k" ] && _valid_keys=1; done
     if [ "$_valid_keys" = "1" ]; then
-        if ensure_dedicated_agent; then
-            _sshport=$(ensure_ssh_bridge) || _sshport=""
+        # プロジェクト（= NAME＝ディレクトリ）ごとに専用 agent + ブリッジを使い、鍵を隔離する
+        if ensure_dedicated_agent "$NAME"; then
+            _sshport=$(ensure_ssh_bridge "$NAME") || _sshport=""
             if [ -n "$_sshport" ]; then
                 SSH_OPTS="-e CLAUDE_DEV_SSH_BRIDGE_PORT=${_sshport}"
-                echo "🔑 SSH agent 転送: 127.0.0.1:${_sshport}（専用 agent、選択鍵 ${#SSH_KEY_LIST[@]} 件）"
+                echo "🔑 SSH agent 転送: 127.0.0.1:${_sshport}（専用 agent [$NAME]、鍵 ${#SSH_KEY_LIST[@]} 件 / ${SSH_CONFIG_SOURCE}）"
             fi
         fi
     else
-        echo "ℹ️  SSH 鍵が未選択のため SSH agent 転送なしで起動します（'claude-dev ssh-keys' で選択）"
+        echo "ℹ️  SSH 鍵が未選択のため SSH agent 転送なしで起動します（'claude-dev ssh-keys' で選択、またはプロジェクト直下に ${PROJECT_CONFIG_NAME} を作成）"
     fi
     # ~/.ssh/known_hosts（読み取り専用、秘密情報なし）
     if [ -f "${HOME}/.ssh/known_hosts" ]; then
@@ -880,39 +923,44 @@ stop)
         echo "ℹ️  ${NAME} は存在しません"
     fi
 
-    # Claude コンテナが残っていなければ Docker Proxy と SSH ブリッジも停止
+    # このプロジェクトの SSH ブリッジを停止（専用 agent は鍵保持のため残す）
+    stop_ssh_bridge "$NAME"
+    # Claude コンテナが残っていなければ Docker Proxy も停止
     stop_proxy_if_idle
-    stop_ssh_bridge_if_idle
     ;;
 
 # -----------------------------------------------------------------------------
-# SSH 鍵の選択（対話）/ 初期化
-#   claude-dev ssh-keys          コンテナへ転送する鍵を対話選択して config に保存
-#   claude-dev ssh-keys reset    選択を初期化（config 消去＋専用 agent フラッシュ/停止）
+# SSH 鍵の選択（対話）/ 初期化（対象はカレントプロジェクト）
+#   claude-dev ssh-keys          鍵を対話選択して ./.claude-dev.yaml に保存
+#   claude-dev ssh-keys reset    このプロジェクトの選択を初期化（./.claude-dev.yaml の ssh_keys 除去＋専用 agent/ブリッジ停止）
 # -----------------------------------------------------------------------------
 ssh-keys)
     case "${2:-}" in
         reset)
-            # config の ssh_keys セクションを除去
-            if [ -f "$USER_CONFIG" ]; then
+            # カレントプロジェクトの .claude-dev.yaml から ssh_keys セクションを除去
+            # （他の記述は残す。ssh_keys だけになれば空になるのでファイルごと削除）
+            NAME=$(container_name)
+            _proj_config="$(pwd)/${PROJECT_CONFIG_NAME}"
+            if [ -f "$_proj_config" ]; then
                 _tmp=$(mktemp)
-                grep -vE '^ssh_keys:|^[[:space:]]*-[[:space:]]' "$USER_CONFIG" > "$_tmp" 2>/dev/null || true
-                mv "$_tmp" "$USER_CONFIG"
+                grep -vE '^ssh_keys:|^[[:space:]]*-[[:space:]]|^# claude-dev プロジェクト設定|^# 再選択は' "$_proj_config" > "$_tmp" 2>/dev/null || true
+                if grep -qE '[^[:space:]]' "$_tmp" 2>/dev/null; then mv "$_tmp" "$_proj_config"; else rm -f "$_tmp" "$_proj_config"; fi
             fi
-            # 専用 agent の鍵をフラッシュして停止、ブリッジも停止
-            if [ -S "$DEV_AGENT_SOCK" ]; then
-                SSH_AUTH_SOCK="$DEV_AGENT_SOCK" ssh-add -D 2>/dev/null || true
-            fi
-            if [ -f "$DEV_BRIDGE_PID_FILE" ]; then
-                kill "$(cat "$DEV_BRIDGE_PID_FILE" 2>/dev/null)" 2>/dev/null || true
-                rm -f "$DEV_BRIDGE_PID_FILE" "$DEV_BRIDGE_PORT_FILE"
-            fi
-            if [ -f "$DEV_AGENT_PID_FILE" ]; then
-                kill "$(cat "$DEV_AGENT_PID_FILE" 2>/dev/null)" 2>/dev/null || true
-                rm -f "$DEV_AGENT_PID_FILE"
-            fi
-            rm -f "$DEV_AGENT_SOCK"
-            echo "✅ SSH 鍵の選択をリセットしました。次回 claude-dev start で再選択します"
+            # このプロジェクトの専用 agent／ブリッジを停止・削除
+            for _kind in bpid pid; do
+                _f=$(dev_agent_path "$NAME" "$_kind")
+                [ -f "$_f" ] && kill "$(cat "$_f" 2>/dev/null)" 2>/dev/null || true
+            done
+            rm -f "$(dev_agent_path "$NAME" sock)" "$(dev_agent_path "$NAME" pid)" \
+                  "$(dev_agent_path "$NAME" bpid)" "$(dev_agent_path "$NAME" bport)" 2>/dev/null || true
+            # 後方互換: 旧・単一 agent／ブリッジ（グローバル方式時代）の残骸も掃除
+            [ -S "$LEGACY_AGENT_SOCK" ] && SSH_AUTH_SOCK="$LEGACY_AGENT_SOCK" ssh-add -D 2>/dev/null || true
+            for _f in "$LEGACY_BRIDGE_PID_FILE" "$LEGACY_AGENT_PID_FILE"; do
+                [ -f "$_f" ] && kill "$(cat "$_f" 2>/dev/null)" 2>/dev/null || true
+            done
+            rm -f "$LEGACY_BRIDGE_PID_FILE" "$LEGACY_BRIDGE_PORT_FILE" \
+                  "$LEGACY_AGENT_PID_FILE" "$LEGACY_AGENT_SOCK" 2>/dev/null || true
+            echo "✅ このプロジェクト（${NAME}）の SSH 鍵選択をリセットしました。次回 claude-dev start で再選択（または .claude-dev.yaml を作成）してください"
             ;;
         ""|select)
             select_ssh_keys_interactive

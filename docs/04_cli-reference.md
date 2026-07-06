@@ -11,7 +11,7 @@ keywords: [ CLI, コマンドリファレンス, claude-dev, orchestrate, ポー
 
 操作は **Makefile**（セットアップ・ビルド・管理）と **claude-dev CLI**（日常の開発操作）の 2 系統で提供される。
 
-> **macOS について**: macOS では CLI 本体は `claude-dev-mac`（`make install` が `claude-dev` として配置）を使う。コマンド名・サブコマンド体系は本リファレンスと同一。差分は VM/KVM 非対応（`--vm`/`--kvm` はエラー）と、`forward`/`ports`/`list` の案内が SSH トンネルではなく `http://localhost:<host-port>` 直結になる点のみ。詳細は [docs/09_macos-support.md](09_macos-support.md)。
+> **macOS について**: macOS では CLI 本体は `claude-dev-mac`（`make install` が `claude-dev` として配置）を使う。コマンド名・サブコマンド体系は本リファレンスと同一。主な差分は、(1) VM/KVM 非対応（`--vm`/`--kvm` はエラー）、(2) `forward`/`ports`/`list` の案内が SSH トンネルではなく `http://localhost:<host-port>` 直結、(3) SSH agent 転送方式が socat TCP ブリッジ（Linux は専用 agent ソケットの直 bind mount）、(4) mac 固有の `claude-dev ssh-keys`（`~/.ssh` の鍵を対話選択してカレントプロジェクトの `.claude-dev.yaml` に保存／`reset` で初期化）を持つ点。詳細は [docs/09_macos-support.md](09_macos-support.md)。
 
 ### Makefile ターゲット一覧
 
@@ -112,7 +112,7 @@ claude-dev start --vm-fresh # VM モード＋ゲストを白紙 provision やり
 - イメージが存在しなければ自動ビルド
 - 共有ボリュームに認証情報があれば `/workspace/.claude/` にコピーする（無い場合もコンテナは起動する。未ログインなら起動後の `claude` でログインを求められる）
 - Web アプリのポートマッピングは行わない（`claude-dev forward` で必要なときに動的にフォワード）
-- ssh-agent が未起動なら自動起動し、鍵が未登録なら `ssh-add` を実行（`~/.config/claude-dev.yaml` から鍵リストを読み込み）
+- プロジェクトごとに専用 ssh-agent を起動し、使う鍵を登録する。鍵リストは `<プロジェクト>/.claude-dev.yaml` の `ssh_keys` **のみ**を見る（グローバル設定へのフォールバックなし。未指定なら SSH 転送なし）。ディレクトリ単位で鍵を切り替えられる
 - `~/.gitconfig` があればコンテナに共有（読み取り専用）
 - SSH agent ソケット・`~/.ssh/known_hosts`・`~/.ssh/config` をコンテナに共有（読み取り専用。秘密鍵はマウントしない）
 - Docker Socket Proxy コンテナ（`claude-dev-docker-proxy`）が未起動なら自動起動する

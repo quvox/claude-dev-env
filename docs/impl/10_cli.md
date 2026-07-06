@@ -43,14 +43,15 @@ claude-dev      （単一の bash スクリプト）
 | `VOL_AUTH` / `VOL_HISTORY` / `VOL_CONFIG` / `VOL_CHROME` | `claude-dev-auth` / `-history` / `-config` / `-chrome-data` | ボリューム名 |
 | `IMG_CLAUDE` / `IMG_CLAUDE_VNC` / `IMG_DOCKER_PROXY` | `claude-dev-claude` / `-vnc` / `-docker-proxy` | イメージ名 |
 | `DOCKER_PROXY_CONTAINER` | `claude-dev-docker-proxy` | プロキシコンテナ名 |
-| `USER_CONFIG` | `${HOME}/.config/claude-dev.yaml` | ユーザー設定（SSH 鍵リスト） |
+| `DEV_DIR` / `DEV_AGENT_DIR` | `${HOME}/.claude-dev` / `${HOME}/.claude-dev/agents` | プロジェクト専用 ssh-agent の作業ディレクトリとソケット/PID 置き場（`<name>.sock` / `<name>.pid`、`<name>` = `container_name`） |
+| `PROJECT_CONFIG_NAME` | `.claude-dev.yaml` | **このプロジェクトで使う SSH 鍵**を定義する、プロジェクト直下（`<PROJECT_DIR>/.claude-dev.yaml`）の設定ファイル名。SSH 鍵は**このファイルの `ssh_keys:` のみ**を見る（グローバル設定へのフォールバック・自動生成はしない） |
 
 ## ヘルパー関数
 
 | 関数 | 責務 |
 |------|------|
-| `load_ssh_keys_from_config` | `~/.config/claude-dev.yaml` から `ssh_keys:` リストを読み取り `SSH_KEY_LIST` 配列へ格納。設定ファイルがなければ `~/.ssh/id_*`（`.pub` 除く）を列挙して雛形を自動生成する。YAML は簡易パース（`ssh_keys:` 開始 → リストアイテム `- path` を読み、`~` を `$HOME` 展開、コメント除去）。 |
-| `ensure_ssh_agent` | ssh-agent が未起動なら起動。鍵が未登録なら `load_ssh_keys_from_config` の鍵を、まずパスフレーズなし（`SSH_ASKPASS=/bin/false`）で一括 `ssh-add`、失敗分のみ対話的に追加。存在しない鍵は警告してスキップ。 |
+| `load_ssh_keys_from_config <project_dir>` | 使う鍵リストを **`<project_dir>/.claude-dev.yaml` の `ssh_keys:` からのみ**読み込み `SSH_KEY_LIST` 配列へ格納する。グローバル設定（`~/.config/claude-dev.yaml`）へのフォールバックや雛形自動生成は**行わない**（ローカル設定だけを見る）。採用元（＝そのプロジェクトの `.claude-dev.yaml` パス）は `SSH_CONFIG_SOURCE` に記録。YAML は簡易パース（`ssh_keys:` 開始 → リストアイテム `- path` を読み、`~` を `$HOME` 展開、コメント除去）。 |
+| `ensure_ssh_agent <project_dir> <name>` | `load_ssh_keys_from_config` で鍵を解決し、**プロジェクト専用 ssh-agent**（`${DEV_AGENT_DIR}/<name>.sock`）を起動/再利用して**解決した鍵だけ**を登録する。ホストの環境 agent（`$SSH_AUTH_SOCK`）は使わない（ディレクトリごとに見える鍵を隔離するため）。登録前に `ssh-add -l` の指紋と各鍵の指紋（`ssh-keygen -lf`、パスフレーズ不要）を突き合わせ、**既に登録済みの鍵はスキップ**（パスフレーズ再入力回避）。未登録分はまずパスフレーズなし（`SSH_ASKPASS=/bin/false SSH_ASKPASS_REQUIRE=force`）で一括 `ssh-add`、失敗分のみ対話追加。存在しない鍵は警告してスキップ。最後に転送用の `SSH_AUTH_SOCK` を専用ソケットへ固定する。鍵が 0 件（`.claude-dev.yaml` が無い/`ssh_keys:` が空）なら `SSH_AUTH_SOCK` を空にして SSH 転送せず、`.claude-dev.yaml` に `ssh_keys:` を記述するよう案内する。 |
 | `project_name` | カレントディレクトリ名を小文字化し `[^a-z0-9._-]` を `-` へ置換した文字列を返す。 |
 | `container_name` | `project_name` と同値（コンテナ名 = ディレクトリ名）。 |
 | `image_exists <image>` | `docker image inspect` の成否。 |
@@ -101,7 +102,7 @@ GHCR のビルド済みイメージを取得してローカルビルドを省く
 8. **マウント/オプション組み立て**:
    - `GITCONFIG_OPT`: `~/.gitconfig` があれば RO マウント
    - `DOCKER_OPTS`: ソケットがあれば `ensure_docker_proxy_container` 後 `DOCKER_HOST=tcp://<proxy>:2375`
-   - `SSH_OPTS`: `ensure_ssh_agent` 後、agent ソケットを `/tmp/ssh-agent.sock`（RO）転送 + `SSH_AUTH_SOCK` 設定。`known_hosts` を RO マウント。`~/.ssh/config` は `IdentityFile`/`IdentitiesOnly`/`IdentityAgent` 行を `sed` で除去した一時ファイルを RO マウント（`IdentityAgent` はホスト固有 agent パスがコンテナ内で `SSH_AUTH_SOCK` を上書きするのを防ぐため。ホストの config 実体は不変）
+   - `SSH_OPTS`: `ensure_ssh_agent`（引数 `PROJECT_DIR` / `NAME`）が用意した**プロジェクト専用 agent** のソケットを `/tmp/ssh-agent.sock`（RO）転送 + `SSH_AUTH_SOCK` 設定（鍵 0 件で `SSH_AUTH_SOCK` が空なら転送しない）。`known_hosts` を RO マウント。`~/.ssh/config` は `IdentityFile`/`IdentitiesOnly`/`IdentityAgent` 行を `sed` で除去した一時ファイルを RO マウント（`IdentityAgent` はホスト固有 agent パスがコンテナ内で `SSH_AUTH_SOCK` を上書きするのを防ぐため。ホストの config 実体は不変）
    - `NOVNC_PORT_OPT`（VNC 時のみ）: 空き noVNC ポートを `find_available_novnc_port` で確保し `-p <port>:6080` + `VOL_CHROME` を `~/.chrome-profile` にマウント
    - `KVM_OPTS`: **`--kvm` 指定時のみ**、ホストに存在する `/dev/kvm` `/dev/vhost-net` `/dev/net/tun` を `--device` で渡す（既定では渡さない。通常は Chrome 操作のみで十分なため、KVM/QEMU が必要なときだけ明示的に有効化する）。デバイス受け渡しはコンテナ作成時にのみ行われるため、稼働中コンテナへ後付けはできず、`stop` → `start --kvm` で再作成する
 9. **コンテナ起動**: 起動直前に **使用イメージ名とバージョン**（`image_version "$RUN_IMAGE"`）を表示する。VM モード（`USE_VM=1`）のときは `docker run` の前に「VM モードで起動する／通常より時間がかかる（初回は cloud image 取得＋provision で数分）」旨を表示する。`docker run -d` で `--cap-add NET_ADMIN`・`NET_RAW`（FW 用）、`--restart unless-stopped`、`/workspace` マウント、各ボリューム、`tmux.conf`/`CLAUDE.md` を RO マウント、上記オプション群、`NODE_OPTIONS=--max-old-space-size=4096`、`-t` を付与。

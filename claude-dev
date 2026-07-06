@@ -48,133 +48,116 @@ CHOME="/home/${CUSER}"
 # ヘルパー関数
 # =============================================================================
 
-# --- ユーザー設定ファイル ---
-USER_CONFIG="${HOME}/.config/claude-dev.yaml"
+# --- 設定/作業ディレクトリ ---
+DEV_DIR="${HOME}/.claude-dev"
+DEV_AGENT_DIR="${DEV_DIR}/agents"               # プロジェクト専用 ssh-agent のソケット/PID 置き場
+PROJECT_CONFIG_NAME=".claude-dev.yaml"          # プロジェクト直下の設定ファイル名（このプロジェクトで使う SSH 鍵）
 
-# ~/.config/claude-dev.yaml から ssh_keys のリストを読み取る
-# YAML が存在しなければ ~/.ssh/ の鍵ファイルを列挙して自動生成する
-load_ssh_keys_from_config() {
-    local config="$USER_CONFIG"
-
-    # 設定ファイルがなければ自動生成
-    if [ ! -f "$config" ]; then
-        local found_keys=()
-        for f in ~/.ssh/id_*; do
-            case "$f" in *.pub) continue ;; esac
-            [ -f "$f" ] && found_keys+=("$f")
-        done
-
-        mkdir -p "$(dirname "$config")"
-        {
-            echo "# claude-dev 設定ファイル"
-            echo "# ssh-agent に登録する SSH 鍵を指定してください"
-            echo "# 不要な鍵はコメントアウトまたは削除してください"
-            echo "ssh_keys:"
-            if [ ${#found_keys[@]} -eq 0 ]; then
-                echo "  # 鍵が見つかりませんでした。以下の形式で追加してください:"
-                echo '  # - ~/.ssh/id_ed25519'
-            else
-                for k in "${found_keys[@]}"; do
-                    echo "  - $k"
-                done
-            fi
-        } > "$config"
-        echo "📝 設定ファイルを作成しました: $config"
-    fi
-
-    # ssh_keys セクションからパスを読み取る
-    SSH_KEY_LIST=()
-    local in_section=0
+# 指定した YAML ファイルの ssh_keys: セクションを SSH_KEY_LIST に読み込む（追記）
+# 簡易パース: `ssh_keys:` 開始 → `- path` を読み、`~` を $HOME 展開・コメント除去
+_parse_ssh_keys_yaml() {
+    local config="$1"
+    [ -f "$config" ] || return 0
+    local line in_section=0
     while IFS= read -r line; do
-        # コメント行・空行をスキップ
-        case "$line" in
-            \#*|"") continue ;;
-        esac
-        # ssh_keys: セクション開始
-        if [[ "$line" =~ ^ssh_keys: ]]; then
-            in_section=1
-            continue
-        fi
-        # 別のトップレベルキーに到達したら終了
-        if [[ $in_section -eq 1 && "$line" =~ ^[a-zA-Z_] ]]; then
-            break
-        fi
-        # リストアイテムを読み取る
+        case "$line" in \#*|"") continue ;; esac
+        if [[ "$line" =~ ^ssh_keys: ]]; then in_section=1; continue; fi
+        if [[ $in_section -eq 1 && "$line" =~ ^[a-zA-Z_] ]]; then break; fi
         if [[ $in_section -eq 1 && "$line" =~ ^[[:space:]]*-[[:space:]]+(.*) ]]; then
             local val="${BASH_REMATCH[1]}"
-            # コメント部分を除去
             val="${val%%#*}"
-            # 前後の空白を除去
             val="$(echo "$val" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
-            # ~ をホームディレクトリに展開
             val="${val/#\~/$HOME}"
             [ -n "$val" ] && SSH_KEY_LIST+=("$val")
         fi
     done < "$config"
 }
 
-# ssh-agent が動いていなければ起動し、鍵が未登録なら ssh-add する
+# 使う鍵リストを <project_dir>/.claude-dev.yaml の ssh_keys からのみ読み込む。
+# グローバル設定へのフォールバックや自動生成は行わない（ローカル設定だけを見る）。
+# 採用元は SSH_CONFIG_SOURCE に記録する。
+load_ssh_keys_from_config() {
+    local project_dir="${1:-$PWD}"
+    local project_config="${project_dir}/${PROJECT_CONFIG_NAME}"
+    SSH_KEY_LIST=()
+    SSH_CONFIG_SOURCE="$project_config"
+    _parse_ssh_keys_yaml "$project_config"
+}
+
+# プロジェクト専用 ssh-agent を起動/再利用し、解決した鍵だけを登録する。
+# ホストの環境 agent は使わない（ディレクトリごとに見える鍵を隔離するため）。
+# 引数: <project_dir> <name>。成功後 SSH_AUTH_SOCK を専用ソケットに固定する。
 ensure_ssh_agent() {
-    # agent が動いていなければ起動
-    if [ -z "${SSH_AUTH_SOCK:-}" ] || [ ! -S "${SSH_AUTH_SOCK:-}" ]; then
-        eval "$(ssh-agent -s)" >/dev/null
-        echo "🔑 ssh-agent を起動しました"
-    fi
+    local project_dir="${1:-$PWD}"
+    local name="${2:-default}"
 
-    # 鍵が既に登録されていれば何もしない
-    if ssh-add -l >/dev/null 2>&1; then
-        return 0
-    fi
-
-    # 設定ファイルから鍵リストを読み込む
-    load_ssh_keys_from_config
+    # 鍵リストを解決
+    load_ssh_keys_from_config "$project_dir"
 
     if [ ${#SSH_KEY_LIST[@]} -eq 0 ]; then
-        echo "⚠️  SSH 鍵が設定されていません。$USER_CONFIG を編集してください"
+        echo "ℹ️  SSH 鍵が未設定のため SSH 転送なしで起動します。使う鍵は ${SSH_CONFIG_SOURCE} に ssh_keys: で記述してください（例: '- ~/.ssh/id_ed25519'）"
+        SSH_AUTH_SOCK=""
         return 0
     fi
 
-    # 存在しない鍵を警告しつつ、有効な鍵だけ処理する
-    local keys=()
-    for key in "${SSH_KEY_LIST[@]}"; do
-        if [ -f "$key" ]; then
-            keys+=("$key")
-        else
-            echo "⚠️  ${key}: ファイルが見つかりません（スキップ）"
+    # プロジェクト専用 agent（ソケットは name ごと＝ディレクトリごと）
+    mkdir -p "$DEV_AGENT_DIR"
+    chmod 700 "$DEV_DIR" "$DEV_AGENT_DIR" 2>/dev/null || true
+    local sock="${DEV_AGENT_DIR}/${name}.sock"
+    local pidfile="${DEV_AGENT_DIR}/${name}.pid"
+
+    # 生きている agent が無ければ起動（ssh-add -l の rc=2 は「接続不可」）
+    local rc=0
+    SSH_AUTH_SOCK="$sock" ssh-add -l >/dev/null 2>&1 || rc=$?
+    if [ "$rc" -eq 2 ] || [ ! -S "$sock" ]; then
+        rm -f "$sock"
+        local out
+        if ! out=$(ssh-agent -a "$sock" 2>/dev/null); then
+            echo "⚠️  専用 ssh-agent の起動に失敗しました。SSH 転送なしで続行します"
+            SSH_AUTH_SOCK=""
+            return 0
         fi
+        echo "$out" | sed -n 's/.*SSH_AGENT_PID=\([0-9][0-9]*\).*/\1/p' | head -1 > "$pidfile"
+        echo "🔑 プロジェクト専用 ssh-agent を起動しました（$name）"
+    fi
+
+    # 既に登録済みの鍵の指紋（パスフレーズ再入力を避けるため突き合わせる）
+    local loaded_fps
+    loaded_fps="$(SSH_AUTH_SOCK="$sock" ssh-add -l 2>/dev/null | awk '{print $2}')"
+
+    # 存在チェック → 既登録スキップ → パスフレーズなし一括 → 残りを対話追加
+    local key keys=() need_passphrase=()
+    for key in "${SSH_KEY_LIST[@]}"; do
+        if [ ! -f "$key" ]; then
+            echo "⚠️  ${key}: ファイルが見つかりません（スキップ）"
+            continue
+        fi
+        local fp
+        fp="$(ssh-keygen -lf "$key" 2>/dev/null | awk '{print $2}')"
+        if [ -n "$fp" ] && printf '%s\n' "$loaded_fps" | grep -qxF "$fp"; then
+            continue   # 既に登録済み
+        fi
+        keys+=("$key")
     done
 
-    if [ ${#keys[@]} -eq 0 ]; then
-        echo "⚠️  有効な SSH 鍵がありません。$USER_CONFIG を確認してください"
-        return 0
-    fi
-
-    # まずパスフレーズなしの鍵を自動追加
-    local added=0
-    local need_passphrase=()
     for key in "${keys[@]}"; do
-        if SSH_ASKPASS=/bin/false SSH_ASKPASS_REQUIRE=force ssh-add "$key" 2>/dev/null; then
-            added=1
+        if SSH_AUTH_SOCK="$sock" SSH_ASKPASS=/bin/false SSH_ASKPASS_REQUIRE=force ssh-add "$key" 2>/dev/null; then
+            :
         else
             need_passphrase+=("$key")
         fi
     done
 
-    # パスフレーズ付きの鍵は対話的に追加を試みる
     if [ ${#need_passphrase[@]} -gt 0 ]; then
-        echo "🔑 パスフレーズ付きの SSH 鍵があります。パスフレーズを入力してください。"
+        echo "🔑 パスフレーズ付きの SSH 鍵を専用 agent に追加します（初回のみ入力）:"
         for key in "${need_passphrase[@]}"; do
-            if ssh-add "$key"; then
-                added=1
-            else
-                echo "⚠️  ${key}: 追加できませんでした（スキップ）"
-            fi
+            SSH_AUTH_SOCK="$sock" ssh-add "$key" || echo "⚠️  ${key}: 追加できませんでした（スキップ）"
         done
     fi
 
-    if [ "$added" -eq 0 ]; then
-        echo "⚠️  SSH 鍵を追加できませんでした。手動で ssh-add を実行してから再度 claude-dev start してください"
-    fi
+    echo "🔑 SSH 鍵: ${SSH_CONFIG_SOURCE} （${#SSH_KEY_LIST[@]} 件）"
+    # 以降の SSH_OPTS 組み立てが参照するソケットを専用 agent に固定
+    SSH_AUTH_SOCK="$sock"
 }
 
 # プロジェクト名（カレントディレクトリから導出）
@@ -642,7 +625,8 @@ start)
     fi
 
     # SSH agent 準備 & ソケット転送（秘密鍵ファイルはマウントしない）
-    ensure_ssh_agent
+    # プロジェクト（= NAME＝ディレクトリ）ごとに専用 agent を使い、使う鍵を切り替える
+    ensure_ssh_agent "$PROJECT_DIR" "$NAME"
     SSH_OPTS=""
     if [ -n "${SSH_AUTH_SOCK:-}" ] && [ -S "$SSH_AUTH_SOCK" ]; then
         SSH_OPTS="-v ${SSH_AUTH_SOCK}:/tmp/ssh-agent.sock:ro -e SSH_AUTH_SOCK=/tmp/ssh-agent.sock"
