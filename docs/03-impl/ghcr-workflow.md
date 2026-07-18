@@ -2,11 +2,11 @@
 id: ghcr-workflow
 layer: impl
 title: ghcr-workflow 実装説明書
-version: 1.0.0
+version: 1.1.0
 updated: 2026-07-18
 verified:
   at: 2026-07-18
-  version: 1.0.0
+  version: 1.1.0
   against:
     - doc: docs/02-design/system.md
       version: 1.0
@@ -73,14 +73,23 @@ source:
     - `context: .`、`file: matrix.image.dockerfile`、`target: matrix.image.target`、
       `platforms: matrix.platform.docker`（単一アーキ）。
     - `build-args`: `USERNAME=dev` / `USER_UID=1000` / `USER_GID=1000`（特定ユーザーに紐づけない
-      generic user。UID/GID は実行時に entrypoint が /workspace 所有者へ追従）、および
-      `IMAGE_VERSION=${{ needs.prepare.outputs.tag }}`（Dockerfile がバージョンラベルへ焼き込む）。
+      generic user。UID/GID は実行時に entrypoint が /workspace 所有者へ追従）。
       docker-proxy は `USERNAME` 系 ARG を宣言しないため無視（警告のみ）。
+      **`IMAGE_VERSION` は build-arg で渡さない**（後述のキャッシュ理由）。
+    - `labels`: `io.github.quvox.claude-dev.version` / `org.opencontainers.image.version` =
+      `${{ needs.prepare.outputs.tag }}`。**バージョン（日次で変わるタイムスタンプ）は build-arg=
+      `IMAGE_VERSION` として Dockerfile の `LABEL` 経由でレイヤーチェーンに載せない**。載せると
+      その層以降のレイヤーキャッシュが毎日失効し（`cache-from` が効かず）`docker pull` が毎回
+      全レイヤー再取得になるため。`labels` 入力は最終イメージの config メタデータとして export 時に
+      付与され、**レイヤーキャッシュ／レイヤーダイジェストに影響しない**（＝日次 pull が増分になる）。
+      Dockerfile 側の `ARG IMAGE_VERSION=local`＋`LABEL` は据え置き（CI では既定 `local` の定数となり
+      キャッシュを失効させない。ローカルビルドのバージョン表示に使う。pushed イメージは本 `labels` が上書き）。
     - `provenance: false`（余分な attestation manifest を作らず manifest list をクリーンに保つ）。
     - `outputs: type=image,name=${REGISTRY}/${owner}/claude-dev-${name},push-by-digest=true,name-canonical=true,push=true`
       （タグを付けずダイジェストで push）。
     - `cache-from`/`cache-to`: `type=gha,scope=${name}-${arch}`（`cache-to` は `mode=max`。
-      アーキ・イメージ別キャッシュ）。
+      アーキ・イメージ別キャッシュ）。上記のとおり、日次で変わる値をレイヤーチェーンに入れないことで
+      このキャッシュが実効化し、変更のない層は再ビルド／再 push／再 pull されない。
   - Export digest: `steps.build.outputs.digest` から `sha256:` を除いた名前で
     `${runner.temp}/digests/<digest>` に空ファイルを `touch`。
   - Upload digest: `actions/upload-artifact@v7`（name `digests-${name}-${arch}`、
@@ -167,5 +176,8 @@ source:
 - タグ時刻 `YYYYMMDDHHmm` は JST。`prepare` で 1 度だけ算出して全 merge ジョブへ配るため、
   イメージ間でタグがずれない。
 - private 公開の場合、pull 側は `docker login ghcr.io` が必要。
-- Dockerfile の base/vnc ステージや ARG（`IMAGE_VERSION` 等）を変更した際は、本ワークフローの
-  build-args / target 指定との整合を確認する（devcontainer モジュールと連動）。
+- Dockerfile の base/vnc ステージや ARG を変更した際は、本ワークフローの build-args / target 指定
+  との整合を確認する（devcontainer モジュールと連動）。
+- **日次で変わる値を新たに build-arg / ENV / LABEL でレイヤーチェーンへ入れない**こと（`IMAGE_VERSION`
+  を `labels` に移した理由と同じ）。入れると `cache-from` が実効しなくなり pull が全再取得に戻る。
+  バージョン等のメタデータは build-push-action の `labels` 入力で最終イメージへ付与する。

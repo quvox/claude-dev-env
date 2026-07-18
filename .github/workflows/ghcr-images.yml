@@ -75,7 +75,14 @@ jobs:
             USERNAME=dev
             USER_UID=1000
             USER_GID=1000
-            IMAGE_VERSION=${{ needs.prepare.outputs.tag }}
+          # バージョン(日次で変わるタイムスタンプ)は build-arg=IMAGE_VERSION として
+          # Dockerfile の LABEL 経由でレイヤーチェーンに載せると、その層以降の
+          # レイヤーキャッシュが毎日失効し（cache-from が効かず）、pull が毎回
+          # 全レイヤー再取得になる。そのため build-arg では渡さず、最終イメージへ
+          # labels 入力で付与する（export 時のメタデータ＝レイヤーキャッシュに影響しない）。
+          labels: |
+            io.github.quvox.claude-dev.version=${{ needs.prepare.outputs.tag }}
+            org.opencontainers.image.version=${{ needs.prepare.outputs.tag }}
           provenance: false
           outputs: type=image,name=${{ env.REGISTRY }}/${{ needs.prepare.outputs.owner }}/claude-dev-${{ matrix.image.name }},push-by-digest=true,name-canonical=true,push=true
           cache-from: type=gha,scope=${{ matrix.image.name }}-${{ matrix.platform.arch }}
