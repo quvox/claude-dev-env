@@ -54,6 +54,17 @@ CUSER="$(docker image inspect "$IMG_CLAUDE" --format '{{range .Config.Env}}{{pri
 [ -n "$CUSER" ] || CUSER="$(whoami)"
 CHOME="/home/${CUSER}"
 
+# 起動中コンテナへ exec する際のユーザーは、ローカルイメージのタグではなく「そのコンテナ自身に
+# 焼き込まれた CONTAINER_USER」から解決する。make build 等でローカルイメージのユーザーが変わっても
+# （例: GHCR=dev とローカルビルド=<whoami> の混在）、別イメージ由来で稼働中のコンテナへ正しい -u で
+# attach できる。見つからなければ CUSER（イメージ由来）へフォールバック。
+resolve_container_user() {
+    local _u
+    _u="$(docker inspect "$1" --format '{{range .Config.Env}}{{println .}}{{end}}' 2>/dev/null | sed -n 's/^CONTAINER_USER=//p' | head -1)"
+    [ -n "$_u" ] || _u="$CUSER"
+    printf '%s' "$_u"
+}
+
 # --- プラットフォーム ---
 # ネイティブアーキでビルド/実行する（Apple Silicon = arm64 / Intel Mac = amd64）。
 # 共有 Dockerfile はアーキ別に対応済み（arm64 は Playwright Chromium・gcloud は arm 写像。
@@ -707,6 +718,7 @@ start)
         ensure_infrastructure
         _url=$(get_novnc_url "$NAME")
         [ -n "$_url" ] && echo "🖥️  noVNC: $_url"
+        CUSER="$(resolve_container_user "$NAME")"   # 稼働中コンテナ側のユーザーで exec する
         if ! docker exec -u "$CUSER" "$NAME" tmux has-session -t main 2>/dev/null; then
             docker exec -u "$CUSER" "$NAME" tmux new-session -d -s main 2>/dev/null || true
             sleep 0.5
@@ -912,6 +924,7 @@ code)
         echo "❌ コンテナが起動していません: claude-dev start を先に実行"
         exit 1
     fi
+    CUSER="$(resolve_container_user "$NAME")"   # 稼働中コンテナ側のユーザーで exec する
 
     docker exec -it -u "$CUSER" "$NAME" tmux new-window -t main "claude"
     docker exec -it -u "$CUSER" "$NAME" tmux attach -t main
@@ -933,6 +946,7 @@ orchestrate)
         echo "❌ コンテナが起動していません: claude-dev start を先に実行"
         exit 1
     fi
+    CUSER="$(resolve_container_user "$NAME")"   # 稼働中コンテナ側のユーザーで exec する
 
     shift  # "orchestrate" を除去
     _fresh=""
@@ -973,6 +987,7 @@ attach)
         echo "   実行中のセッション: claude-dev list"
         exit 1
     fi
+    CUSER="$(resolve_container_user "$NAME")"   # 稼働中コンテナ側のユーザーで exec する
 
     docker exec -it -u "$CUSER" "$NAME" tmux attach -t main
     ;;

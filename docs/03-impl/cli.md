@@ -2,11 +2,11 @@
 id: cli
 layer: impl
 title: cli 実装説明書
-version: 1.0.0
+version: 1.1.0
 updated: 2026-07-18
 verified:
   at: 2026-07-18
-  version: 1.0.0
+  version: 1.1.0
   against:
     - doc: docs/02-design/system.md
       version: 1.0
@@ -53,6 +53,15 @@ source:
 - `CUSER`/`CHOME`: **イメージ `IMG_CLAUDE` に焼かれた `CONTAINER_USER` env を優先**して解決
   （`docker image inspect ... | sed -n 's/^CONTAINER_USER=//p'`）、無ければ `whoami`。GHCR の
   generic user イメージ（`CONTAINER_USER=dev`）を pull すると `CUSER=dev`・`/home/dev` が自動追従。
+  この初期値は**新規コンテナ作成（create パス）用**（＝これから作るコンテナのユーザー）。
+- `resolve_container_user <container>`: **起動中のコンテナへ exec する際のユーザー解決**。イメージの
+  タグではなく **そのコンテナ自身の `CONTAINER_USER` env**（`docker inspect <container> ...`）から解決し、
+  無ければ `CUSER` にフォールバック。`start`（再接続パス）/`code`/`orchestrate`/`attach` の各分岐で
+  `is_running` 確認後に `CUSER="$(resolve_container_user "$NAME")"` と上書きしてから `docker exec -u` する。
+  **狙い**: `make build` 等でローカルイメージのユーザーが変わっても（例: GHCR=`dev` とローカルビルド=
+  `whoami` の混在）、別イメージ由来で稼働中のコンテナへ正しい `-u` で attach できる（イメージ由来の
+  `CUSER` を使うと `unable to find user ...: no matching entries in passwd file` になる回帰を防ぐ）。
+  create パス・firewall（`-u` 無し）は本上書きの対象外。
 - 主要定数: `NETWORK=claude-dev-net`、`NOVNC_BASE_PORT=6080`、`FWD_PORT_BASE=8100`、共有ボリューム
   `VOL_AUTH/VOL_HISTORY/VOL_CONFIG`、コンテナ別 Chrome ボリューム接頭辞 `VOL_CHROME_PREFIX=claude-dev-chrome`、
   イメージ名 `IMG_CLAUDE`/`IMG_CLAUDE_VNC`/`IMG_DOCKER_PROXY`、`DOCKER_PROXY_CONTAINER`、
