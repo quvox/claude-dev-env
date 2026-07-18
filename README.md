@@ -126,10 +126,10 @@ VNC あり（既定）で起動すると、コンテナ内の Chrome を**ブラ
 ├── claude-dev-docker-proxy (共有) Docker Socket Proxy（危険操作をブロック）
 ├── claude-dev-net              コンテナ間ネットワーク
 │
-├── claude-dev-auth (volume)        認証情報（.credentials.json / .claude.json）
-├── claude-dev-config (volume)      共有シェル設定（.zshrc）
-├── claude-dev-chrome-data (volume) Chrome プロファイル
-└── claude-dev-history (volume)     コマンド履歴
+├── claude-dev-auth (volume)          認証情報（.credentials.json / .claude.json）※共有
+├── claude-dev-config (volume)        共有シェル設定（.zshrc）※共有
+├── claude-dev-history (volume)       コマンド履歴 ※共有
+└── claude-dev-chrome-<name> (volume) Chrome プロファイル ※コンテナごと（同時起動時の競合回避）
 ```
 
 - コンテナ内資産（イメージ・entrypoint・ファイアウォール・docker-proxy）は OS 非依存で共有し、**OS 差分はホスト側 CLI に閉じる**。詳細設計は [docs/02_architecture.md](docs/02_architecture.md)。

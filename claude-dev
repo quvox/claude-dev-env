@@ -31,7 +31,10 @@ FWD_PORT_BASE=8100     # ポートフォワード用開始番号
 VOL_AUTH="claude-dev-auth"
 VOL_HISTORY="claude-dev-history"
 VOL_CONFIG="claude-dev-config"
-VOL_CHROME="claude-dev-chrome-data"
+# Chrome プロファイルはコンテナごとに分離する（共有すると複数コンテナ同時起動時に
+# 同一プロファイルへ多重書き込みし SingletonLock 奪取・プロファイル破損を招く）。
+# 実体は `${VOL_CHROME_PREFIX}-<container_name>`（VM ボリューム claude-dev-vm-<name> と同方式）。
+VOL_CHROME_PREFIX="claude-dev-chrome"
 IMG_CLAUDE="claude-dev-claude"
 IMG_CLAUDE_VNC="claude-dev-claude-vnc"
 IMG_DOCKER_PROXY="claude-dev-docker-proxy"
@@ -328,7 +331,7 @@ ensure_infrastructure() {
     docker volume create "$VOL_AUTH" >/dev/null 2>&1 || true
     docker volume create "$VOL_HISTORY" >/dev/null 2>&1 || true
     docker volume create "$VOL_CONFIG" >/dev/null 2>&1 || true
-    docker volume create "$VOL_CHROME" >/dev/null 2>&1 || true  # Chrome プロファイル
+    # Chrome プロファイルはコンテナごとのボリューム（docker run が自動作成）なのでここでは作らない
 }
 
 # 指定コンテナの noVNC URL を取得
@@ -430,8 +433,8 @@ setup)
     docker volume create "$VOL_AUTH" >/dev/null 2>&1 || true
     docker volume create "$VOL_HISTORY" >/dev/null 2>&1 || true
     docker volume create "$VOL_CONFIG" >/dev/null 2>&1 || true
-    docker volume create "$VOL_CHROME" >/dev/null 2>&1 || true
-    echo "✅ ボリューム: $VOL_AUTH, $VOL_HISTORY, $VOL_CONFIG, $VOL_CHROME"
+    # Chrome プロファイルはコンテナごとのボリューム（起動時に docker run が自動作成）
+    echo "✅ ボリューム: $VOL_AUTH, $VOL_HISTORY, $VOL_CONFIG"
 
     # Claude ベースイメージビルド
     echo ""
@@ -750,7 +753,7 @@ start)
     NOVNC_PORT_OPT=""
     if [ "$USE_VNC" = "1" ]; then
         NOVNC_PORT=$(find_available_novnc_port)
-        NOVNC_PORT_OPT="-p ${NOVNC_PORT}:6080 -v ${VOL_CHROME}:${CHOME}/.chrome-profile"
+        NOVNC_PORT_OPT="-p ${NOVNC_PORT}:6080 -v ${VOL_CHROME_PREFIX}-${NAME}:${CHOME}/.chrome-profile"
     fi
 
     # KVM / QEMU デバイス（--kvm 指定時のみ、ホストに存在すれば渡す）
@@ -796,29 +799,51 @@ start)
     fi
     echo "🚀 起動中... [${NAME}] → ${PROJECT_DIR}"
     echo "🏷️  イメージ: ${RUN_IMAGE}  バージョン $(image_version "$RUN_IMAGE")"
-    docker run -d \
-        --name "$NAME" \
-        --hostname "$NAME" \
-        --network "$NETWORK" \
-        --cap-add NET_ADMIN \
-        --cap-add NET_RAW \
-        --restart unless-stopped \
-        -v "${PROJECT_DIR}:/workspace" \
-        -v "${VOL_HISTORY}:${CHOME}/.command_history" \
-        -v "${VOL_AUTH}:${CHOME}/.claude-shared" \
-        -v "${VOL_CONFIG}:${CHOME}/.config-shared" \
-        -v "${BASE_DIR}/scripts/tmux.conf:${CHOME}/.tmux.conf:ro" \
-        -v "${BASE_DIR}/CLAUDE.md:${CHOME}/CLAUDE.md:ro" \
-        $GITCONFIG_OPT \
-        $GH_CONFIG_OPT \
-        $SSH_OPTS \
-        $DOCKER_OPTS \
-        $NOVNC_PORT_OPT \
-        $KVM_OPTS \
-        $VM_OPTS \
-        -e NODE_OPTIONS=--max-old-space-size=4096 \
-        -t \
-        "$RUN_IMAGE" >/dev/null
+    # docker run はポート割り当て競合に備えてリトライする。複数 claude-dev を
+    # ほぼ同時に start すると find_available_novnc_port の選定〜-p バインドが競合し、
+    # 双方が同じポートを選んで「port is already allocated」で失敗し得る（他プロセスに
+    # よる横取りも同様）。失敗時は作成途中コンテナを掃除し、ポート競合かつ VNC 有効なら
+    # 別ポートを取り直して再試行する（最大 20 回）。
+    _run_attempt=0
+    while :; do
+        if _run_err=$(docker run -d \
+            --name "$NAME" \
+            --hostname "$NAME" \
+            --network "$NETWORK" \
+            --cap-add NET_ADMIN \
+            --cap-add NET_RAW \
+            --restart unless-stopped \
+            -v "${PROJECT_DIR}:/workspace" \
+            -v "${VOL_HISTORY}:${CHOME}/.command_history" \
+            -v "${VOL_AUTH}:${CHOME}/.claude-shared" \
+            -v "${VOL_CONFIG}:${CHOME}/.config-shared" \
+            -v "${BASE_DIR}/scripts/tmux.conf:${CHOME}/.tmux.conf:ro" \
+            -v "${BASE_DIR}/CLAUDE.md:${CHOME}/CLAUDE.md:ro" \
+            $GITCONFIG_OPT \
+            $GH_CONFIG_OPT \
+            $SSH_OPTS \
+            $DOCKER_OPTS \
+            $NOVNC_PORT_OPT \
+            $KVM_OPTS \
+            $VM_OPTS \
+            -e NODE_OPTIONS=--max-old-space-size=4096 \
+            -t \
+            "$RUN_IMAGE" 2>&1 >/dev/null); then
+            break
+        fi
+        _run_attempt=$((_run_attempt + 1))
+        docker rm -f "$NAME" >/dev/null 2>&1 || true   # 作成途中コンテナを掃除
+        if [ "$USE_VNC" = "1" ] && [ "$_run_attempt" -le 20 ] \
+           && printf '%s' "$_run_err" | grep -qiE "port is already allocated|address already in use|bind for .* failed"; then
+            NOVNC_PORT=$(find_available_novnc_port)
+            NOVNC_PORT_OPT="-p ${NOVNC_PORT}:6080 -v ${VOL_CHROME_PREFIX}-${NAME}:${CHOME}/.chrome-profile"
+            echo "🔁 noVNC ポートが競合したため ${NOVNC_PORT} で再試行します"
+            continue
+        fi
+        echo "❌ コンテナ起動に失敗しました:" >&2
+        printf '%s\n' "$_run_err" >&2
+        exit 1
+    done
 
     # tmux 起動を待つ（VM モードはゲスト VM のブート待ちで時間がかかるため長めに待つ）
     _wait_max=30
@@ -1254,8 +1279,9 @@ reset)
     docker ps -a --filter "name=^fwd-" -q | xargs -r docker rm -f 2>/dev/null || true
     # Docker Socket Proxy コンテナ停止
     docker rm -f "$DOCKER_PROXY_CONTAINER" 2>/dev/null || true
-    # ボリューム削除
-    docker volume rm -f "$VOL_AUTH" "$VOL_HISTORY" "$VOL_CONFIG" "$VOL_CHROME" 2>/dev/null || true
+    # ボリューム削除（共有 3 ボリューム + コンテナごとの Chrome プロファイル `claude-dev-chrome-*`）
+    docker volume rm -f "$VOL_AUTH" "$VOL_HISTORY" "$VOL_CONFIG" 2>/dev/null || true
+    docker volume ls -q --filter "name=^${VOL_CHROME_PREFIX}-" | xargs -r docker volume rm -f 2>/dev/null || true
     # ネットワーク削除
     docker network rm "$NETWORK" 2>/dev/null || true
     # イメージ削除
