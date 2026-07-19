@@ -5,11 +5,11 @@ title: hooks 実装説明書
 version: 1.0.0
 updated: 2026-07-18
 verified:
-  at: 2026-07-18
+  at: 2026-07-19
   version: 1.0.0
   against:
     - doc: docs/02-design/system.md
-      version: 1.0
+      version: 1.1
 summary: >
   Claude Code のフックスクリプト2種。save_prompt.sh が hook 入力 JSON から直近プロンプトを
   一時ファイルへ保存し、sendslackmsg.sh がそれを本文に添えて Slack へ通知する。両者はイメージに

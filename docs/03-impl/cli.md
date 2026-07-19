@@ -2,14 +2,14 @@
 id: cli
 layer: impl
 title: cli 実装説明書
-version: 1.1.0
-updated: 2026-07-18
+version: 1.2.0
+updated: 2026-07-19
 verified:
-  at: 2026-07-18
-  version: 1.1.0
+  at: 2026-07-19
+  version: 1.2.0
   against:
     - doc: docs/02-design/system.md
-      version: 1.0
+      version: 1.1
 summary: >
   ホスト Linux 用 `claude-dev`（単一 bash スクリプト）の実装。case ディスパッチで
   start/stop/list/attach/forward/orchestrate/login 等のサブコマンドを提供し、Docker
@@ -128,7 +128,10 @@ source:
   6. **.gitignore 追記**: `.claude` 未記載なら追記（`.git` あり `.gitignore` 無しは新規作成）。
   7. **マウント/オプション組立**: `GITCONFIG_OPT`（`~/.gitconfig` RO）、`GH_CONFIG_OPT`（`~/.config/gh` RO=
      `gh` 認証共有）、`DOCKER_OPTS`（ソケットあれば `ensure_docker_proxy_container` 後
-     `DOCKER_HOST=tcp://<proxy>:2375`）、`SSH_OPTS`（`ensure_ssh_agent` の専用 agent ソケットを
+     `DOCKER_HOST=tcp://<proxy>:2375`）、`COMPOSE_OPTS`（`NAME` を compose 互換名〈小文字・
+     `[a-z0-9_-]` のみ〉へ正規化した `COMPOSE_PROJECT_NAME` を `-e` で付与。全プロジェクトが
+     `/workspace` にマウントされ compose 既定名が `workspace` に衝突するのを防ぐ。`-e` なので
+     対話・非対話シェル〈`bash -c` 実行〉と `docker exec` の全てで有効）、`SSH_OPTS`（`ensure_ssh_agent` の専用 agent ソケットを
      `/tmp/ssh-agent.sock` RO 転送＋`SSH_AUTH_SOCK`、`known_hosts` RO、`~/.ssh/config` は
      `IdentityFile/IdentitiesOnly/IdentityAgent` 行を `sed` 除去した一時コピーを RO）、`NOVNC_PORT_OPT`
      （VNC 時のみ空きポート `-p <port>:6080`＋コンテナ別 Chrome ボリューム）、`KVM_OPTS`（`--kvm` 時のみ

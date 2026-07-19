@@ -5,11 +5,11 @@ title: vm-mode 実装説明書
 version: 1.0.0
 updated: 2026-07-18
 verified:
-  at: 2026-07-18
+  at: 2026-07-19
   version: 1.0.0
   against:
     - doc: docs/02-design/system.md
-      version: 1.0
+      version: 1.1
 summary: >
   オプトインのゲスト VM モード。claude コンテナ内で QEMU/KVM のゲスト VM を起動し、
   virtiofs で /workspace を同一パス共有、ゲスト内ネイティブ dockerd を DOCKER_HOST 経由で

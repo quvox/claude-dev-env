@@ -2,14 +2,14 @@
 id: system
 layer: design
 title: claude-dev-env 全体設計書
-version: 1.0.1
-updated: 2026-07-18
+version: 1.1.0
+updated: 2026-07-19
 verified:
-  at: 2026-07-18
-  version: 1.0.0
+  at: 2026-07-19
+  version: 1.1.0
   against:
     - doc: docs/01-requirements/core.md
-      version: 1.0
+      version: 1.1
     - doc: docs/01-requirements/orchestration.md
       version: 1.0
 summary: >
@@ -225,6 +225,8 @@ sequenceDiagram
 | 結合 | コンテナ→docker-proxy 契約 / cli→orchestrator 起動契約 | go test（proxy 側で API ボディ検査）＋実機（コンテナ起動） | 契約ごとに担当モジュールの 03-impl テスト対応表へ（下表） |
 | E2E | ユースケース（下のシナリオ一覧） | 実機（`claude-dev` 実操作）＋ orchestrator 自己検証（`make orch-sample` で題材を scaffold し `claude-dev orchestrate` で実走） | シェル系は自動テストなし＝実機確認。orchestrator は題材を用意して実走・観測 |
 
+備考: core/7-5（compose プロジェクト名の一意化）はシェル系のため自動テスト対象外。実機確認は「異なる 2 プロジェクトで同時に `claude-dev start` → 各コンテナで `COMPOSE_PROJECT_NAME` が別値になり、`docker compose` の生成リソース（ネットワーク／コンテナ名）がプロジェクト間で衝突しない」ことを確認する（cli/cli-mac が `docker run` に `-e COMPOSE_PROJECT_NAME` を付与）。
+
 ### 結合テスト対象
 
 | 契約(呼び出し元→呼び出し先) | 検証観点 | 担当モジュール |
@@ -273,7 +275,7 @@ sequenceDiagram
 | core/4 SSH 鍵 | cli (mac 差分は cli-mac) |
 | core/5 FW・ネットワーク | firewall, entrypoint, cli |
 | core/6 ポートフォワード | cli, portsync |
-| core/7 docker-proxy | docker-proxy |
+| core/7 docker-proxy | docker-proxy, cli/cli-mac（7-5 compose プロジェクト名一意化） |
 | core/8 VM モード | vm-mode |
 | core/9 配布・ビルド | makefile, ghcr-workflow, devcontainer |
 | core/10 macOS | cli-mac, makefile(install 判定) |

@@ -5,11 +5,11 @@ title: container-tools 実装説明書
 version: 1.0.0
 updated: 2026-07-18
 verified:
-  at: 2026-07-18
+  at: 2026-07-19
   version: 1.0.0
   against:
     - doc: docs/02-design/system.md
-      version: 1.0
+      version: 1.1
 summary: >
   コンテナ内でユーザが使う 2 つの資産の実装説明。レート制限リセット待ちユーティリティ
   wait-limit-reset.sh と、実行時に ~/.tmux.conf へマウントされる tmux 設定 tmux.conf。

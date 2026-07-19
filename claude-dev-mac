@@ -803,6 +803,13 @@ start)
         DOCKER_OPTS="-e DOCKER_HOST=tcp://${DOCKER_PROXY_CONTAINER}:2375"
     fi
 
+    # docker compose プロジェクト名を一意化（全プロジェクトが /workspace にマウントされ
+    # 既定名が "workspace" に衝突するのを防ぐ）。DOCKER_HOST と同様に -e で渡し、対話・非対話
+    # を問わず全シェル（Claude Code の bash -c 実行含む）と docker exec で有効にする。
+    # NAME を compose 互換名（小文字・[a-z0-9_-] のみ）へ正規化する。
+    COMPOSE_PROJECT="$(printf '%s' "$NAME" | sed 's/[^a-z0-9_-]/-/g')"
+    COMPOSE_OPTS="-e COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT}"
+
     # SSH agent（方式D: claude-dev 専用 agent＋socat TCP ブリッジ。秘密鍵はコンテナに渡さない）
     # macOS の Unix ソケットはコンテナへ直接マウントできず、Docker Desktop 魔法ソケットは
     # 利用者の鍵がある agent を転送しないため、専用 agent を鍵ファイルから構築して転送する。
@@ -873,6 +880,7 @@ start)
             $GH_CONFIG_OPT \
             $SSH_OPTS \
             $DOCKER_OPTS \
+            $COMPOSE_OPTS \
             $NOVNC_PORT_OPT \
             -e NODE_OPTIONS=--max-old-space-size=4096 \
             -t \

@@ -5,11 +5,11 @@ title: firewall 実装説明書
 version: 1.0.0
 updated: 2026-07-18
 verified:
-  at: 2026-07-18
+  at: 2026-07-19
   version: 1.0.0
   against:
     - doc: docs/02-design/system.md
-      version: 1.0
+      version: 1.1
 summary: >
   Claude コンテナ内で起動時に適用する iptables ブラックリスト方式ファイアウォールの実装。
   デフォルト全許可（ACCEPT）とし、ペーストサイト等の危険ドメイン(ipset)・メタデータ・SMTP・

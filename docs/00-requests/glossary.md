@@ -5,7 +5,7 @@ title: claude-dev-env 用語集
 version: 1.0.0
 updated: 2026-07-18
 verified:
-  at: 2026-07-18
+  at: 2026-07-19
   version: 1.0.0
   against: []
 summary: >

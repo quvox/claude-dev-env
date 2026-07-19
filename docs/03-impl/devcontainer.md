@@ -5,11 +5,11 @@ title: devcontainer 実装説明書
 version: 1.0.0
 updated: 2026-07-18
 verified:
-  at: 2026-07-18
+  at: 2026-07-19
   version: 1.0.0
   against:
     - doc: docs/02-design/system.md
-      version: 1.0
+      version: 1.1
 summary: >
   Claude コンテナイメージ定義。Dockerfile.claude（orch-builder→base→vnc の多段ビルド）と
   Dockerfile.docker-proxy（Go 多段）、.devcontainer/tmux.conf を持ち、他モジュールの資産を

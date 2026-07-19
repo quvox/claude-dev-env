@@ -2,16 +2,16 @@
 id: core
 layer: requirements
 title: 開発環境基盤 要件定義書
-version: 1.0.0
-updated: 2026-07-18
+version: 1.1.0
+updated: 2026-07-19
 verified:
-  at: 2026-07-18
-  version: 1.0.0
+  at: 2026-07-19
+  version: 1.1.0
   against:
     - doc: docs/00-requests/request.md
       version: 1.0
     - doc: docs/00-requests/decisions.md
-      version: 1.0
+      version: 1.1
     - doc: docs/00-requests/glossary.md
       version: 1.0
     - doc: docs/00-requests/acceptance.md
@@ -173,6 +173,7 @@ forward プロキシ / DooD / VM モード 等）。
 2. IF リクエストがホストバインドマウント（`/workspace` 配下を除く）・privileged・host ネットワーク/PID モードを含むならば、システムはそれを拒否しなければならない
 3. WHERE 呼び出し元の `/workspace` 配下の bind の場合、システムは実ホストパスへ書き換えて許可しなければならない（既定有効、`CLAUDE_DEV_ALLOW_WORKSPACE_BINDS` で切替）
 4. システムは docker-proxy をホストに公開せず `claude-dev-net` 内でのみアクセス可能にしなければならない
+5. WHEN 複数プロジェクトのコンテナで同時に `docker compose` を実行したとき、システムは各プロジェクトの compose プロジェクト名を起動ディレクトリ名で一意化し、生成されるネットワーク名・コンテナ名がプロジェクト間で衝突しないようにしなければならない
 
 ### 要件8:VM モード（オプトイン）
 

@@ -130,22 +130,9 @@ if [ -n "${DOCKER_HOST:-}" ]; then
     done
 fi
 
-# --- Docker Compose プロジェクト名の一意化 ---
-# どのプロジェクトもコンテナ内では /workspace にマウントされるため、
-# docker compose の既定プロジェクト名が全コンテナで "workspace" になり、
-# 複数プロジェクトを同時に起動するとコンテナ名・ネットワーク名が衝突する。
-# コンテナのホスト名（= プロジェクトディレクトリ名で一意）を compose 互換名
-# （小文字・[a-z0-9_-] のみ）に正規化し、COMPOSE_PROJECT_NAME として全シェルに設定する。
-COMPOSE_NAME=$(hostname | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9_-]/-/g')
-if [ -n "$COMPOSE_NAME" ]; then
-    for rc in /etc/zsh/zshrc /etc/bash.bashrc; do
-        if [ -f "$rc" ]; then
-            echo "" >> "$rc"
-            echo "# --- claude-dev: Docker Compose project name ---" >> "$rc"
-            echo "export COMPOSE_PROJECT_NAME='${COMPOSE_NAME}'" >> "$rc"
-        fi
-    done
-fi
+# docker compose プロジェクト名の一意化（COMPOSE_PROJECT_NAME）は、対話シェル rc では
+# 非対話シェル（bash -c 実行）に効かないため、ホスト CLI 側で docker run の -e として渡す
+# （cli/cli-mac が正本。DOCKER_HOST と同様に全シェル・docker exec で有効）。
 
 # --- .zshrc の共有（ボリューム経由でコンテナ間共有）---
 # ~/.config-shared/ はボリュームとしてマウントされている

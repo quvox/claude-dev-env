@@ -2,14 +2,14 @@
 id: orchestrator
 layer: impl
 title: orchestrator 実装説明書
-version: 1.0.0
-updated: 2026-07-18
+version: 1.0.1
+updated: 2026-07-19
 verified:
-  at: 2026-07-18
-  version: 1.0.0
+  at: 2026-07-19
+  version: 1.0.1
   against:
     - doc: docs/02-design/system.md
-      version: 1.0
+      version: 1.1
 summary: >
   プロジェクトに1体立てる AIオーケストレーター（Go 製単一プロセス `claude-orchestrator`）の実装。
   tmux 常駐（orch-<CNAME>-main:dashboard）で外部制御ループを所有し、ブレインストーミング/実行の2モード状態機械・
@@ -42,8 +42,8 @@ orchestrator 契約、orchestrator→worker/対話Claude 契約、UI設計 orch-
 | orchestrator/go.mod / go.sum / vendor/ | 独立 Go モジュール（Go 1.24）。TUI 用に `bubbletea`/`lipgloss` へ依存。vendoring（`-mod=vendor`）でオフライン再現ビルド |
 | orchestrator/main.go | エントリ。`--workspace` 絶対パス化、`--fresh`/`--start-executing`/`--instructions`/`--print-main-session` 解析、再開/新規判定、Store 初期化、SIGINT/SIGTERM ハンドラ、`Sessions` 注入、`defer ttyRestoreSane()` |
 | orchestrator/controller.go | 状態機械（brainstorming/executing/done）と run loop（中核）。`runBrainstorming`/`runExecuting`/介入解決/worker ウィンドウ結線 |
-| orchestrator/state.go | 状態ストアの読み書きとスキーマ（State/Plan/Task/Control/Open*）、audit/assumptions/interventions.jsonl 追記、`ArchiveRun`、`NormalizeForResume`、`VMModePreamble` |
-| orchestrator/plan_test.go 由来のプラン論理 | 依存解決（`ReadyTasks`）・状態遷移・`AllDone`/`AllSettled`・`MarkBlockedByFailedDeps`（state.go/plan 系に実装） |
+| orchestrator/state.go | 状態ストアの読み書きとスキーマ（State/Plan/Task/Control/Open*）、audit/assumptions/interventions.jsonl 追記、`ArchiveRun`、`VMModePreamble` |
+| orchestrator/controller.go（プラン論理・`plan_test.go` でテスト） | 依存解決（`ReadyTasks`）・状態遷移・`AllDone`/`AllSettled`・`MarkBlockedByFailedDeps`・`NormalizeForResume`（いずれも controller.go に実装。`plan.go` は存在しない） |
 | orchestrator/mode.go | 対話 claude（ブレスト/介入）の instruction 組立・launch script 生成（`WriteLaunchScript`）・`RunInteractive`（tmux 無しフォールバック）・`ORCHESTRATOR.md`/VM前置 |
 | orchestrator/session.go | tmux ウィンドウ管理（`SessionManager`）。`DetectSession`/`SetupMainSession`/`Ensure`/`Run`/`Kill`/`Has`/`SwitchTo`/`LaunchInteractive`/`EnsureAll`/`normalizeCName` |
 | orchestrator/term.go | 端末モード制御（stty raw/カノニカル復元 `ttyRestoreSane`）・`selectMenu`/`terminalConfirm`・`printModeBanner`・`buildQuestion` |
