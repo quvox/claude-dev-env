@@ -2,14 +2,14 @@
 id: system
 layer: design
 title: claude-dev-env 全体設計書
-version: 1.1.0
+version: 1.2.0
 updated: 2026-07-19
 verified:
   at: 2026-07-19
-  version: 1.1.0
+  version: 1.2.0
   against:
     - doc: docs/01-requirements/core.md
-      version: 1.1
+      version: 1.2
     - doc: docs/01-requirements/orchestration.md
       version: 1.0
 summary: >
@@ -226,6 +226,8 @@ sequenceDiagram
 | E2E | ユースケース（下のシナリオ一覧） | 実機（`claude-dev` 実操作）＋ orchestrator 自己検証（`make orch-sample` で題材を scaffold し `claude-dev orchestrate` で実走） | シェル系は自動テストなし＝実機確認。orchestrator は題材を用意して実走・観測 |
 
 備考: core/7-5（compose プロジェクト名の一意化）はシェル系のため自動テスト対象外。実機確認は「異なる 2 プロジェクトで同時に `claude-dev start` → 各コンテナで `COMPOSE_PROJECT_NAME` が別値になり、`docker compose` の生成リソース（ネットワーク／コンテナ名）がプロジェクト間で衝突しない」ことを確認する（cli/cli-mac が `docker run` に `-e COMPOSE_PROJECT_NAME` を付与）。
+
+備考: core/1-6（stop 時の compose 片付け, D-24 ライフサイクル）もシェル系のため自動テスト対象外。実機確認は「コンテナ内で `docker compose up` → ホストで `claude-dev stop` → ラベル `com.docker.compose.project=<正規化NAME>` のコンテナと当該プロジェクトの compose デフォルトネットワークが消え、名前付きボリュームと共有の `claude-dev-net`／docker-proxy は残る」ことを確認する。VM モードは compose がゲスト内で完結するため対象外。
 
 ### 結合テスト対象
 

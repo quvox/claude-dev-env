@@ -2,11 +2,11 @@
 id: decisions
 layer: request
 title: claude-dev-env 決定台帳
-version: 1.1.0
+version: 1.2.0
 updated: 2026-07-19
 verified:
   at: 2026-07-19
-  version: 1.1.0
+  version: 1.2.0
   against: []
 summary: >
   既存実装に埋め込まれた設計判断を「決定/委任/要確認」に仕分けた台帳。逆生成のため証跡は
@@ -45,7 +45,7 @@ source: null
 | D-16 | 状態の保全 | 起動時の自動処理で plan/状態/履歴を削除しない。片付けは全タスク done か `--fresh` 時のみ、その場合も `history/<run_id>/` へ退避。実削除は利用者の明示 `rm` だけ | 中断・再開でのやり直しを構造的に排除する（人間の巡回負荷削減が本ツールの価値） | 旧06_orchestration §4.3 |
 | D-17 | ダッシュボード UI | bubbletea/lipgloss のイベント駆動 TUI（カーソル選択→Enter で移動）。全消去・全再描画方式と数字キー即移動は廃止。この UI に限り外部依存を許容（vendoring） | ちらつき・強制移動を排し、選択と確定を分離する。Go の「標準ライブラリのみ」方針を本UIだけ変更 | 旧06_orchestration §5.3 |
 | D-18 | 品質ゲート（レビュー） | 実装 worker と別 worker（できれば別ベンダー）による独立レビュー。採点は当該タスクの `completion` のみ（プランゴールで採点しない）。レビュー結果は構造化出力（スキーマ強制）で返す。同一フォーマットエラー2回で打切り介入へ | 旧 MODIFICATION の誤採点・パース失敗・試行浪費を構造的に是正 | 旧MODIFICATION, 06_orchestration §8, `orchestrator/review*` |
-| D-24 | 複数プロジェクト同時実行時の compose リソース分離 | DooD 既定モードで各プロジェクトのコンテナ内 `docker compose` が作るネットワーク名・コンテナ名をプロジェクト間で衝突させない。`COMPOSE_PROJECT_NAME` を起動ディレクトリ名で一意化する。`claude-dev-net`（claude↔proxy）は共有のまま分離しない | 全プロジェクトが `/workspace` にマウントされ compose 既定名が `workspace` に衝突するため。分離は compose 層で十分（利用者確認済み）。claude-dev-net の分離は単一共有 proxy 前提と両立しないため見送り | 本変更, `claude-dev`/`claude-dev-mac`（`-e COMPOSE_PROJECT_NAME`） |
+| D-24 | 複数プロジェクト同時実行時の compose リソース分離とライフサイクル | ①**分離**: DooD 既定モードで各プロジェクトのコンテナ内 `docker compose` が作るネットワーク名・コンテナ名をプロジェクト間で衝突させない。`COMPOSE_PROJECT_NAME` を起動ディレクトリ名で一意化する。`claude-dev-net`（claude↔proxy）は共有のまま分離しない。②**ライフサイクル**: compose で作られたコンテナ群は親 claude コンテナに束ね、`claude-dev stop` 時にラベル `com.docker.compose.project=<正規化NAME>` を持つコンテナと当該プロジェクトの compose デフォルトネットワークを削除する（`docker compose down` 相当。名前付きボリュームは非破壊のため保持）。共有の `claude-dev-net`・docker-proxy は削除しない。VM モードは compose がゲスト内 Docker で完結するため本片付けの対象外 | 全プロジェクトが `/workspace` にマウントされ compose 既定名が `workspace` に衝突するため。分離は compose 層で十分（利用者確認済み）。claude-dev-net の分離は単一共有 proxy 前提と両立しないため見送り。stop 後に compose コンテナが孤児として残り続けるのを防ぐ一方、ボリューム削除は破壊的なため行わず、共有リソースは他プロジェクトが使用中のため残す | 本変更, `claude-dev`/`claude-dev-mac`（`-e COMPOSE_PROJECT_NAME`／`stop`） |
 
 ## AIへの委任
 

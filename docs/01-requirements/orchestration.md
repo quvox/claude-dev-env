@@ -11,7 +11,7 @@ verified:
     - doc: docs/00-requests/request.md
       version: 1.0
     - doc: docs/00-requests/decisions.md
-      version: 1.1
+      version: 1.2
     - doc: docs/00-requests/glossary.md
       version: 1.0
     - doc: docs/00-requests/acceptance.md

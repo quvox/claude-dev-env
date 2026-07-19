@@ -1051,6 +1051,15 @@ stop)
         # フォワードコンテナも停止
         docker ps -a --filter "name=^fwd-${NAME}-" -q | xargs -r docker rm -f 2>/dev/null || true
         docker rm -f "$NAME" >/dev/null
+        # このコンテナ内から起動された docker compose のコンテナ群を片付ける。
+        # docker-proxy 経由でホスト daemon 上に作られ、com.docker.compose.project
+        # ラベル（起動時の COMPOSE_PROJECT_NAME）を持つため、ホスト側から特定できる。
+        # docker compose down 相当: コンテナと当該プロジェクトのデフォルトネットワークを
+        # 削除し、名前付きボリューム・共有 claude-dev-net・docker-proxy は残す。
+        # 正規化は start（COMPOSE_PROJECT）と同一変換（project_name は既に小文字化済み）。
+        _cproj=$(printf '%s' "$NAME" | sed 's/[^a-z0-9_-]/-/g')
+        docker ps -a --filter "label=com.docker.compose.project=${_cproj}" -q | xargs -r docker rm -f 2>/dev/null || true
+        docker network rm "${_cproj}_default" >/dev/null 2>&1 || true
         echo "✅ ${NAME} を停止しました"
     else
         echo "ℹ️  ${NAME} は存在しません"

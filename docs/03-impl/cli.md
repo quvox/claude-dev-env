@@ -2,14 +2,14 @@
 id: cli
 layer: impl
 title: cli 実装説明書
-version: 1.2.0
+version: 1.3.0
 updated: 2026-07-19
 verified:
   at: 2026-07-19
-  version: 1.2.0
+  version: 1.3.0
   against:
     - doc: docs/02-design/system.md
-      version: 1.1
+      version: 1.2
 summary: >
   ホスト Linux 用 `claude-dev`（単一 bash スクリプト）の実装。case ディスパッチで
   start/stop/list/attach/forward/orchestrate/login 等のサブコマンドを提供し、Docker
@@ -160,7 +160,7 @@ source:
   `[ -f /etc/claude-dev/vm.env ] && . /etc/claude-dev/vm.env; claude-orchestrator --workspace /workspace [--fresh] [\"<goal>\"]`
   （VM モードでゲスト `DOCKER_HOST` を非対話起動へ引継ぐ）。
 - **`attach [NAME]`**: 稼働中なら `tmux attach -t main`、未起動はエラー。
-- **`stop [NAME]`**: `fwd-<name>-*` とコンテナを `rm -f`→`stop_proxy_if_idle`。
+- **`stop [NAME]`**: `fwd-<name>-*` とコンテナを `rm -f`→当該コンテナ内から起動された compose コンテナ群（ラベル `com.docker.compose.project=<正規化NAME>` で特定）を `rm -f` し、当該プロジェクトの compose デフォルトネットワーク（`<正規化NAME>_default`）が残れば `docker network rm`（`docker compose down` 相当。名前付きボリューム・共有 `claude-dev-net`・docker-proxy は残す）→`stop_proxy_if_idle`。正規化 NAME は start と同じく `NAME` を compose 互換名へ変換した値。VM モードは compose がゲスト内 Docker で完結するため対象外。
 - **`forward <cport> [NAME]`**: 稼働確認→`fwd-<name>-<cport>` 既存なら現ポート表示。空きホストポート確保→
   `socat` を `--entrypoint` にした使い捨てコンテナ（`-d --rm`、`IMG_CLAUDE`）で
   `TCP-LISTEN:<cport>,fork,reuseaddr`→`TCP:<name>:<cport>` を中継。SSH トンネル例を表示。

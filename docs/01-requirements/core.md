@@ -2,16 +2,16 @@
 id: core
 layer: requirements
 title: 開発環境基盤 要件定義書
-version: 1.1.0
+version: 1.2.0
 updated: 2026-07-19
 verified:
   at: 2026-07-19
-  version: 1.1.0
+  version: 1.2.0
   against:
     - doc: docs/00-requests/request.md
       version: 1.0
     - doc: docs/00-requests/decisions.md
-      version: 1.1
+      version: 1.2
     - doc: docs/00-requests/glossary.md
       version: 1.0
     - doc: docs/00-requests/acceptance.md
@@ -108,7 +108,7 @@ forward プロキシ / DooD / VM モード 等）。
 3. WHILE コンテナが起動している間、SSH 切断や tmux デタッチ（`Ctrl-_ D`）が起きてもコンテナは動作を継続しなければならない
 4. WHEN 同一ディレクトリで `claude-dev start` を再実行したとき、システムは既存コンテナに再接続しなければならない（tmux セッションが無ければ再作成する）
 5. WHEN `claude-dev list` を実行したとき、システムは実行中セッション一覧（noVNC URL・フォワード状況を含む）を表示しなければならない
-6. WHEN `claude-dev stop <name>` を実行したとき、システムは当該コンテナを削除し、全 Claude コンテナ停止時には docker-proxy コンテナも停止しなければならない
+6. WHEN `claude-dev stop <name>` を実行したとき、システムは当該コンテナを削除し、さらに当該コンテナ内から起動された compose コンテナ群（ラベル `com.docker.compose.project=<正規化name>`）と当該プロジェクトの compose デフォルトネットワークを削除（`docker compose down` 相当。名前付きボリュームは保持）し、全 Claude コンテナ停止時には docker-proxy コンテナも停止しなければならない（compose の片付けは DooD 既定モードが対象。VM モードでは compose はゲスト内 Docker で完結する）
 
 ### 要件2:UID/GID 追従とホスト資産の共有
 
