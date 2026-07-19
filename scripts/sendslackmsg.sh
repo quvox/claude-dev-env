@@ -12,6 +12,15 @@ fi
 MSG="${1:-}"
 INPUT="$(cat)"
 
+# サブエージェント（Task＝バックグラウンド）由来の hook では通知しない。
+# 本体エージェントは Stop、サブエージェントは SubagentStop で発火し、
+# サブエージェント文脈では stdin JSON に agent_id が入る。
+AGENT_ID="$(printf '%s' "$INPUT" | jq -r '.agent_id // empty' 2>/dev/null || true)"
+EVENT="$(printf '%s' "$INPUT" | jq -r '.hook_event_name // empty' 2>/dev/null || true)"
+if [ -n "$AGENT_ID" ] || [ "$EVENT" = "SubagentStop" ]; then
+  exit 0
+fi
+
 SESSION_ID="$(printf '%s' "$INPUT" | jq -r '.session_id // "unknown"' 2>/dev/null || echo unknown)"
 
 FILE="/tmp/claude_prompt_${SESSION_ID}.txt"
