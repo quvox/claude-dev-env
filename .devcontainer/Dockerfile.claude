@@ -304,6 +304,10 @@ ENV SHELL=/bin/zsh
 # USERNAME を環境変数として保存（entrypoint で参照）
 ENV CONTAINER_USER=${USERNAME}
 
+# コンテナ内動作の判定マーカー（systemd/podman の標準慣習 container=<runtime> に準拠）。
+# コンテナ内プロセスはこの変数の有無・値で「自分がコンテナ内か」を判定できる。vnc は FROM base で継承。
+ENV container=docker
+
 # root で起動し、entrypoint が UID/GID 調整後にユーザーへ切り替える
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 

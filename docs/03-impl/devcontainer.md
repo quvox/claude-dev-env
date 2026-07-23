@@ -2,14 +2,14 @@
 id: devcontainer
 layer: impl
 title: devcontainer 実装説明書
-version: 1.0.0
-updated: 2026-07-18
+version: 1.1.0
+updated: 2026-07-23
 verified:
-  at: 2026-07-19
-  version: 1.0.0
+  at: 2026-07-23
+  version: 1.1.0
   against:
     - doc: docs/02-design/system.md
-      version: 1.1
+      version: 1.2
 summary: >
   Claude コンテナイメージ定義。Dockerfile.claude（orch-builder→base→vnc の多段ビルド）と
   Dockerfile.docker-proxy（Go 多段）、.devcontainer/tmux.conf を持ち、他モジュールの資産を
@@ -67,6 +67,10 @@ portsync・vm-mode・orchestrator の各スクリプト/バイナリ）をイメ
     標準キーに `24.04` を入れており衝突するため。CI は `YYYYMMDDHHmm` を渡し、`claude-dev start`
     がこのラベルでバージョン表示する。`vnc` は `FROM base` で継承。
   - `ENV USER_HOME=/home/${USERNAME}`、`CONTAINER_USER=${USERNAME}`（entrypoint が参照）。
+  - `ENV container=docker`（コンテナ内動作の判定マーカー。値・名前は systemd/podman の標準慣習
+    `container=<runtime>` に合わせる。内部プロセスがこの変数の有無で「自分がコンテナ内か」を判定
+    できるようにする恒久印。起動経路に依存させないためイメージ側で常時保証する。`vnc` は
+    `FROM base` で継承し同値を持つ。設計: 決定 D-25）。
 - **処理の要点（ビルド順）:**
   1. **システムパッケージ（apt）:** iptables/ipset/dnsutils（FW）、zsh/tmux/vim、git/git-lfs/
      git-secrets/openssh-client、curl/wget/jq/ca-certificates、iproute2/net-tools/iputils-ping、
@@ -189,6 +193,7 @@ portsync・vm-mode・orchestrator の各スクリプト/バイナリ）をイメ
 | CLAUDE_CACHE_BUST | Claude CLI 以降のキャッシュ無効化 | none | 任意 |
 | LANG / LC_ALL / TZ | ロケール・時刻 | en_US.UTF-8 / Asia/Tokyo | 焼込 |
 | SHELL / CONTAINER_USER / USER_HOME | 既定シェル・entrypoint 参照 | /bin/zsh 他 | 焼込 |
+| container | コンテナ内動作の判定マーカー（systemd/podman 標準慣習, D-25） | docker | 焼込 |
 | DISPLAY 他 VNC 系（vnc のみ） | GTK/QT IM・sync・VNC 印 | :99 / ibus 等 / CLAUDE_DEV_VNC=1 | 焼込 |
 
 ## エラーハンドリング実装

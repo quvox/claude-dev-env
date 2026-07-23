@@ -2,15 +2,15 @@
 id: decisions
 layer: request
 title: claude-dev-env 決定台帳
-version: 1.2.0
-updated: 2026-07-19
+version: 1.3.0
+updated: 2026-07-23
 verified:
-  at: 2026-07-19
-  version: 1.2.0
+  at: 2026-07-23
+  version: 1.3.0
   against: []
 summary: >
   既存実装に埋め込まれた設計判断を「決定/委任/要確認」に仕分けた台帳。逆生成のため証跡は
-  既存コード・旧docsを指す（人間は00層の承認ゲートで本台帳を追認する）。決定19・委任2・要確認3。
+  既存コード・旧docsを指す（人間は00層の承認ゲートで本台帳を追認する）。決定20・委任2・要確認3。
 keywords: [決定台帳, 隔離方針, docker-proxy, オーケストレーター, VMモード, 委任]
 source: null
 ---
@@ -46,6 +46,7 @@ source: null
 | D-17 | ダッシュボード UI | bubbletea/lipgloss のイベント駆動 TUI（カーソル選択→Enter で移動）。全消去・全再描画方式と数字キー即移動は廃止。この UI に限り外部依存を許容（vendoring） | ちらつき・強制移動を排し、選択と確定を分離する。Go の「標準ライブラリのみ」方針を本UIだけ変更 | 旧06_orchestration §5.3 |
 | D-18 | 品質ゲート（レビュー） | 実装 worker と別 worker（できれば別ベンダー）による独立レビュー。採点は当該タスクの `completion` のみ（プランゴールで採点しない）。レビュー結果は構造化出力（スキーマ強制）で返す。同一フォーマットエラー2回で打切り介入へ | 旧 MODIFICATION の誤採点・パース失敗・試行浪費を構造的に是正 | 旧MODIFICATION, 06_orchestration §8, `orchestrator/review*` |
 | D-24 | 複数プロジェクト同時実行時の compose リソース分離とライフサイクル | ①**分離**: DooD 既定モードで各プロジェクトのコンテナ内 `docker compose` が作るネットワーク名・コンテナ名をプロジェクト間で衝突させない。`COMPOSE_PROJECT_NAME` を起動ディレクトリ名で一意化する。`claude-dev-net`（claude↔proxy）は共有のまま分離しない。②**ライフサイクル**: compose で作られたコンテナ群は親 claude コンテナに束ね、`claude-dev stop` 時にラベル `com.docker.compose.project=<正規化NAME>` を持つコンテナと当該プロジェクトの compose デフォルトネットワークを削除する（`docker compose down` 相当。名前付きボリュームは非破壊のため保持）。共有の `claude-dev-net`・docker-proxy は削除しない。VM モードは compose がゲスト内 Docker で完結するため本片付けの対象外 | 全プロジェクトが `/workspace` にマウントされ compose 既定名が `workspace` に衝突するため。分離は compose 層で十分（利用者確認済み）。claude-dev-net の分離は単一共有 proxy 前提と両立しないため見送り。stop 後に compose コンテナが孤児として残り続けるのを防ぐ一方、ボリューム削除は破壊的なため行わず、共有リソースは他プロジェクトが使用中のため残す | 本変更, `claude-dev`/`claude-dev-mac`（`-e COMPOSE_PROJECT_NAME`／`stop`） |
+| D-25 | コンテナ内動作の判定マーカー（`container` 環境変数） | 全 claude コンテナに環境変数 `container=docker` を持たせ、コンテナ内で動作するプロセスが「自分がコンテナ内か」を判定できるようにする。名前・値は systemd/podman の標準慣習（`container=<runtime>`）に合わせ `container=docker` とする。イメージ焼き込み（`Dockerfile.claude` の base ステージの `ENV`）で付与し、VNC 版も `FROM base` 継承で同値を持つ。起動経路（`docker run`／login 等の一時コンテナ含む）に依存させないためイメージ側で常時保証する | 内部プロセス（entrypoint・各スクリプト・オーケストレーター等）が環境依存の分岐を安全にできるようにする恒久マーカーが要る。名前・値を既存の業界標準慣習に合わせることで、systemd 等の外部ツールとの互換も同時に得られる。起動時 `-e` 付与は経路依存で漏れうるためイメージ側に置く | 本変更, `.devcontainer/Dockerfile.claude` |
 
 ## AIへの委任
 

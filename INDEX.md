@@ -28,7 +28,7 @@
 | パス | 概要 |
 |---|---|
 | docs/00-requests/request.md | 要求定義（隔離Docker開発環境＋AIオーケストレーター。並列開発力の向上） |
-| docs/00-requests/decisions.md | 決定台帳（決定18・委任2・要確認3） |
+| docs/00-requests/decisions.md | 決定台帳（決定20・委任2・要確認3） |
 | docs/00-requests/glossary.md | 用語集 |
 | docs/00-requests/acceptance.md | 受入シナリオ AS-1〜5 |
 

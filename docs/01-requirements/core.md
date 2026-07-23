@@ -5,13 +5,13 @@ title: 開発環境基盤 要件定義書
 version: 1.2.0
 updated: 2026-07-19
 verified:
-  at: 2026-07-19
+  at: 2026-07-23
   version: 1.2.0
   against:
     - doc: docs/00-requests/request.md
       version: 1.0
     - doc: docs/00-requests/decisions.md
-      version: 1.2
+      version: 1.3
     - doc: docs/00-requests/glossary.md
       version: 1.0
     - doc: docs/00-requests/acceptance.md
