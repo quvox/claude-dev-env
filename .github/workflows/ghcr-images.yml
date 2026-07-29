@@ -2,11 +2,16 @@ name: Build and push images to GHCR
 
 # コンテナイメージ（claude / claude-vnc / docker-proxy）を GHCR へ毎日・マルチアーキ
 # (amd64/arm64) で push する。タグは YYYYMMDDHHmm(JST) と latest。
-# 設計: docs/10_ghcr-images.md / 実装仕様: docs/impl/90_ghcr-workflow.md
+# 設計: docs/02-design/system.md / 実装説明書: docs/03-impl/ghcr-workflow.md
 on:
   schedule:
     - cron: '30 18 * * *'   # 03:30 JST 毎日（UTC 18:30）
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      claude_version:
+        description: '同梱する Claude Code のバージョン（stable / latest / 2.1.220 等）。空なら latest チャネルを自動解決'
+        required: false
+        default: ''
 
 permissions:
   contents: read
@@ -20,17 +25,43 @@ env:
   REGISTRY: ghcr.io
 
 jobs:
-  # --- タグ(YYYYMMDDHHmm, JST) と小文字オーナー名を算出し後続で一貫利用 ---
+  # --- タグ(YYYYMMDDHHmm, JST)・小文字オーナー名・同梱 Claude Code の具体バージョンを
+  #     1 度だけ算出し後続で一貫利用（6 つの build ジョブが個別に latest を引くと
+  #     解決タイミング差で amd64/arm64 に別バージョンが入りうるため）---
   prepare:
     runs-on: ubuntu-latest
     outputs:
       tag: ${{ steps.meta.outputs.tag }}
       owner: ${{ steps.meta.outputs.owner }}
+      claude_version: ${{ steps.meta.outputs.claude_version }}
     steps:
       - id: meta
+        env:
+          CLAUDE_VERSION_INPUT: ${{ inputs.claude_version }}
         run: |
+          set -euo pipefail
           echo "tag=$(TZ=Asia/Tokyo date +%Y%m%d%H%M)" >> "$GITHUB_OUTPUT"
           echo "owner=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+
+          # 同梱する Claude Code のバージョン（D-26）:
+          # 手動入力があればそれを採用（不良版を引いた際の切り戻し手段）。
+          # 空（スケジュール実行を含む）なら latest チャネルを具体バージョンへ解決する。
+          # CLAUDE_VERSION=latest のまま渡すと文字列が変化せずキャッシュキーとして機能せず、
+          # 「ラベルだけ日次更新され中身が凍結する」問題が再発するため必ず解決してから渡す。
+          if [ -n "${CLAUDE_VERSION_INPUT}" ]; then
+            claude_version="${CLAUDE_VERSION_INPUT}"
+            echo "同梱バージョン（手動指定）: ${claude_version}"
+          else
+            claude_version="$(curl -fsSL https://downloads.claude.ai/claude-code-releases/latest)"
+            echo "同梱バージョン（latest チャネル解決）: ${claude_version}"
+            # 取得値が HTML エラーページ等で壊れていたら、install.sh の引数
+            # バリデーションで落ちる前に prepare で失敗させる（原因追跡を近くに保つ）。
+            if ! echo "${claude_version}" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+              echo "::error::latest チャネルの解決結果が MAJOR.MINOR.PATCH 形式ではありません: ${claude_version}"
+              exit 1
+            fi
+          fi
+          echo "claude_version=${claude_version}" >> "$GITHUB_OUTPUT"
 
   # --- 3 イメージ × 2 アーキをネイティブ runner で並行ビルドし push-by-digest ---
   build:
@@ -39,8 +70,8 @@ jobs:
       fail-fast: false
       matrix:
         image:
-          - { name: claude,        dockerfile: .devcontainer/Dockerfile.claude,        target: base }
-          - { name: claude-vnc,    dockerfile: .devcontainer/Dockerfile.claude,        target: vnc }
+          - { name: claude,        dockerfile: .devcontainer/Dockerfile.claude,        target: claude-cli }
+          - { name: claude-vnc,    dockerfile: .devcontainer/Dockerfile.claude,        target: claude-vnc }
           - { name: docker-proxy,  dockerfile: .devcontainer/Dockerfile.docker-proxy,  target: "" }
         platform:
           - { arch: amd64, runner: ubuntu-latest,     docker: linux/amd64 }
@@ -71,10 +102,15 @@ jobs:
           # 特定ユーザーに紐づけない generic user で焼く（UID/GID は実行時に entrypoint が
           # /workspace 所有者へ追従。docs/10_ghcr-images.md「pull して使う運用」）。
           # docker-proxy はこれらの ARG を宣言しないため無視される（警告のみ）。
+          #
+          # CLAUDE_VERSION は build-arg で渡してよい——内容由来の値であり、かつ参照する層が
+          # 配布ステージの終端レイヤーに限られるため、失効の波及先が claude バイナリ層だけに
+          # 留まる（D-26 / 02-design 判断4）。
           build-args: |
             USERNAME=dev
             USER_UID=1000
             USER_GID=1000
+            CLAUDE_VERSION=${{ needs.prepare.outputs.claude_version }}
           # バージョン(日次で変わるタイムスタンプ)は build-arg=IMAGE_VERSION として
           # Dockerfile の LABEL 経由でレイヤーチェーンに載せると、その層以降の
           # レイヤーキャッシュが毎日失効し（cache-from が効かず）、pull が毎回
