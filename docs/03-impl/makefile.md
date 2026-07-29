@@ -4,6 +4,12 @@ layer: impl
 title: makefile 実装説明書
 version: 1.3.0
 updated: 2026-07-29
+verified:
+  at: 2026-07-29
+  version: 1.3.0
+  against:
+    - doc: docs/02-design/system.md
+      version: 1.4
 summary: >
   ビルド・初回セットアップ・install/uninstall・login・upgrade・orch-sample 等の入口を
   `make <target>` の統一インタフェースで提供する Makefile。イメージビルドはマルチステージ

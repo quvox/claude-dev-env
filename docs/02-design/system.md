@@ -2,14 +2,14 @@
 id: system
 layer: design
 title: claude-dev-env 全体設計書
-version: 1.2.0
-updated: 2026-07-19
+version: 1.4.0
+updated: 2026-07-29
 verified:
-  at: 2026-07-19
-  version: 1.2.0
+  at: 2026-07-29
+  version: 1.4.0
   against:
     - doc: docs/01-requirements/core.md
-      version: 1.2
+      version: 1.5
     - doc: docs/01-requirements/orchestration.md
       version: 1.0
 summary: >
@@ -80,7 +80,7 @@ graph TD
 | makefile | ビルド・セットアップ・install/uninstall・login・upgrade・orch-sample 等の入口 | core/9(build),全般 | devcontainer, docker-proxy, orchestrator, sample-project | なし | 03-impl/makefile.md |
 | entrypoint | `entrypoint-claude.sh`：UID/GID 追従・認証コピー・firewall 起動・MCP/VNC/Chrome・tmux・認証同期・portsync 起動 | core/2,3,5,11 | firewall, portsync | なし | 03-impl/entrypoint.md |
 | firewall | `init-firewall-claude.sh`：iptables ファイアウォール | core/5 | — | なし | 03-impl/firewall.md |
-| devcontainer | `Dockerfile.claude`(base/vnc 2ステージ)・`Dockerfile.docker-proxy`・`.devcontainer/tmux.conf` 等イメージ定義。各モジュールの資産をイメージへ同梱する | core/1,11,9 | — | なし | 03-impl/devcontainer.md |
+| devcontainer | `Dockerfile.claude`(base / vnc-base / claude-cli / claude-vnc の4ステージ)・`Dockerfile.docker-proxy`・`.devcontainer/tmux.conf` 等イメージ定義。各モジュールの資産をイメージへ同梱する | core/1,11,9 | — | なし | 03-impl/devcontainer.md |
 | docker-proxy | Go 製 Docker API 検査プロキシ（危険操作拒否・/workspace bind 書換） | core/7 | — | なし | 03-impl/docker-proxy.md |
 | orchestrator | Go 製コントローラ：2モード・外部制御ループ・worker並列・タスク単位介入・相互レビュー・TUI・Slack・状態保全 | orchestration/12〜19 | hooks(Slack通知) | なし | 03-impl/orchestrator.md |
 | sample-project | `examples/orch-sample/`（Python+pytest 題材）・`workspace/orch-sample`・`scripts/orch-sample.sh`（scaffold）：自己検証 | orchestration/20 | orchestrator | なし | 03-impl/sample-project.md |
@@ -267,6 +267,23 @@ sequenceDiagram
 - **却下した代替案:** symlink 共有。
 - **理由:** Claude Code のアトミック書き込み（tmp→rename）で symlink が壊れる（D-3）。
 
+### 判断4:Claude Code 導入は「内容由来キー」で配布ステージの終端レイヤーに置く
+
+- **採用:** `Dockerfile.claude` を 4 ステージに分ける——重い共通層を持つ `base`、VNC 資産を積む
+  `vnc-base`(`FROM base`)、そして配布する 2 つの終端ステージ `claude-cli`(`FROM base`) /
+  `claude-vnc`(`FROM vnc-base`)。Claude Code の導入 `RUN` は**終端ステージの最終レイヤーにのみ**置き、
+  キャッシュキーには具体バージョン（`latest` チャネルを CI で解決した値）を使う（D-26）。
+- **却下した代替案:** ①`base` の途中で導入したまま、日次タイムスタンプで cache-bust する
+  ②`base` の途中で導入したまま、バージョンで cache-bust する ③導入をやめて実行時に自動更新させる。
+- **理由:** `vnc-base` は `FROM base` で連なるため、`base` 途中の層を失効させると VNC の高コスト層
+  （apt VNC 群・Chrome・`cargo install`）まで巻き込んで再ビルド・再 push・再 pull になる（①②が該当。
+  ①は加えて新版が無い日も毎日失効する）。終端レイヤーへ移すと、失効の波及先が claude バイナリ層
+  だけになり、鮮度（core/9 受入基準3）と pull の増分性（非機能:性能）を同時に満たせる。③は
+  ファイアウォール下・オフライン起動で不確定になり、イメージが「同一構成の保証」を失うため却下。
+- **一般原則:** レイヤーチェーンに入れてよいのは**内容由来**の値（実バージョン等）に限る。時刻など
+  内容と無関係に動く値を入れてはならない（`docs/knowledge/changing-label-busts-layer-cache.md`）。
+  内容由来であっても、失効の波及範囲を最小化できる位置——依存される側ではなく終端——に置く。
+
 ## 要件カバレッジ確認
 
 | 要件(領域/番号) | 対応モジュール |
@@ -284,7 +301,7 @@ sequenceDiagram
 | core/11 ブラウザ確認 | entrypoint, devcontainer, container-tools(tmux) |
 | orchestration/12〜19 | orchestrator, hooks(Slack) |
 | orchestration/20 自己検証 | sample-project, orchestrator, makefile |
-| core 非機能(セキュリティ/性能/保守/環境) | docker-proxy, devcontainer, cli/cli-mac |
+| core 非機能(セキュリティ/性能/保守/環境) | docker-proxy, devcontainer, ghcr-workflow(pull 増分性), cli/cli-mac |
 | orchestration 非機能(耐障害/保守/性能/可観測) | orchestrator |
 
 ## 未解決事項(Open Questions)

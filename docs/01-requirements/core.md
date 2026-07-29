@@ -2,16 +2,16 @@
 id: core
 layer: requirements
 title: 開発環境基盤 要件定義書
-version: 1.2.0
-updated: 2026-07-19
+version: 1.5.0
+updated: 2026-07-29
 verified:
-  at: 2026-07-23
-  version: 1.2.0
+  at: 2026-07-29
+  version: 1.5.0
   against:
     - doc: docs/00-requests/request.md
       version: 1.0
     - doc: docs/00-requests/decisions.md
-      version: 1.3
+      version: 1.4
     - doc: docs/00-requests/glossary.md
       version: 1.0
     - doc: docs/00-requests/acceptance.md
@@ -57,7 +57,7 @@ forward プロキシ / DooD / VM モード 等）。
   - `--no-vnc` 指定時: Chrome/VNC を起動せず軽量コンテナを使う
   - 同一ディレクトリで再実行時: 既存コンテナに再接続する（tmux が無ければ再作成）
 - **事後条件(成功時):** プロジェクト専用コンテナで Claude Code が動作している
-- **関連要件:** 要件1、要件2、要件4
+- **関連要件:** 要件1、要件2、要件4、要件5（基本フロー2 のファイアウォール設定）、要件11（同 VNC ありのブラウザ環境）
 
 ### UC-2:Webアプリをクライアントのブラウザで確認（AS-2）
 
@@ -92,6 +92,9 @@ forward プロキシ / DooD / VM モード 等）。
 - 認証ログイン（要件3）は独立した保守操作のため UC を持たない（AS では前提扱い）。
 - イメージ配布（要件9）・macOS 対応（要件10）・VM モード（要件8）は横断的な提供形態であり、
   UC-1〜3 のフロー内で「どの環境でも同じ操作ができる」形で満たされる。
+- ただし要件9 の受け入れ基準2〜4（タグ付与・同梱 Claude Code の版・手動指定）は**ビルド時の性質**で
+  あり、UC のフロー中に現れない。これらは利用者操作ではなく CI 側の成果物検証で確認する
+  （検証手段は 03-impl/ghcr-workflow.md のテスト表が持つ）。
 
 ## 機能要件
 
@@ -192,7 +195,10 @@ forward プロキシ / DooD / VM モード 等）。
 #### 受け入れ基準
 
 1. システムは GitHub Actions によりイメージを GHCR へマルチアーキ（amd64/arm64）で push しなければならない
-2. システムはイメージにタイムスタンプタグを付与し、日次で更新しなければならない
+2. WHEN 日次ビルド（03:30 JST）が実行されたとき、システムはイメージに `YYYYMMDDHHmm`（JST）形式のタイムスタンプタグと `latest` タグを付与して push しなければならない
+3. WHEN 日次ビルドが実行されたとき、システムは配布イメージに同梱する Claude Code のバージョンを、その時点の `latest` チャネル公開バージョンに一致させなければならない（[D-26](../00-requests/decisions.md)）
+4. WHERE Claude Code の特定バージョンが手動で指定された場合、システムは同梱する Claude Code をその指定バージョンにしなければならない（不良版を引いた際の切り戻し手段）
+5. WHEN 利用者が配布イメージを取得したとき、システムはイメージのラベルとして同梱バージョン（タイムスタンプ）を参照可能にしなければならない
 
 ### 要件10:macOS 対応
 
@@ -200,7 +206,7 @@ forward プロキシ / DooD / VM モード 等）。
 
 #### 受け入れ基準
 
-1. WHEN `make install` を実行したとき、システムは OS を判定し `/usr/local/bin/claude-dev` を適切な実体（macOS は `claude-dev-mac`）への symlink にしなければならない
+1. WHEN `make install` を実行したとき、システムは `uname -s` で OS を判定し、`/usr/local/bin/claude-dev` を Linux では `claude-dev`、macOS（`Darwin`）では `claude-dev-mac` への symlink にしなければならない
 2. WHERE macOS の場合、システムは SSH agent を TCP ブリッジで転送し、ポートは直結（SSH トンネル不要）とし、VM/KVM は非対応としなければならない
 3. WHERE Apple Silicon の場合、システムは arm64 ネイティブで動作しなければならない
 
@@ -219,7 +225,7 @@ forward プロキシ / DooD / VM モード 等）。
 | 分類 | 要件 |
 |---|---|
 | セキュリティ | 生 Docker ソケット・SSH 秘密鍵ファイルをコンテナへ渡さない。API キー/トークンをイメージに焼き込まない。docker-proxy をホスト非公開にする |
-| 性能・拡張性 | VNC ありイメージは VNC なしイメージのベースレイヤーを共有し、追加ディスクを Chrome/VNC 分に限定する。noVNC ポートはプロジェクト間で衝突しない |
+| 性能・拡張性 | VNC ありイメージは VNC なしイメージのベースレイヤーを共有し、追加ディスクを Chrome/VNC 分に限定する。noVNC ポートはプロジェクト間で衝突しない。日次ビルドの更新後も利用者の `docker pull` は増分取得に留め、実際に内容が変わった層以外を再取得させない（同梱 Claude Code の更新時に再取得させる層は、その導入層以降のみ） |
 | 運用・保守性 | OS 依存はホスト CLI（`claude-dev`/`claude-dev-mac`）に閉じ、コンテナ内資産は OS 非依存に保つ。全ターゲットを `make help` で確認できる |
 | システム環境 | Linux（Ubuntu 22.04+ / Debian 12+ 推奨）または macOS + Docker Desktop、Docker Engine 24+、`jq` 必須、Claude Pro/Max（OAuth） |
 
