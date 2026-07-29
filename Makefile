@@ -136,22 +136,22 @@ volumes:
 ## 全イメージビルド
 build: build-claude build-claude-vnc build-docker-proxy
 
-## Claude ベースイメージ
+## Claude ベースイメージ（配布ステージ claude-cli。Claude Code は Dockerfile 既定の latest）
 build-claude:
 	@echo "📦 Claude ベースイメージをビルド中..."
 	@docker build -t $(IMG_CLAUDE) \
-		--target base \
+		--target claude-cli \
 		--build-arg USERNAME=$(CUSER) \
 		--build-arg USER_UID=$$(id -u) \
 		--build-arg USER_GID=$$(id -g) \
 		-f $(BASE_DIR)/.devcontainer/Dockerfile.claude $(BASE_DIR)
 	@echo "✅ $(IMG_CLAUDE)"
 
-## Claude VNC イメージ
+## Claude VNC イメージ（配布ステージ claude-vnc。base/vnc-base 層は build-claude と共有）
 build-claude-vnc: build-claude
 	@echo "📦 Claude VNC イメージをビルド中..."
 	@docker build -t $(IMG_CLAUDE_VNC) \
-		--target vnc \
+		--target claude-vnc \
 		--build-arg USERNAME=$(CUSER) \
 		--build-arg USER_UID=$$(id -u) \
 		--build-arg USER_GID=$$(id -g) \
@@ -194,26 +194,41 @@ login:
 # =============================================================================
 
 ## Claude Code のみ高速更新（Go/Rust/Playwright 等はキャッシュ利用）
+# latest チャネルを具体バージョンへ解決し build-arg CLAUDE_VERSION で渡す（D-26）。
+# 値そのものが終端レイヤーのキャッシュキーになるため、新版が無ければキャッシュヒットで
+# 即終わり、新版があれば必ず失効する。解決に失敗したとき latest の文字列へフォールバック
+# すると、キャッシュヒットして「更新したつもりで何も変わらない」状態（CI で実際に起きた
+# 凍結と同型）になるため、フォールバックせずエラーで中断する。
 update-claude:
-	@echo "📦 Claude Code を更新中（キャッシュ利用で高速ビルド）..."
-	@docker build -t $(IMG_CLAUDE) \
-		--target base \
+	@set -e; \
+	claude_version=$$(curl -fsSL https://downloads.claude.ai/claude-code-releases/latest) || { \
+		echo "❌ Claude Code の latest バージョンを解決できませんでした（ネットワーク不通等）"; \
+		echo "   バージョンを解決できないままビルドすると更新されないため中断します"; \
+		exit 1; \
+	}; \
+	case "$$claude_version" in \
+		[0-9]*.[0-9]*.[0-9]*) ;; \
+		*) echo "❌ 解決結果が MAJOR.MINOR.PATCH 形式ではありません: $$claude_version"; exit 1 ;; \
+	esac; \
+	echo "📦 Claude Code $$claude_version へ更新中（キャッシュ利用で高速ビルド）..."; \
+	docker build -t $(IMG_CLAUDE) \
+		--target claude-cli \
 		--build-arg USERNAME=$(CUSER) \
 		--build-arg USER_UID=$$(id -u) \
 		--build-arg USER_GID=$$(id -g) \
-		--build-arg CLAUDE_CACHE_BUST=$$(date +%s) \
-		-f $(BASE_DIR)/.devcontainer/Dockerfile.claude $(BASE_DIR)
-	@echo "✅ Claude ベースイメージ更新完了"
-	@echo ""
-	@echo "📦 Claude VNC イメージを更新中..."
-	@docker build -t $(IMG_CLAUDE_VNC) \
-		--target vnc \
+		--build-arg CLAUDE_VERSION=$$claude_version \
+		-f $(BASE_DIR)/.devcontainer/Dockerfile.claude $(BASE_DIR); \
+	echo "✅ Claude ベースイメージ更新完了"; \
+	echo ""; \
+	echo "📦 Claude VNC イメージを更新中..."; \
+	docker build -t $(IMG_CLAUDE_VNC) \
+		--target claude-vnc \
 		--build-arg USERNAME=$(CUSER) \
 		--build-arg USER_UID=$$(id -u) \
 		--build-arg USER_GID=$$(id -g) \
-		--build-arg CLAUDE_CACHE_BUST=$$(date +%s) \
-		-f $(BASE_DIR)/.devcontainer/Dockerfile.claude $(BASE_DIR)
-	@echo "✅ Claude VNC イメージ更新完了"
+		--build-arg CLAUDE_VERSION=$$claude_version \
+		-f $(BASE_DIR)/.devcontainer/Dockerfile.claude $(BASE_DIR); \
+	echo "✅ Claude VNC イメージ更新完了"
 	@echo ""
 	@echo "   実行中のコンテナは claude-dev stop → claude-dev start で反映"
 
@@ -221,7 +236,7 @@ update-claude:
 upgrade:
 	@echo "📦 Claude ベースイメージを更新中..."
 	@docker build --no-cache -t $(IMG_CLAUDE) \
-		--target base \
+		--target claude-cli \
 		--build-arg USERNAME=$(CUSER) \
 		--build-arg USER_UID=$$(id -u) \
 		--build-arg USER_GID=$$(id -g) \
@@ -230,7 +245,7 @@ upgrade:
 	@echo ""
 	@echo "📦 Claude VNC イメージを更新中..."
 	@docker build --no-cache -t $(IMG_CLAUDE_VNC) \
-		--target vnc \
+		--target claude-vnc \
 		--build-arg USERNAME=$(CUSER) \
 		--build-arg USER_UID=$$(id -u) \
 		--build-arg USER_GID=$$(id -g) \
