@@ -5,11 +5,11 @@ title: cli-mac 実装説明書
 version: 1.2.0
 updated: 2026-07-19
 verified:
-  at: 2026-07-19
+  at: 2026-07-29
   version: 1.2.0
   against:
     - doc: docs/02-design/system.md
-      version: 1.2
+      version: 1.4
 summary: >
   macOS 版ホスト CLI `claude-dev-mac`（単一 bash）。cli との差分のみを持つ——SSH agent を
   専用 agent＋socat TCP ブリッジ（127.0.0.1）で転送・ポート直結（SSH トンネルなし）・VM/KVM 非対応・

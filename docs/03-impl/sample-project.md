@@ -2,14 +2,14 @@
 id: sample-project
 layer: impl
 title: sample-project 実装説明書
-version: 1.0.0
-updated: 2026-07-18
+version: 1.1.0
+updated: 2026-07-29
 verified:
-  at: 2026-07-19
-  version: 1.0.0
+  at: 2026-07-29
+  version: 1.1.0
   against:
     - doc: docs/02-design/system.md
-      version: 1.1
+      version: 1.4
 summary: >
   オーケストレーター自己検証用のサンプル題材 examples/orch-sample/（外部依存なしの Python+pytest
   ユーティリティ mathkit）と、それを使い捨て作業コピー workspace/orch-sample へ独立 git リポジトリ
@@ -179,7 +179,10 @@ scripts/orch-sample.sh [--force] [--seed]
   直接は `scripts/orch-sample.sh [--force] [--seed]`。
 - 作業コピー削除: `make orch-sample-clean`。
 - 題材の pytest: `cd examples/orch-sample && pytest`（`pytest.ini` で `pythonpath=src` 設定済み）。
-- 自己検証実走: `make orch-sample` 後に `claude-dev orchestrate --workspace workspace/orch-sample`。
+- 自己検証実走: `make orch-sample` 後に、作業コピー `workspace/orch-sample` を対象として
+  オーケストレーターを起動する（`claude-dev orchestrate` にワークスペース指定オプションは無い。
+  当該ディレクトリで `claude-dev start`→`claude-dev orchestrate`、またはローカルビルドした
+  `orchestrator --workspace workspace/orch-sample` を直接起動する）。
 
 ## 既知の制限・技術的負債
 

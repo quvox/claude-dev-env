@@ -351,7 +351,7 @@ require_setup() {
     if ! image_exists "$IMG_CLAUDE"; then
         echo "📦 Claude ベースイメージが見つかりません。ビルドします..."
         docker build -t "$IMG_CLAUDE" \
-            --target base \
+            --target claude-cli \
             --build-arg USERNAME="$CUSER" \
             --build-arg USER_UID="$(id -u)" \
             --build-arg USER_GID="$(id -g)" \
@@ -360,7 +360,7 @@ require_setup() {
     if ! image_exists "$IMG_CLAUDE_VNC"; then
         echo "📦 Claude VNC イメージが見つかりません。ビルドします..."
         docker build -t "$IMG_CLAUDE_VNC" \
-            --target vnc \
+            --target claude-vnc \
             --build-arg USERNAME="$CUSER" \
             --build-arg USER_UID="$(id -u)" \
             --build-arg USER_GID="$(id -g)" \
@@ -519,7 +519,7 @@ setup)
     echo ""
     echo "📦 Claude ベースイメージをビルド中... (user: $CUSER)"
     docker build -t "$IMG_CLAUDE" \
-        --target base \
+        --target claude-cli \
         --build-arg USERNAME="$CUSER" \
         --build-arg USER_UID="$(id -u)" \
         --build-arg USER_GID="$(id -g)" \
@@ -530,7 +530,7 @@ setup)
     echo ""
     echo "📦 Claude VNC イメージをビルド中..."
     docker build -t "$IMG_CLAUDE_VNC" \
-        --target vnc \
+        --target claude-vnc \
         --build-arg USERNAME="$CUSER" \
         --build-arg USER_UID="$(id -u)" \
         --build-arg USER_GID="$(id -g)" \
@@ -1224,7 +1224,7 @@ list)
 upgrade)
     echo "📦 Claude ベースイメージを更新中..."
     docker build --no-cache -t "$IMG_CLAUDE" \
-        --target base \
+        --target claude-cli \
         --build-arg USERNAME="$CUSER" \
         --build-arg USER_UID="$(id -u)" \
         --build-arg USER_GID="$(id -g)" \
@@ -1234,7 +1234,7 @@ upgrade)
     echo ""
     echo "📦 Claude VNC イメージを更新中..."
     docker build --no-cache -t "$IMG_CLAUDE_VNC" \
-        --target vnc \
+        --target claude-vnc \
         --build-arg USERNAME="$CUSER" \
         --build-arg USER_UID="$(id -u)" \
         --build-arg USER_GID="$(id -g)" \

@@ -2,19 +2,20 @@
 id: ghcr-workflow
 layer: impl
 title: ghcr-workflow 実装説明書
-version: 1.1.0
-updated: 2026-07-18
+version: 1.2.0
+updated: 2026-07-29
 verified:
-  at: 2026-07-19
-  version: 1.1.0
+  at: 2026-07-29
+  version: 1.2.0
   against:
     - doc: docs/02-design/system.md
-      version: 1.1
+      version: 1.4
 summary: >
   コンテナイメージ（claude / claude-vnc / docker-proxy）を GHCR へ毎日・マルチアーキ
   (amd64/arm64) で push する GitHub Actions ワークフロー。prepare→build(matrix, push-by-digest)
   →merge(imagetools) の3ジョブ構成で、YYYYMMDDHHmm(JST) と latest の2タグを付与する。
-keywords: [GitHubActions, GHCR, buildx, マルチアーキ, push-by-digest, imagetools, タグ]
+  prepare で Claude Code の latest チャネルを具体バージョンへ解決し、build-arg でピン留めする。
+keywords: [GitHubActions, GHCR, buildx, マルチアーキ, push-by-digest, imagetools, タグ, ClaudeCodeバージョン]
 depends_on: [devcontainer]
 source:
   - docs/02-design/system.md
@@ -29,8 +30,10 @@ source:
 （`ghcr.io`）へマルチアーキ（amd64 / arm64）で push するワークフロー（要件 core/9 配布）。
 重いイメージ（CPython ソースビルド等）を arm64 で QEMU エミュレーションせず（エミュレーションは
 ビルド時間が数倍に増えるため）、アーキごとにネイティブ runner で並行ビルドし、manifest list を統合する方式を採る。
-`prepare`（タグ算出）→ `build`（matrix・push-by-digest）→ `merge`（imagetools でタグ付け）の
-3 ジョブから成る。上流: [全体設計](../02-design/system.md)。
+`prepare`（タグ算出＋Claude Code バージョン解決）→ `build`（matrix・push-by-digest）→
+`merge`（imagetools でタグ付け）の 3 ジョブから成る。同梱する Claude Code は prepare で解決した
+具体バージョンにピン留めして焼く（要件 core/9 受入基準3・4、決定 D-26）。
+上流: [全体設計](../02-design/system.md)。
 
 ## ファイル構成
 
@@ -38,20 +41,33 @@ source:
 |---|---|
 | .github/workflows/ghcr-images.yml | GHCR マルチアーキ日次配布ワークフロー本体（3ジョブ） |
 
-ビルド対象の Dockerfile（`.devcontainer/Dockerfile.claude` の base/vnc ステージ、
-`.devcontainer/Dockerfile.docker-proxy`）は devcontainer モジュールが所有する。
+ビルド対象の Dockerfile（`.devcontainer/Dockerfile.claude` の `claude-cli`/`claude-vnc` 終端
+ステージ、`.devcontainer/Dockerfile.docker-proxy`）は devcontainer モジュールが所有する。
 
 ## モジュール別実装詳細
 
 ### prepare ジョブ
 
-- **責務:** タグ（`YYYYMMDDHHmm`, JST）と小文字化したオーナー名を 1 度だけ算出し、後続ジョブへ配る。
+- **責務:** タグ（`YYYYMMDDHHmm`, JST）・小文字化したオーナー名・**同梱する Claude Code の具体
+  バージョン**を 1 度だけ算出し、後続ジョブへ配る。
 - **処理の要点:**
   - `runs-on: ubuntu-latest`。
   - outputs `tag`: `TZ=Asia/Tokyo date +%Y%m%d%H%M`（JST の分精度タイムスタンプ）。
   - outputs `owner`: `github.repository_owner` を `tr '[:upper:]' '[:lower:]'` で小文字化
     （GHCR はパスに小文字を要求するため）。
-- **実装上の判断:** タグを prepare で 1 度だけ算出することで、全 build/merge ジョブ間でタグがずれない。
+  - outputs `claude_version`: `workflow_dispatch` 入力 `claude_version` が空でなければその値を採用し、
+    空（スケジュール実行を含む）なら `https://downloads.claude.ai/claude-code-releases/latest` を
+    `curl -fsSL` で取得した値を採用する（D-26）。取得値が `MAJOR.MINOR.PATCH` 形式に合致しない場合
+    （HTML エラーページ等）は**ジョブを失敗させる**。
+- **実装上の判断:**
+  - タグを prepare で 1 度だけ算出することで、全 build/merge ジョブ間でタグがずれない。Claude Code の
+    バージョンも同様に 1 度だけ解決する——6 つの build ジョブが個別に `latest` を引くと、解決の
+    タイミング差で amd64 と arm64 に別バージョンが入り、同一 manifest list 内でアーキ間の版が
+    食い違いうるため。
+  - `latest` チャネルの値を**具体バージョンへ解決してから**渡す。`CLAUDE_VERSION=latest` のまま
+    渡すと文字列が変化せずキャッシュキーとして機能せず、凍結問題が再発する。
+  - 形式検証を入れるのは、不正値をそのまま `install.sh` に渡すと引数バリデーションで落ちる位置が
+    ビルド後半になり、原因追跡が遠くなるため（prepare で早期に落とす）。
 
 ### build ジョブ（matrix）
 
@@ -59,8 +75,8 @@ source:
 - **処理の要点:**
   - `needs: prepare`、`strategy.fail-fast: false`（1 ジョブ失敗でも他を継続）。
   - matrix `image`（`{name, dockerfile, target}`）:
-    - `claude`: `.devcontainer/Dockerfile.claude` / target `base`
-    - `claude-vnc`: `.devcontainer/Dockerfile.claude` / target `vnc`
+    - `claude`: `.devcontainer/Dockerfile.claude` / target `claude-cli`
+    - `claude-vnc`: `.devcontainer/Dockerfile.claude` / target `claude-vnc`
     - `docker-proxy`: `.devcontainer/Dockerfile.docker-proxy` / target `""`（空＝target 指定なし）
   - matrix `platform`（`{arch, runner, docker}`）:
     - `amd64`: runner `ubuntu-latest` / `linux/amd64`
@@ -73,9 +89,13 @@ source:
     - `context: .`、`file: matrix.image.dockerfile`、`target: matrix.image.target`、
       `platforms: matrix.platform.docker`（単一アーキ）。
     - `build-args`: `USERNAME=dev` / `USER_UID=1000` / `USER_GID=1000`（特定ユーザーに紐づけない
-      generic user。UID/GID は実行時に entrypoint が /workspace 所有者へ追従）。
-      docker-proxy は `USERNAME` 系 ARG を宣言しないため無視（警告のみ）。
+      generic user。UID/GID は実行時に entrypoint が /workspace 所有者へ追従）＋
+      `CLAUDE_VERSION=${{ needs.prepare.outputs.claude_version }}`。
+      docker-proxy は `USERNAME`/`CLAUDE_VERSION` 系 ARG を宣言しないため無視（警告のみ）。
       **`IMAGE_VERSION` は build-arg で渡さない**（後述のキャッシュ理由）。
+      `CLAUDE_VERSION` は build-arg で渡してよい——**内容由来の値**であり、かつ参照する層が配布
+      ステージの終端レイヤーに限られるため、失効の波及先が claude バイナリ層だけに留まる
+      （設計: [判断4](../02-design/system.md)、決定 D-26）。
     - `labels`: `io.github.quvox.claude-dev.version` / `org.opencontainers.image.version` =
       `${{ needs.prepare.outputs.tag }}`。**バージョン（日次で変わるタイムスタンプ）は build-arg=
       `IMAGE_VERSION` として Dockerfile の `LABEL` 経由でレイヤーチェーンに載せない**。載せると
@@ -135,11 +155,12 @@ source:
 | secrets.GITHUB_TOKEN | GHCR ログインのパスワード（Actions 既定トークン） | Actions 自動発行 | ○ |
 | github.actor | GHCR ログインのユーザー名 | 実行者 | ○（自動） |
 | github.repository_owner | イメージパスのオーナー（小文字化して使用） | リポジトリ所有者 | ○（自動） |
+| inputs.claude_version | `workflow_dispatch` の手動入力。同梱する Claude Code のバージョンを明示指定する（`stable`／`latest`／`2.1.220` 等）。不良版を引いた際の切り戻し手段（D-26） | 空（＝`latest` チャネルを自動解決） | 任意 |
 
 トリガー・権限:
 
-- `on`: `schedule`（`cron: '30 18 * * *'` = UTC 18:30 = 03:30 JST 毎日）と `workflow_dispatch`（手動）。
-  push トリガーは無し。
+- `on`: `schedule`（`cron: '30 18 * * *'` = UTC 18:30 = 03:30 JST 毎日）と `workflow_dispatch`（手動、
+  入力 `claude_version`）。push トリガーは無し。
 - `permissions`: `contents: read`, `packages: write`（GHCR push に必要）。
 - `concurrency`: group `ghcr-images`、`cancel-in-progress: false`（多重起動を直列化）。
 
@@ -150,6 +171,8 @@ source:
 | ダイジェストファイルが無い | build: Upload digest | `if-no-files-found: error` でジョブ失敗 | core/9 |
 | 一部アーキ/イメージのビルド失敗 | build/merge: strategy | `fail-fast: false` で他ジョブは継続 | core/9 |
 | ワークフロー多重起動 | concurrency | 同一 group を直列化（進行中はキャンセルしない） | core/9 |
+| Claude Code バージョンの解決失敗（取得不能・HTML エラーページ等） | prepare: claude_version 算出 | `MAJOR.MINOR.PATCH` 形式に合致しなければジョブを失敗させ、build へ進ませない | core/9 受入基準3 |
+| 同梱された Claude Code が不良版だった | 運用（`workflow_dispatch` 入力） | 直前の正常バージョンを `claude_version` に指定して手動再実行し、焼き直す | core/9 受入基準4 |
 
 ## テスト
 
@@ -158,7 +181,10 @@ source:
 
 | テスト(ファイル::ケース名) | レベル | 検証内容 | 対応する受け入れ基準/契約 |
 |---|---|---|---|
-| CI 実機（`workflow_dispatch` 手動実行 → GHCR 確認） | 実機 | 3 イメージ × amd64/arm64 の manifest list が `YYYYMMDDHHmm` と `latest` で push される | core/9 配布 |
+| CI 実機（`workflow_dispatch` 手動実行 → GHCR 確認） | 実機 | 3 イメージ × amd64/arm64 の manifest list が `YYYYMMDDHHmm` と `latest` で push される | core/9 受入基準1,2 |
+| CI 実機（配布イメージ内で `claude --version` を確認） | 実機 | 同梱 Claude Code のバージョンが、そのビルド時点の `latest` チャネル値と一致する | core/9 受入基準3 |
+| CI 実機（`claude_version` を指定して手動実行） | 実機 | 指定した特定バージョンが同梱される | core/9 受入基準4 |
+| CI 実機（新版が出ていない日の再実行ログ） | 実機 | claude 導入層が `CACHED` となり、`base`/`vnc-base` の高コスト層も再ビルドされない | 非機能:性能（pull 増分性） |
 
 実行方法: GitHub 上で本ワークフローを手動実行（Actions タブ → workflow_dispatch）するか、
 日次スケジュール（03:30 JST）で自動実行。GHCR パッケージ一覧と `imagetools inspect` の出力で確認する。
@@ -170,14 +196,22 @@ source:
   `platforms: linux/amd64,linux/arm64` で 1 回ビルド（push-by-digest を使わず直接タグ push）に
   変更する必要がある。ただし arm64 エミュレーションビルドは非常に遅いため既定は採らない。
 - GHCR パッケージの可視性（public/private）はワークフロー外（GitHub のパッケージ設定）で調整する。
+- 同梱 Claude Code の鮮度は `latest` チャネルの公開に追随するため、`stable` への段階的公開を待たない。
+  不良版を引くリスクは `workflow_dispatch` 入力による手動ピンで運用的に回収する（D-26）。
 
 ## 運用メモ
 
 - タグ時刻 `YYYYMMDDHHmm` は JST。`prepare` で 1 度だけ算出して全 merge ジョブへ配るため、
   イメージ間でタグがずれない。
 - private 公開の場合、pull 側は `docker login ghcr.io` が必要。
-- Dockerfile の base/vnc ステージや ARG を変更した際は、本ワークフローの build-args / target 指定
-  との整合を確認する（devcontainer モジュールと連動）。
-- **日次で変わる値を新たに build-arg / ENV / LABEL でレイヤーチェーンへ入れない**こと（`IMAGE_VERSION`
-  を `labels` に移した理由と同じ）。入れると `cache-from` が実効しなくなり pull が全再取得に戻る。
-  バージョン等のメタデータは build-push-action の `labels` 入力で最終イメージへ付与する。
+- Dockerfile のステージ構成（`base`/`vnc-base`/`claude-cli`/`claude-vnc`）や ARG を変更した際は、
+  本ワークフローの build-args / target 指定との整合を確認する（devcontainer モジュールと連動）。
+- **時刻など内容と無関係に変化する値を build-arg / ENV / LABEL でレイヤーチェーンへ入れない**こと
+  （`IMAGE_VERSION` を `labels` に移した理由と同じ）。入れると `cache-from` が実効しなくなり pull が
+  全再取得に戻る。バージョン等のメタデータは build-push-action の `labels` 入力で最終イメージへ付与する。
+- 一方で、**内容由来**の値（`CLAUDE_VERSION` のような実バージョン）はレイヤーチェーンに入れる必要が
+  ある。ここを完全に固定すると当該層が永久にキャッシュヒットし、**中身が更新されないままラベルだけ
+  日次で変わる**状態になる（2026-07-19〜2026-07-29 に実際に発生し、同梱 claude が 2.1.214 で凍結した）。
+  内容由来キーは、失効の波及範囲が最小になる位置——配布ステージの終端レイヤー——に置く（D-26）。
+- 日次実行のログで claude 導入層が `CACHED` かどうかは、**その日に新版が無かったこと**を意味する。
+  新版が出ているのに `CACHED` なら `claude_version` の解決が壊れているサインとして扱う。

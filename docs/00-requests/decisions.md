@@ -2,16 +2,16 @@
 id: decisions
 layer: request
 title: claude-dev-env 決定台帳
-version: 1.3.0
-updated: 2026-07-23
+version: 1.4.0
+updated: 2026-07-29
 verified:
-  at: 2026-07-23
-  version: 1.3.0
+  at: 2026-07-29
+  version: 1.4.0
   against: []
 summary: >
   既存実装に埋め込まれた設計判断を「決定/委任/要確認」に仕分けた台帳。逆生成のため証跡は
-  既存コード・旧docsを指す（人間は00層の承認ゲートで本台帳を追認する）。決定20・委任2・要確認3。
-keywords: [決定台帳, 隔離方針, docker-proxy, オーケストレーター, VMモード, 委任]
+  既存コード・旧docsを指す（人間は00層の承認ゲートで本台帳を追認する）。決定21・委任2・要確認3。
+keywords: [決定台帳, 隔離方針, docker-proxy, オーケストレーター, VMモード, 委任, ClaudeCodeバージョン]
 source: null
 ---
 
@@ -37,7 +37,7 @@ source: null
 | D-8 | KVM デバイスの受け渡し | 既定では `/dev/kvm` 等を渡さない。`--kvm` 指定時のみ device 渡し（無ければ警告しソフトエミュ） | 通常は Chrome 操作で足りる。過剰な特権付与を避ける | 旧02_architecture, entrypoint |
 | D-9 | VM モード | 重い Docker 案件向けにオプトイン（`--vm`）。QEMU+virtiofs のゲストVMで**ネイティブDocker**を動かし、claude コンテナは privileged 化しない。`/workspace` は virtiofs で同一パス共有、Docker は `DOCKER_HOST` | bind/compose/privileged が要る案件と、軽量既定（DooD+proxy）を両立する | 旧08_vm-mode, `scripts/vm*` |
 | D-10 | macOS 対応 | ホスト CLI を `claude-dev-mac` に差し替え（`make install` が OS 判定で symlink）。SSH agent は TCP ブリッジ、ポート直結、VM/KVM 非対応、arm64 ネイティブ | OS 依存をホスト CLI に閉じ、コンテナ資産は OS 非依存に保つ | 旧09_macos-support, `claude-dev-mac` |
-| D-11 | イメージ配布 | GitHub Actions で GHCR へマルチアーキ・日次・タイムスタンプタグで push | チーム全員が同一構成を pull で使える | 旧10_ghcr-images, `.github/workflows/ghcr-images.yml` |
+| D-11 | イメージ配布 | GitHub Actions で GHCR へマルチアーキ・日次・タイムスタンプタグで push | チーム全員が同一構成を pull で使える | 旧10_ghcr-images, `.github/workflows/ghcr-images.yml`（同梱 Claude Code のバージョン方針は D-26） |
 | D-12 | オーケストレーションの実装方式 | 自作の**外部制御ループ**（コントローラがループを所有）。Docker Agent／Stop-hook 力技は当面不採用 | 暴走しない・コンテキストを汚さない・再開可能。L1推論ループは `claude -p`／対話Claudeから借りる | 旧06_orchestration §3 |
 | D-13 | オーケストレーターの2モード | 「1実体・2モード」。ブレインストーミング（人間×対話Claude、自動化しない）と実行（自律・並列）。境界は実装仕様ドキュメント | 人間の価値が宿る検討は自動化せず、実装〜整合性確認を自動化する | 旧06_orchestration §2 |
 | D-14 | コントローラの常駐方式 | tmux 常駐（`orch-<project>-main` セッション内の `dashboard` ウィンドウで常駐）。各 worker/ブレインストーミングは同セッションの独立ウィンドウ | クライアント破壊でも tmux サーバがセッションを保持→再attachで復旧。完全デーモン化より単純 | 旧06_orchestration §4.1/§5.9 |
@@ -47,6 +47,7 @@ source: null
 | D-18 | 品質ゲート（レビュー） | 実装 worker と別 worker（できれば別ベンダー）による独立レビュー。採点は当該タスクの `completion` のみ（プランゴールで採点しない）。レビュー結果は構造化出力（スキーマ強制）で返す。同一フォーマットエラー2回で打切り介入へ | 旧 MODIFICATION の誤採点・パース失敗・試行浪費を構造的に是正 | 旧MODIFICATION, 06_orchestration §8, `orchestrator/review*` |
 | D-24 | 複数プロジェクト同時実行時の compose リソース分離とライフサイクル | ①**分離**: DooD 既定モードで各プロジェクトのコンテナ内 `docker compose` が作るネットワーク名・コンテナ名をプロジェクト間で衝突させない。`COMPOSE_PROJECT_NAME` を起動ディレクトリ名で一意化する。`claude-dev-net`（claude↔proxy）は共有のまま分離しない。②**ライフサイクル**: compose で作られたコンテナ群は親 claude コンテナに束ね、`claude-dev stop` 時にラベル `com.docker.compose.project=<正規化NAME>` を持つコンテナと当該プロジェクトの compose デフォルトネットワークを削除する（`docker compose down` 相当。名前付きボリュームは非破壊のため保持）。共有の `claude-dev-net`・docker-proxy は削除しない。VM モードは compose がゲスト内 Docker で完結するため本片付けの対象外 | 全プロジェクトが `/workspace` にマウントされ compose 既定名が `workspace` に衝突するため。分離は compose 層で十分（利用者確認済み）。claude-dev-net の分離は単一共有 proxy 前提と両立しないため見送り。stop 後に compose コンテナが孤児として残り続けるのを防ぐ一方、ボリューム削除は破壊的なため行わず、共有リソースは他プロジェクトが使用中のため残す | 本変更, `claude-dev`/`claude-dev-mac`（`-e COMPOSE_PROJECT_NAME`／`stop`） |
 | D-25 | コンテナ内動作の判定マーカー（`container` 環境変数） | 全 claude コンテナに環境変数 `container=docker` を持たせ、コンテナ内で動作するプロセスが「自分がコンテナ内か」を判定できるようにする。名前・値は systemd/podman の標準慣習（`container=<runtime>`）に合わせ `container=docker` とする。イメージ焼き込み（`Dockerfile.claude` の base ステージの `ENV`）で付与し、VNC 版も `FROM base` 継承で同値を持つ。起動経路（`docker run`／login 等の一時コンテナ含む）に依存させないためイメージ側で常時保証する | 内部プロセス（entrypoint・各スクリプト・オーケストレーター等）が環境依存の分岐を安全にできるようにする恒久マーカーが要る。名前・値を既存の業界標準慣習に合わせることで、systemd 等の外部ツールとの互換も同時に得られる。起動時 `-e` 付与は経路依存で漏れうるためイメージ側に置く | 本変更, `.devcontainer/Dockerfile.claude` |
+| D-26 | 同梱する Claude Code のバージョン方針と、そのキャッシュキーの置き場所 | ①**チャネル**: 配布イメージに焼く Claude Code は `https://downloads.claude.ai/claude-code-releases/latest` を CI の prepare ジョブで具体バージョン（例 `2.1.220`）へ解決し、build-arg として**ピン留めして**インストールする。`install.sh` の引数なし既定（`stable` チャネル）は使わない。②**逃げ道**: 不良版を引いた場合は `workflow_dispatch` の入力で特定バージョンを手動指定して焼き直せるようにする（`install.sh` は `stable｜latest｜具体バージョン` を受け付ける）。③**キャッシュキー**: バージョン文字列そのものをキャッシュキーとし、時刻由来の cache-bust（`CLAUDE_CACHE_BUST`）は廃止する。新版が出た日だけ当該レイヤーが失効し、出ない日は完全にキャッシュヒットする。④**日次更新の意味**: 「日次で更新」の保証はタグが変わることではなく、**同梱 Claude Code が `latest` に追随すること**を含む（要件9の受け入れ基準に反映） | 2026-07-18 の変更（バージョンを build-arg から `labels` へ移しレイヤーキャッシュを実効化）以降、レイヤーチェーンから日々変わる値が消え、claude 導入層が永久にキャッシュヒットするようになった。結果、ラベルだけが日次更新され**同梱版は 2026-07-19 時点の 2.1.214 で凍結**していた。`stable` は段階的公開のため現行 `latest` より古い版を指すことがあり（2026-07-29 観測: stable=2.1.212 / latest=2.1.220）、`stable` 追随ではむしろ現状より古い版を焼くことになる。`latest` ピン留めならホスト側 claude（`latest` 追随）と版が揃い、認証共有時にホスト/イメージ間のバージョン差が問題になりにくい（D-3 の `--update=none` 方針と整合）。時刻由来ではなく内容由来のキーにすることで、キャッシュの実効性（pull を増分に保つ）と鮮度を両立できる | 本変更, `.github/workflows/ghcr-images.yml`, `.devcontainer/Dockerfile.claude` |
 
 ## AIへの委任
 

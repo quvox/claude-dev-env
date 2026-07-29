@@ -2,14 +2,14 @@
 id: cli
 layer: impl
 title: cli 実装説明書
-version: 1.3.0
-updated: 2026-07-19
+version: 1.5.1
+updated: 2026-07-29
 verified:
-  at: 2026-07-19
-  version: 1.3.0
+  at: 2026-07-29
+  version: 1.5.1
   against:
     - doc: docs/02-design/system.md
-      version: 1.2
+      version: 1.4
 summary: >
   ホスト Linux 用 `claude-dev`（単一 bash スクリプト）の実装。case ディスパッチで
   start/stop/list/attach/forward/orchestrate/login 等のサブコマンドを提供し、Docker
@@ -45,7 +45,7 @@ source:
 
 ## モジュール別実装詳細
 
-### 初期化・定数（claude-dev L1〜48）
+### 初期化・定数（claude-dev L1〜59）
 
 - `SCRIPT_PATH` を `readlink -f`／`realpath` で解決（symlink 経由起動に対応）、`BASE_DIR` はその親。
 - `BASE_DIR/.env` があれば `set -a; source; set +a` でエクスポート。
@@ -67,7 +67,7 @@ source:
   イメージ名 `IMG_CLAUDE`/`IMG_CLAUDE_VNC`/`IMG_DOCKER_PROXY`、`DOCKER_PROXY_CONTAINER`、
   `DEV_DIR=~/.claude-dev`・`DEV_AGENT_DIR`、`PROJECT_CONFIG_NAME=.claude-dev.yaml`。
 
-### ヘルパー関数群（L54〜406）
+### ヘルパー関数群（L61〜417）
 
 - **SSH 鍵解決**: `_parse_ssh_keys_yaml`（`ssh_keys:` セクションの `- path` を簡易パース、`~`→`$HOME`
   展開・コメント除去）／`load_ssh_keys_from_config`（`<project_dir>/.claude-dev.yaml` の `ssh_keys:`
@@ -86,7 +86,8 @@ source:
 - **ポート探索**: `find_available_novnc_port`（6080〜+100 で `docker ps` の公開ポートに無い空きを返す。
   選定〜`docker run` が非アトミックなため競合し得るが `start` のリトライで吸収）、
   `find_available_host_port`（8100〜+900）。
-- **セットアップ/前提**: `require_setup`（`IMG_CLAUDE`/`IMG_CLAUDE_VNC` 未存在なら `--target base/vnc`・
+- **セットアップ/前提**: `require_setup`（`IMG_CLAUDE`/`IMG_CLAUDE_VNC` 未存在なら
+  `--target claude-cli`/`--target claude-vnc`・
   `USERNAME/USER_UID/USER_GID` build-arg で自動ビルド）、`check_host_deps`（`docker`・`jq` を確認、
   無ければ導入案内して `exit 1`）、`ensure_project_config`（`.claude-dev.yaml` 不在時のみ TTY は鍵選択、
   非 TTY は空 `ssh_keys:` で作成。既存は尊重）、`ensure_infrastructure`（ネットワーク＋共有 3 ボリュームを
@@ -98,10 +99,10 @@ source:
   未起動なら `claude-dev-net` 上に `--restart unless-stopped`・ソケット RO マウント・
   `-e CLAUDE_DEV_ALLOW_WORKSPACE_BINDS=${...:-1}` 付きで起動）。
 
-### サブコマンド（case ディスパッチ、L411〜1354）
+### サブコマンド（case ディスパッチ、L422〜1387）
 
-- **`setup`**: `.env` 生成（example から）、ネットワーク・共有 3 ボリューム作成、`IMG_CLAUDE`(base)・
-  `IMG_CLAUDE_VNC`(vnc)・`IMG_DOCKER_PROXY` を順にビルド、次手順と PATH 用 symlink コマンドを案内。
+- **`setup`**: `.env` 生成（example から）、ネットワーク・共有 3 ボリューム作成、`IMG_CLAUDE`(`claude-cli`)・
+  `IMG_CLAUDE_VNC`(`claude-vnc`)・`IMG_DOCKER_PROXY` を順にビルド、次手順と PATH 用 symlink コマンドを案内。
 - **`login`**: `require_setup`→`ensure_infrastructure` 後、一時コンテナ（`--rm -it`、`--entrypoint bash`、
   `VOL_AUTH` を `~/.claude-shared` へ）を起動。root が `settings.json` 未存在時に
   `{"permissions":{"defaultMode":"bypassPermissions"},"model":"sonnet"}` を生成し `chown`（共有しない）→
@@ -171,7 +172,7 @@ source:
 - **`ssh-keys [reset|select]`**: 対象はカレントプロジェクト。引数なし/`select` は `select_ssh_keys_interactive`。
   `reset` は `.claude-dev.yaml` から `ssh_keys` 関連行を `grep -vE` 除去（他記述なしなら削除）し、専用 agent
   （`<NAME>.sock`/`.pid`）を kill・削除。その他は使い方表示し `exit 1`。
-- **`upgrade`**: 3 イメージを `--no-cache` 再ビルド（反映は stop→start）。
+- **`upgrade`**: 3 イメージ（`claude-cli`/`claude-vnc`/docker-proxy）を `--no-cache` 再ビルド（反映は stop→start）。
 - **`firewall`**: 稼働中コンテナで `iptables -L OUTPUT -n --line-numbers`。
 - **`reset`**: 確認プロンプト後、全 Claude コンテナ・全 `fwd-*`・proxy を削除、共有 3 ボリューム・全
   `claude-dev-chrome-*`・ネットワーク・3 イメージを削除。
@@ -203,10 +204,10 @@ source:
 | `.claude-dev.yaml` 不在 | `ensure_project_config` | TTY は鍵選択、非 TTY は空作成。停止しない | core/4 |
 | SSH 鍵 0 件/存在しない鍵 | `ensure_ssh_agent` | 転送なしで続行し `ssh_keys:` 記述を案内、欠落鍵は警告スキップ | core/4 |
 | noVNC ポート競合 | `start` の `docker run` リトライ | 途中コンテナ掃除→別ポートで最大 20 回再試行 | core/1,6 |
-| tmux 起動タイムアウト | `start` L864〜 | 終了せず状況案内し `exit 0`（コンテナは稼働継続） | core/1 |
+| tmux 起動タイムアウト | `start` L882〜 | 終了せず状況案内し `exit 0`（コンテナは稼働継続） | core/1 |
 | コンテナ未起動での操作 | `code`/`attach`/`forward`/`ports`/`firewall` | 日本語エラーで `exit 1` | core/1,6 |
 | pull 全失敗 | `pull` | `docker login ghcr.io` 案内し `exit 1` | core/9 |
-| VM モードで `/dev/kvm` 不在 | `start` L632 | `exit 1`（`--kvm` のみの場合は警告のみで続行） | core/8 |
+| VM モードで `/dev/kvm` 不在 | `start` L643 | `exit 1`（`--kvm` のみの場合は警告のみで続行） | core/8 |
 
 - 前提不足は停止せず日本語で案内する方針（system.md エラーハンドリング方針「cli」）に一致。
 
