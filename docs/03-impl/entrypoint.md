@@ -5,11 +5,11 @@ title: entrypoint 実装説明書
 version: 1.1.0
 updated: 2026-07-19
 verified:
-  at: 2026-07-19
+  at: 2026-07-29
   version: 1.1.0
   against:
     - doc: docs/02-design/system.md
-      version: 1.1
+      version: 1.4
 summary: >
   Claude コンテナの ENTRYPOINT として root で起動し、UID/GID 追従・認証共有・settings/MCP 生成・
   firewall/portsync 起動・VNC/Chrome 起動・tmux セッション開始までを行う初期化シェルスクリプトの実装。

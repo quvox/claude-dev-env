@@ -2,19 +2,14 @@
 id: devcontainer
 layer: impl
 title: devcontainer 実装説明書
-version: 1.1.0
-updated: 2026-07-23
-verified:
-  at: 2026-07-23
-  version: 1.1.0
-  against:
-    - doc: docs/02-design/system.md
-      version: 1.2
+version: 1.3.0
+updated: 2026-07-29
 summary: >
-  Claude コンテナイメージ定義。Dockerfile.claude（orch-builder→base→vnc の多段ビルド）と
-  Dockerfile.docker-proxy（Go 多段）、.devcontainer/tmux.conf を持ち、他モジュールの資産を
-  イメージへ同梱する。自動テストはなくビルド実機確認で検証する。
-keywords: [Dockerfile, マルチステージ, Ubuntu24.04, VNC, noVNC, Chrome, pyenv, fnm, docker-proxy, 同梱]
+  Claude コンテナイメージ定義。Dockerfile.claude（orch-builder / base / vnc-base と、配布する
+  終端ステージ claude-cli / claude-vnc）と Dockerfile.docker-proxy（Go 多段）、
+  .devcontainer/tmux.conf を持ち、他モジュールの資産をイメージへ同梱する。Claude Code は終端
+  ステージでバージョン指定インストールする。自動テストはなくビルド実機確認で検証する。
+keywords: [Dockerfile, マルチステージ, Ubuntu24.04, VNC, noVNC, Chrome, pyenv, fnm, docker-proxy, 同梱, ClaudeCodeバージョン]
 depends_on: []
 source:
   - docs/02-design/system.md
@@ -26,10 +21,21 @@ source:
 
 Claude Code を動かすランタイム一式を再現可能にビルドするイメージ定義モジュール（上流:
 [全体設計](../02-design/system.md) の `devcontainer` 行、要件 core/1・11・9）。中核は
-`.devcontainer/Dockerfile.claude` で、Go オーケストレーターをビルドする `orch-builder`、開発
-環境本体の `base`（イメージ `claude-dev-claude`）、GUI/日本語入力を足す `vnc`（イメージ
-`claude-dev-claude-vnc`、`FROM base`）の 3 ステージから成る。VNC あり/なしで `base` レイヤーを
-共有し、追加分のディスクだけ増やす。加えて `.devcontainer/Dockerfile.docker-proxy`（Go 静的
+`.devcontainer/Dockerfile.claude` で、次の 5 ステージから成る。
+
+| ステージ | 役割 | 配布 |
+|---|---|---|
+| `orch-builder` | Go オーケストレーターのビルド専用 | — |
+| `base` | 開発環境本体（言語処理系・CLI・FW ツール・ヘッドレスブラウザ・同梱資産）。**Claude Code を含まない** | — |
+| `vnc-base` | `FROM base`。GUI/日本語入力を足す。**Claude Code を含まない** | — |
+| `claude-cli` | `FROM base`。**終端レイヤーで Claude Code を導入** | イメージ `claude-dev-claude` |
+| `claude-vnc` | `FROM vnc-base`。**終端レイヤーで Claude Code を導入** | イメージ `claude-dev-claude-vnc` |
+
+VNC あり/なしで `base` レイヤーを共有し、追加分のディスクだけ増やす。Claude Code の導入を配布
+ステージの**終端レイヤーに限定**するのは、そのキャッシュ失効の波及先を claude バイナリ層だけに
+留め、日次更新でも利用者の `docker pull` を増分に保つため（設計: [判断4](../02-design/system.md)、
+決定 D-26）。`base` の途中に置くと `vnc-base` 以降の高コスト層（apt VNC 群・Chrome・`cargo install`）
+まで巻き込んで失効する。加えて `.devcontainer/Dockerfile.docker-proxy`（Go 静的
 ビルド + alpine、共有 `docker-proxy` イメージ）と、イメージに焼き込む `.devcontainer/tmux.conf`
 を持つ。**このモジュールは他モジュールの成果物（entrypoint・firewall・hooks・container-tools・
 portsync・vm-mode・orchestrator の各スクリプト/バイナリ）をイメージへ COPY で同梱する集約点**で
@@ -39,7 +45,7 @@ portsync・vm-mode・orchestrator の各スクリプト/バイナリ）をイメ
 
 | パス | 役割 |
 |---|---|
-| .devcontainer/Dockerfile.claude | `orch-builder`→`base`→`vnc` の多段ビルド。開発環境本体と GUI |
+| .devcontainer/Dockerfile.claude | `orch-builder` / `base` / `vnc-base` / `claude-cli` / `claude-vnc` の多段ビルド。開発環境本体と GUI、および Claude Code 導入の終端層 |
 | .devcontainer/Dockerfile.docker-proxy | Go 多段（`golang:1.24-alpine`→`alpine:3.21`）。docker-proxy イメージ |
 | .devcontainer/tmux.conf | `/etc/tmux.conf` へ焼き込む最小 tmux 設定 |
 
@@ -57,20 +63,21 @@ portsync・vm-mode・orchestrator の各スクリプト/バイナリ）をイメ
   - 依存（bubbletea/lipgloss 等 TUI ライブラリ）は **vendoring** で取り込み、ビルド時ネットワーク
     非依存・再現性を確保する。実ロジックは orchestrator の 03-impl が正本。
 
-### Dockerfile.claude — ステージ `base`(イメージ `claude-dev-claude`)
+### Dockerfile.claude — ステージ `base`(中間・非配布)
 
-- **責務:** 言語処理系・CLI・FW ツール・（ヘッドレス）ブラウザを備えた非 GUI 開発環境（core/1・9）。
+- **責務:** 言語処理系・CLI・FW ツール・（ヘッドレス）ブラウザを備えた非 GUI 開発環境の土台
+  （core/1・9）。**Claude Code は含めない**（`claude-cli`/`claude-vnc` が終端で導入する）。
 - **ビルド引数/環境:**
   - `ARG USERNAME=devuser` / `USER_UID=1500` / `USER_GID=1500`（CLI・makefile がホスト値で上書き）。
   - `ARG IMAGE_VERSION=local`。`LABEL io.github.quvox.claude-dev.version` と OCI 標準
     `org.opencontainers.image.version` の両方に同値を設定。専用キーを併設するのは、ubuntu ベースが
     標準キーに `24.04` を入れており衝突するため。CI は `YYYYMMDDHHmm` を渡し、`claude-dev start`
-    がこのラベルでバージョン表示する。`vnc` は `FROM base` で継承。
+    がこのラベルでバージョン表示する。`vnc-base` および終端ステージは `FROM` 継承で同値を持つ。
   - `ENV USER_HOME=/home/${USERNAME}`、`CONTAINER_USER=${USERNAME}`（entrypoint が参照）。
   - `ENV container=docker`（コンテナ内動作の判定マーカー。値・名前は systemd/podman の標準慣習
     `container=<runtime>` に合わせる。内部プロセスがこの変数の有無で「自分がコンテナ内か」を判定
-    できるようにする恒久印。起動経路に依存させないためイメージ側で常時保証する。`vnc` は
-    `FROM base` で継承し同値を持つ。設計: 決定 D-25）。
+    できるようにする恒久印。起動経路に依存させないためイメージ側で常時保証する。`vnc-base` および
+    終端ステージは `FROM` 継承で同値を持つ。設計: 決定 D-25）。
 - **処理の要点（ビルド順）:**
   1. **システムパッケージ（apt）:** iptables/ipset/dnsutils（FW）、zsh/tmux/vim、git/git-lfs/
      git-secrets/openssh-client、curl/wget/jq/ca-certificates、iproute2/net-tools/iputils-ping、
@@ -95,9 +102,7 @@ portsync・vm-mode・orchestrator の各スクリプト/バイナリ）をイメ
      arm64 の GUI ブラウザにも流用）。AWS CLI v2（`uname -m`）、Terraform（index から最新解決、
      `dpkg --print-architecture`）、Google Cloud CLI（**アーキ写像: aarch64/arm64→`arm`**、
      gcloud/gsutil/bq を `/usr/local/bin` に symlink）。
-  5. **Claude Code CLI:** `curl https://claude.ai/install.sh | bash` を `WORKDIR /tmp` で実行
-     （FS 全体スキャン回避）。`ARG CLAUDE_CACHE_BUST` で以降のレイヤーキャッシュを無効化可能。
-  6. **コンテナ設定（root）:** Playwright Chromium のラッパー `/usr/local/bin/chromium-browser`
+  5. **コンテナ設定（root）:** Playwright Chromium のラッパー `/usr/local/bin/chromium-browser`
      （`--no-sandbox --headless` 等付与）を生成し `chromium`/`chrome` へ symlink、`CHROME_PATH`/
      `PLAYWRIGHT_*`/`PUPPETEER_*` を `/etc/zsh/zshrc`・`/etc/bash.bashrc` へ追記（ヘッドレステスト用）。
      同 rc に PATH・fnm 初期化・**pyenv 初期化**（`PYENV_ROOT`・PATH・`pyenv init -`）を追記。`.zshrc`
@@ -107,9 +112,10 @@ portsync・vm-mode・orchestrator の各スクリプト/バイナリ）をイメ
 - **実装上の判断:** システム rc とユーザー `.zshrc.default` の両方に pyenv 初期化を置くが、
   `.zshrc.default` 側は二重初期化ガード（`$PYENV_ROOT/shims` が PATH 済みならスキップ）を持つ。
 
-### Dockerfile.claude — ステージ `vnc`(イメージ `claude-dev-claude-vnc`, `FROM base`)
+### Dockerfile.claude — ステージ `vnc-base`(中間・非配布, `FROM base`)
 
-- **責務:** GUI ブラウザ確認と日本語入力（core/11）。base に GUI 層のみ追加。
+- **責務:** GUI ブラウザ確認と日本語入力（core/11）。base に GUI 層のみ追加。**Claude Code は
+  含めない**（`claude-vnc` が終端で導入する）。
 - **処理の要点:**
   - `ja_JP.UTF-8` ロケール追加。TigerVNC(standalone-server) + python3-websockify + openbox、
     端末/X ユーティリティ（lxterminal, xterm, xclip, x11-xserver-utils, xdotool）、**IBus+Mozc**
@@ -131,6 +137,34 @@ portsync・vm-mode・orchestrator の各スクリプト/バイナリ）をイメ
   - VNC 系 `ENV`（`DISPLAY=:99`, `GTK_IM_MODULE=ibus`, `QT_IM_MODULE=ibus`, `XMODIFIERS`,
     `IBUS_ENABLE_SYNC_MODE=1`, `CLAUDE_DEV_VNC=1`）、`EXPOSE 6080`、同一 ENTRYPOINT。
 - **実装上の判断:** `chrome-devtools-mcp` はイメージに含めず、実行時 `npx` 取得（entrypoint が設定）。
+
+### Dockerfile.claude — 終端ステージ `claude-cli` / `claude-vnc`(配布イメージ)
+
+- **責務:** Claude Code CLI を指定バージョンで導入する終端レイヤー。`claude-cli` は `FROM base`
+  （イメージ `claude-dev-claude`）、`claude-vnc` は `FROM vnc-base`（イメージ
+  `claude-dev-claude-vnc`）。両ステージは同一の導入手順を持つ。
+- **ビルド引数:** `ARG CLAUDE_VERSION=latest`。CI は prepare ジョブで解決した具体バージョン
+  （例 `2.1.220`）を渡す（D-26）。既定値 `latest` はローカルビルド用（`install.sh` がその時点の
+  最新版を導入する）。加えて `ARG USERNAME=devuser` を**各終端ステージで再宣言**する（`ARG` は
+  ステージスコープのため、`FROM` 継承だけでは `$USERNAME` が空になり `USER $USERNAME` が
+  失敗する。`ENV CONTAINER_USER`/`USER_HOME` は継承されるが `USERNAME` は ARG のため継承されない）。
+- **処理の要点:**
+  - `USER $USERNAME` に切り替え、`WORKDIR /tmp` で
+    `curl -fsSL https://claude.ai/install.sh | bash -s -- "$CLAUDE_VERSION"` を実行。
+    `WORKDIR /tmp` はインストーラーの FS 全体スキャン回避。**必ずユーザー権限で実行する**——root で
+    実行すると `/root/.local/bin` に入り、コンテナ内ユーザーから `claude` が見えなくなる。
+  - 導入後 `WORKDIR /workspace` と `USER root` に戻す（`base` 末尾の状態と一致させる。entrypoint は
+    root 実行前提のため状態を変えてはならない）。
+  - `ENTRYPOINT`・`ENV`・`LABEL` は親ステージから継承するため再宣言しない。
+- **実装上の判断:**
+  - `install.sh` へは具体バージョンを引数で渡す（同スクリプトは `stable｜latest｜具体バージョン` を
+    受け付ける）。引数なしの既定は `stable` チャネルだが、段階的公開のため `latest` より古い版を
+    指すことがあるため使わない（D-26）。
+  - `CLAUDE_VERSION` の値そのものが本レイヤーのキャッシュキーになるため、時刻由来の cache-bust 用
+    ARG（旧 `CLAUDE_CACHE_BUST`）は不要になり**廃止した**。新版が出た日だけ本レイヤーが失効する。
+  - 同一の `RUN` を 2 ステージに重複して書く。CI では `claude`/`claude-vnc` が別ジョブでビルドされる
+    ため追加コストは生じない。共通化のため中間ステージを挟むと、その層が再び共有チェーンに入り
+    終端配置の意味を失う。
 
 ### Dockerfile.claude — 同梱資産(他モジュールの成果物を COPY)
 
@@ -185,25 +219,25 @@ portsync・vm-mode・orchestrator の各スクリプト/バイナリ）をイメ
 
 | 名前 | 用途 | デフォルト | 必須 |
 |---|---|---|---|
-| USERNAME | コンテナ内ユーザー名 | devuser | 任意 |
+| USERNAME | コンテナ内ユーザー名（`base` と各終端ステージの両方で `ARG` 宣言。ARG はステージスコープのため） | devuser | 任意 |
 | USER_UID / USER_GID | ホスト UID/GID 追従 | 1500 / 1500 | 任意 |
 | IMAGE_VERSION | イメージバージョンラベル | local | 任意（CI は日時） |
 | GO_VERSION | Go 展開版 | 1.26.1 | 任意 |
 | PYTHON_VERSION | pyenv 既定 CPython 系 | 3.13 | 任意 |
-| CLAUDE_CACHE_BUST | Claude CLI 以降のキャッシュ無効化 | none | 任意 |
+| CLAUDE_VERSION | 終端ステージで導入する Claude Code のバージョン（`stable`／`latest`／具体バージョン）。値がそのまま当該レイヤーのキャッシュキーになる（D-26） | latest | 任意（CI は具体バージョン） |
 | LANG / LC_ALL / TZ | ロケール・時刻 | en_US.UTF-8 / Asia/Tokyo | 焼込 |
 | SHELL / CONTAINER_USER / USER_HOME | 既定シェル・entrypoint 参照 | /bin/zsh 他 | 焼込 |
 | container | コンテナ内動作の判定マーカー（systemd/podman 標準慣習, D-25） | docker | 焼込 |
-| DISPLAY 他 VNC 系（vnc のみ） | GTK/QT IM・sync・VNC 印 | :99 / ibus 等 / CLAUDE_DEV_VNC=1 | 焼込 |
+| DISPLAY 他 VNC 系（`vnc-base` 系のみ） | GTK/QT IM・sync・VNC 印 | :99 / ibus 等 / CLAUDE_DEV_VNC=1 | 焼込 |
 
 ## エラーハンドリング実装
 
 | 異常系 | 実装箇所 | 実際の振る舞い | 対応する要件 |
 |---|---|---|---|
 | UID/GID がイメージ既存と競合 | base 非 root ユーザー作成 | 既存グループ/ユーザーを 9999 へ退避してから作成 | core/2 |
-| arm64 で Google Chrome 非提供 | vnc GUI ブラウザ分岐 | Chrome 導入をスキップし Playwright Chromium を流用（`claude-dev-chrome` で吸収） | core/11 |
+| arm64 で Google Chrome 非提供 | vnc-base GUI ブラウザ分岐 | Chrome 導入をスキップし Playwright Chromium を流用（`claude-dev-chrome` で吸収） | core/11 |
 | gcloud 配布名のアーキ不一致 | base gcloud 導入 | aarch64/arm64 を `arm` へ写像（写像しないと 404） | core/9 |
-| rmcp-xdotool ビルド失敗 | vnc computer-use MCP | `|| echo WARN` で非致命化。バイナリ不在時 entrypoint が MCP 登録をスキップ | core/11 |
+| rmcp-xdotool ビルド失敗 | vnc-base computer-use MCP | `|| echo WARN` で非致命化。バイナリ不在時 entrypoint が MCP 登録をスキップ | core/11 |
 
 ## テスト
 
@@ -212,7 +246,7 @@ portsync・vm-mode・orchestrator の各スクリプト/バイナリ）をイメ
 
 | テスト(ファイル::ケース名) | レベル | 検証内容 | 対応する受け入れ基準/契約 |
 |---|---|---|---|
-| （自動テストなし＝実機確認） | 単体 | `make build` 系で base/vnc/docker-proxy が amd64/arm64 でビルド成功 | core/9 ビルド |
+| （自動テストなし＝実機確認） | 単体 | `make build` 系で claude-cli/claude-vnc/docker-proxy が amd64/arm64 でビルド成功 | core/9 ビルド |
 | （実機確認 E2E-1 の一部） | 結合 | 起動後にランタイム（node/python/go/rust/gh/docker）と VNC/日本語入力が機能 | core/1,11 |
 
 実行方法: リポジトリの `make`（tech steering のビルドコマンド）でイメージをビルドし、
@@ -231,4 +265,6 @@ portsync・vm-mode・orchestrator の各スクリプト/バイナリ）をイメ
   ローカルビルドは `local`、CI/GHCR 配布は `YYYYMMDDHHmm`。
 - 同梱スクリプト（entrypoint/firewall/hooks/portsync/vm-mode/container-tools）や orchestrator を
   変更した場合、反映にはイメージ再ビルドが必要（COPY 焼き込みのため）。
-- base/vnc はレイヤー共有。vnc 更新時も base 差分のみ再ビルドされる。
+- `base` は `vnc-base`・`claude-cli`・`claude-vnc` に共有される。Claude Code の新版が出た日は、
+  失効するのは各配布ステージの終端 claude 層だけで、`base`/`vnc-base` の高コスト層は再ビルド・
+  再 push・再 pull されない（D-26、設計判断4）。

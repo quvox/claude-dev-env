@@ -2,14 +2,8 @@
 id: cli
 layer: impl
 title: cli 実装説明書
-version: 1.3.0
-updated: 2026-07-19
-verified:
-  at: 2026-07-19
-  version: 1.3.0
-  against:
-    - doc: docs/02-design/system.md
-      version: 1.2
+version: 1.5.0
+updated: 2026-07-29
 summary: >
   ホスト Linux 用 `claude-dev`（単一 bash スクリプト）の実装。case ディスパッチで
   start/stop/list/attach/forward/orchestrate/login 等のサブコマンドを提供し、Docker
@@ -86,7 +80,8 @@ source:
 - **ポート探索**: `find_available_novnc_port`（6080〜+100 で `docker ps` の公開ポートに無い空きを返す。
   選定〜`docker run` が非アトミックなため競合し得るが `start` のリトライで吸収）、
   `find_available_host_port`（8100〜+900）。
-- **セットアップ/前提**: `require_setup`（`IMG_CLAUDE`/`IMG_CLAUDE_VNC` 未存在なら `--target base/vnc`・
+- **セットアップ/前提**: `require_setup`（`IMG_CLAUDE`/`IMG_CLAUDE_VNC` 未存在なら
+  `--target claude-cli`/`--target claude-vnc`・
   `USERNAME/USER_UID/USER_GID` build-arg で自動ビルド）、`check_host_deps`（`docker`・`jq` を確認、
   無ければ導入案内して `exit 1`）、`ensure_project_config`（`.claude-dev.yaml` 不在時のみ TTY は鍵選択、
   非 TTY は空 `ssh_keys:` で作成。既存は尊重）、`ensure_infrastructure`（ネットワーク＋共有 3 ボリュームを
@@ -100,8 +95,8 @@ source:
 
 ### サブコマンド（case ディスパッチ、L411〜1354）
 
-- **`setup`**: `.env` 生成（example から）、ネットワーク・共有 3 ボリューム作成、`IMG_CLAUDE`(base)・
-  `IMG_CLAUDE_VNC`(vnc)・`IMG_DOCKER_PROXY` を順にビルド、次手順と PATH 用 symlink コマンドを案内。
+- **`setup`**: `.env` 生成（example から）、ネットワーク・共有 3 ボリューム作成、`IMG_CLAUDE`(`claude-cli`)・
+  `IMG_CLAUDE_VNC`(`claude-vnc`)・`IMG_DOCKER_PROXY` を順にビルド、次手順と PATH 用 symlink コマンドを案内。
 - **`login`**: `require_setup`→`ensure_infrastructure` 後、一時コンテナ（`--rm -it`、`--entrypoint bash`、
   `VOL_AUTH` を `~/.claude-shared` へ）を起動。root が `settings.json` 未存在時に
   `{"permissions":{"defaultMode":"bypassPermissions"},"model":"sonnet"}` を生成し `chown`（共有しない）→
@@ -171,7 +166,7 @@ source:
 - **`ssh-keys [reset|select]`**: 対象はカレントプロジェクト。引数なし/`select` は `select_ssh_keys_interactive`。
   `reset` は `.claude-dev.yaml` から `ssh_keys` 関連行を `grep -vE` 除去（他記述なしなら削除）し、専用 agent
   （`<NAME>.sock`/`.pid`）を kill・削除。その他は使い方表示し `exit 1`。
-- **`upgrade`**: 3 イメージを `--no-cache` 再ビルド（反映は stop→start）。
+- **`upgrade`**: 3 イメージ（`claude-cli`/`claude-vnc`/docker-proxy）を `--no-cache` 再ビルド（反映は stop→start）。
 - **`firewall`**: 稼働中コンテナで `iptables -L OUTPUT -n --line-numbers`。
 - **`reset`**: 確認プロンプト後、全 Claude コンテナ・全 `fwd-*`・proxy を削除、共有 3 ボリューム・全
   `claude-dev-chrome-*`・ネットワーク・3 イメージを削除。

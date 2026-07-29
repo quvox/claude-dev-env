@@ -2,18 +2,12 @@
 id: makefile
 layer: impl
 title: makefile 実装説明書
-version: 1.0.0
-updated: 2026-07-18
-verified:
-  at: 2026-07-19
-  version: 1.0.0
-  against:
-    - doc: docs/02-design/system.md
-      version: 1.1
+version: 1.3.0
+updated: 2026-07-29
 summary: >
   ビルド・初回セットアップ・install/uninstall・login・upgrade・orch-sample 等の入口を
   `make <target>` の統一インタフェースで提供する Makefile。イメージビルドはマルチステージ
-  （base→vnc）でキャッシュ共有し、OS 判定で使用する CLI を切り替える。
+  （base→vnc-base→各配布ステージ）でキャッシュ共有し、OS 判定で使用する CLI を切り替える。
 keywords: [Makefile, ビルド, セットアップ, install, upgrade, マルチステージ, orch-sample]
 depends_on: [devcontainer, docker-proxy, orchestrator, sample-project]
 source:
@@ -73,25 +67,38 @@ Makefile 単体で完結し、実処理は `docker build` / `docker network|volu
 | `network` | — | `docker network create $(NETWORK) 2>/dev/null || true` で冪等作成 |
 | `volumes` | — | 4 ボリューム（AUTH/HISTORY/CONFIG/CHROME）を `docker volume create ... || true` で冪等作成 |
 | `build` | `build-claude build-claude-vnc build-docker-proxy` | 全イメージビルド |
-| `build-claude` | — | `.devcontainer/Dockerfile.claude` の `--target base` を `IMG_CLAUDE` としてビルド。build-arg に `USERNAME=$(CUSER)`, `USER_UID=$$(id -u)`, `USER_GID=$$(id -g)` |
-| `build-claude-vnc` | `build-claude` | 同 Dockerfile の `--target vnc` を `IMG_CLAUDE_VNC` としてビルド（build-arg 同上）。base レイヤーをキャッシュ共有 |
+| `build-claude` | — | `.devcontainer/Dockerfile.claude` の `--target claude-cli` を `IMG_CLAUDE` としてビルド。build-arg に `USERNAME=$(CUSER)`, `USER_UID=$$(id -u)`, `USER_GID=$$(id -g)`。`CLAUDE_VERSION` は渡さず Dockerfile の既定 `latest` に委ねる |
+| `build-claude-vnc` | `build-claude` | 同 Dockerfile の `--target claude-vnc` を `IMG_CLAUDE_VNC` としてビルド（build-arg 同上）。`base`/`vnc-base` レイヤーをキャッシュ共有 |
 | `build-docker-proxy` | — | `.devcontainer/Dockerfile.docker-proxy` を `IMG_DOCKER_PROXY` としてビルド |
-| `build-orchestrator` | — | `cd orchestrator && go build -o orchestrator . && go vet ./... && go test ./...`。実行ファイル `orchestrator/orchestrator` を生成（`-o` で明示。自己検証の高速ループが直接起動する）。イメージ用バイナリは `build-claude`(base) に同梱されるため独立イメージは作らない |
+| `build-orchestrator` | — | `cd orchestrator && go build -o orchestrator . && go vet ./... && go test ./...`。実行ファイル `orchestrator/orchestrator` を生成（`-o` で明示。自己検証の高速ループが直接起動する）。イメージ用バイナリは `base` 経由で配布イメージに同梱されるため独立イメージは作らない |
 | `orch-sample` | — | `scripts/orch-sample.sh` を呼び、`examples/orch-sample/` テンプレを `workspace/orch-sample/` へ scaffold。`FORCE=1`→`--force`、`SEED=1`→`--seed` を引数化 |
 | `orch-sample-clean` | — | `rm -rf $(BASE_DIR)/workspace/orch-sample`（作業コピー削除） |
 | `login` | — | `$(CLI) login` に委譲（OAuth ログイン） |
-| `update-claude` | — | Claude Code のみ高速更新。`IMG_CLAUDE`(base) と `IMG_CLAUDE_VNC`(vnc) を、build-arg `CLAUDE_CACHE_BUST=$$(date +%s)` を付けて再ビルド（`--no-cache` ではなくキャッシュ利用。Claude Code 導入レイヤー以降のみ無効化）。反映は `stop`→`start` を案内 |
-| `upgrade` | — | 3 イメージ（base/vnc/docker-proxy）を `--no-cache` で完全再ビルド。反映は `stop`→`start` を案内 |
+| `update-claude` | — | Claude Code のみ高速更新。`https://downloads.claude.ai/claude-code-releases/latest` を `curl -fsSL` で具体バージョンへ解決し、`IMG_CLAUDE`(`claude-cli`) と `IMG_CLAUDE_VNC`(`claude-vnc`) を build-arg `CLAUDE_VERSION=<解決値>` 付きで再ビルド（`--no-cache` ではなくキャッシュ利用。失効するのは終端の claude 導入層のみ）。解決に失敗した場合はエラーで中断する。反映は `stop`→`start` を案内 |
+| `upgrade` | — | 3 イメージ（`claude-cli`/`claude-vnc`/docker-proxy）を `--no-cache` で完全再ビルド。反映は `stop`→`start` を案内 |
 | `status` | — | イメージ一覧・稼働中 Claude セッション・プロキシコンテナ・`claude-dev` ボリュームを `docker images/ps/volume ls` のフィルタ表示 |
 | `clean` | — | 確認プロンプト（`y` 以外はキャンセル）後、全 Claude/プロキシコンテナ削除・4 ボリューム・ネットワーク・3 イメージを削除。※`fwd-*` フォワードコンテナは対象外（CLI `reset` は網羅的） |
 
 ### ビルド構成（重要）
 
-`Dockerfile.claude` はマルチステージ（`base` → `vnc`）。`build-claude` が `base` を、
-`build-claude-vnc`（`build-claude` に依存）が `vnc` をビルドし、ベースレイヤーを Docker
-キャッシュで共有する。これにより VNC イメージの追加ディスクは GUI/Chrome 分のみ。
-`update-claude` は同 2 段を `CLAUDE_CACHE_BUST` 付きでキャッシュ利用再ビルドし、Claude Code
-導入レイヤー以降だけを無効化して高速更新する。
+`Dockerfile.claude` はマルチステージ（`base` → `vnc-base` → 配布ステージ `claude-cli` /
+`claude-vnc`）。`build-claude` が `claude-cli` を、`build-claude-vnc`（`build-claude` に依存）が
+`claude-vnc` をビルドし、`base`/`vnc-base` レイヤーを Docker キャッシュで共有する。これにより
+VNC イメージの追加ディスクは GUI/Chrome 分のみ。
+
+`update-claude` は同 2 ターゲットを `CLAUDE_VERSION=<解決した具体バージョン>` 付きでキャッシュ利用
+再ビルドし、**終端の claude 導入層だけ**を無効化して高速更新する（設計: [判断4](../02-design/system.md)、
+決定 D-26）。
+
+**実装上の判断（`update-claude` のバージョン解決）:** 旧実装は `CLAUDE_CACHE_BUST=$$(date +%s)` で
+毎回無条件に層を失効させていたが、値を**具体バージョン**に変えた。新版が無ければキャッシュヒットして
+即座に終わり（無駄な再インストールをしない）、新版があれば必ず失効する。解決に失敗したときに
+`latest` の文字列へフォールバックすると、キャッシュヒットして「更新したつもりで何も変わらない」状態
+（CI 側で実際に起きた凍結と同型）になるため、フォールバックせずエラーで中断する。
+取得値は `case` のパターンマッチで `MAJOR.MINOR.PATCH` 形の体裁だけ検査してから使う（HTML
+エラーページ等をそのまま `--build-arg` へ渡さないため。厳密検証は CI 側 prepare が担う）。
+ターゲット全体を 1 つのレシピ行（`set -e` 付きの `\` 連結）にしているのは、解決したバージョンを
+シェル変数として 2 回の `docker build` で共有する必要があるため（make は行ごとに別シェルを起動する）。
 
 ### 冪等性・CLI との関係
 
@@ -107,7 +114,7 @@ Makefile 単体で完結し、実処理は `docker build` / `docker network|volu
 | `FORCE`（make 変数） | `orch-sample` に `--force` を渡し作業コピーを再生成 | 未設定 | 任意 |
 | `SEED`（make 変数） | `orch-sample` に `--seed` を渡し決定論検証用 seed plan を配置 | 未設定 | 任意 |
 | `USERNAME`/`USER_UID`/`USER_GID`（build-arg） | イメージ内ユーザを実行者に合わせる | whoami / id -u / id -g | ビルド時自動 |
-| `CLAUDE_CACHE_BUST`（build-arg） | `update-claude` で Claude 導入レイヤーのキャッシュ無効化 | date +%s | 自動 |
+| `CLAUDE_VERSION`（build-arg） | 同梱する Claude Code のバージョン。`update-claude` が `latest` チャネルを具体バージョンへ解決して渡す（`build-claude`系は渡さず Dockerfile 既定に委ねる） | Dockerfile 既定 `latest` | 自動 |
 | `INSTALL_PATH` | CLI symlink 先 | /usr/local/bin/claude-dev | 固定 |
 
 OS 判定（`uname -s`）は `CLI` 変数の選択（`claude-dev` / `claude-dev-mac`）にのみ用いる。
@@ -121,7 +128,7 @@ Makefile 自体に対する自動テストは無い（シェル/ビルド系の�
 
 | テスト(ファイル::ケース名) | レベル | 検証内容 | 対応する受け入れ基準/契約 |
 |---|---|---|---|
-| （自動テストなし。実機確認） | — | `make setup`→`build`→`install` が成功し `claude-dev` が起動できること、`make orch-sample` で `make orch-sample`（E2E-4 の実走）ができること | core/9 build / E2E-4 実走の入口 |
+| （自動テストなし。実機確認） | — | `make setup`→`build`→`install` が成功し `claude-dev` が起動できること、`make orch-sample` で題材が scaffold され、そこに対するオーケストレーター実走（E2E-4）に入れること | core/9 build / E2E-4 実走の入口 |
 
 実行方法: 実機で `make setup` / `make build` / `make status` 等を実行して確認する。
 
