@@ -197,13 +197,11 @@ RUN GC_ARCH=$(uname -m); case "$GC_ARCH" in aarch64|arm64) GC_ARCH=arm ;; esac \
     && sudo ln -s ${USER_HOME}/google-cloud-sdk/bin/gsutil /usr/local/bin/gsutil \
     && sudo ln -s ${USER_HOME}/google-cloud-sdk/bin/bq /usr/local/bin/bq
 
-# --- Claude Code CLI (ネイティブインストーラー) ---
-# CLAUDE_CACHE_BUST を変えることでこのレイヤー以降だけキャッシュを無効化できる
-# 公式ドキュメント: WORKDIR /tmp でインストーラーがファイルシステム全体をスキャンするのを防ぐ
-ARG CLAUDE_CACHE_BUST=none
-WORKDIR /tmp
-RUN curl -fsSL https://claude.ai/install.sh | bash
-WORKDIR /workspace
+# --- Claude Code CLI について ---
+# base では導入しない。配布ステージ（claude-cli / claude-vnc）の終端レイヤーで
+# バージョン指定して導入する。base の途中で導入すると、新版が出た日に vnc-base 以降の
+# 高コスト層（apt VNC 群・Chrome・cargo install）まで巻き込んでキャッシュが失効し、
+# 利用者の docker pull が増分でなくなる（D-26 / 02-design 判断4）。
 
 # =============================================================================
 # コンテナ設定
@@ -312,12 +310,12 @@ ENV container=docker
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 
 # =============================================================================
-# VNC ステージ: Chrome + noVNC + 日本語入力
+# vnc-base ステージ（中間・非配布）: Chrome + noVNC + 日本語入力
 # =============================================================================
-# claude-dev-claude-vnc イメージ
-# base レイヤーを共有し、GUI / ブラウザ関連のみ追加
+# claude-dev-claude-vnc イメージの土台。base レイヤーを共有し、GUI / ブラウザ関連のみ追加。
+# Claude Code は含めない（配布ステージ claude-vnc が終端で導入する）。
 # =============================================================================
-FROM base AS vnc
+FROM base AS vnc-base
 
 USER root
 
@@ -477,3 +475,46 @@ ENV CLAUDE_DEV_VNC=1
 EXPOSE 6080
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+
+# =============================================================================
+# 配布ステージ: claude-cli / claude-vnc（Claude Code を終端レイヤーで導入）
+# =============================================================================
+# Claude Code の導入 RUN は「配布ステージの最終レイヤー」にのみ置く。キャッシュキーは
+# 具体バージョン（CI が latest チャネルを解決した値）＝内容由来の値にし、時刻由来の
+# cache-bust（旧 CLAUDE_CACHE_BUST）は使わない。新版が出た日だけこの層が失効し、
+# base / vnc-base の高コスト層は再ビルド・再 push・再 pull されない（D-26 / 02-design 判断4）。
+#
+# 実装上の注意:
+#   - 必ずユーザー権限で実行する。root で実行すると /root/.local/bin に入り、コンテナ内
+#     ユーザーから claude が見えなくなる。
+#   - WORKDIR /tmp はインストーラーがファイルシステム全体をスキャンするのを防ぐため（公式ドキュメント）。
+#   - 導入後は base 末尾と同じ状態（WORKDIR /workspace・USER root）へ戻す（entrypoint は root 実行前提）。
+#   - ENTRYPOINT / ENV / LABEL は親ステージから継承するので再宣言しない。
+#   - 2 ステージに同一の RUN を重複させている。共通化のため中間ステージを挟むと、その層が
+#     再び共有チェーンに入り「終端配置」の意味を失う（CI では別ジョブでビルドされるため
+#     重複による追加コストは生じない）。
+# =============================================================================
+
+# --- claude-cli: VNC なし配布イメージ（claude-dev-claude）---
+FROM base AS claude-cli
+
+ARG USERNAME=devuser
+ARG CLAUDE_VERSION=latest
+
+USER $USERNAME
+WORKDIR /tmp
+RUN curl -fsSL https://claude.ai/install.sh | bash -s -- "$CLAUDE_VERSION"
+WORKDIR /workspace
+USER root
+
+# --- claude-vnc: VNC あり配布イメージ（claude-dev-claude-vnc）---
+FROM vnc-base AS claude-vnc
+
+ARG USERNAME=devuser
+ARG CLAUDE_VERSION=latest
+
+USER $USERNAME
+WORKDIR /tmp
+RUN curl -fsSL https://claude.ai/install.sh | bash -s -- "$CLAUDE_VERSION"
+WORKDIR /workspace
+USER root
