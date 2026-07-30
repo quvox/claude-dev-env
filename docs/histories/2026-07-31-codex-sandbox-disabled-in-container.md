@@ -18,6 +18,9 @@ affected:
     version: 1.6.0 -> 1.7.0
   - doc: docs/03-impl/entrypoint.md
     version: 1.4.0 -> 1.5.0
+  - doc: docs/03-impl/entrypoint.md
+    version: 1.5.0 -> 1.5.1
+    change: コード反映完了後の同期（テスト対応表へ 2026-07-31 の実測evidence、運用メモへ config.toml の再生成手順。PATCH）
   - doc: docs/03-impl/cli.md
     version: 1.7.2 -> 1.8.0
   - doc: docs/03-impl/e2e.md
@@ -79,3 +82,31 @@ D-27 ⑤ は本決定のスコープを「開発者がコンテナ内で codex �
 - **03-impl/e2e.md**: E2E-6 の検証内容にシェル実行成功を追加。既知の制限に「**codex 自身の応答を
   合否根拠にしてはならない**（出力捏造・`codex doctor` も検知しない）。判定は `exec` 行の終了コードと
   `/workspace` に残った成果物で行う」を追加。
+
+## コード反映（2026-07-31）
+
+本変更は文書を先に更新したため、コード反映は同日別作業（`/implement`、作業 slug は本変更 slug と同一）
+で行った。実装は `scripts/entrypoint-claude.sh` の 1 箇所のみ——`settings.json` 生成ブロック直後に、
+`$LOCAL_CODEX/config.toml` 不在時だけ 2 行を `printf` で生成し `chown $USERNAME` する分岐を追加した
+（コミット `7b1eeb4`）。`cli`/`cli-mac` は「`--security-opt` を付けない」という禁止事項であり、
+既存コードが既に条件を満たしていたため変更なし。
+
+実機確認（配布イメージ `claude-dev-claude:latest` に修正版 entrypoint を bind mount して観測）:
+
+- 12-5: `config.toml` 不在の workspace で起動 → 既定 2 行が生成され所有権もコンテナユーザー。
+- 12-6: 利用者設定を置いて再起動 → md5 不変（上書きされない）。
+- 12-4: 既存の codex 認証を使って `codex exec` を実走。ヘッダが `sandbox: danger-full-access` /
+  `approval: never` を示し、**成果物**（`/workspace` に残ったファイル）で成功を確認。
+- 対照: 同じ依頼を `-c sandbox_mode="workspace-write"` で実行すると `exited 1` ＋
+  `bwrap: No permissions to create new namespace` で成果物なし。既定設定が故障を解消していることが確定。
+- 副産物として、捏造が非決定的である（この対照実行ではモデルが失敗を正直に報告した）ことを観測し、
+  `docs/knowledge/nested-agent-sandbox-blocked-by-container-confinement.md` に追記した。
+
+E2E-6 の確認状況（本変更で追加された観測点のみ再実施）:
+
+| E2E-6 の要素 | 本作業での状況 |
+|---|---|
+| `login-codex` のデバイス認証 | **未再実施**（ブラウザ操作を要し無人自動化できない）。2026-07-30 の実機確認で確認済み、本変更はこの経路に触れていない |
+| 別プロジェクトで再ログイン不要に `codex` が起動 | 確認（共有ボリュームの既存 `codex/auth.json` をコピーした workspace で起動・認証済み状態を観測） |
+| **codex のシェル実行が成功し `/workspace` を読み書きできる** | **確認（本変更で追加された観測点。成果物で判定）** |
+| トークン更新の 30 秒書き戻し | **未再実施**（今回の実走でトークンリフレッシュが発生しなかった）。2026-07-30 に確認済み、本変更はこの経路に触れていない |

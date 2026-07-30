@@ -2,7 +2,7 @@
 id: entrypoint
 layer: impl
 title: entrypoint 実装説明書
-version: 1.5.0
+version: 1.5.1
 updated: 2026-07-31
 summary: >
   Claude コンテナの ENTRYPOINT として root で起動し、UID/GID 追従・認証共有（claude/codex）・
@@ -200,8 +200,8 @@ CLI が動的割り当てで公開する。
 | （自動テストなし・実機確認） | 結合 | `/workspace` 所有者に UID/GID が追従しファイル所有権齟齬が無い | 契約: cli→コンテナ/entrypoint／要件 core/2 |
 | （自動テストなし・実機確認） | 結合 | 認証が共有ボリューム経由でコピー・30秒書き戻しされ再接続できる | 契約: cli→コンテナ/entrypoint／要件 core/3 |
 | （自動テストなし・実機確認。ローカル検証済み: symlink 化・`chmod 600`・共有 `codex/` 作成・書き戻し伝播） | 結合 | codex 認証（auth.json）がコピーされ `codex` が再ログイン不要で動き、更新が 30 秒で共有ボリュームへ書き戻る | 契約: cli→コンテナ/entrypoint／要件 core/3-7,8,9（E2E-6） |
-| （自動テストなし・実機確認） | 単体 | `config.toml` が無いコンテナで起動すると `sandbox_mode = "danger-full-access"`・`approval_policy = "never"` を含む `config.toml` が生成され、codex のシェルコマンドが成功する | 要件 core/12-4,12-5（E2E-6） |
-| （自動テストなし・実機確認） | 単体 | 利用者が書き換えた `config.toml` を持つコンテナを再起動しても内容が変わらない | 要件 core/12-6 |
+| （自動テストなし・実機確認。2026-07-31 実測済み: 生成内容・所有権と、`codex exec` の成果物〈`/workspace` に残ったファイル〉で確認。対照として `-c sandbox_mode="workspace-write"` では `exited 1`＋`bwrap` エラーで成果物なしを確認し、既定設定が故障を解消していることを確定） | 単体 | `config.toml` が無いコンテナで起動すると `sandbox_mode = "danger-full-access"`・`approval_policy = "never"` を含む `config.toml` が生成され、codex のシェルコマンドが成功する | 要件 core/12-4,12-5（E2E-6） |
+| （自動テストなし・実機確認。2026-07-31 実測済み: 利用者設定を置いて `docker restart` し md5 が前後で不変） | 単体 | 利用者が書き換えた `config.toml` を持つコンテナを再起動しても内容が変わらない | 要件 core/12-6 |
 | （自動テストなし・実機確認） | 結合 | VNC イメージで Chrome/noVNC が起動し chrome-devtools MCP で操作できる | 要件 core/11 |
 
 実行方法: 自動テストコマンドなし。`claude-dev start`（VNC あり/`--no-vnc`）でコンテナを起動し、
@@ -218,6 +218,8 @@ CLI が動的割り当てで公開する。
 ## 運用メモ
 
 - `CLAUDE.md` はマーカー範囲だけを毎回再生成するため、マーカー外にユーザーが書いた内容は保持される。
+- codex の `config.toml` はプロジェクト配下（`/workspace/.codex/config.toml`）の実体である。既定へ
+  戻したいときは削除して再起動すれば再生成される（存在する限り entrypoint は触らない）。
 - `--kvm`/`--vm` の切り替えは再起動で追従する（KVM 追記の有無・VM_DEV.md 生成が変わる）。
 - VM モード時、`vm-up.sh` は `$USERNAME` 権限で走るため、root 所有のマウント点を entrypoint が事前に
   `install -d -o $USERNAME` で用意している（これが無いと `mkdir` が Permission denied で失敗する）。
