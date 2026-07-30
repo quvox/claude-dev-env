@@ -3,8 +3,8 @@
 # Claude コンテナ エントリポイント
 # =============================================================================
 # 1. /workspace の所有者 UID/GID にコンテナユーザーを合わせる
-# 2. ~/.claude → /workspace/.claude にシンボリックリンク
-#    認証ファイルを共有ボリューム（~/.claude-shared/）から /workspace/.claude/ にコピー
+# 2. ~/.claude → /workspace/.claude・~/.codex → /workspace/.codex にシンボリックリンク
+#    認証ファイルを共有ボリューム（~/.claude-shared/、codex は同 codex/）からコピー
 # 3. ファイアウォール設定
 # 4. tmux 起動
 # =============================================================================
@@ -164,14 +164,25 @@ fi
 #   認証ファイルだけは共有ボリューム (~/.claude-shared/) から起動時にコピーし、
 #   バックグラウンドで書き戻す（トークンリフレッシュ等の伝播用）。
 #
-# 共有対象: .credentials.json, .claude.json のみ
+#   codex も同じ形にする。~/.codex/ は /workspace/.codex/ へのシンボリックリンクとし、
+#   認証ファイル auth.json だけを共有ボリュームの codex/ サブディレクトリ経由で共有する
+#   （config.toml・セッション履歴は共有せずコンテナ固有。D-27）。
+#
+# 共有対象: claude=.credentials.json, .claude.json / codex=auth.json のみ
 # =============================================================================
 SHARED_CLAUDE="$USER_HOME/.claude-shared"
 LOCAL_CLAUDE="/workspace/.claude"
 AUTH_FILES=".credentials.json .claude.json"
+# codex 認証は claude と同じボリュームの codex/ に相乗りする（D-27。ボリュームを増やさず
+# logout / reset の分岐も増やさないため。ディレクトリ名が claude 由来なのは歴史的経緯）
+SHARED_CODEX="$SHARED_CLAUDE/codex"
+LOCAL_CODEX="/workspace/.codex"
+CODEX_AUTH_FILES="auth.json"
 
 # 共有ボリュームの所有権
 chown "$USERNAME":"$USERNAME" "$SHARED_CLAUDE" 2>/dev/null || true
+mkdir -p "$SHARED_CODEX" 2>/dev/null || true
+chown "$USERNAME":"$USERNAME" "$SHARED_CODEX" 2>/dev/null || true
 
 # /workspace/.claude/ ディレクトリを確保
 mkdir -p "$LOCAL_CLAUDE"
@@ -201,6 +212,27 @@ if [ -f "$LOCAL_CLAUDE/.claude.json" ]; then
     ln -sf "$LOCAL_CLAUDE/.claude.json" "$USER_HOME/.claude.json"
     chown -h "$USERNAME":"$USERNAME" "$USER_HOME/.claude.json"
 fi
+
+# --- codex（~/.codex → /workspace/.codex）も同じ形に整える ---
+mkdir -p "$LOCAL_CODEX"
+chown "$USERNAME":"$USERNAME" "$LOCAL_CODEX"
+
+# ~/.codex が実ディレクトリの場合は中身を退避してから削除（ln -sfn は実ディレクトリを置き換えられない）
+if [ -d "$USER_HOME/.codex" ] && [ ! -L "$USER_HOME/.codex" ]; then
+    cp -an "$USER_HOME/.codex/." "$LOCAL_CODEX/" 2>/dev/null || true
+    rm -rf "$USER_HOME/.codex"
+fi
+
+ln -sfn "$LOCAL_CODEX" "$USER_HOME/.codex"
+chown -h "$USERNAME":"$USERNAME" "$USER_HOME/.codex"
+
+# 認証ファイルのパーミッション修正（claude-dev start でコピー済み）
+for f in $CODEX_AUTH_FILES; do
+    if [ -f "$LOCAL_CODEX/$f" ]; then
+        chown "$USERNAME":"$USERNAME" "$LOCAL_CODEX/$f"
+        chmod 600 "$LOCAL_CODEX/$f"
+    fi
+done
 
 # --- settings.json はコンテナローカル（共有しない）---
 if [ ! -f "$LOCAL_CLAUDE/settings.json" ]; then
@@ -242,6 +274,7 @@ fi
 
 # --- バックグラウンド: 認証ファイルの変更を共有ボリュームに書き戻し ---
 # トークンリフレッシュ等で認証ファイルが更新された場合に他コンテナへ伝播する
+# （claude / codex 双方を同じループ・同じ間隔で見る。D-27）
 (
     while true; do
         sleep 30
@@ -250,6 +283,15 @@ fi
                 # ファイル内容が異なる場合のみコピー
                 if ! cmp -s "$LOCAL_CLAUDE/$f" "$SHARED_CLAUDE/$f" 2>/dev/null; then
                     cp "$LOCAL_CLAUDE/$f" "$SHARED_CLAUDE/$f" 2>/dev/null || true
+                fi
+            fi
+        done
+        for f in $CODEX_AUTH_FILES; do
+            if [ -f "$LOCAL_CODEX/$f" ]; then
+                if ! cmp -s "$LOCAL_CODEX/$f" "$SHARED_CODEX/$f" 2>/dev/null; then
+                    mkdir -p "$SHARED_CODEX" 2>/dev/null || true
+                    cp "$LOCAL_CODEX/$f" "$SHARED_CODEX/$f" 2>/dev/null || true
+                    chmod 600 "$SHARED_CODEX/$f" 2>/dev/null || true
                 fi
             fi
         done

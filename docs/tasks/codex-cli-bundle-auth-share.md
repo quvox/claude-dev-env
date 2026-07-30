@@ -44,7 +44,7 @@ Codex CLI（`@openai/codex`）を配布 2 イメージの終端レイヤーへ�
   - root で `/usr/local/bin/codex` symlink を作成（非対話シェル・`docker exec` からの解決保証）
   - 導入後は `WORKDIR /workspace` / `USER root` に戻す（base 末尾と同状態）
 
-- [ ] 2. entrypoint に `~/.codex` 構成・認証コピー・書き戻し同期を追加
+- [x] 2. entrypoint に `~/.codex` 構成・認証コピー・書き戻し同期を追加
   _要件: core/3-7,8,9_ _Boundary: scripts/entrypoint-claude.sh（認証セクションと同期ループ）_ _Depends: なし_
   - `SHARED_CODEX="$USER_HOME/.claude-shared/codex"` / `LOCAL_CODEX=/workspace/.codex`
   - `~/.codex` 実ディレクトリを退避して `~/.codex → /workspace/.codex` symlink
@@ -102,3 +102,9 @@ Codex CLI（`@openai/codex`）を配布 2 イメージの終端レイヤーへ�
   - `docker build --target claude-cli` 成功、素の PATH（`env -i PATH=...`）でも `codex --version`=0.146.0、
     最終状態は `root` / `/workspace` / entrypoint 継承のまま（base 末尾と一致）。
   - 検証用タグ `claude-dev-claude:codex-test` を作成した。**Phase C で削除する**こと。
+- **タスク2 完了（実測で検証済み）**: `bash -n` OK。テストコンテナ（`--target claude-cli` 再ビルド）で
+  `~/.codex → /workspace/.codex` symlink 化、イメージ内の実 `~/.codex`（ビルド時に codex が作る）の退避、
+  `auth.json` の `chmod 600`、共有ボリューム `codex/` の作成、**auth.json 更新の書き戻し伝播**を実測確認。
+  entrypoint は `✅ Ready` まで到達し既存 claude 側の symlink も維持。
+  - 注意: 書き戻しはループが root で走るため共有側ファイルは root 所有になる（claude 側と同じ既存挙動）。
+    そのため `login-codex` では `login` と同様に先に `chown -R` する必要がある（タスク3で対応）。
