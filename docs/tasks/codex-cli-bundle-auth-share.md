@@ -51,7 +51,7 @@ Codex CLI（`@openai/codex`）を配布 2 イメージの終端レイヤーへ�
   - `auth.json` の `chown` / `chmod 600`
   - 既存の 30 秒同期ループへ codex 認証の `cmp`→書き戻しを追加
 
-- [ ] 3. `claude-dev`（Linux）に `login-codex` と start 側の codex 認証コピーを追加
+- [x] 3. `claude-dev`（Linux）に `login-codex` と start 側の codex 認証コピーを追加
   _要件: core/3-6,7,5_ _Boundary: claude-dev（login-codex 追加・start の認証コピー・.gitignore・help）_ _Depends: 1, 2_
   - `login-codex`: 一時コンテナで `codex login --device-auth` →`~/.claude-shared/codex/auth.json` へ書き戻し
   - `start`: 認証コピーの一時コンテナで `codex/auth.json` → `${PROJECT_DIR}/.codex/auth.json`
@@ -108,3 +108,9 @@ Codex CLI（`@openai/codex`）を配布 2 イメージの終端レイヤーへ�
   entrypoint は `✅ Ready` まで到達し既存 claude 側の symlink も維持。
   - 注意: 書き戻しはループが root で走るため共有側ファイルは root 所有になる（claude 側と同じ既存挙動）。
     そのため `login-codex` では `login` と同様に先に `chown -R` する必要がある（タスク3で対応）。
+- **タスク3 完了（実測で検証済み）**: `bash -n` OK。`login-codex` の書き戻し経路（共有 `codex/auth.json`
+  が 600 で作られる）、`start` の認証コピー（共有 → プロジェクト `.codex/auth.json`、ホスト UID/GID へ chown）、
+  `.gitignore` の新規作成/冪等/既存（`.claude/` 表記）への追記を実コンテナ＋一時ボリュームで確認。
+  `claude-dev help` に `login-codex` が出ることも確認。
+  - `login-codex` 冒頭で `chown -R` してから su するため、共有側が root 所有でもユーザー権限で上書きできる。
+  - 実際の `codex login --device-auth` 対話は人間の実機確認（E2E-6）で行う。ここでは書き戻し経路のみ検証。

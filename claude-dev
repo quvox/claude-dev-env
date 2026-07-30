@@ -481,7 +481,7 @@ setup)
     echo "✅ セットアップ完了！"
     echo ""
     echo "次のステップ:"
-    echo "  1. claude-dev login"
+    echo "  1. claude-dev login          # Claude（codex も使うなら claude-dev login-codex）"
     echo "  2. cd /path/to/your/project"
     echo "  3. claude-dev start"
     echo ""
@@ -561,6 +561,60 @@ login)
     ;;
 
 # -----------------------------------------------------------------------------
+# Codex デバイス認証ログイン（D-27）
+#   codex の認証は $CODEX_HOME/auth.json（既定 ~/.codex/auth.json）のみを共有する。
+#   claude と同じ claude-dev-auth ボリュームの codex/ サブディレクトリに相乗りさせるため、
+#   ボリューム・logout・reset の分岐は増えない。
+# -----------------------------------------------------------------------------
+login-codex)
+    require_setup
+    ensure_infrastructure
+    echo "📋 Codex デバイス認証ログイン"
+    echo ""
+    echo "codex が認証 URL と認証コードを表示します。ブラウザ（手元の PC）で開いて認証を完了し、"
+    echo "その後 codex を終了してください。"
+    echo ""
+
+    docker run --rm -it \
+        --network "$NETWORK" \
+        --entrypoint bash \
+        -e "TERM=${TERM:-xterm-256color}" \
+        -e "LANG=en_US.UTF-8" \
+        -e "CUSER=$CUSER" \
+        -e "CHOME=$CHOME" \
+        -v "${VOL_AUTH}:${CHOME}/.claude-shared" \
+        "$IMG_CLAUDE" \
+        -c '
+            # 共有側は entrypoint のバックグラウンド同期（root 実行）で root 所有になりうるため、
+            # ここで所有権を戻してからユーザー権限で読み書きする（login と同じ流儀）
+            mkdir -p "$CHOME/.claude-shared/codex"
+            chown -R "$CUSER":"$CUSER" "$CHOME/.claude-shared" 2>/dev/null || true
+            rm -rf "$CHOME/.codex"
+            mkdir -p "$CHOME/.codex"
+            chown "$CUSER":"$CUSER" "$CHOME/.codex"
+
+            su "$CUSER" -s /bin/bash -l -c "
+                # 既存の認証があれば引き継ぐ（再ログインで別アカウントに変える場合も上書きされる）
+                if [ -f ~/.claude-shared/codex/auth.json ]; then
+                    cp ~/.claude-shared/codex/auth.json ~/.codex/auth.json
+                    chmod 600 ~/.codex/auth.json
+                fi
+
+                codex login --device-auth || true
+
+                # ログイン後: 認証ファイルを共有ボリュームに永続化
+                if [ -f ~/.codex/auth.json ]; then
+                    cp ~/.codex/auth.json ~/.claude-shared/codex/auth.json
+                    chmod 600 ~/.claude-shared/codex/auth.json
+                fi
+            "
+        '
+
+    echo "✅ Codex ログイン処理完了"
+    echo "   次回以降の claude-dev start で全プロジェクトのコンテナに共有されます"
+    ;;
+
+# -----------------------------------------------------------------------------
 # ログイン情報削除
 # -----------------------------------------------------------------------------
 logout)
@@ -580,7 +634,7 @@ logout)
         "$IMG_CLAUDE" \
         -c "rm -rf /auth/* /auth/.*" 2>/dev/null || true
     echo "✅ 認証情報を削除しました"
-    echo "   再ログイン: claude-dev login"
+    echo "   再ログイン: claude-dev login / claude-dev login-codex"
     ;;
 
 # -----------------------------------------------------------------------------
@@ -680,17 +734,22 @@ start)
         RUN_IMAGE="$IMG_CLAUDE"
     fi
 
-    # 認証ファイルを共有ボリュームから /workspace/.claude/ にコピー
-    mkdir -p "${PROJECT_DIR}/.claude"
+    # 認証ファイルを共有ボリュームから /workspace/.claude/・/workspace/.codex/ にコピー
+    # （codex 認証は共有ボリュームの codex/ に置かれる。未ログインなら何もコピーせず起動できる）
+    mkdir -p "${PROJECT_DIR}/.claude" "${PROJECT_DIR}/.codex"
     docker run --rm \
         --entrypoint bash \
         -v "${VOL_AUTH}:/auth:ro" \
         -v "${PROJECT_DIR}/.claude:/target" \
+        -v "${PROJECT_DIR}/.codex:/target-codex" \
         "$IMG_CLAUDE" -c '
             for f in .credentials.json .claude.json; do
                 [ -f "/auth/$f" ] && cp "/auth/$f" "/target/$f"
             done
-            chown -R '"$(id -u):$(id -g)"' /target/
+            for f in auth.json; do
+                [ -f "/auth/codex/$f" ] && cp "/auth/codex/$f" "/target-codex/$f"
+            done
+            chown -R '"$(id -u):$(id -g)"' /target/ /target-codex/
         '
 
     # ホストの ~/.claude/settings.json から hooks / env 設定を抽出してコピー
@@ -711,13 +770,15 @@ start)
         cp -a "${HOME}/.local/bin/." "${PROJECT_DIR}/.claude/host-local-bin/"
     fi
 
-    # .gitignore に .claude が含まれていなければ追加
+    # .gitignore に .claude / .codex が含まれていなければ追加
     if [ -f "${PROJECT_DIR}/.gitignore" ]; then
-        if ! grep -qxF '.claude' "${PROJECT_DIR}/.gitignore" && ! grep -qxF '.claude/' "${PROJECT_DIR}/.gitignore"; then
-            echo '.claude' >> "${PROJECT_DIR}/.gitignore"
-        fi
+        for _ig in .claude .codex; do
+            if ! grep -qxF "$_ig" "${PROJECT_DIR}/.gitignore" && ! grep -qxF "${_ig}/" "${PROJECT_DIR}/.gitignore"; then
+                echo "$_ig" >> "${PROJECT_DIR}/.gitignore"
+            fi
+        done
     elif [ -d "${PROJECT_DIR}/.git" ]; then
-        echo '.claude' > "${PROJECT_DIR}/.gitignore"
+        printf '%s\n%s\n' '.claude' '.codex' > "${PROJECT_DIR}/.gitignore"
     fi
 
     # ~/.gitconfig があればマウント（読み取り専用）
@@ -1333,8 +1394,9 @@ claude-dev - Claude Code 安全開発環境
 セットアップ（初回のみ）:
   claude-dev setup               イメージビルド + インフラ構築
   claude-dev pull [TAG]          GHCR からビルド済みイメージを取得（ビルドの代わり。既定 latest）
-  claude-dev login               OAuth ログイン
-  claude-dev logout              認証情報を削除
+  claude-dev login               Claude の OAuth ログイン
+  claude-dev login-codex         Codex のデバイス認証ログイン（codex login --device-auth）
+  claude-dev logout              認証情報を削除（Claude / Codex 双方）
 
 開発:
   claude-dev start               カレントディレクトリで環境を起動（VNC + Chrome 付き）
