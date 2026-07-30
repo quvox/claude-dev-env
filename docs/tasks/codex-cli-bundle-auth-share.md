@@ -61,7 +61,7 @@ Codex CLI（`@openai/codex`）を配布 2 イメージの終端レイヤーへ�
   _要件: core/3-6,7・core/10_ _Boundary: claude-dev-mac_ _Depends: 3_
   - `login-codex` は OS 差分ではないため cli.md 正本の実装をそのまま移植する
 
-- [ ] 5. GHCR ワークフローで codex バージョンを解決して build-arg で渡す
+- [x] 5. GHCR ワークフローで codex バージョンを解決して build-arg で渡す
   _要件: core/9-6,7_ _Boundary: .github/workflows/ghcr-images.yml_ _Depends: 1_
   - `workflow_dispatch` 入力 `codex_version` を追加
   - prepare の outputs に `codex_version`（npm registry から解決＋形式検証で早期失敗）
@@ -71,7 +71,7 @@ Codex CLI（`@openai/codex`）を配布 2 イメージの終端レイヤーへ�
 
 以下がすべて満たされたときに完了とする。**ビルドが通っただけでは完了ではない。**
 
-- [ ] 上記タスクの全チェックが完了している
+- [x] 上記タスクの全チェックが完了している
 - [ ] `go vet ./...`（各 Go モジュール）がエラーなしで通る（本作業は Go 非改変のため回帰確認）
 - [ ] `cd docker-proxy && go test ./...` と `cd orchestrator && go test -mod=vendor ./...` が全パスする
 - [ ] 今回対象の受け入れ基準に対応する確認が存在しパスする（シェル/Dockerfile 系は自動テストなし＝
@@ -117,3 +117,6 @@ Codex CLI（`@openai/codex`）を配布 2 イメージの終端レイヤーへ�
 - **タスク4 完了**: `claude-dev-mac` に `login-codex`・start の codex コピー・`.gitignore`・help/案内を移植。
   `bash -n` OK。両 CLI の codex 関連行を diff で突き合わせ、差分は案内文 1 行のみ
   （Linux=「ブラウザ（手元の PC）で」／mac=「ブラウザで」。既存の forward 案内と同じ OS 差分の流儀）。
+- **タスク5 完了（実測で検証済み）**: YAML パース OK（prepare outputs に `codex_version`、
+  dispatch inputs に `codex_version`、build-args に `CODEX_VERSION` が入っていることをパース結果で確認）。
+  prepare の解決ロジックをそのまま実行し `0.146.0` を取得、形式不正時に `exit 1` する異常系も確認。
