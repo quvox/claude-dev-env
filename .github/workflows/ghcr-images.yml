@@ -12,6 +12,10 @@ on:
         description: '同梱する Claude Code のバージョン（stable / latest / 2.1.220 等）。空なら latest チャネルを自動解決'
         required: false
         default: ''
+      codex_version:
+        description: '同梱する Codex CLI のバージョン（latest / 0.146.0 等）。空なら npm registry の最新版を自動解決'
+        required: false
+        default: ''
 
 permissions:
   contents: read
@@ -25,19 +29,22 @@ env:
   REGISTRY: ghcr.io
 
 jobs:
-  # --- タグ(YYYYMMDDHHmm, JST)・小文字オーナー名・同梱 Claude Code の具体バージョンを
-  #     1 度だけ算出し後続で一貫利用（6 つの build ジョブが個別に latest を引くと
-  #     解決タイミング差で amd64/arm64 に別バージョンが入りうるため）---
+  # --- タグ(YYYYMMDDHHmm, JST)・小文字オーナー名・同梱エージェント CLI
+  #     （Claude Code / Codex CLI）の具体バージョンを 1 度だけ算出し後続で一貫利用
+  #     （6 つの build ジョブが個別に latest を引くと、解決タイミング差で amd64/arm64 に
+  #     別バージョンが入りうるため）---
   prepare:
     runs-on: ubuntu-latest
     outputs:
       tag: ${{ steps.meta.outputs.tag }}
       owner: ${{ steps.meta.outputs.owner }}
       claude_version: ${{ steps.meta.outputs.claude_version }}
+      codex_version: ${{ steps.meta.outputs.codex_version }}
     steps:
       - id: meta
         env:
           CLAUDE_VERSION_INPUT: ${{ inputs.claude_version }}
+          CODEX_VERSION_INPUT: ${{ inputs.codex_version }}
         run: |
           set -euo pipefail
           echo "tag=$(TZ=Asia/Tokyo date +%Y%m%d%H%M)" >> "$GITHUB_OUTPUT"
@@ -62,6 +69,25 @@ jobs:
             fi
           fi
           echo "claude_version=${claude_version}" >> "$GITHUB_OUTPUT"
+
+          # 同梱する Codex CLI のバージョン（D-27）:
+          # claude と同じ方針。手動入力があればそれを採用し、空なら npm registry の
+          # dist-tag latest を具体バージョンへ解決する（@latest のまま渡すと文字列が
+          # 変化せずキャッシュキーとして機能しないため必ず解決してから渡す）。
+          if [ -n "${CODEX_VERSION_INPUT}" ]; then
+            codex_version="${CODEX_VERSION_INPUT}"
+            echo "同梱バージョン（手動指定）: codex ${codex_version}"
+          else
+            codex_version="$(curl -fsSL https://registry.npmjs.org/@openai/codex/latest | jq -r '.version')"
+            echo "同梱バージョン（npm registry 解決）: codex ${codex_version}"
+            # registry 不達や JSON 不正（null 等）はここで落とす。npm install に渡してから
+            # 落ちるとビルド後半になり原因追跡が遠くなる。
+            if ! echo "${codex_version}" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+              echo "::error::npm registry の解決結果が MAJOR.MINOR.PATCH 形式ではありません: ${codex_version}"
+              exit 1
+            fi
+          fi
+          echo "codex_version=${codex_version}" >> "$GITHUB_OUTPUT"
 
   # --- 3 イメージ × 2 アーキをネイティブ runner で並行ビルドし push-by-digest ---
   build:
@@ -103,14 +129,15 @@ jobs:
           # /workspace 所有者へ追従。docs/10_ghcr-images.md「pull して使う運用」）。
           # docker-proxy はこれらの ARG を宣言しないため無視される（警告のみ）。
           #
-          # CLAUDE_VERSION は build-arg で渡してよい——内容由来の値であり、かつ参照する層が
-          # 配布ステージの終端レイヤーに限られるため、失効の波及先が claude バイナリ層だけに
-          # 留まる（D-26 / 02-design 判断4）。
+          # CLAUDE_VERSION / CODEX_VERSION は build-arg で渡してよい——内容由来の値であり、
+          # かつ参照する層が配布ステージの終端レイヤーに限られるため、失効の波及先が各
+          # エージェント CLI のバイナリ層だけに留まる（D-26 / D-27 / 02-design 判断4）。
           build-args: |
             USERNAME=dev
             USER_UID=1000
             USER_GID=1000
             CLAUDE_VERSION=${{ needs.prepare.outputs.claude_version }}
+            CODEX_VERSION=${{ needs.prepare.outputs.codex_version }}
           # バージョン(日次で変わるタイムスタンプ)は build-arg=IMAGE_VERSION として
           # Dockerfile の LABEL 経由でレイヤーチェーンに載せると、その層以降の
           # レイヤーキャッシュが毎日失効し（cache-from が効かず）、pull が毎回

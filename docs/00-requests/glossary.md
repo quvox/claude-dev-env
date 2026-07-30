@@ -2,15 +2,15 @@
 id: glossary
 layer: request
 title: claude-dev-env 用語集
-version: 1.0.0
-updated: 2026-07-18
+version: 1.2.0
+updated: 2026-07-31
 verified:
-  at: 2026-07-29
-  version: 1.0.0
+  at: 2026-07-31
+  version: 1.2.0
   against: []
 summary: >
   claude-dev-env 固有の用語定義。下流の誤読・表記ゆれを潰す。
-keywords: [用語集, オーケストレーター, worker, DooD, VMモード, docker-proxy]
+keywords: [用語集, オーケストレーター, worker, DooD, VMモード, docker-proxy, CodexCLI, Codexサンドボックス]
 source: null
 ---
 
@@ -22,6 +22,8 @@ source: null
 |---|---|---|
 | claude-dev | ホスト側 CLI。コンテナのライフサイクル・認証・ポート・SSH鍵を操作する。Linux は `claude-dev`、macOS は `claude-dev-mac`（installで symlink 統一） | 「CLIツール」単独表記は避け claude-dev と書く |
 | Claude コンテナ | プロジェクトごとに起動する開発用コンテナ。VNC あり(`claude-dev-claude-vnc`)/なし(`claude-dev-claude`) | プロジェクトコンテナ（同義。文脈で使い分け） |
+| Codex CLI | OpenAI 製のコーディングエージェント CLI（npm パッケージ `@openai/codex`、コマンド名 `codex`）。Claude コンテナに同梱し、`codex login --device-auth` で認証する。認証ファイルは `~/.codex/auth.json` | 本文では Codex CLI と書く（`codex` はコマンド名を指すときのみ） |
+| Codex サンドボックス | Codex CLI がシェルコマンドを実行する際に張る自前の隔離機構。Linux では bubblewrap（実行ファイル `bwrap`）実装で、ユーザー名前空間の作成とマウント伝播の変更を必要とする。強度は `config.toml` の `sandbox_mode`（`read-only` / `workspace-write` / `danger-full-access`）で決まる。Claude コンテナ内では無効化する（[D-27](decisions.md) ⑥） | bubblewrap / bwrap は実装名。方針を語るときは Codex サンドボックスと書く。docker-proxy による Docker API 制限とは別物 |
 | docker-proxy | Docker Socket Proxy。生ソケットを直接使わせず、危険な Docker API を拒否する Go 製リバースプロキシ。全 Claude コンテナで共有 | 「プロキシ」単独は forward の socat プロキシと紛らわしいので docker-proxy と書く |
 | forward プロキシ | `claude-dev forward` が立てる `fwd-<name>-<port>` の socat コンテナ。Webアプリのポート中継用 | docker-proxy と混同しない |
 | DooD | Docker-outside-of-Docker。コンテナがホストの Docker デーモンを（proxy 経由で）使う既定方式 | DinD（Docker-in-Docker、本構成では非採用）と区別 |
@@ -44,3 +46,5 @@ source: null
 | DooD（既定） | VM モード | DooD はホスト daemon を proxy 経由で使う軽量既定。VM モードは VM 内ネイティブ Docker（bind/compose/privileged 可）でオプトイン |
 | ブレインストーミングモード | 実行モード | 前者は人間主導・同期・自動化しない検討。後者は自律・並列の実装。境界は実装仕様ドキュメント |
 | 仕様（docs/） | 運用状態（.orchestrator/） | 固まった仕様は docs/ に、進捗・仮定・plan 等の運用状態は `.orchestrator/` に置く |
+| Codex サンドボックス | Claude コンテナの隔離 | 前者は codex がコンテナ内で自前に張る隔離（無効化する）。後者はコンテナ／ホスト間の隔離境界（唯一の境界。D-1。緩めない） |
+| Codex CLI の同梱（D-27） | 異種ベンダー worker の常用（D-22） | 前者は開発者がコンテナ内で codex を使える状態にすること（決定済み）。後者はオーケストレーターが worker/レビューアーとして codex を常用すること（未決） |

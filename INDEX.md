@@ -28,15 +28,15 @@
 | パス | 概要 |
 |---|---|
 | docs/00-requests/request.md | 要求定義（隔離Docker開発環境＋AIオーケストレーター。並列開発力の向上） |
-| docs/00-requests/decisions.md | 決定台帳（決定21・委任2・要確認3） |
+| docs/00-requests/decisions.md | 決定台帳（決定22・委任2・要確認3） |
 | docs/00-requests/glossary.md | 用語集 |
-| docs/00-requests/acceptance.md | 受入シナリオ AS-1〜5 |
+| docs/00-requests/acceptance.md | 受入シナリオ AS-1〜6 |
 
 ## 01-requirements（要件・WHAT／ユースケース）
 
 | パス | 概要 |
 |---|---|
-| docs/01-requirements/core.md | 開発環境基盤の要件（コンテナ/認証/SSH/FW/ブラウザ/ポート/docker-proxy/VM/配布/mac）。UC-1〜3 |
+| docs/01-requirements/core.md | 開発環境基盤の要件（コンテナ/認証/SSH/FW/ブラウザ/ポート/docker-proxy/VM/配布/mac/同梱エージェントCLI）。UC-1〜3・UC-6 |
 | docs/01-requirements/orchestration.md | オーケストレーションの要件（2モード/介入/品質ゲート/復旧）。UC-4〜5 |
 
 ## 02-design（全体設計・モジュール分割定義）
@@ -63,7 +63,7 @@
 | docs/03-impl/hooks.md | `scripts/save_prompt.sh` / `sendslackmsg.sh` |
 | docs/03-impl/container-tools.md | `scripts/wait-limit-reset.sh` / `scripts/tmux.conf` |
 | docs/03-impl/portsync.md | `scripts/dood-portsync.sh` |
-| docs/03-impl/e2e.md | E2Eテスト実装（E2E-1〜5、実機＋自己検証） |
+| docs/03-impl/e2e.md | E2Eテスト実装（E2E-1〜6、実機＋自己検証） |
 
 ## 補助
 

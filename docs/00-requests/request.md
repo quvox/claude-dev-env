@@ -2,16 +2,16 @@
 id: request
 layer: request
 title: claude-dev-env 要求定義書
-version: 1.0.0
-updated: 2026-07-18
+version: 1.1.0
+updated: 2026-07-30
 verified:
-  at: 2026-07-29
-  version: 1.0.0
+  at: 2026-07-31
+  version: 1.1.0
   against: []
 summary: >
   Claude Code を安全な Docker コンテナで動かす開発環境と、その上で複数エージェントを連携させる
   AIオーケストレーターを、チームの並列開発力を上げるために提供する。信頼できる社内開発用途に限定。
-keywords: [claude-dev, Docker開発環境, 並列開発, AIオーケストレーター, 隔離, 配布]
+keywords: [claude-dev, Docker開発環境, 並列開発, AIオーケストレーター, 隔離, 配布, CodexCLI]
 source: null
 ---
 
@@ -57,6 +57,8 @@ source: null
 - ホスト CLI（Linux: `claude-dev` / macOS: `claude-dev-mac`）によるコンテナのライフサイクル管理・
   ポートフォワード・認証・SSH 鍵転送。
 - 開発ツール入りコンテナイメージ（VNC あり/なし）と、noVNC 経由のブラウザ確認。
+- **エージェント CLI の同梱**（Claude Code に加え OpenAI Codex CLI）。いずれも認証情報はホストと共有し、
+  プロジェクト間で再ログインを不要にする。
 - ホストの Docker を制限付きで使うための **Docker Socket Proxy**。
 - 重い Docker 案件向けの **VM モード**（オプトイン、QEMU+virtiofs、VM 内ネイティブ Docker）。
 - **AIオーケストレーター**（ブレインストーミング／実行の2モード、外部制御ループ、介入設計、
@@ -75,7 +77,9 @@ source: null
 ## 6. 制約・前提
 
 - 実行環境: Linux サーバ（Ubuntu 22.04+ / Debian 12+ 推奨）または macOS + Docker Desktop。Docker Engine 24+。
-- 認証: Claude Pro / Max プラン（OAuth）。API キー・トークンはイメージに焼き込まず環境変数等で注入する。
+- 認証: Claude Pro / Max プラン（OAuth）、および Codex 利用時は OpenAI 側アカウント
+  （`codex login --device-auth` によるデバイス認証）。API キー・トークンはイメージに焼き込まず
+  環境変数等で注入する。
 - 外部 CLI（`claude` 等）と各ツールは変化が速い。採用・更新時に公式ドキュメントで最新仕様を確認する。
 - OS 依存はホスト CLI に閉じる。コンテナ内資産（イメージ・entrypoint・firewall・docker-proxy）は OS 非依存に保つ。
 
@@ -83,9 +87,10 @@ source: null
 
 - **Must（v1 の最低限）**: 隔離コンテナ起動・認証共有・ファイアウォール・Docker Socket Proxy・
   ポートフォワード・ブラウザ確認（VNC）。
-- **Should**: AIオーケストレーター（2モード・介入・相互レビュー）、VM モード、macOS 対応。
-- **Could / 将来**: MCP ツールの本格連携（stdio 方式優先）、異種ベンダー worker（Codex 等）の常用、
-  Docker Agent 方式の再評価。
+- **Should**: AIオーケストレーター（2モード・介入・相互レビュー）、VM モード、macOS 対応、
+  Codex CLI の同梱と認証共有。
+- **Could / 将来**: MCP ツールの本格連携（stdio 方式優先）、オーケストレーターの worker/レビューアーとして
+  異種ベンダー（Codex 等）を常用すること、Docker Agent 方式の再評価。
 
 ## 8. 補足・参考情報
 

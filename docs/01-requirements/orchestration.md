@@ -2,20 +2,20 @@
 id: orchestration
 layer: requirements
 title: オーケストレーション 要件定義書
-version: 1.0.0
-updated: 2026-07-18
+version: 1.1.0
+updated: 2026-07-30
 verified:
-  at: 2026-07-29
-  version: 1.0.0
+  at: 2026-07-31
+  version: 1.1.0
   against:
     - doc: docs/00-requests/request.md
-      version: 1.0
+      version: 1.1
     - doc: docs/00-requests/decisions.md
-      version: 1.4
+      version: 1.6
     - doc: docs/00-requests/glossary.md
-      version: 1.0
+      version: 1.2
     - doc: docs/00-requests/acceptance.md
-      version: 1.0
+      version: 1.2
 summary: >
   プロジェクトに1体のAIオーケストレーターを立て、ブレインストーミング/実行の2モード・外部制御ループ・
   タスク単位介入・相互レビュー品質ゲート・中断復旧により、人間の管理負荷を下げ並列度を上げる要件。
@@ -60,7 +60,7 @@ AIオーケストレーターの要件を定める。上流: [要求定義](../0
   - plan が実行不可（未 ready／`completion` 欠落）のとき: システムは理由を端末に明示しブレインストーミングへ戻す
   - 完了時: システムは成果を統合し Slack に「完了」を通知する
 - **事後条件(成功時):** 要判断のタスクだけが待機し他 worker は継続、回答後に実行復帰、完了で成果統合
-- **関連要件:** 要件12〜18
+- **関連要件:** 要件12〜19（基本フロー2・7 のダッシュボード表示とセレクタ選択、および要判断の日本語提示が要件19）
 
 ### UC-5:端末が壊れても復旧する（AS-5）
 

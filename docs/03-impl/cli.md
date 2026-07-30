@@ -2,19 +2,20 @@
 id: cli
 layer: impl
 title: cli 実装説明書
-version: 1.5.1
-updated: 2026-07-29
+version: 1.8.0
+updated: 2026-07-31
 verified:
-  at: 2026-07-29
-  version: 1.5.1
+  at: 2026-07-31
+  version: 1.8.0
   against:
     - doc: docs/02-design/system.md
-      version: 1.4
+      version: 1.8
 summary: >
   ホスト Linux 用 `claude-dev`（単一 bash スクリプト）の実装。case ディスパッチで
-  start/stop/list/attach/forward/orchestrate/login 等のサブコマンドを提供し、Docker
-  コンテナのライフサイクル・認証コピー・SSH 専用 agent・ポート転送・docker-proxy 連携を担う。
-keywords: [cli, claude-dev, bash, container, ssh-agent, port-forward, orchestrate, docker-proxy]
+  start/stop/list/attach/forward/orchestrate/login/login-codex 等のサブコマンドを提供し、Docker
+  コンテナのライフサイクル・認証コピー（claude/codex）・SSH 専用 agent・ポート転送・docker-proxy
+  連携を担う。
+keywords: [cli, claude-dev, bash, container, ssh-agent, port-forward, orchestrate, docker-proxy, codex]
 depends_on: [container-tools, hooks, portsync, devcontainer]
 source:
   - docs/02-design/system.md
@@ -99,7 +100,7 @@ source:
   未起動なら `claude-dev-net` 上に `--restart unless-stopped`・ソケット RO マウント・
   `-e CLAUDE_DEV_ALLOW_WORKSPACE_BINDS=${...:-1}` 付きで起動）。
 
-### サブコマンド（case ディスパッチ、L422〜1387）
+### サブコマンド（case ディスパッチ、L422〜1449）
 
 - **`setup`**: `.env` 生成（example から）、ネットワーク・共有 3 ボリューム作成、`IMG_CLAUDE`(`claude-cli`)・
   `IMG_CLAUDE_VNC`(`claude-vnc`)・`IMG_DOCKER_PROXY` を順にビルド、次手順と PATH 用 symlink コマンドを案内。
@@ -110,7 +111,19 @@ source:
   `~/.claude.json` リンク→`claude` 対話起動→終了後 `~/.claude-shared/` へ書き戻す。**クォート制約**:
   `-c '...'` はホスト側でシングルクォートに括られるため内部でシングルクォートを使えず、JSON は root 部で
   `\"` エスケープの二重引用符で生成する。
+- **`login-codex`**: `require_setup`→`ensure_infrastructure` 後、`login` と同型の一時コンテナ
+  （`--rm -it`、`--entrypoint bash`、`VOL_AUTH` を `~/.claude-shared` へ）を起動する。root が
+  `~/.claude-shared/codex/` を `mkdir -p` し **`chown -R` で共有ディレクトリの所有権をユーザーへ戻す**
+  （entrypoint の同期ループが root で書き戻すため共有側が root 所有になりうる。戻さないと後続の
+  ユーザー権限コピーが失敗する）→コンテナ内の `~/.codex` を作り直し→`su` でユーザーに切替→共有側に
+  `codex/auth.json` があれば `~/.codex/` へコピー（`chmod 600`）→`codex login --device-auth` を対話起動
+  （表示される URL と認証コードは利用者がブラウザで開く。Linux 版は「手元の PC」と案内、mac 版はローカル
+  ブラウザ前提の文言）→終了後 `~/.codex/auth.json` を `~/.claude-shared/codex/` へ書き戻す（`chmod 600`）。
+  デバイス認証を完了せず終了した場合は書き戻す対象が無く、共有ボリュームは変化しない
+  （要件 core/3-6、D-27 ④）。**クォート制約**は `login` と同じ（`-c '...'` の内側でシングルクォートを
+  使わない）。
 - **`logout`**: 全 Claude コンテナ＋proxy を `rm -f` し、`VOL_AUTH` の中身を空にする（`rm -rf /auth/* /auth/.*`）。
+  `codex/` サブディレクトリも同ボリュームにあるため、claude・codex 双方の認証が同時に消える（要件 core/3-5）。
 - **`pull [TAG]`**: `.env` の `CLAUDE_DEV_REGISTRY`（既定 `ghcr.io/quvox`）と `CLAUDE_DEV_IMAGE_TAG`
   （既定 `latest`、引数 `TAG` で上書き）から 3 イメージを `docker pull` し、**`${name}:latest` へ retag**。
   以降 `start`/`require_setup` は retag 済みを使いビルドしない。1 つでも成功で完了、全失敗なら
@@ -122,11 +135,15 @@ source:
      `CLAUDE_DEV_NO_ATTACH!=1` のとき `tmux attach`）。`--vm-fresh` は稼働中無効の警告。
   2. 停止中コンテナ削除→`ensure_infrastructure`→イメージ選択（VNC 有無）。
   3. **認証コピー**: 一時コンテナで `VOL_AUTH`(RO) から `${PROJECT_DIR}/.claude/` へコピーしホスト UID/GID に chown。
+     同じ一時コンテナに `${PROJECT_DIR}/.codex` を `/target-codex` としてもマウントし、codex 認証
+     （`/auth/codex/auth.json`）があれば `/target-codex/auth.json` へコピーして同じ `chown -R` に含める
+     （無ければ何もしない＝未ログインのまま起動できる。要件 core/3-7）。
   4. **ホスト設定抽出**: `~/.claude/settings.json` から `jq` で `{hooks, env}`（null 除外）を
      `host-hooks.json` へ（entrypoint がマージ。名は歴史的経緯で hooks だが env も含む）。
   5. **ユーザー hook**: `~/.local/bin/` が非空なら `.claude/host-local-bin/` へコピー（組込み hook は
      イメージ焼込み済みで対象外）。
-  6. **.gitignore 追記**: `.claude` 未記載なら追記（`.git` あり `.gitignore` 無しは新規作成）。
+  6. **.gitignore 追記**: `.claude`・`.codex` を対象にループし、`<name>` も `<name>/` も未記載のものだけ
+     追記する（冪等）。`.git` あり `.gitignore` 無しは 2 行で新規作成。
   7. **マウント/オプション組立**: `GITCONFIG_OPT`（`~/.gitconfig` RO）、`GH_CONFIG_OPT`（`~/.config/gh` RO=
      `gh` 認証共有）、`DOCKER_OPTS`（ソケットあれば `ensure_docker_proxy_container` 後
      `DOCKER_HOST=tcp://<proxy>:2375`）、`COMPOSE_OPTS`（`NAME` を compose 互換名〈小文字・
@@ -143,7 +160,10 @@ source:
      --restart unless-stopped`、`/workspace`・各ボリューム・`tmux.conf`/`CLAUDE.md` RO マウント、上記
      オプション、`NODE_OPTIONS=--max-old-space-size=4096`、`-t`。**ポート競合リトライ**: 失敗時は作成途中を
      `docker rm -f` し、エラーがポート競合かつ VNC 有効なら別ポートを取り直して最大 20 回再試行。他失敗/上限は
-     stderr 表示し `exit 1`。
+     stderr 表示し `exit 1`。**`--security-opt` は付けない**（Docker 既定 seccomp と `docker-default`
+     AppArmor を有効なまま使う）。codex のサンドボックス（bubblewrap）はこの confinement 下では動かないが、
+     対処はコンテナ側を緩めるのではなく codex 側の無効化で行う（要件 core/12-7・D-27 ⑥。既定設定は
+     entrypoint が置く）。
   9. tmux 起動待ち（通常 30 秒／VM 420 秒、VM は 15 秒ごと進捗表示）→noVNC URL 表示→
      `CLAUDE_DEV_NO_ATTACH!=1` なら `tmux attach -t main`。上限超過でも終了せず状況案内して `exit 0`
      （コンテナは `--restart unless-stopped` で稼働継続、次回 start の attach 経路で接続可能）。
@@ -204,10 +224,10 @@ source:
 | `.claude-dev.yaml` 不在 | `ensure_project_config` | TTY は鍵選択、非 TTY は空作成。停止しない | core/4 |
 | SSH 鍵 0 件/存在しない鍵 | `ensure_ssh_agent` | 転送なしで続行し `ssh_keys:` 記述を案内、欠落鍵は警告スキップ | core/4 |
 | noVNC ポート競合 | `start` の `docker run` リトライ | 途中コンテナ掃除→別ポートで最大 20 回再試行 | core/1,6 |
-| tmux 起動タイムアウト | `start` L882〜 | 終了せず状況案内し `exit 0`（コンテナは稼働継続） | core/1 |
+| tmux 起動タイムアウト | `start` L930〜 | 終了せず状況案内し `exit 0`（コンテナは稼働継続） | core/1 |
 | コンテナ未起動での操作 | `code`/`attach`/`forward`/`ports`/`firewall` | 日本語エラーで `exit 1` | core/1,6 |
 | pull 全失敗 | `pull` | `docker login ghcr.io` 案内し `exit 1` | core/9 |
-| VM モードで `/dev/kvm` 不在 | `start` L643 | `exit 1`（`--kvm` のみの場合は警告のみで続行） | core/8 |
+| VM モードで `/dev/kvm` 不在 | `start` L697 | `exit 1`（`--kvm` のみの場合は警告のみで続行） | core/8 |
 
 - 前提不足は停止せず日本語で案内する方針（system.md エラーハンドリング方針「cli」）に一致。
 
@@ -222,6 +242,7 @@ bash スクリプトのため**自動テストランナーは存在しない**�
 |---|---|---|---|
 | （自動テストなし） | — | `start`→マウント/認証/再接続、`list`/`stop`（proxy 連動） | core/要件1-1〜6 未検証(自動テストなし) |
 | （自動テストなし） | — | `login`→認証ボリューム保存、`logout`→削除 | core/要件3-1,2,5 未検証(自動テストなし) |
+| （自動テストなし。書き戻し/コピー/`.gitignore` 経路はローカル検証済み。対話デバイス認証は実機） | — | `login-codex`→デバイス認証→`codex/auth.json` 保存、`start`→`.codex/auth.json` コピー | core/要件3-6,7 未検証(自動テストなし) |
 | （自動テストなし） | — | `ssh-keys` 対話選択→`.claude-dev.yaml` 生成、専用 agent 限定転送 | core/要件4-4 ほか 未検証(自動テストなし) |
 | （自動テストなし） | — | `forward`/`unforward`/`ports`（8100〜割当） | core/要件6-2,3,4 未検証(自動テストなし) |
 | （自動テストなし） | — | `orchestrate`→未起動自動起動・生存判定 attach/resume | orchestration/要件13-2 未検証(自動テストなし) |
@@ -235,6 +256,12 @@ bash スクリプトのため**自動テストランナーは存在しない**�
 - `host-hooks.json` はファイル名が実態（hooks＋env）と乖離（歴史的経緯、変更コスト回避で据置き）。
 - 認証は「コピー方式」で symlink を使わない（Claude Code のアトミック書込みで symlink が壊れるため。
   書き戻しは entrypoint のバックグラウンド同期）。
+- **ホストのユーザー認証（`~/.claude/.credentials.json`・`~/.codex/auth.json`）は読み込まない**。
+  `login`/`login-codex` は一時コンテナ内で認証を取得して共有ボリュームへ入れる方式で、ホストで
+  ログイン済みでも初回一度は本コマンドが必要になる。これは意図した設計で、ホストのクレデンシャルを
+  コンテナへ渡す経路（およびコンテナからホストのホームへ書き込む経路）を作らないため
+  （`docs/knowledge/host-credentials-are-not-imported-into-containers.md`）。ホストから読むのは
+  `~/.claude/settings.json` の `hooks`/`env` と `~/.gitconfig`・`~/.config/gh`(RO) のみ。
 - コンテナ名＝ディレクトリ名のため、別パスでも同名ディレクトリは同一セッション扱いになる。
 - `.claude-dev.yaml` の SSH 鍵はローカル設定のみ参照し、グローバルへのフォールバックや鍵推測はしない
   （意図的な安全側設計）。

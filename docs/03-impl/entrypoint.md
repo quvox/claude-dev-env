@@ -2,18 +2,19 @@
 id: entrypoint
 layer: impl
 title: entrypoint 実装説明書
-version: 1.1.0
-updated: 2026-07-19
+version: 1.6.0
+updated: 2026-07-31
 verified:
-  at: 2026-07-29
-  version: 1.1.0
+  at: 2026-07-31
+  version: 1.6.0
   against:
     - doc: docs/02-design/system.md
-      version: 1.4
+      version: 1.8
 summary: >
-  Claude コンテナの ENTRYPOINT として root で起動し、UID/GID 追従・認証共有・settings/MCP 生成・
-  firewall/portsync 起動・VNC/Chrome 起動・tmux セッション開始までを行う初期化シェルスクリプトの実装。
-keywords: [entrypoint, UID/GID, 認証共有, MCP, VNC, Chrome, tmux, firewall, portsync]
+  Claude コンテナの ENTRYPOINT として root で起動し、UID/GID 追従・認証共有（claude/codex）・
+  既定設定生成（claude settings.json / codex config.toml）・MCP 生成・firewall/portsync 起動・
+  VNC/Chrome 起動・tmux セッション開始までを行う初期化シェルスクリプトの実装。
+keywords: [entrypoint, UID/GID, 認証共有, codex, Codexサンドボックス, config.toml, MCP, VNC, Chrome, tmux, firewall, portsync]
 depends_on: [firewall, portsync]
 source:
   - docs/02-design/system.md
@@ -26,9 +27,11 @@ source:
 `scripts/entrypoint-claude.sh` は Claude コンテナの ENTRYPOINT として **root で 1 プロセス**起動し、
 コンテナ内部の初期化を上から順に実行する初期化スクリプトである（上流: [全体設計](../02-design/system.md)、
 契約「cli → コンテナ/entrypoint」「entrypoint → firewall」）。主な責務は、(1) `/workspace` 所有者に合わせた
-UID/GID 追従、(2) 共有ボリューム経由の認証共有と `~/.claude` の symlink 化、(3) `settings.json`・MCP 設定生成、
+UID/GID 追従、(2) 共有ボリューム経由の認証共有（claude / codex）と `~/.claude`・`~/.codex` の symlink 化、
+(3) 既定設定生成（claude `settings.json`／codex `config.toml`＝Codex サンドボックス無効化の既定）と MCP 設定生成、
 (4) `firewall` 起動、(5) `portsync`（DooD ポート転送）起動、(6) VNC/Chrome/noVNC 起動（VNC イメージ時のみ）、
-(7) `tmux` セッション開始。最後に `exec tail -f /dev/null` で常駐する。要件 core/2,3,5,11 を担う。
+(7) `tmux` セッション開始。最後に `exec tail -f /dev/null` で常駐する。
+要件 core/2,3,5,11,12(12-4〜12-6) を担う。
 
 ## ファイル構成
 
@@ -71,18 +74,38 @@ UID/GID 追従、(2) 共有ボリューム経由の認証共有と `~/.claude` �
      （正本は cli/cli-mac。`DOCKER_HOST` と同様に全シェル・`docker exec` で有効）。entrypoint は関与しない。
   8. **.zshrc 共有:** `~/.config-shared/`（ボリューム）に `.zshrc` が無ければ、`~/.zshrc.default`→実体 `~/.zshrc`→
      空ファイルの順でコピー元を決めて作成。以後 `~/.zshrc` を共有ファイルへの symlink にする（コンテナ間共有）。
-  9. **~/.claude 構成と認証共有:** `LOCAL_CLAUDE=/workspace/.claude` を確保。`~/.claude` が実ディレクトリなら
+  9. **~/.claude・~/.codex 構成と認証共有:** `LOCAL_CLAUDE=/workspace/.claude` を確保。`~/.claude` が実ディレクトリなら
      中身を `cp -an` で退避して削除し、`~/.claude → /workspace/.claude` の symlink（`ln -sfn`）を張る。認証ファイル
      （`.credentials.json`・`.claude.json`。CLI がコピー済み）は所有権と `chmod 600` を整える。`~/.claude.json`
      （ホーム直下）→ `/workspace/.claude/.claude.json` の symlink を張る。
+     続けて codex 側も同形に整える——`LOCAL_CODEX=/workspace/.codex` を確保し、`~/.codex` が実ディレクトリなら
+     中身を `cp -an` で退避して削除して `~/.codex → /workspace/.codex` の symlink を張り、認証ファイル
+     `auth.json`（CLI がコピー済み）の所有権と `chmod 600` を整える。`config.toml`・セッション履歴は共有せず
+     このディレクトリ（＝プロジェクト）に残す（要件 core/3-7,3-9）。**イメージには実 `~/.codex` が存在する**
+     （ビルド時の `codex --version` が作る）ため、この退避処理は初回起動で必ず通る経路である。
+     共有側（`$SHARED_CLAUDE/codex`）はこの段より前に `mkdir -p`＋`chown` で用意する（`login-codex` を
+     一度も実行していない場合でも同期ループが書き戻せるようにするため）。
   10. **settings.json 生成:** `$LOCAL_CLAUDE/settings.json` が無ければ
       `{"permissions":{"defaultMode":"bypassPermissions"},"model":"sonnet"}` を生成（共有しない）。
+      **同じ考え方で codex 側も既定設定を置く**——`$LOCAL_CODEX/config.toml` が無ければ
+      `sandbox_mode = "danger-full-access"` と `approval_policy = "never"` の 2 行を生成し、
+      所有権を `$USERNAME` に整える（共有しない）。既に存在する場合は内容を読まず一切変更しない
+      （利用者が書いた設定を保持する。要件 core/12-5,12-6・D-27 ⑥）。
+      これは codex の自前サンドボックス（bubblewrap 実装）がコンテナ内で起動できないため必要な設定である
+      ——Docker 既定 seccomp が `CLONE_NEWUSER` を拒否し、それを外しても `docker-default` AppArmor が
+      `mount --make-rslave /` を拒否するため、既定の `sandbox_mode` では codex のシェルコマンドが例外なく
+      `exited 1` になる（設計判断は 02-design 判断5）。コンテナ側の `--security-opt` を緩める対処は取らない
+      （要件 core/12-7）。
   11. **ホスト設定マージ:** `host-hooks.json`（名称は歴史的経緯で `hooks`/`env` 両方を運ぶ）があり `.hooks` か
       `.env` を含むなら `jq '. * $overlay[0]'` で `settings.json` へ深いマージし、元ファイル削除。失敗時は警告し継続。
   12. **ユーザー hook スクリプト配置:** `host-local-bin/` があれば `~/.local/bin/` へ `cp -a --update=none`
       （イメージ焼き込み済みを上書きしない）し、実行権付与後に元を削除。
   13. **認証バックグラウンド同期:** 30 秒ごとに `LOCAL_CLAUDE` の認証ファイルを共有ボリュームと `cmp` し、
       差分があれば書き戻すループを `( while true; ... ) &` でバックグラウンド起動（トークンリフレッシュ伝播）。
+      同じループで codex の `LOCAL_CODEX/auth.json` を `~/.claude-shared/codex/auth.json` と `cmp` し、
+      差分があれば `mkdir -p`→`cp`→`chmod 600` で書き戻す（対象ファイルが増えるだけで、ループ・間隔・
+      比較方法は claude と共通。要件 core/3-8）。ループは root で走るため共有側のファイルは root 所有に
+      なる（claude 側と同じ既存挙動）。そのため `login-codex` は書き込み前に `chown -R` する（cli 側の責務）。
   14. **firewall 起動:** `/usr/local/bin/init-firewall.sh` を実行（失敗は無視）。契約「entrypoint → firewall」。
   15. **VM モード起動（`CLAUDE_DEV_VM=1` 時）:** root のうちに `install -d -o $USERNAME` でマウント点
       `~/.claude-dev-vm`・`/run/vm` を用意し、`su "$USERNAME" -c /usr/local/bin/vm-up.sh` で起動。成功時のみ
@@ -116,14 +139,20 @@ UID/GID 追従、(2) 共有ボリューム経由の認証共有と `~/.claude` �
   21. **常駐:** `✅ Ready (...)` を表示し `exec tail -f /dev/null` で待機。
 - **実装上の判断:** 認証共有は symlink でなく「起動時コピー＋30 秒書き戻し」（Claude Code のアトミック書き込みで
   symlink が壊れるため。設計判断3/D-3）。`~/.claude` 自体は `/workspace/.claude` への symlink とし、
-  `settings.json`/`projects/`/`sessions/` はプロジェクトに永続化する。
+  `settings.json`/`projects/`/`sessions/` はプロジェクトに永続化する。codex も同じ形（`~/.codex` →
+  `/workspace/.codex` の symlink、`auth.json` はコピー＋書き戻し）に揃える——codex の `auth.json` は
+  その場書き換えで symlink でも壊れないが、同期ループと片付け経路を 2 方式に分けない判断（設計判断3/D-27）。
+  共有ボリューム内の codex 認証パスが `~/.claude-shared/codex/auth.json` になるのは、認証ボリュームを
+  claude と共用する決定（D-27 ③）によるもので、名称は claude 由来のまま据え置く。
 
 ## データアクセス
 
 | データ | 操作 | 実施モジュール | 備考 |
 |---|---|---|---|
 | 認証ファイル（.credentials.json / .claude.json） | 起動時 chmod 600・30秒ごと共有ボリュームへ書き戻し | entrypoint | 共有元コピーは cli 側。symlink 不使用（D-3） |
+| codex 認証ファイル（/workspace/.codex/auth.json） | 起動時 chmod 600・30秒ごと `~/.claude-shared/codex/auth.json` へ書き戻し | entrypoint | 共有元コピーは cli 側（`login-codex`/`start`）。`config.toml`・セッション履歴は共有しない（D-27） |
 | /workspace/.claude/settings.json | 生成（無い時）・host-hooks.json を jq で深いマージ | entrypoint | コンテナローカル（共有しない） |
+| /workspace/.codex/config.toml | 生成（無い時のみ。`sandbox_mode`/`approval_policy`）。存在時は不変 | entrypoint | コンテナローカル（共有しない）。Codex サンドボックス無効化の既定（D-27 ⑥） |
 | /workspace/.mcp.json | chrome-devtools / computer-use エントリを jq で追加 | entrypoint | VNC 時のみ |
 | /workspace/.claude/.claude.json | enabledMcpjsonServers に chrome-devtools を追加 | entrypoint | VNC 時のみ |
 | /workspace/CLAUDE.md | マーカー範囲を毎回削除→再生成 | entrypoint | KVM/VNC/Docker ネットワーク情報 |
@@ -167,11 +196,19 @@ CLI が動的割り当てで公開する。
 なし＝実機確認」）。以下の受け入れ基準・契約は **実機確認**で検証する（`claude-dev start` 実操作。E2E-1）。
 自動テストが存在しないため、下表はいずれも**未検証（自動テストなし）**であり、実機確認の対応関係を示す。
 
+**本モジュールは 02-design のテスト戦略「結合テスト対象」で 2 契約の担当である**——`entrypoint → firewall`
+（呼び出し元担当の原則どおり）と `cli → コンテナ/entrypoint`（呼び出し元 cli が bash で自動テストを持たないため
+観測側の本モジュールへ寄せたもの）。いずれも手段は実機確認であり、下表で対応関係を示す。
+
 | テスト(ファイル::ケース名) | レベル | 検証内容 | 対応する受け入れ基準/契約 |
 |---|---|---|---|
 | （自動テストなし・実機確認） | 結合 | 起動時に firewall が適用される | 契約: entrypoint→firewall／要件 core/5 |
-| （自動テストなし・実機確認） | 結合 | `/workspace` 所有者に UID/GID が追従しファイル所有権齟齬が無い | 要件 core/2 |
-| （自動テストなし・実機確認） | 結合 | 認証が共有ボリューム経由でコピー・30秒書き戻しされ再接続できる | 要件 core/3 |
+| （自動テストなし・実機確認） | 結合 | cli が `docker run` で渡した環境変数（`DOCKER_HOST`／`CLAUDE_DEV_DOOD_PORTSYNC`／`CLAUDE_DEV_VM`／`COMPOSE_PROJECT_NAME`）とマウント（`<cwd>`→`/workspace`、`claude-dev-auth`→`~/.claude-shared`、`claude-dev-config`→`~/.config-shared`、`$SSH_AUTH_SOCK`→`/tmp/ssh-agent.sock`）を受け取り、`SSH_AUTH_SOCK`/`DOCKER_HOST` の export 行が `/etc/zsh/zshrc`・`/etc/bash.bashrc` の両方に追記され、`CLAUDE_DEV_VM != 1` かつ `CLAUDE_DEV_DOOD_PORTSYNC != 0` かつ `DOCKER_HOST` が `docker-proxy` を含むときに限り portsync が常駐起動する | 契約: cli→コンテナ/entrypoint |
+| （自動テストなし・実機確認） | 結合 | `/workspace` 所有者に UID/GID が追従しファイル所有権齟齬が無い | 契約: cli→コンテナ/entrypoint／要件 core/2 |
+| （自動テストなし・実機確認） | 結合 | 認証が共有ボリューム経由でコピー・30秒書き戻しされ再接続できる | 契約: cli→コンテナ/entrypoint／要件 core/3 |
+| （自動テストなし・実機確認。ローカル検証済み: symlink 化・`chmod 600`・共有 `codex/` 作成・書き戻し伝播） | 結合 | codex 認証（auth.json）がコピーされ `codex` が再ログイン不要で動き、更新が 30 秒で共有ボリュームへ書き戻る | 契約: cli→コンテナ/entrypoint／要件 core/3-7,8,9（E2E-6） |
+| （自動テストなし・実機確認。2026-07-31 実測済み: 生成内容・所有権と、`codex exec` の成果物〈`/workspace` に残ったファイル〉で確認。対照として `-c sandbox_mode="workspace-write"` では `exited 1`＋`bwrap` エラーで成果物なしを確認し、既定設定が故障を解消していることを確定） | 単体 | `config.toml` が無いコンテナで起動すると `sandbox_mode = "danger-full-access"`・`approval_policy = "never"` を含む `config.toml` が生成され、codex のシェルコマンドが成功する | 要件 core/12-4,12-5（E2E-6） |
+| （自動テストなし・実機確認。2026-07-31 実測済み: 利用者設定を置いて `docker restart` し md5 が前後で不変） | 単体 | 利用者が書き換えた `config.toml` を持つコンテナを再起動しても内容が変わらない | 要件 core/12-6 |
 | （自動テストなし・実機確認） | 結合 | VNC イメージで Chrome/noVNC が起動し chrome-devtools MCP で操作できる | 要件 core/11 |
 
 実行方法: 自動テストコマンドなし。`claude-dev start`（VNC あり/`--no-vnc`）でコンテナを起動し、
@@ -188,6 +225,8 @@ CLI が動的割り当てで公開する。
 ## 運用メモ
 
 - `CLAUDE.md` はマーカー範囲だけを毎回再生成するため、マーカー外にユーザーが書いた内容は保持される。
+- codex の `config.toml` はプロジェクト配下（`/workspace/.codex/config.toml`）の実体である。既定へ
+  戻したいときは削除して再起動すれば再生成される（存在する限り entrypoint は触らない）。
 - `--kvm`/`--vm` の切り替えは再起動で追従する（KVM 追記の有無・VM_DEV.md 生成が変わる）。
 - VM モード時、`vm-up.sh` は `$USERNAME` 権限で走るため、root 所有のマウント点を entrypoint が事前に
   `install -d -o $USERNAME` で用意している（これが無いと `mkdir` が Permission denied で失敗する）。
