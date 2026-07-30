@@ -2,8 +2,8 @@
 id: entrypoint
 layer: impl
 title: entrypoint 実装説明書
-version: 1.1.0
-updated: 2026-07-19
+version: 1.2.0
+updated: 2026-07-30
 verified:
   at: 2026-07-29
   version: 1.1.0
@@ -11,9 +11,10 @@ verified:
     - doc: docs/02-design/system.md
       version: 1.4
 summary: >
-  Claude コンテナの ENTRYPOINT として root で起動し、UID/GID 追従・認証共有・settings/MCP 生成・
-  firewall/portsync 起動・VNC/Chrome 起動・tmux セッション開始までを行う初期化シェルスクリプトの実装。
-keywords: [entrypoint, UID/GID, 認証共有, MCP, VNC, Chrome, tmux, firewall, portsync]
+  Claude コンテナの ENTRYPOINT として root で起動し、UID/GID 追従・認証共有（claude/codex）・
+  settings/MCP 生成・firewall/portsync 起動・VNC/Chrome 起動・tmux セッション開始までを行う
+  初期化シェルスクリプトの実装。
+keywords: [entrypoint, UID/GID, 認証共有, codex, MCP, VNC, Chrome, tmux, firewall, portsync]
 depends_on: [firewall, portsync]
 source:
   - docs/02-design/system.md
@@ -26,7 +27,8 @@ source:
 `scripts/entrypoint-claude.sh` は Claude コンテナの ENTRYPOINT として **root で 1 プロセス**起動し、
 コンテナ内部の初期化を上から順に実行する初期化スクリプトである（上流: [全体設計](../02-design/system.md)、
 契約「cli → コンテナ/entrypoint」「entrypoint → firewall」）。主な責務は、(1) `/workspace` 所有者に合わせた
-UID/GID 追従、(2) 共有ボリューム経由の認証共有と `~/.claude` の symlink 化、(3) `settings.json`・MCP 設定生成、
+UID/GID 追従、(2) 共有ボリューム経由の認証共有（claude / codex）と `~/.claude`・`~/.codex` の symlink 化、
+(3) `settings.json`・MCP 設定生成、
 (4) `firewall` 起動、(5) `portsync`（DooD ポート転送）起動、(6) VNC/Chrome/noVNC 起動（VNC イメージ時のみ）、
 (7) `tmux` セッション開始。最後に `exec tail -f /dev/null` で常駐する。要件 core/2,3,5,11 を担う。
 
@@ -71,10 +73,14 @@ UID/GID 追従、(2) 共有ボリューム経由の認証共有と `~/.claude` �
      （正本は cli/cli-mac。`DOCKER_HOST` と同様に全シェル・`docker exec` で有効）。entrypoint は関与しない。
   8. **.zshrc 共有:** `~/.config-shared/`（ボリューム）に `.zshrc` が無ければ、`~/.zshrc.default`→実体 `~/.zshrc`→
      空ファイルの順でコピー元を決めて作成。以後 `~/.zshrc` を共有ファイルへの symlink にする（コンテナ間共有）。
-  9. **~/.claude 構成と認証共有:** `LOCAL_CLAUDE=/workspace/.claude` を確保。`~/.claude` が実ディレクトリなら
+  9. **~/.claude・~/.codex 構成と認証共有:** `LOCAL_CLAUDE=/workspace/.claude` を確保。`~/.claude` が実ディレクトリなら
      中身を `cp -an` で退避して削除し、`~/.claude → /workspace/.claude` の symlink（`ln -sfn`）を張る。認証ファイル
      （`.credentials.json`・`.claude.json`。CLI がコピー済み）は所有権と `chmod 600` を整える。`~/.claude.json`
      （ホーム直下）→ `/workspace/.claude/.claude.json` の symlink を張る。
+     続けて codex 側も同形に整える——`LOCAL_CODEX=/workspace/.codex` を確保し、`~/.codex` が実ディレクトリなら
+     中身を `cp -an` で退避して削除して `~/.codex → /workspace/.codex` の symlink を張り、認証ファイル
+     `auth.json`（CLI がコピー済み）の所有権と `chmod 600` を整える。`config.toml`・セッション履歴は共有せず
+     このディレクトリ（＝プロジェクト）に残す（要件 core/3-7,3-9）。
   10. **settings.json 生成:** `$LOCAL_CLAUDE/settings.json` が無ければ
       `{"permissions":{"defaultMode":"bypassPermissions"},"model":"sonnet"}` を生成（共有しない）。
   11. **ホスト設定マージ:** `host-hooks.json`（名称は歴史的経緯で `hooks`/`env` 両方を運ぶ）があり `.hooks` か
@@ -83,6 +89,8 @@ UID/GID 追従、(2) 共有ボリューム経由の認証共有と `~/.claude` �
       （イメージ焼き込み済みを上書きしない）し、実行権付与後に元を削除。
   13. **認証バックグラウンド同期:** 30 秒ごとに `LOCAL_CLAUDE` の認証ファイルを共有ボリュームと `cmp` し、
       差分があれば書き戻すループを `( while true; ... ) &` でバックグラウンド起動（トークンリフレッシュ伝播）。
+      同じループで codex の `LOCAL_CODEX/auth.json` を `~/.claude-shared/codex/auth.json` と `cmp` し、
+      差分があれば書き戻す（対象ファイルが増えるだけで、ループ・間隔・比較方法は claude と共通。要件 core/3-8）。
   14. **firewall 起動:** `/usr/local/bin/init-firewall.sh` を実行（失敗は無視）。契約「entrypoint → firewall」。
   15. **VM モード起動（`CLAUDE_DEV_VM=1` 時）:** root のうちに `install -d -o $USERNAME` でマウント点
       `~/.claude-dev-vm`・`/run/vm` を用意し、`su "$USERNAME" -c /usr/local/bin/vm-up.sh` で起動。成功時のみ
@@ -116,13 +124,18 @@ UID/GID 追従、(2) 共有ボリューム経由の認証共有と `~/.claude` �
   21. **常駐:** `✅ Ready (...)` を表示し `exec tail -f /dev/null` で待機。
 - **実装上の判断:** 認証共有は symlink でなく「起動時コピー＋30 秒書き戻し」（Claude Code のアトミック書き込みで
   symlink が壊れるため。設計判断3/D-3）。`~/.claude` 自体は `/workspace/.claude` への symlink とし、
-  `settings.json`/`projects/`/`sessions/` はプロジェクトに永続化する。
+  `settings.json`/`projects/`/`sessions/` はプロジェクトに永続化する。codex も同じ形（`~/.codex` →
+  `/workspace/.codex` の symlink、`auth.json` はコピー＋書き戻し）に揃える——codex の `auth.json` は
+  その場書き換えで symlink でも壊れないが、同期ループと片付け経路を 2 方式に分けない判断（設計判断3/D-27）。
+  共有ボリューム内の codex 認証パスが `~/.claude-shared/codex/auth.json` になるのは、認証ボリュームを
+  claude と共用する決定（D-27 ③）によるもので、名称は claude 由来のまま据え置く。
 
 ## データアクセス
 
 | データ | 操作 | 実施モジュール | 備考 |
 |---|---|---|---|
 | 認証ファイル（.credentials.json / .claude.json） | 起動時 chmod 600・30秒ごと共有ボリュームへ書き戻し | entrypoint | 共有元コピーは cli 側。symlink 不使用（D-3） |
+| codex 認証ファイル（/workspace/.codex/auth.json） | 起動時 chmod 600・30秒ごと `~/.claude-shared/codex/auth.json` へ書き戻し | entrypoint | 共有元コピーは cli 側（`login-codex`/`start`）。`config.toml`・セッション履歴は共有しない（D-27） |
 | /workspace/.claude/settings.json | 生成（無い時）・host-hooks.json を jq で深いマージ | entrypoint | コンテナローカル（共有しない） |
 | /workspace/.mcp.json | chrome-devtools / computer-use エントリを jq で追加 | entrypoint | VNC 時のみ |
 | /workspace/.claude/.claude.json | enabledMcpjsonServers に chrome-devtools を追加 | entrypoint | VNC 時のみ |
@@ -172,6 +185,7 @@ CLI が動的割り当てで公開する。
 | （自動テストなし・実機確認） | 結合 | 起動時に firewall が適用される | 契約: entrypoint→firewall／要件 core/5 |
 | （自動テストなし・実機確認） | 結合 | `/workspace` 所有者に UID/GID が追従しファイル所有権齟齬が無い | 要件 core/2 |
 | （自動テストなし・実機確認） | 結合 | 認証が共有ボリューム経由でコピー・30秒書き戻しされ再接続できる | 要件 core/3 |
+| （自動テストなし・実機確認） | 結合 | codex 認証（auth.json）がコピーされ `codex` が再ログイン不要で動き、更新が 30 秒で共有ボリュームへ書き戻る | 要件 core/3-7,8,9（E2E-6） |
 | （自動テストなし・実機確認） | 結合 | VNC イメージで Chrome/noVNC が起動し chrome-devtools MCP で操作できる | 要件 core/11 |
 
 実行方法: 自動テストコマンドなし。`claude-dev start`（VNC あり/`--no-vnc`）でコンテナを起動し、

@@ -2,8 +2,8 @@
 id: e2e
 layer: impl
 title: E2Eテスト実装説明書
-version: 1.0.0
-updated: 2026-07-18
+version: 1.1.0
+updated: 2026-07-30
 verified:
   at: 2026-07-29
   version: 1.0.0
@@ -11,9 +11,9 @@ verified:
     - doc: docs/02-design/system.md
       version: 1.4
 summary: >
-  02-design のE2Eシナリオ一覧(E2E-1〜5)に対応するE2E検証の実装説明。専用E2Eフレームワークは持たず、
+  02-design のE2Eシナリオ一覧(E2E-1〜6)に対応するE2E検証の実装説明。専用E2Eフレームワークは持たず、
   実機操作(claude-dev)とオーケストレーター自己検証(make orch-sample)で担保する。
-keywords: [e2e, 実機確認, 自己検証, orch-sample, docker-proxy, orchestrate]
+keywords: [e2e, 実機確認, 自己検証, orch-sample, docker-proxy, orchestrate, codex認証共有]
 depends_on: [cli, entrypoint, docker-proxy, portsync, orchestrator, sample-project]
 source:
   - docs/02-design/system.md
@@ -23,7 +23,7 @@ source:
 
 ## 概要
 
-本システムのE2Eは、[全体設計のテスト戦略](../02-design/system.md)「E2Eシナリオ一覧」（E2E-1〜5）に従う。
+本システムのE2Eは、[全体設計のテスト戦略](../02-design/system.md)「E2Eシナリオ一覧」（E2E-1〜6）に従う。
 Web アプリのような自動E2Eフレームワーク（Playwright 等）は導入していない。E2E は
 **(a) ホスト CLI の実機操作**（コンテナ起動・フォワード・docker-proxy 挙動）と、**(b) オーケストレーターの
 自己検証**（バンドル題材に対する `make orch-sample` の実走、[sample-project](sample-project.md)）で担保する。
@@ -55,10 +55,12 @@ Web アプリのような自動E2Eフレームワーク（Playwright 等）は�
 | 実機確認(手動): コンテナ内 `docker run -v /:/host` 等 → 拒否／`/workspace` bind 許可／通常許可 | E2E-3 | UC-3 | docker-proxy の許可/拒否/書換（契約は [docker-proxy](docker-proxy.md) の結合テストが機械検証、E2E としては実機確認）＝**部分自動(結合テスト)＋実機確認** |
 | 自己検証: `make orch-sample`（scaffold）→ `claude-dev orchestrate`（実走） | E2E-4 | UC-4 | ブレスト→plan→worker 並列→要判断タスク単位待機→回答復帰→完了。題材に対し実走で確認＝**半自動(自己検証題材で実走・観測)** |
 | 実機確認(手動): 実行中に端末全終了 → `claude-dev orchestrate` 再実行 | E2E-5 | UC-5 | attach/resume・完了済み非再実行・plan/履歴保持。自動化なし＝**未検証(自動化なし・実機確認)** |
+| 実機確認(手動): `claude-dev login-codex` → デバイス認証 → 別プロジェクトで `claude-dev start` → コンテナ内 `codex` | E2E-6 | UC-6 | 共有ボリュームへ `codex/auth.json` が保存され、別プロジェクトのコンテナで再ログイン不要に `codex` が起動する。トークン更新が 30 秒同期で共有ボリュームへ書き戻り次のコンテナへ引き継がれる。`config.toml`/セッション履歴はコンテナごとに独立。自動化なし＝**未検証(自動化なし・実機確認)** |
 
 ## 既知の制限・技術的負債
 
-- CLI/コンテナ系（E2E-1,2,3,5）の**自動E2Eは未整備**で、実機確認に依存する。回帰検出は手動。
+- CLI/コンテナ系（E2E-1,2,3,5,6）の**自動E2Eは未整備**で、実機確認に依存する。回帰検出は手動。
+- E2E-6 はデバイス認証にブラウザ操作（クライアント PC 側）を伴うため、原理的に無人自動化できない。
 - E2E-4 は自己検証題材での実走・観測であり、合否を機械判定する厳密なアサーションは持たない（人間/助言的検証が確認する）。
 - docker-proxy の契約は結合テスト（`docker-proxy/*_test.go`）で機械検証されるため、E2E-3 の中核ロジックはそちらでカバーされる。
 

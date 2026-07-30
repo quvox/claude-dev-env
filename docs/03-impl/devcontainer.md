@@ -2,8 +2,8 @@
 id: devcontainer
 layer: impl
 title: devcontainer 実装説明書
-version: 1.3.0
-updated: 2026-07-29
+version: 1.4.0
+updated: 2026-07-30
 verified:
   at: 2026-07-29
   version: 1.3.0
@@ -13,9 +13,10 @@ verified:
 summary: >
   Claude コンテナイメージ定義。Dockerfile.claude（orch-builder / base / vnc-base と、配布する
   終端ステージ claude-cli / claude-vnc）と Dockerfile.docker-proxy（Go 多段）、
-  .devcontainer/tmux.conf を持ち、他モジュールの資産をイメージへ同梱する。Claude Code は終端
-  ステージでバージョン指定インストールする。自動テストはなくビルド実機確認で検証する。
-keywords: [Dockerfile, マルチステージ, Ubuntu24.04, VNC, noVNC, Chrome, pyenv, fnm, docker-proxy, 同梱, ClaudeCodeバージョン]
+  .devcontainer/tmux.conf を持ち、他モジュールの資産をイメージへ同梱する。エージェント CLI
+  （Claude Code / Codex CLI）は終端ステージでバージョン指定インストールする。自動テストはなく
+  ビルド実機確認で検証する。
+keywords: [Dockerfile, マルチステージ, Ubuntu24.04, VNC, noVNC, Chrome, pyenv, fnm, docker-proxy, 同梱, ClaudeCodeバージョン, CodexCLI]
 depends_on: []
 source:
   - docs/02-design/system.md
@@ -32,16 +33,17 @@ Claude Code を動かすランタイム一式を再現可能にビルドする�
 | ステージ | 役割 | 配布 |
 |---|---|---|
 | `orch-builder` | Go オーケストレーターのビルド専用 | — |
-| `base` | 開発環境本体（言語処理系・CLI・FW ツール・ヘッドレスブラウザ・同梱資産）。**Claude Code を含まない** | — |
-| `vnc-base` | `FROM base`。GUI/日本語入力を足す。**Claude Code を含まない** | — |
-| `claude-cli` | `FROM base`。**終端レイヤーで Claude Code を導入** | イメージ `claude-dev-claude` |
-| `claude-vnc` | `FROM vnc-base`。**終端レイヤーで Claude Code を導入** | イメージ `claude-dev-claude-vnc` |
+| `base` | 開発環境本体（言語処理系・CLI・FW ツール・ヘッドレスブラウザ・同梱資産）。**エージェント CLI を含まない** | — |
+| `vnc-base` | `FROM base`。GUI/日本語入力を足す。**エージェント CLI を含まない** | — |
+| `claude-cli` | `FROM base`。**終端レイヤーで Claude Code と Codex CLI を導入** | イメージ `claude-dev-claude` |
+| `claude-vnc` | `FROM vnc-base`。**終端レイヤーで Claude Code と Codex CLI を導入** | イメージ `claude-dev-claude-vnc` |
 
-VNC あり/なしで `base` レイヤーを共有し、追加分のディスクだけ増やす。Claude Code の導入を配布
-ステージの**終端レイヤーに限定**するのは、そのキャッシュ失効の波及先を claude バイナリ層だけに
-留め、日次更新でも利用者の `docker pull` を増分に保つため（設計: [判断4](../02-design/system.md)、
-決定 D-26）。`base` の途中に置くと `vnc-base` 以降の高コスト層（apt VNC 群・Chrome・`cargo install`）
-まで巻き込んで失効する。加えて `.devcontainer/Dockerfile.docker-proxy`（Go 静的
+VNC あり/なしで `base` レイヤーを共有し、追加分のディスクだけ増やす。エージェント CLI（Claude Code /
+Codex CLI）の導入を配布ステージの**終端レイヤーに限定**するのは、そのキャッシュ失効の波及先を各 CLI の
+バイナリ層だけに留め、日次更新でも利用者の `docker pull` を増分に保つため（設計:
+[判断4](../02-design/system.md)、決定 D-26／D-27）。`base` の途中に置くと `vnc-base` 以降の高コスト層
+（apt VNC 群・Chrome・`cargo install`）まで巻き込んで失効する。加えて
+`.devcontainer/Dockerfile.docker-proxy`（Go 静的
 ビルド + alpine、共有 `docker-proxy` イメージ）と、イメージに焼き込む `.devcontainer/tmux.conf`
 を持つ。**このモジュールは他モジュールの成果物（entrypoint・firewall・hooks・container-tools・
 portsync・vm-mode・orchestrator の各スクリプト/バイナリ）をイメージへ COPY で同梱する集約点**で
@@ -51,7 +53,7 @@ portsync・vm-mode・orchestrator の各スクリプト/バイナリ）をイメ
 
 | パス | 役割 |
 |---|---|
-| .devcontainer/Dockerfile.claude | `orch-builder` / `base` / `vnc-base` / `claude-cli` / `claude-vnc` の多段ビルド。開発環境本体と GUI、および Claude Code 導入の終端層 |
+| .devcontainer/Dockerfile.claude | `orch-builder` / `base` / `vnc-base` / `claude-cli` / `claude-vnc` の多段ビルド。開発環境本体と GUI、およびエージェント CLI（Claude Code / Codex CLI）導入の終端層 |
 | .devcontainer/Dockerfile.docker-proxy | Go 多段（`golang:1.24-alpine`→`alpine:3.21`）。docker-proxy イメージ |
 | .devcontainer/tmux.conf | `/etc/tmux.conf` へ焼き込む最小 tmux 設定 |
 
@@ -72,7 +74,8 @@ portsync・vm-mode・orchestrator の各スクリプト/バイナリ）をイメ
 ### Dockerfile.claude — ステージ `base`(中間・非配布)
 
 - **責務:** 言語処理系・CLI・FW ツール・（ヘッドレス）ブラウザを備えた非 GUI 開発環境の土台
-  （core/1・9）。**Claude Code は含めない**（`claude-cli`/`claude-vnc` が終端で導入する）。
+  （core/1・9）。**エージェント CLI（Claude Code / Codex CLI）は含めない**（`claude-cli`/`claude-vnc`
+  が終端で導入する）。
 - **ビルド引数/環境:**
   - `ARG USERNAME=devuser` / `USER_UID=1500` / `USER_GID=1500`（CLI・makefile がホスト値で上書き）。
   - `ARG IMAGE_VERSION=local`。`LABEL io.github.quvox.claude-dev.version` と OCI 標準
@@ -120,7 +123,7 @@ portsync・vm-mode・orchestrator の各スクリプト/バイナリ）をイメ
 
 ### Dockerfile.claude — ステージ `vnc-base`(中間・非配布, `FROM base`)
 
-- **責務:** GUI ブラウザ確認と日本語入力（core/11）。base に GUI 層のみ追加。**Claude Code は
+- **責務:** GUI ブラウザ確認と日本語入力（core/11）。base に GUI 層のみ追加。**エージェント CLI は
   含めない**（`claude-vnc` が終端で導入する）。
 - **処理の要点:**
   - `ja_JP.UTF-8` ロケール追加。TigerVNC(standalone-server) + python3-websockify + openbox、
@@ -146,19 +149,28 @@ portsync・vm-mode・orchestrator の各スクリプト/バイナリ）をイメ
 
 ### Dockerfile.claude — 終端ステージ `claude-cli` / `claude-vnc`(配布イメージ)
 
-- **責務:** Claude Code CLI を指定バージョンで導入する終端レイヤー。`claude-cli` は `FROM base`
-  （イメージ `claude-dev-claude`）、`claude-vnc` は `FROM vnc-base`（イメージ
-  `claude-dev-claude-vnc`）。両ステージは同一の導入手順を持つ。
-- **ビルド引数:** `ARG CLAUDE_VERSION=latest`。CI は prepare ジョブで解決した具体バージョン
-  （例 `2.1.220`）を渡す（D-26）。既定値 `latest` はローカルビルド用（`install.sh` がその時点の
-  最新版を導入する）。加えて `ARG USERNAME=devuser` を**各終端ステージで再宣言**する（`ARG` は
-  ステージスコープのため、`FROM` 継承だけでは `$USERNAME` が空になり `USER $USERNAME` が
-  失敗する。`ENV CONTAINER_USER`/`USER_HOME` は継承されるが `USERNAME` は ARG のため継承されない）。
+- **責務:** エージェント CLI（Claude Code / Codex CLI）を指定バージョンで導入する終端レイヤー。
+  `claude-cli` は `FROM base`（イメージ `claude-dev-claude`）、`claude-vnc` は `FROM vnc-base`
+  （イメージ `claude-dev-claude-vnc`）。両ステージは同一の導入手順を持つ。
+- **ビルド引数:** `ARG CLAUDE_VERSION=latest` と `ARG CODEX_VERSION=latest`。CI は prepare ジョブで
+  解決した具体バージョン（claude 例 `2.1.220`／codex 例 `0.146.0`）を渡す（D-26／D-27）。既定値
+  `latest` はローカルビルド用（その時点の最新版を導入する）。加えて `ARG USERNAME=devuser` を
+  **各終端ステージで再宣言**する（`ARG` はステージスコープのため、`FROM` 継承だけでは `$USERNAME` が
+  空になり `USER $USERNAME` が失敗する。`ENV CONTAINER_USER`/`USER_HOME` は継承されるが `USERNAME`
+  は ARG のため継承されない）。
 - **処理の要点:**
   - `USER $USERNAME` に切り替え、`WORKDIR /tmp` で
     `curl -fsSL https://claude.ai/install.sh | bash -s -- "$CLAUDE_VERSION"` を実行。
     `WORKDIR /tmp` はインストーラーの FS 全体スキャン回避。**必ずユーザー権限で実行する**——root で
     実行すると `/root/.local/bin` に入り、コンテナ内ユーザーから `claude` が見えなくなる。
+  - 続けて**同じユーザー権限**で Codex CLI を導入する。`base` が入れた fnm の既定 Node を使い、
+    `npm install -g @openai/codex@${CODEX_VERSION}`（`CODEX_VERSION=latest` のときは `@latest`）を
+    実行する。npm パッケージは JS ランチャー（`bin/codex.js`）＋ platform 別バイナリ
+    （optionalDependencies、`linux-x64`/`linux-arm64` の両方が提供される）の構成で、amd64/arm64
+    いずれのネイティブビルドでも解決できる。
+  - 導入後、**root で `codex` の絶対パス symlink を `/usr/local/bin/codex` へ張る**（fnm の
+    node-versions 配下に入る実体を指す）。これは PATH 解決を fnm 初期化に依存させないため
+    （要件 core/12-2: 非対話シェル `bash -c` や `docker exec` からも解決できること）。
   - 導入後 `WORKDIR /workspace` と `USER root` に戻す（`base` 末尾の状態と一致させる。entrypoint は
     root 実行前提のため状態を変えてはならない）。
   - `ENTRYPOINT`・`ENV`・`LABEL` は親ステージから継承するため再宣言しない。
@@ -166,11 +178,14 @@ portsync・vm-mode・orchestrator の各スクリプト/バイナリ）をイメ
   - `install.sh` へは具体バージョンを引数で渡す（同スクリプトは `stable｜latest｜具体バージョン` を
     受け付ける）。引数なしの既定は `stable` チャネルだが、段階的公開のため `latest` より古い版を
     指すことがあるため使わない（D-26）。
-  - `CLAUDE_VERSION` の値そのものが本レイヤーのキャッシュキーになるため、時刻由来の cache-bust 用
-    ARG（旧 `CLAUDE_CACHE_BUST`）は不要になり**廃止した**。新版が出た日だけ本レイヤーが失効する。
-  - 同一の `RUN` を 2 ステージに重複して書く。CI では `claude`/`claude-vnc` が別ジョブでビルドされる
-    ため追加コストは生じない。共通化のため中間ステージを挟むと、その層が再び共有チェーンに入り
-    終端配置の意味を失う。
+  - `CLAUDE_VERSION`/`CODEX_VERSION` の値そのものが本レイヤーのキャッシュキーになるため、時刻由来の
+    cache-bust 用 ARG（旧 `CLAUDE_CACHE_BUST`）は不要になり**廃止した**。新版が出た日だけ本レイヤーが
+    失効する。codex を `@latest` 直書きで焼くと文字列が変化せず**中身だけ凍結**するため採らない（D-27）。
+  - claude と codex の導入は**同一の終端レイヤー群に置く**（別の中間ステージを挟むと、その層が共有
+    チェーンに入り終端配置の意味を失う）。同一の `RUN` 群を 2 ステージに重複して書く点も claude と同じで、
+    CI では `claude`/`claude-vnc` が別ジョブでビルドされるため追加コストは生じない。
+  - codex は npm パッケージで導入するため、`claude` と違い**実行時に Node を必要とする**（ランチャーが
+    JS）。`base` が Node を持つ前提であり、これは既存の構成で満たされている。
 
 ### Dockerfile.claude — 同梱資産(他モジュールの成果物を COPY)
 
@@ -231,6 +246,7 @@ portsync・vm-mode・orchestrator の各スクリプト/バイナリ）をイメ
 | GO_VERSION | Go 展開版 | 1.26.1 | 任意 |
 | PYTHON_VERSION | pyenv 既定 CPython 系 | 3.13 | 任意 |
 | CLAUDE_VERSION | 終端ステージで導入する Claude Code のバージョン（`stable`／`latest`／具体バージョン）。値がそのまま当該レイヤーのキャッシュキーになる（D-26） | latest | 任意（CI は具体バージョン） |
+| CODEX_VERSION | 終端ステージで導入する Codex CLI のバージョン（`latest`／具体バージョン。`npm install -g @openai/codex@<値>`）。値がそのまま当該レイヤーのキャッシュキーになる（D-27） | latest | 任意（CI は具体バージョン） |
 | LANG / LC_ALL / TZ | ロケール・時刻 | en_US.UTF-8 / Asia/Tokyo | 焼込 |
 | SHELL / CONTAINER_USER / USER_HOME | 既定シェル・entrypoint 参照 | /bin/zsh 他 | 焼込 |
 | container | コンテナ内動作の判定マーカー（systemd/podman 標準慣習, D-25） | docker | 焼込 |
@@ -253,6 +269,7 @@ portsync・vm-mode・orchestrator の各スクリプト/バイナリ）をイメ
 | テスト(ファイル::ケース名) | レベル | 検証内容 | 対応する受け入れ基準/契約 |
 |---|---|---|---|
 | （自動テストなし＝実機確認） | 単体 | `make build` 系で claude-cli/claude-vnc/docker-proxy が amd64/arm64 でビルド成功 | core/9 ビルド |
+| （自動テストなし＝実機確認） | 単体 | 配布 2 イメージで `claude --version`／`codex --version` が期待バージョンを返し、`docker exec <c> bash -c 'codex --version'`（非対話シェル）でも解決できる | core/12-1,2,3 |
 | （実機確認 E2E-1 の一部） | 結合 | 起動後にランタイム（node/python/go/rust/gh/docker）と VNC/日本語入力が機能 | core/1,11 |
 
 実行方法: リポジトリの `make`（tech steering のビルドコマンド）でイメージをビルドし、
@@ -260,8 +277,8 @@ portsync・vm-mode・orchestrator の各スクリプト/バイナリ）をイメ
 
 ## 既知の制限・技術的負債
 
-- Chromium/Chrome・AWS/Terraform/gcloud・Claude CLI 等を外部 URL から取得するため、ビルドは
-  ネットワーク接続とアップストリーム可用性に依存する（orchestrator は vendoring で例外）。
+- Chromium/Chrome・AWS/Terraform/gcloud・Claude CLI・Codex CLI（npm registry）等を外部から取得する
+  ため、ビルドはネットワーク接続とアップストリーム可用性に依存する（orchestrator は vendoring で例外）。
 - `rmcp-xdotool` はソースビルドで、失敗すると computer-use MCP が使えない（意図的に非致命化）。
 - Terraform は index から常に最新を解決するため、ビルド時期によって版が変わる（固定していない）。
 
@@ -271,6 +288,9 @@ portsync・vm-mode・orchestrator の各スクリプト/バイナリ）をイメ
   ローカルビルドは `local`、CI/GHCR 配布は `YYYYMMDDHHmm`。
 - 同梱スクリプト（entrypoint/firewall/hooks/portsync/vm-mode/container-tools）や orchestrator を
   変更した場合、反映にはイメージ再ビルドが必要（COPY 焼き込みのため）。
-- `base` は `vnc-base`・`claude-cli`・`claude-vnc` に共有される。Claude Code の新版が出た日は、
-  失効するのは各配布ステージの終端 claude 層だけで、`base`/`vnc-base` の高コスト層は再ビルド・
-  再 push・再 pull されない（D-26、設計判断4）。
+- `base` は `vnc-base`・`claude-cli`・`claude-vnc` に共有される。Claude Code / Codex CLI の新版が
+  出た日は、失効するのは各配布ステージの終端レイヤー（claude / codex 導入層）だけで、`base`/`vnc-base`
+  の高コスト層は再ビルド・再 push・再 pull されない（D-26／D-27、設計判断4）。
+- `codex` の実体は fnm の node-versions 配下に入るため、Node の既定バージョンを変えると実体パスが
+  変わる。`/usr/local/bin/codex` の symlink を張り直すのはイメージ再ビルド時であり、Node 既定版を
+  変更する変更（`base` の fnm 設定）を入れる際は本 symlink の追従を確認する。

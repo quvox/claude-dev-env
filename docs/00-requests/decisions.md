@@ -2,16 +2,16 @@
 id: decisions
 layer: request
 title: claude-dev-env 決定台帳
-version: 1.4.0
-updated: 2026-07-29
+version: 1.5.0
+updated: 2026-07-30
 verified:
   at: 2026-07-29
   version: 1.4.0
   against: []
 summary: >
   既存実装に埋め込まれた設計判断を「決定/委任/要確認」に仕分けた台帳。逆生成のため証跡は
-  既存コード・旧docsを指す（人間は00層の承認ゲートで本台帳を追認する）。決定21・委任2・要確認3。
-keywords: [決定台帳, 隔離方針, docker-proxy, オーケストレーター, VMモード, 委任, ClaudeCodeバージョン]
+  既存コード・旧docsを指す（人間は00層の承認ゲートで本台帳を追認する）。決定22・委任2・要確認3。
+keywords: [決定台帳, 隔離方針, docker-proxy, オーケストレーター, VMモード, 委任, ClaudeCodeバージョン, CodexCLI]
 source: null
 ---
 
@@ -48,6 +48,7 @@ source: null
 | D-24 | 複数プロジェクト同時実行時の compose リソース分離とライフサイクル | ①**分離**: DooD 既定モードで各プロジェクトのコンテナ内 `docker compose` が作るネットワーク名・コンテナ名をプロジェクト間で衝突させない。`COMPOSE_PROJECT_NAME` を起動ディレクトリ名で一意化する。`claude-dev-net`（claude↔proxy）は共有のまま分離しない。②**ライフサイクル**: compose で作られたコンテナ群は親 claude コンテナに束ね、`claude-dev stop` 時にラベル `com.docker.compose.project=<正規化NAME>` を持つコンテナと当該プロジェクトの compose デフォルトネットワークを削除する（`docker compose down` 相当。名前付きボリュームは非破壊のため保持）。共有の `claude-dev-net`・docker-proxy は削除しない。VM モードは compose がゲスト内 Docker で完結するため本片付けの対象外 | 全プロジェクトが `/workspace` にマウントされ compose 既定名が `workspace` に衝突するため。分離は compose 層で十分（利用者確認済み）。claude-dev-net の分離は単一共有 proxy 前提と両立しないため見送り。stop 後に compose コンテナが孤児として残り続けるのを防ぐ一方、ボリューム削除は破壊的なため行わず、共有リソースは他プロジェクトが使用中のため残す | 本変更, `claude-dev`/`claude-dev-mac`（`-e COMPOSE_PROJECT_NAME`／`stop`） |
 | D-25 | コンテナ内動作の判定マーカー（`container` 環境変数） | 全 claude コンテナに環境変数 `container=docker` を持たせ、コンテナ内で動作するプロセスが「自分がコンテナ内か」を判定できるようにする。名前・値は systemd/podman の標準慣習（`container=<runtime>`）に合わせ `container=docker` とする。イメージ焼き込み（`Dockerfile.claude` の base ステージの `ENV`）で付与し、VNC 版も `FROM base` 継承で同値を持つ。起動経路（`docker run`／login 等の一時コンテナ含む）に依存させないためイメージ側で常時保証する | 内部プロセス（entrypoint・各スクリプト・オーケストレーター等）が環境依存の分岐を安全にできるようにする恒久マーカーが要る。名前・値を既存の業界標準慣習に合わせることで、systemd 等の外部ツールとの互換も同時に得られる。起動時 `-e` 付与は経路依存で漏れうるためイメージ側に置く | 本変更, `.devcontainer/Dockerfile.claude` |
 | D-26 | 同梱する Claude Code のバージョン方針と、そのキャッシュキーの置き場所 | ①**チャネル**: 配布イメージに焼く Claude Code は `https://downloads.claude.ai/claude-code-releases/latest` を CI の prepare ジョブで具体バージョン（例 `2.1.220`）へ解決し、build-arg として**ピン留めして**インストールする。`install.sh` の引数なし既定（`stable` チャネル）は使わない。②**逃げ道**: 不良版を引いた場合は `workflow_dispatch` の入力で特定バージョンを手動指定して焼き直せるようにする（`install.sh` は `stable｜latest｜具体バージョン` を受け付ける）。③**キャッシュキー**: バージョン文字列そのものをキャッシュキーとし、時刻由来の cache-bust（`CLAUDE_CACHE_BUST`）は廃止する。新版が出た日だけ当該レイヤーが失効し、出ない日は完全にキャッシュヒットする。④**日次更新の意味**: 「日次で更新」の保証はタグが変わることではなく、**同梱 Claude Code が `latest` に追随すること**を含む（要件9の受け入れ基準に反映） | 2026-07-18 の変更（バージョンを build-arg から `labels` へ移しレイヤーキャッシュを実効化）以降、レイヤーチェーンから日々変わる値が消え、claude 導入層が永久にキャッシュヒットするようになった。結果、ラベルだけが日次更新され**同梱版は 2026-07-19 時点の 2.1.214 で凍結**していた。`stable` は段階的公開のため現行 `latest` より古い版を指すことがあり（2026-07-29 観測: stable=2.1.212 / latest=2.1.220）、`stable` 追随ではむしろ現状より古い版を焼くことになる。`latest` ピン留めならホスト側 claude（`latest` 追随）と版が揃い、認証共有時にホスト/イメージ間のバージョン差が問題になりにくい（D-3 の `--update=none` 方針と整合）。時刻由来ではなく内容由来のキーにすることで、キャッシュの実効性（pull を増分に保つ）と鮮度を両立できる | 本変更, `.github/workflows/ghcr-images.yml`, `.devcontainer/Dockerfile.claude` |
+| D-27 | Codex CLI の同梱・バージョン方針・認証共有方式 | ①**同梱**: 配布 2 イメージ（`claude-cli`/`claude-vnc`）に OpenAI Codex CLI（npm パッケージ `@openai/codex`）を導入する。導入 `RUN` は Claude Code と同じ**配布ステージの終端レイヤー**に置く。②**バージョン**: CI の prepare ジョブで npm registry の最新版を具体バージョン（例 `0.146.0`）へ解決し、build-arg でピン留めしてインストールする。`@latest` の直書きはしない。`workflow_dispatch` の入力で特定バージョンを手動指定して焼き直せるようにする。③**認証**: `codex login --device-auth`（ヘッドレス前提のデバイス認証）を採り、`$CODEX_HOME/auth.json`（既定 `~/.codex/auth.json`）**のみ**を既存 `claude-dev-auth` ボリュームの `codex/` サブディレクトリ経由でコンテナ間・ホスト間共有する。共有方式は D-3 と同じ「起動時コピー＋30 秒ごとのバックグラウンド書き戻し」。`config.toml`・セッション/履歴はコンテナ固有に保つ。④**ログイン導線**: ホスト CLI に独立サブコマンド `claude-dev login-codex` を追加する（既存 `login` は claude 専用のまま。`logout` は共有ボリュームを空にする現状挙動を維持し、codex 認証も同時に消える）。⑤**スコープ**: 本決定は「開発者がコンテナ内で codex を使える状態」までであり、オーケストレーターの worker/レビューアーとして codex を常用するかは D-22 のまま未決 | codex も claude 同様に更新が速く、`@latest` を直書きすると文字列が変化せずレイヤーキャッシュが永久ヒットして**中身だけ凍結**する（D-26 で実際に発生した事象）。内容由来キーを終端レイヤーに置く方針をそのまま横展開すれば、鮮度と `docker pull` の増分性を両立できる。npm パッケージは platform 別バイナリを optionalDependencies で取得し linux-arm64 も提供されるため、マルチアーキ配布（D-11）と両立する。`auth.json` は保存方式の既定が keyring ではなくファイル・パーミッション 0600・その場書き換えで、トークンリフレッシュにより内容が変わるため書き戻し同期が必要。認証の器を既存ボリュームへ相乗りさせるのは、インフラ作成・`logout`・`reset` の分岐を増やさないため。ログインは対象ごとに独立コマンドとし、既存 `login` の挙動を変えずに片方だけログインし直せるようにする | 本変更, `.devcontainer/Dockerfile.claude`, `scripts/entrypoint-claude.sh`, `claude-dev`/`claude-dev-mac`, `.github/workflows/ghcr-images.yml` |
 
 ## AIへの委任
 
@@ -65,5 +66,5 @@ source: null
 | ID | 判断項目 | 論点 | 誰が・いつまでに決めるか |
 |---|---|---|---|
 | D-21 | オーケストレーターのモデル/effort ポリシーの将来調整 | 工程別のモデル選択（設計系=opus/high、実装系=sonnet/high）は 2026-07 時点の方針。基準見直し時は要合意 | 運用実測を見て人間が随時 |
-| D-22 | 異種ベンダー worker（Codex 等）の常用可否 | 現状 worker は主に Claude。別ベンダー常用に踏み込むかは未決 | 品質ゲート定着後に人間が判断 |
+| D-22 | 異種ベンダー worker（Codex 等）の常用可否 | 現状 worker は主に Claude。別ベンダー常用に踏み込むかは未決。**Codex CLI の同梱と認証共有は D-27 で決定済み**であり、ここで未決なのはオーケストレーターが worker/レビューアーとして codex を常用するかどうかのみ | 品質ゲート定着後に人間が判断 |
 | D-23 | MCP ツールの本格導入 | stdio 方式から段階導入する方針。Docker MCP（DinD/ソケット共有）はセキュリティ要件を満たせる場合のみ | 必要が生じた段階で人間が判断 |

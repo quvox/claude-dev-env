@@ -477,17 +477,24 @@ EXPOSE 6080
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 
 # =============================================================================
-# 配布ステージ: claude-cli / claude-vnc（Claude Code を終端レイヤーで導入）
+# 配布ステージ: claude-cli / claude-vnc
+#   （エージェント CLI = Claude Code / Codex CLI を終端レイヤーで導入）
 # =============================================================================
-# Claude Code の導入 RUN は「配布ステージの最終レイヤー」にのみ置く。キャッシュキーは
-# 具体バージョン（CI が latest チャネルを解決した値）＝内容由来の値にし、時刻由来の
-# cache-bust（旧 CLAUDE_CACHE_BUST）は使わない。新版が出た日だけこの層が失効し、
-# base / vnc-base の高コスト層は再ビルド・再 push・再 pull されない（D-26 / 02-design 判断4）。
+# エージェント CLI の導入 RUN は「配布ステージの最終レイヤー」にのみ置く。キャッシュキーは
+# 具体バージョン（CI が claude=latest チャネル / codex=npm registry を解決した値）＝内容由来の
+# 値にし、時刻由来の cache-bust（旧 CLAUDE_CACHE_BUST）は使わない。新版が出た日だけこの層が
+# 失効し、base / vnc-base の高コスト層は再ビルド・再 push・再 pull されない
+# （D-26 / D-27 / 02-design 判断4）。
 #
 # 実装上の注意:
-#   - 必ずユーザー権限で実行する。root で実行すると /root/.local/bin に入り、コンテナ内
-#     ユーザーから claude が見えなくなる。
+#   - 必ずユーザー権限で実行する。root で実行すると claude は /root/.local/bin に入り、codex は
+#     root の npm prefix に入るため、コンテナ内ユーザーから見えなくなる。
 #   - WORKDIR /tmp はインストーラーがファイルシステム全体をスキャンするのを防ぐため（公式ドキュメント）。
+#   - codex は npm パッケージ（JS ランチャー＋platform 別バイナリ。optionalDependencies に
+#     linux-x64 / linux-arm64 の両方があるため amd64/arm64 いずれのネイティブビルドでも解決できる）。
+#     実体は fnm の node-versions 配下に入り PATH 解決が fnm 初期化に依存するため、root で
+#     /usr/local/bin/codex ランチャーを生成し、非対話シェル（bash -c）や docker exec からも
+#     解決できるようにする（要件 core/12-2。chromium-browser / claude-dev-chrome と同じ流儀）。
 #   - 導入後は base 末尾と同じ状態（WORKDIR /workspace・USER root）へ戻す（entrypoint は root 実行前提）。
 #   - ENTRYPOINT / ENV / LABEL は親ステージから継承するので再宣言しない。
 #   - 2 ステージに同一の RUN を重複させている。共通化のため中間ステージを挟むと、その層が
@@ -500,21 +507,53 @@ FROM base AS claude-cli
 
 ARG USERNAME=devuser
 ARG CLAUDE_VERSION=latest
+ARG CODEX_VERSION=latest
 
 USER $USERNAME
 WORKDIR /tmp
 RUN curl -fsSL https://claude.ai/install.sh | bash -s -- "$CLAUDE_VERSION"
+RUN export PATH="${USER_HOME}/.local/share/fnm:$PATH" \
+    && eval "$($USER_HOME/.local/share/fnm/fnm env)" \
+    && npm install -g "@openai/codex@${CODEX_VERSION}" \
+    && codex --version
 WORKDIR /workspace
 USER root
+
+# codex 共通ランチャー: fnm 既定バージョンの bin を PATH に足して実体を exec する。
+# codex の実体は #!/usr/bin/env node の JS ランチャーなので、単純な symlink では
+# fnm 初期化のないシェル（bash -c / docker exec）から node が見つからず動かない。
+# aliases/default は fnm default が張る安定パスで、Node の既定版が変わっても追従する。
+RUN FNM_DEFAULT_BIN="${USER_HOME}/.local/share/fnm/aliases/default/bin" \
+    && [ -x "${FNM_DEFAULT_BIN}/codex" ] \
+    && printf '#!/bin/sh\nexport PATH="%s:${PATH}"\nexec "%s/codex" "$@"\n' \
+        "$FNM_DEFAULT_BIN" "$FNM_DEFAULT_BIN" > /usr/local/bin/codex \
+    && chmod 755 /usr/local/bin/codex \
+    && /usr/local/bin/codex --version
 
 # --- claude-vnc: VNC あり配布イメージ（claude-dev-claude-vnc）---
 FROM vnc-base AS claude-vnc
 
 ARG USERNAME=devuser
 ARG CLAUDE_VERSION=latest
+ARG CODEX_VERSION=latest
 
 USER $USERNAME
 WORKDIR /tmp
 RUN curl -fsSL https://claude.ai/install.sh | bash -s -- "$CLAUDE_VERSION"
+RUN export PATH="${USER_HOME}/.local/share/fnm:$PATH" \
+    && eval "$($USER_HOME/.local/share/fnm/fnm env)" \
+    && npm install -g "@openai/codex@${CODEX_VERSION}" \
+    && codex --version
 WORKDIR /workspace
 USER root
+
+# codex 共通ランチャー: fnm 既定バージョンの bin を PATH に足して実体を exec する。
+# codex の実体は #!/usr/bin/env node の JS ランチャーなので、単純な symlink では
+# fnm 初期化のないシェル（bash -c / docker exec）から node が見つからず動かない。
+# aliases/default は fnm default が張る安定パスで、Node の既定版が変わっても追従する。
+RUN FNM_DEFAULT_BIN="${USER_HOME}/.local/share/fnm/aliases/default/bin" \
+    && [ -x "${FNM_DEFAULT_BIN}/codex" ] \
+    && printf '#!/bin/sh\nexport PATH="%s:${PATH}"\nexec "%s/codex" "$@"\n' \
+        "$FNM_DEFAULT_BIN" "$FNM_DEFAULT_BIN" > /usr/local/bin/codex \
+    && chmod 755 /usr/local/bin/codex \
+    && /usr/local/bin/codex --version
