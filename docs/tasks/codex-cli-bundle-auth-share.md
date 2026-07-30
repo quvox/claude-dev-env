@@ -57,7 +57,7 @@ Codex CLI（`@openai/codex`）を配布 2 イメージの終端レイヤーへ�
   - `start`: 認証コピーの一時コンテナで `codex/auth.json` → `${PROJECT_DIR}/.codex/auth.json`
   - `.gitignore` に `.codex` を追記、`help` に `login-codex` を追加
 
-- [ ] 4. `claude-dev-mac` に同じ差分を反映
+- [x] 4. `claude-dev-mac` に同じ差分を反映
   _要件: core/3-6,7・core/10_ _Boundary: claude-dev-mac_ _Depends: 3_
   - `login-codex` は OS 差分ではないため cli.md 正本の実装をそのまま移植する
 
@@ -114,3 +114,6 @@ Codex CLI（`@openai/codex`）を配布 2 イメージの終端レイヤーへ�
   `claude-dev help` に `login-codex` が出ることも確認。
   - `login-codex` 冒頭で `chown -R` してから su するため、共有側が root 所有でもユーザー権限で上書きできる。
   - 実際の `codex login --device-auth` 対話は人間の実機確認（E2E-6）で行う。ここでは書き戻し経路のみ検証。
+- **タスク4 完了**: `claude-dev-mac` に `login-codex`・start の codex コピー・`.gitignore`・help/案内を移植。
+  `bash -n` OK。両 CLI の codex 関連行を diff で突き合わせ、差分は案内文 1 行のみ
+  （Linux=「ブラウザ（手元の PC）で」／mac=「ブラウザで」。既存の forward 案内と同じ OS 差分の流儀）。
