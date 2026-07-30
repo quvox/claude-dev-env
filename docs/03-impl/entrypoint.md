@@ -2,7 +2,7 @@
 id: entrypoint
 layer: impl
 title: entrypoint 実装説明書
-version: 1.2.0
+version: 1.3.0
 updated: 2026-07-30
 verified:
   at: 2026-07-29
@@ -80,7 +80,10 @@ UID/GID 追従、(2) 共有ボリューム経由の認証共有（claude / codex
      続けて codex 側も同形に整える——`LOCAL_CODEX=/workspace/.codex` を確保し、`~/.codex` が実ディレクトリなら
      中身を `cp -an` で退避して削除して `~/.codex → /workspace/.codex` の symlink を張り、認証ファイル
      `auth.json`（CLI がコピー済み）の所有権と `chmod 600` を整える。`config.toml`・セッション履歴は共有せず
-     このディレクトリ（＝プロジェクト）に残す（要件 core/3-7,3-9）。
+     このディレクトリ（＝プロジェクト）に残す（要件 core/3-7,3-9）。**イメージには実 `~/.codex` が存在する**
+     （ビルド時の `codex --version` が作る）ため、この退避処理は初回起動で必ず通る経路である。
+     共有側（`$SHARED_CLAUDE/codex`）はこの段より前に `mkdir -p`＋`chown` で用意する（`login-codex` を
+     一度も実行していない場合でも同期ループが書き戻せるようにするため）。
   10. **settings.json 生成:** `$LOCAL_CLAUDE/settings.json` が無ければ
       `{"permissions":{"defaultMode":"bypassPermissions"},"model":"sonnet"}` を生成（共有しない）。
   11. **ホスト設定マージ:** `host-hooks.json`（名称は歴史的経緯で `hooks`/`env` 両方を運ぶ）があり `.hooks` か
@@ -90,7 +93,9 @@ UID/GID 追従、(2) 共有ボリューム経由の認証共有（claude / codex
   13. **認証バックグラウンド同期:** 30 秒ごとに `LOCAL_CLAUDE` の認証ファイルを共有ボリュームと `cmp` し、
       差分があれば書き戻すループを `( while true; ... ) &` でバックグラウンド起動（トークンリフレッシュ伝播）。
       同じループで codex の `LOCAL_CODEX/auth.json` を `~/.claude-shared/codex/auth.json` と `cmp` し、
-      差分があれば書き戻す（対象ファイルが増えるだけで、ループ・間隔・比較方法は claude と共通。要件 core/3-8）。
+      差分があれば `mkdir -p`→`cp`→`chmod 600` で書き戻す（対象ファイルが増えるだけで、ループ・間隔・
+      比較方法は claude と共通。要件 core/3-8）。ループは root で走るため共有側のファイルは root 所有に
+      なる（claude 側と同じ既存挙動）。そのため `login-codex` は書き込み前に `chown -R` する（cli 側の責務）。
   14. **firewall 起動:** `/usr/local/bin/init-firewall.sh` を実行（失敗は無視）。契約「entrypoint → firewall」。
   15. **VM モード起動（`CLAUDE_DEV_VM=1` 時）:** root のうちに `install -d -o $USERNAME` でマウント点
       `~/.claude-dev-vm`・`/run/vm` を用意し、`su "$USERNAME" -c /usr/local/bin/vm-up.sh` で起動。成功時のみ
@@ -185,7 +190,7 @@ CLI が動的割り当てで公開する。
 | （自動テストなし・実機確認） | 結合 | 起動時に firewall が適用される | 契約: entrypoint→firewall／要件 core/5 |
 | （自動テストなし・実機確認） | 結合 | `/workspace` 所有者に UID/GID が追従しファイル所有権齟齬が無い | 要件 core/2 |
 | （自動テストなし・実機確認） | 結合 | 認証が共有ボリューム経由でコピー・30秒書き戻しされ再接続できる | 要件 core/3 |
-| （自動テストなし・実機確認） | 結合 | codex 認証（auth.json）がコピーされ `codex` が再ログイン不要で動き、更新が 30 秒で共有ボリュームへ書き戻る | 要件 core/3-7,8,9（E2E-6） |
+| （自動テストなし・実機確認。ローカル検証済み: symlink 化・`chmod 600`・共有 `codex/` 作成・書き戻し伝播） | 結合 | codex 認証（auth.json）がコピーされ `codex` が再ログイン不要で動き、更新が 30 秒で共有ボリュームへ書き戻る | 要件 core/3-7,8,9（E2E-6） |
 | （自動テストなし・実機確認） | 結合 | VNC イメージで Chrome/noVNC が起動し chrome-devtools MCP で操作できる | 要件 core/11 |
 
 実行方法: 自動テストコマンドなし。`claude-dev start`（VNC あり/`--no-vnc`）でコンテナを起動し、

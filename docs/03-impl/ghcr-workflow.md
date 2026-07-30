@@ -2,7 +2,7 @@
 id: ghcr-workflow
 layer: impl
 title: ghcr-workflow 実装説明書
-version: 1.3.0
+version: 1.4.0
 updated: 2026-07-30
 verified:
   at: 2026-07-29
@@ -63,7 +63,8 @@ source:
   - outputs `codex_version`: `workflow_dispatch` 入力 `codex_version` が空でなければその値を採用し、
     空なら npm registry（`https://registry.npmjs.org/@openai/codex/latest` の `.version`）を
     `curl -fsSL` ＋ `jq -r` で取得した値を採用する（D-27）。取得値が `MAJOR.MINOR.PATCH` 形式に
-    合致しなければ**ジョブを失敗させる**（claude 側と同じ扱い）。
+    合致しなければ**ジョブを失敗させる**（claude 側と同じ扱い。`jq` が `null` を返すケースも同じ検証で
+    落ちる）。claude 版と同じ `steps.meta` 内で連続して算出し、入力は env（`CODEX_VERSION_INPUT`）で受ける。
 - **実装上の判断:**
   - タグを prepare で 1 度だけ算出することで、全 build/merge ジョブ間でタグがずれない。エージェント
     CLI のバージョンも同様に 1 度だけ解決する——6 つの build ジョブが個別に `latest` を引くと、解決の

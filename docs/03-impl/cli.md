@@ -2,7 +2,7 @@
 id: cli
 layer: impl
 title: cli 実装説明書
-version: 1.6.0
+version: 1.7.0
 updated: 2026-07-30
 verified:
   at: 2026-07-29
@@ -113,12 +113,15 @@ source:
   `\"` エスケープの二重引用符で生成する。
 - **`login-codex`**: `require_setup`→`ensure_infrastructure` 後、`login` と同型の一時コンテナ
   （`--rm -it`、`--entrypoint bash`、`VOL_AUTH` を `~/.claude-shared` へ）を起動する。root が
-  `~/.claude-shared/codex/` を作成し `chown`→`su` でユーザーに切替→共有ボリュームの `codex/auth.json` が
-  あれば `~/.codex/` へコピー→`codex login --device-auth` を対話起動（表示される URL と認証コードは
-  利用者がクライアント PC のブラウザで開く）→終了後 `~/.codex/auth.json` を `~/.claude-shared/codex/`
-  へ書き戻す（`chmod 600`）。デバイス認証を完了せず終了した場合は書き戻す対象が無く、共有ボリュームは
-  変化しない（要件 core/3-6、D-27 ④）。**クォート制約**は `login` と同じ（`-c '...'` の内側で
-  シングルクォートを使わない）。
+  `~/.claude-shared/codex/` を `mkdir -p` し **`chown -R` で共有ディレクトリの所有権をユーザーへ戻す**
+  （entrypoint の同期ループが root で書き戻すため共有側が root 所有になりうる。戻さないと後続の
+  ユーザー権限コピーが失敗する）→コンテナ内の `~/.codex` を作り直し→`su` でユーザーに切替→共有側に
+  `codex/auth.json` があれば `~/.codex/` へコピー（`chmod 600`）→`codex login --device-auth` を対話起動
+  （表示される URL と認証コードは利用者がブラウザで開く。Linux 版は「手元の PC」と案内、mac 版はローカル
+  ブラウザ前提の文言）→終了後 `~/.codex/auth.json` を `~/.claude-shared/codex/` へ書き戻す（`chmod 600`）。
+  デバイス認証を完了せず終了した場合は書き戻す対象が無く、共有ボリュームは変化しない
+  （要件 core/3-6、D-27 ④）。**クォート制約**は `login` と同じ（`-c '...'` の内側でシングルクォートを
+  使わない）。
 - **`logout`**: 全 Claude コンテナ＋proxy を `rm -f` し、`VOL_AUTH` の中身を空にする（`rm -rf /auth/* /auth/.*`）。
   `codex/` サブディレクトリも同ボリュームにあるため、claude・codex 双方の認証が同時に消える（要件 core/3-5）。
 - **`pull [TAG]`**: `.env` の `CLAUDE_DEV_REGISTRY`（既定 `ghcr.io/quvox`）と `CLAUDE_DEV_IMAGE_TAG`
@@ -132,13 +135,15 @@ source:
      `CLAUDE_DEV_NO_ATTACH!=1` のとき `tmux attach`）。`--vm-fresh` は稼働中無効の警告。
   2. 停止中コンテナ削除→`ensure_infrastructure`→イメージ選択（VNC 有無）。
   3. **認証コピー**: 一時コンテナで `VOL_AUTH`(RO) から `${PROJECT_DIR}/.claude/` へコピーしホスト UID/GID に chown。
-     同じ一時コンテナで codex 認証（`codex/auth.json`）があれば `${PROJECT_DIR}/.codex/auth.json` へも
-     コピーし同様に chown する（無ければ何もしない＝未ログインのまま起動できる。要件 core/3-7）。
+     同じ一時コンテナに `${PROJECT_DIR}/.codex` を `/target-codex` としてもマウントし、codex 認証
+     （`/auth/codex/auth.json`）があれば `/target-codex/auth.json` へコピーして同じ `chown -R` に含める
+     （無ければ何もしない＝未ログインのまま起動できる。要件 core/3-7）。
   4. **ホスト設定抽出**: `~/.claude/settings.json` から `jq` で `{hooks, env}`（null 除外）を
      `host-hooks.json` へ（entrypoint がマージ。名は歴史的経緯で hooks だが env も含む）。
   5. **ユーザー hook**: `~/.local/bin/` が非空なら `.claude/host-local-bin/` へコピー（組込み hook は
      イメージ焼込み済みで対象外）。
-  6. **.gitignore 追記**: `.claude`・`.codex` が未記載なら追記（`.git` あり `.gitignore` 無しは新規作成）。
+  6. **.gitignore 追記**: `.claude`・`.codex` を対象にループし、`<name>` も `<name>/` も未記載のものだけ
+     追記する（冪等）。`.git` あり `.gitignore` 無しは 2 行で新規作成。
   7. **マウント/オプション組立**: `GITCONFIG_OPT`（`~/.gitconfig` RO）、`GH_CONFIG_OPT`（`~/.config/gh` RO=
      `gh` 認証共有）、`DOCKER_OPTS`（ソケットあれば `ensure_docker_proxy_container` 後
      `DOCKER_HOST=tcp://<proxy>:2375`）、`COMPOSE_OPTS`（`NAME` を compose 互換名〈小文字・
@@ -234,7 +239,7 @@ bash スクリプトのため**自動テストランナーは存在しない**�
 |---|---|---|---|
 | （自動テストなし） | — | `start`→マウント/認証/再接続、`list`/`stop`（proxy 連動） | core/要件1-1〜6 未検証(自動テストなし) |
 | （自動テストなし） | — | `login`→認証ボリューム保存、`logout`→削除 | core/要件3-1,2,5 未検証(自動テストなし) |
-| （自動テストなし） | — | `login-codex`→デバイス認証→`codex/auth.json` 保存、`start`→`.codex/auth.json` コピー | core/要件3-6,7 未検証(自動テストなし) |
+| （自動テストなし。書き戻し/コピー/`.gitignore` 経路はローカル検証済み。対話デバイス認証は実機） | — | `login-codex`→デバイス認証→`codex/auth.json` 保存、`start`→`.codex/auth.json` コピー | core/要件3-6,7 未検証(自動テストなし) |
 | （自動テストなし） | — | `ssh-keys` 対話選択→`.claude-dev.yaml` 生成、専用 agent 限定転送 | core/要件4-4 ほか 未検証(自動テストなし) |
 | （自動テストなし） | — | `forward`/`unforward`/`ports`（8100〜割当） | core/要件6-2,3,4 未検証(自動テストなし) |
 | （自動テストなし） | — | `orchestrate`→未起動自動起動・生存判定 attach/resume | orchestration/要件13-2 未検証(自動テストなし) |

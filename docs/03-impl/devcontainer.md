@@ -2,7 +2,7 @@
 id: devcontainer
 layer: impl
 title: devcontainer 実装説明書
-version: 1.4.0
+version: 1.5.0
 updated: 2026-07-30
 verified:
   at: 2026-07-29
@@ -163,14 +163,19 @@ portsync・vm-mode・orchestrator の各スクリプト/バイナリ）をイメ
     `curl -fsSL https://claude.ai/install.sh | bash -s -- "$CLAUDE_VERSION"` を実行。
     `WORKDIR /tmp` はインストーラーの FS 全体スキャン回避。**必ずユーザー権限で実行する**——root で
     実行すると `/root/.local/bin` に入り、コンテナ内ユーザーから `claude` が見えなくなる。
-  - 続けて**同じユーザー権限**で Codex CLI を導入する。`base` が入れた fnm の既定 Node を使い、
-    `npm install -g @openai/codex@${CODEX_VERSION}`（`CODEX_VERSION=latest` のときは `@latest`）を
-    実行する。npm パッケージは JS ランチャー（`bin/codex.js`）＋ platform 別バイナリ
-    （optionalDependencies、`linux-x64`/`linux-arm64` の両方が提供される）の構成で、amd64/arm64
-    いずれのネイティブビルドでも解決できる。
-  - 導入後、**root で `codex` の絶対パス symlink を `/usr/local/bin/codex` へ張る**（fnm の
-    node-versions 配下に入る実体を指す）。これは PATH 解決を fnm 初期化に依存させないため
-    （要件 core/12-2: 非対話シェル `bash -c` や `docker exec` からも解決できること）。
+  - 続けて**同じユーザー権限**で Codex CLI を導入する。`base` が入れた fnm の既定 Node を使い
+    （`export PATH=${USER_HOME}/.local/share/fnm:$PATH` → `eval "$(fnm env)"` の既存イディオム）、
+    `npm install -g "@openai/codex@${CODEX_VERSION}"` → `codex --version` で導入を確認する。npm
+    パッケージは JS ランチャー（`bin/codex.js`）＋ platform 別バイナリ（optionalDependencies、
+    `linux-x64`/`linux-arm64` の両方が提供される）の構成で、amd64/arm64 いずれのネイティブビルドでも
+    解決できる。導入先は `${USER_HOME}/.local/share/fnm/aliases/default/bin/codex`。
+  - 導入後、**root で `/usr/local/bin/codex` ランチャースクリプトを生成する**（`printf` で
+    `#!/bin/sh` ＋ fnm 既定版の bin を PATH に前置 ＋ 実体を `exec` する 3 行、`chmod 755`、
+    生成直後に `--version` で自己検証）。単純な symlink にしないのは、codex の実体が
+    `#!/usr/bin/env node` の JS ランチャーで、**fnm 初期化のないシェルからは `node` が解決できず
+    起動しない**ため（要件 core/12-2: 非対話シェル `bash -c` や `docker exec` からも解決できること）。
+    `aliases/default` は `fnm default` が張る安定 symlink で、Node 既定版が変わっても追従する。
+    この方式は `chromium-browser`／`claude-dev-chrome` の共通ランチャーと同じ流儀。
   - 導入後 `WORKDIR /workspace` と `USER root` に戻す（`base` 末尾の状態と一致させる。entrypoint は
     root 実行前提のため状態を変えてはならない）。
   - `ENTRYPOINT`・`ENV`・`LABEL` は親ステージから継承するため再宣言しない。
@@ -186,6 +191,9 @@ portsync・vm-mode・orchestrator の各スクリプト/バイナリ）をイメ
     CI では `claude`/`claude-vnc` が別ジョブでビルドされるため追加コストは生じない。
   - codex は npm パッケージで導入するため、`claude` と違い**実行時に Node を必要とする**（ランチャーが
     JS）。`base` が Node を持つ前提であり、これは既存の構成で満たされている。
+  - 結果として `codex` は**素の PATH（`docker exec` / `bash -c`）でも解決できる**が、`claude` は
+    従来どおり rc の PATH 追記に依存する（`~/.local/bin`）。この非対称は意図的で、codex 側だけを
+    ランチャーで吸収した（claude の導線変更は本変更のスコープ外）。
 
 ### Dockerfile.claude — 同梱資産(他モジュールの成果物を COPY)
 
@@ -269,7 +277,7 @@ portsync・vm-mode・orchestrator の各スクリプト/バイナリ）をイメ
 | テスト(ファイル::ケース名) | レベル | 検証内容 | 対応する受け入れ基準/契約 |
 |---|---|---|---|
 | （自動テストなし＝実機確認） | 単体 | `make build` 系で claude-cli/claude-vnc/docker-proxy が amd64/arm64 でビルド成功 | core/9 ビルド |
-| （自動テストなし＝実機確認） | 単体 | 配布 2 イメージで `claude --version`／`codex --version` が期待バージョンを返し、`docker exec <c> bash -c 'codex --version'`（非対話シェル）でも解決できる | core/12-1,2,3 |
+| （自動テストなし＝実機確認。ローカルビルドで確認済み: claude-cli / codex 0.146.0） | 単体 | 配布 2 イメージで `claude --version`／`codex --version` が期待バージョンを返し、素の PATH（`env -i PATH=...` / `docker exec <c> bash -c 'codex --version'`）でも解決できる | core/12-1,2,3 |
 | （実機確認 E2E-1 の一部） | 結合 | 起動後にランタイム（node/python/go/rust/gh/docker）と VNC/日本語入力が機能 | core/1,11 |
 
 実行方法: リポジトリの `make`（tech steering のビルドコマンド）でイメージをビルドし、
@@ -291,6 +299,7 @@ portsync・vm-mode・orchestrator の各スクリプト/バイナリ）をイメ
 - `base` は `vnc-base`・`claude-cli`・`claude-vnc` に共有される。Claude Code / Codex CLI の新版が
   出た日は、失効するのは各配布ステージの終端レイヤー（claude / codex 導入層）だけで、`base`/`vnc-base`
   の高コスト層は再ビルド・再 push・再 pull されない（D-26／D-27、設計判断4）。
-- `codex` の実体は fnm の node-versions 配下に入るため、Node の既定バージョンを変えると実体パスが
-  変わる。`/usr/local/bin/codex` の symlink を張り直すのはイメージ再ビルド時であり、Node 既定版を
-  変更する変更（`base` の fnm 設定）を入れる際は本 symlink の追従を確認する。
+- `codex` の実体は fnm の node-versions 配下に入るが、`/usr/local/bin/codex` ランチャーは
+  `aliases/default`（`fnm default` が張る symlink）を経由するため、Node 既定版のパッチ更新には
+  再ビルドなしで追従する。ただし fnm の設置場所（`${USER_HOME}/.local/share/fnm`）や既定版の
+  切り替え方針を `base` で変える際は、本ランチャーのパス前提を確認する。

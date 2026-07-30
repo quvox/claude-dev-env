@@ -19,15 +19,15 @@ affected:
   - doc: docs/02-design/system.md
     version: 1.4 -> 1.5
   - doc: docs/03-impl/devcontainer.md
-    version: 1.3 -> 1.4
+    version: 1.3 -> 1.5          # 1.4=仕様更新 / 1.5=実装同期（ランチャー方式）
   - doc: docs/03-impl/entrypoint.md
-    version: 1.1 -> 1.2
+    version: 1.1 -> 1.3          # 1.2=仕様更新 / 1.3=実装同期
   - doc: docs/03-impl/cli.md
-    version: 1.5 -> 1.6
+    version: 1.5 -> 1.7          # 1.6=仕様更新 / 1.7=実装同期
   - doc: docs/03-impl/ghcr-workflow.md
-    version: 1.2 -> 1.3
+    version: 1.2 -> 1.4          # 1.3=仕様更新 / 1.4=実装同期
   - doc: docs/03-impl/e2e.md
-    version: 1.0 -> 1.1
+    version: 1.0 -> 1.2          # 1.1=仕様更新 / 1.2=実装同期
 ---
 
 # 変更記録:Codex CLI をコンテナへ同梱し、認証情報をホストと共有する（D-27）
@@ -96,3 +96,23 @@ build-arg に渡すとレイヤーキャッシュが永久ヒットし、ラベ�
 - **変更しなかったドキュメント**: `03-impl/cli-mac.md`（`login-codex` は OS 差分ではなく cli.md が正本。
   実装は `claude-dev-mac` にも反映が必要）、`03-impl/makefile.md`（`make login-codex` は追加せず
   `claude-dev login-codex` を直接使う）。
+
+## 実装（コード反映）で確定した差分
+
+`/implement`（作業 slug `codex-cli-bundle-auth-share`）でコードへ反映した際、03-impl を実装結果へ
+同期して次の点を書き改めた。
+
+- **devcontainer**: `/usr/local/bin/codex` は当初「symlink」と記述していたが、**ランチャースクリプト**に
+  変更した。codex の実体が `#!/usr/bin/env node` の JS ランチャーであり、fnm 初期化のないシェル
+  （`bash -c` / `docker exec`）では `node` が解決できず単純な symlink では起動しないため（実測で確認）。
+  `${USER_HOME}/.local/share/fnm/aliases/default/bin` を PATH に前置して実体を `exec` する方式とし、
+  `chromium-browser`／`claude-dev-chrome` の共通ランチャーと同じ流儀に揃えた。副作用として `codex` は
+  素の PATH でも解決できる（`claude` は従来どおり rc の PATH 追記に依存）。
+- **entrypoint**: 共有側（`~/.claude-shared/codex`）を認証段より前に `mkdir -p`＋`chown` で用意する点、
+  イメージにはビルド時 `codex --version` が作る実 `~/.codex` が必ず存在し退避経路を必ず通る点、
+  同期ループが root で走るため共有側ファイルが root 所有になる点を明記した。
+- **cli**: `login-codex` は書き込み前に共有ディレクトリを `chown -R` する（上記の root 所有対策）。
+  `start` の認証コピーは同一の一時コンテナに `/target-codex` を追加マウントして 1 回の `chown -R` に
+  含める。`.gitignore` は `.claude`/`.codex` をループで冪等追記する。
+- **ghcr-workflow**: `codex_version` は claude と同じ `steps.meta` 内で連続算出し、入力は env
+  （`CODEX_VERSION_INPUT`）で受ける。`jq` が `null` を返すケースも同じ形式検証で落ちる。

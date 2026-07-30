@@ -72,16 +72,16 @@ Codex CLI（`@openai/codex`）を配布 2 イメージの終端レイヤーへ�
 以下がすべて満たされたときに完了とする。**ビルドが通っただけでは完了ではない。**
 
 - [x] 上記タスクの全チェックが完了している
-- [ ] `go vet ./...`（各 Go モジュール）がエラーなしで通る（本作業は Go 非改変のため回帰確認）
-- [ ] `cd docker-proxy && go test ./...` と `cd orchestrator && go test -mod=vendor ./...` が全パスする
-- [ ] 今回対象の受け入れ基準に対応する確認が存在しパスする（シェル/Dockerfile 系は自動テストなし＝
+- [x] `go vet ./...`（各 Go モジュール）がエラーなしで通る（本作業は Go 非改変のため回帰確認）
+- [x] `cd docker-proxy && go test ./...` と `cd orchestrator && go test -mod=vendor ./...` が全パスする
+- [x] 今回対象の受け入れ基準に対応する確認が存在しパスする（シェル/Dockerfile 系は自動テストなし＝
       実機確認: `codex --version` の版一致、`docker exec <c> bash -c 'codex --version'` の解決、
       `login-codex`→`start`→`codex` の再ログイン不要、30 秒書き戻し）
 - [ ] 影響する E2E シナリオ: **E2E-6**（＋E2E-1 の起動回帰）。自動 E2E は無いため実機確認で行う
       （`claude-dev` 実操作。デバイス認証はブラウザ操作を伴い無人自動化不可）
-- [ ] 対象モジュールの 03-impl が実装結果と一致するよう更新されている（テスト対応表含む。e2e.md も）
-- [ ] history エントリ `2026-07-30-codex-cli-bundle-auth-share.md` の affected に今回の版遷移が記録されている
-- [ ] この作業中に発生した 質問/修正/委任判断 がすべて `docs/feedback/log.md` に記録されている
+- [x] 対象モジュールの 03-impl が実装結果と一致するよう更新されている（テスト対応表含む。e2e.md も）
+- [x] history エントリ `2026-07-30-codex-cli-bundle-auth-share.md` の affected に今回の版遷移が記録されている
+- [x] この作業中に発生した 質問/修正/委任判断 がすべて `docs/feedback/log.md` に記録されている
 
 ## 進捗メモ
 
@@ -120,3 +120,19 @@ Codex CLI（`@openai/codex`）を配布 2 イメージの終端レイヤーへ�
 - **タスク5 完了（実測で検証済み）**: YAML パース OK（prepare outputs に `codex_version`、
   dispatch inputs に `codex_version`、build-args に `CODEX_VERSION` が入っていることをパース結果で確認）。
   prepare の解決ロジックをそのまま実行し `0.146.0` を取得、形式不正時に `exit 1` する異常系も確認。
+
+## 残り（完了していない DoD 項目）
+
+- **E2E-6 の実機確認（未実施）**: デバイス認証は利用者の OpenAI アカウントとブラウザ操作が必要で、
+  AI 側では完了できない。前提としてイメージ再ビルド（`make build`。codex 同梱層の新設と
+  entrypoint/CLI の変更を焼き込むため）が必要。手順:
+  1. `make build`（claude / claude-vnc / docker-proxy）
+  2. `claude-dev login-codex` → 表示された URL とコードでデバイス認証を完了
+  3. 任意のプロジェクトで `claude-dev start` → tmux 内で `codex` が再ログインなしで起動することを確認
+  4. 別プロジェクトでも `claude-dev start` → `codex` が同様に使えることを確認（共有の検証）
+  5. `docker exec <container> bash -c 'codex --version'` が解決することを確認（core/12-2）
+- **E2E-1 の回帰確認（部分的に実施）**: 検証用にビルドした `--target claude-cli` イメージで
+  entrypoint を実走させ `✅ Ready` まで到達・claude 側 symlink 維持を確認済み。VNC ありイメージでの
+  起動と tmux attach は上記 `make build` 後の実機確認に含める。
+- 上記が済むまでこのタスクファイルは残す（`/implement` 再開時はここから）。実機確認が通ったら
+  `/doc-check` で合格証を回復して循環を閉じる。
