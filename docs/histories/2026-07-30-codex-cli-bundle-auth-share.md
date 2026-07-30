@@ -116,3 +116,17 @@ build-arg に渡すとレイヤーキャッシュが永久ヒットし、ラベ�
   含める。`.gitignore` は `.claude`/`.codex` をループで冪等追記する。
 - **ghcr-workflow**: `codex_version` は claude と同じ `steps.meta` 内で連続算出し、入力は env
   （`CODEX_VERSION_INPUT`）で受ける。`jq` が `null` を返すケースも同じ形式検証で落ちる。
+
+## 検証結果
+
+- 自動検証（AI 実行）: `go vet`（docker-proxy / orchestrator）・単体テスト（両 Go モジュール）・
+  変更したシェル資産の `bash -n`・ワークフローの YAML パース、いずれも通過。Go コードは無変更。
+- ビルド実測（AI 実行）: `--target claude-cli` のビルド成功、`codex --version`=0.146.0、素の PATH
+  （`env -i PATH=...`）でも解決（core/12-1,2）。`CODEX_VERSION=0.144.6` を指定したビルドで指定版が
+  入ることを確認（core/9-7・core/12-3）。
+- コンテナ実測（AI 実行）: `~/.codex → /workspace/.codex` の symlink 化、イメージ内の実 `~/.codex` の
+  退避、`auth.json` の `chmod 600`、共有ボリューム `codex/` の作成、`auth.json` 更新の書き戻し伝播、
+  entrypoint の `✅ Ready` 到達（core/3-7,8,9）。
+- **実機確認（利用者実行、2026-07-30 完了）: E2E-6（`login-codex` → 別プロジェクトで `start` →
+  `codex` が再ログイン不要で起動）および E2E-1 の起動回帰。** これによりタスクの Definition of Done を
+  全項目充足し、作業用タスクドキュメントを削除した。
