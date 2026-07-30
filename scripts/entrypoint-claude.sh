@@ -240,6 +240,20 @@ if [ ! -f "$LOCAL_CLAUDE/settings.json" ]; then
     chown "$USERNAME":"$USERNAME" "$LOCAL_CLAUDE/settings.json"
 fi
 
+# --- codex の config.toml もコンテナローカル（共有しない）---
+# codex 自前のサンドボックス（Linux では bubblewrap 実装）はこのコンテナ内では起動できない。
+# Docker 既定 seccomp が CLONE_NEWUSER を拒否し、それを外しても docker-default AppArmor が
+# mount --make-rslave / を拒否する 2 段構えのため。既定の sandbox_mode（read-only /
+# workspace-write）のままでは codex が起こすシェルコマンドが例外なく exited 1 になるので、
+# 隔離はコンテナ境界に委ねて codex 側のサンドボックスを無効化する（D-27 ⑥ / 要件 core/12-4,12-5）。
+# コンテナ側の --security-opt は緩めない（要件 core/12-7。ホスト CLI の責務）。
+# 既存ファイルは内容を読まず一切変更しない（利用者が書いた設定を保持。要件 core/12-6）。
+if [ ! -f "$LOCAL_CODEX/config.toml" ]; then
+    printf '%s\n%s\n' 'sandbox_mode = "danger-full-access"' 'approval_policy = "never"' \
+        > "$LOCAL_CODEX/config.toml"
+    chown "$USERNAME":"$USERNAME" "$LOCAL_CODEX/config.toml"
+fi
+
 # --- ホストの hooks / env 設定をマージ ---
 # claude-dev start 時にコピーされた host-hooks.json があれば settings.json にマージ
 # （ファイル名は歴史的経緯で host-hooks.json のままだが env も含む）
