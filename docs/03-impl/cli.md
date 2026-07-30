@@ -2,7 +2,7 @@
 id: cli
 layer: impl
 title: cli 実装説明書
-version: 1.7.0
+version: 1.7.1
 updated: 2026-07-30
 verified:
   at: 2026-07-29
@@ -253,6 +253,12 @@ bash スクリプトのため**自動テストランナーは存在しない**�
 - `host-hooks.json` はファイル名が実態（hooks＋env）と乖離（歴史的経緯、変更コスト回避で据置き）。
 - 認証は「コピー方式」で symlink を使わない（Claude Code のアトミック書込みで symlink が壊れるため。
   書き戻しは entrypoint のバックグラウンド同期）。
+- **ホストのユーザー認証（`~/.claude/.credentials.json`・`~/.codex/auth.json`）は読み込まない**。
+  `login`/`login-codex` は一時コンテナ内で認証を取得して共有ボリュームへ入れる方式で、ホストで
+  ログイン済みでも初回一度は本コマンドが必要になる。これは意図した設計で、ホストのクレデンシャルを
+  コンテナへ渡す経路（およびコンテナからホストのホームへ書き込む経路）を作らないため
+  （`docs/knowledge/host-credentials-are-not-imported-into-containers.md`）。ホストから読むのは
+  `~/.claude/settings.json` の `hooks`/`env` と `~/.gitconfig`・`~/.config/gh`(RO) のみ。
 - コンテナ名＝ディレクトリ名のため、別パスでも同名ディレクトリは同一セッション扱いになる。
 - `.claude-dev.yaml` の SSH 鍵はローカル設定のみ参照し、グローバルへのフォールバックや鍵推測はしない
   （意図的な安全側設計）。
