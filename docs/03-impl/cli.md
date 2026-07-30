@@ -2,14 +2,14 @@
 id: cli
 layer: impl
 title: cli 実装説明書
-version: 1.7.2
-updated: 2026-07-30
+version: 1.8.0
+updated: 2026-07-31
 verified:
-  at: 2026-07-30
-  version: 1.7.2
+  at: 2026-07-31
+  version: 1.8.0
   against:
     - doc: docs/02-design/system.md
-      version: 1.6
+      version: 1.8
 summary: >
   ホスト Linux 用 `claude-dev`（単一 bash スクリプト）の実装。case ディスパッチで
   start/stop/list/attach/forward/orchestrate/login/login-codex 等のサブコマンドを提供し、Docker
@@ -160,7 +160,10 @@ source:
      --restart unless-stopped`、`/workspace`・各ボリューム・`tmux.conf`/`CLAUDE.md` RO マウント、上記
      オプション、`NODE_OPTIONS=--max-old-space-size=4096`、`-t`。**ポート競合リトライ**: 失敗時は作成途中を
      `docker rm -f` し、エラーがポート競合かつ VNC 有効なら別ポートを取り直して最大 20 回再試行。他失敗/上限は
-     stderr 表示し `exit 1`。
+     stderr 表示し `exit 1`。**`--security-opt` は付けない**（Docker 既定 seccomp と `docker-default`
+     AppArmor を有効なまま使う）。codex のサンドボックス（bubblewrap）はこの confinement 下では動かないが、
+     対処はコンテナ側を緩めるのではなく codex 側の無効化で行う（要件 core/12-7・D-27 ⑥。既定設定は
+     entrypoint が置く）。
   9. tmux 起動待ち（通常 30 秒／VM 420 秒、VM は 15 秒ごと進捗表示）→noVNC URL 表示→
      `CLAUDE_DEV_NO_ATTACH!=1` なら `tmux attach -t main`。上限超過でも終了せず状況案内して `exit 0`
      （コンテナは `--restart unless-stopped` で稼働継続、次回 start の attach 経路で接続可能）。

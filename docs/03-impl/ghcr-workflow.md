@@ -5,11 +5,11 @@ title: ghcr-workflow 実装説明書
 version: 1.5.0
 updated: 2026-07-30
 verified:
-  at: 2026-07-30
+  at: 2026-07-31
   version: 1.5.0
   against:
     - doc: docs/02-design/system.md
-      version: 1.6
+      version: 1.8
 summary: >
   コンテナイメージ（claude / claude-vnc / docker-proxy）を GHCR へ毎日・マルチアーキ
   (amd64/arm64) で push する GitHub Actions ワークフロー。prepare→build(matrix, push-by-digest)

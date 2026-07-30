@@ -5,11 +5,11 @@ title: orchestrator 実装説明書
 version: 1.1.0
 updated: 2026-07-30
 verified:
-  at: 2026-07-30
+  at: 2026-07-31
   version: 1.1.0
   against:
     - doc: docs/02-design/system.md
-      version: 1.6
+      version: 1.8
 summary: >
   プロジェクトに1体立てる AIオーケストレーター（Go 製単一プロセス `claude-orchestrator`）の実装。
   tmux 常駐（orch-<CNAME>-main:dashboard）で外部制御ループを所有し、ブレインストーミング/実行の2モード状態機械・

@@ -2,25 +2,25 @@
 id: core
 layer: requirements
 title: 開発環境基盤 要件定義書
-version: 1.6.0
-updated: 2026-07-30
+version: 1.8.0
+updated: 2026-07-31
 verified:
-  at: 2026-07-30
-  version: 1.6.0
+  at: 2026-07-31
+  version: 1.8.0
   against:
     - doc: docs/00-requests/request.md
       version: 1.1
     - doc: docs/00-requests/decisions.md
-      version: 1.5
+      version: 1.6
     - doc: docs/00-requests/glossary.md
-      version: 1.1
+      version: 1.2
     - doc: docs/00-requests/acceptance.md
-      version: 1.1
+      version: 1.2
 summary: >
   Claude Code を隔離Dockerコンテナで動かす開発環境基盤の要件。コンテナ管理・認証・SSH鍵・
   ネットワーク/FW・ブラウザ確認・ポートフォワード・Dockerアクセス制限・VMモード・配布/プラットフォーム・
-  同梱エージェント CLI（Codex CLI）。
-keywords: [コンテナ, 認証, SSH, ファイアウォール, docker-proxy, ポートフォワード, VMモード, GHCR, CodexCLI]
+  同梱エージェント CLI（Codex CLI。サンドボックス方針を含む）。
+keywords: [コンテナ, 認証, SSH, ファイアウォール, docker-proxy, ポートフォワード, VMモード, GHCR, CodexCLI, Codexサンドボックス]
 depends_on: []
 source:
   - docs/00-requests/request.md
@@ -112,7 +112,7 @@ forward プロキシ / DooD / VM モード 等）。
   デバイス認証は UC-6 の基本フローそのものであり、UC を持つ。
 - イメージ配布（要件9）・macOS 対応（要件10）・VM モード（要件8）は横断的な提供形態であり、
   UC-1〜3 のフロー内で「どの環境でも同じ操作ができる」形で満たされる。
-- ただし要件9 の受け入れ基準2〜4・6〜7（タグ付与・同梱エージェント CLI の版・手動指定）は**ビルド時の
+- ただし要件9 の受け入れ基準1〜4・6〜7（マルチアーキ push・タグ付与・同梱エージェント CLI の版・手動指定）は**ビルド時の
   性質**であり、UC のフロー中に現れない。これらは利用者操作ではなく CI 側の成果物検証で確認する
   （検証手段は 03-impl/ghcr-workflow.md のテスト表が持つ）。
 
@@ -158,7 +158,7 @@ forward プロキシ / DooD / VM モード 等）。
 6. WHEN `claude-dev login-codex` を実行したとき、システムは一時コンテナで `codex login --device-auth` によるデバイス認証を行い、完了後に codex の認証ファイル（`auth.json`）を `claude-dev-auth` ボリュームの `codex/` サブディレクトリへ保存しなければならない
 7. WHEN コンテナを起動したとき、システムは codex の認証ファイルを共有ボリュームからコンテナローカルの `~/.codex/` へコピーしなければならない（symlink は使わない）
 8. WHILE コンテナが起動している間、システムは 30 秒ごとに codex 認証ファイルの変更を検知し共有ボリュームへ書き戻さなければならない（トークンリフレッシュの伝播）
-9. システムは codex の設定・セッション履歴（`config.toml`・セッションログ）をコンテナ固有に保たなければならない
+9. システムは codex の設定・セッション履歴（`config.toml`・セッションログ）をコンテナ固有に保たなければならない（共有ボリューム経由でコンテナ間に伝播させない。コンテナ起動時に置く既定設定〈要件12-5〉もコンテナ固有の実体として置かれるため本基準と両立する）
 
 ### 要件4:SSH 鍵の限定転送
 
@@ -257,7 +257,11 @@ forward プロキシ / DooD / VM モード 等）。
 1. システムは配布イメージ（VNC あり/なしの両方）に Claude Code と Codex CLI の双方を同梱しなければならない
 2. WHEN コンテナ内で `codex` を実行したとき、システムは同梱した Codex CLI を起動しなければならない。コマンドは対話シェル・非対話シェル（`bash -c`）・`docker exec` のいずれからも解決できなければならない
 3. システムは Codex CLI をイメージビルド時に具体バージョンでピン留めして導入しなければならず、起動時や実行時のダウンロードに依存してはならない
-4. 本要件の対象は開発者が対話的に codex を使うことであり、オーケストレーターが worker/レビューアーとして codex を常用することは対象外とする（[D-22](../00-requests/decisions.md) 未決）
+4. WHEN codex がシェルコマンドを実行したとき、そのコマンドはコンテナ内で成功しなければならない（Codex サンドボックスの起動失敗を理由に失敗してはならない）
+5. システムは Codex サンドボックスを無効化する既定設定（`sandbox_mode = "danger-full-access"`・`approval_policy = "never"`）をコンテナ起動時に置かなければならない（[D-27](../00-requests/decisions.md) ⑥）
+6. IF 起動時に codex の `config.toml` が既に存在するならば、システムはそれを上書きしてはならない（利用者が書いた設定を保持する）
+7. システムは Codex サンドボックスを動作させるためにコンテナの seccomp/AppArmor プロファイルを緩めてはならない
+8. 本要件の対象は開発者が対話的に codex を使うことであり、オーケストレーターが worker/レビューアーとして codex を常用することは対象外とする（[D-22](../00-requests/decisions.md) 未決）
 
 ## 非機能要件
 

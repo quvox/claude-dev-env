@@ -5,11 +5,11 @@ title: devcontainer 実装説明書
 version: 1.5.0
 updated: 2026-07-30
 verified:
-  at: 2026-07-30
+  at: 2026-07-31
   version: 1.5.0
   against:
     - doc: docs/02-design/system.md
-      version: 1.6
+      version: 1.8
 summary: >
   Claude コンテナイメージ定義。Dockerfile.claude（orch-builder / base / vnc-base と、配布する
   終端ステージ claude-cli / claude-vnc）と Dockerfile.docker-proxy（Go 多段）、

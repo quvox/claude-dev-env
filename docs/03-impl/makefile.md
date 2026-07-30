@@ -5,11 +5,11 @@ title: makefile 実装説明書
 version: 1.4.0
 updated: 2026-07-30
 verified:
-  at: 2026-07-30
+  at: 2026-07-31
   version: 1.4.0
   against:
     - doc: docs/02-design/system.md
-      version: 1.6
+      version: 1.8
 summary: >
   ビルド・初回セットアップ・install/uninstall・login・upgrade・orch-sample 等の入口を
   `make <target>` の統一インタフェースで提供する Makefile。イメージビルドはマルチステージ

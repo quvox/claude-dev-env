@@ -2,19 +2,13 @@
 id: entrypoint
 layer: impl
 title: entrypoint 実装説明書
-version: 1.4.0
-updated: 2026-07-30
-verified:
-  at: 2026-07-30
-  version: 1.4.0
-  against:
-    - doc: docs/02-design/system.md
-      version: 1.6
+version: 1.5.0
+updated: 2026-07-31
 summary: >
   Claude コンテナの ENTRYPOINT として root で起動し、UID/GID 追従・認証共有（claude/codex）・
-  settings/MCP 生成・firewall/portsync 起動・VNC/Chrome 起動・tmux セッション開始までを行う
-  初期化シェルスクリプトの実装。
-keywords: [entrypoint, UID/GID, 認証共有, codex, MCP, VNC, Chrome, tmux, firewall, portsync]
+  既定設定生成（claude settings.json / codex config.toml）・MCP 生成・firewall/portsync 起動・
+  VNC/Chrome 起動・tmux セッション開始までを行う初期化シェルスクリプトの実装。
+keywords: [entrypoint, UID/GID, 認証共有, codex, Codexサンドボックス, config.toml, MCP, VNC, Chrome, tmux, firewall, portsync]
 depends_on: [firewall, portsync]
 source:
   - docs/02-design/system.md
@@ -86,6 +80,15 @@ UID/GID 追従、(2) 共有ボリューム経由の認証共有（claude / codex
      一度も実行していない場合でも同期ループが書き戻せるようにするため）。
   10. **settings.json 生成:** `$LOCAL_CLAUDE/settings.json` が無ければ
       `{"permissions":{"defaultMode":"bypassPermissions"},"model":"sonnet"}` を生成（共有しない）。
+      **同じ考え方で codex 側も既定設定を置く**——`$LOCAL_CODEX/config.toml` が無ければ
+      `sandbox_mode = "danger-full-access"` と `approval_policy = "never"` の 2 行を生成し、
+      所有権を `$USERNAME` に整える（共有しない）。既に存在する場合は内容を読まず一切変更しない
+      （利用者が書いた設定を保持する。要件 core/12-5,12-6・D-27 ⑥）。
+      これは codex の自前サンドボックス（bubblewrap 実装）がコンテナ内で起動できないため必要な設定である
+      ——Docker 既定 seccomp が `CLONE_NEWUSER` を拒否し、それを外しても `docker-default` AppArmor が
+      `mount --make-rslave /` を拒否するため、既定の `sandbox_mode` では codex のシェルコマンドが例外なく
+      `exited 1` になる（設計判断は 02-design 判断5）。コンテナ側の `--security-opt` を緩める対処は取らない
+      （要件 core/12-7）。
   11. **ホスト設定マージ:** `host-hooks.json`（名称は歴史的経緯で `hooks`/`env` 両方を運ぶ）があり `.hooks` か
       `.env` を含むなら `jq '. * $overlay[0]'` で `settings.json` へ深いマージし、元ファイル削除。失敗時は警告し継続。
   12. **ユーザー hook スクリプト配置:** `host-local-bin/` があれば `~/.local/bin/` へ `cp -a --update=none`
@@ -142,6 +145,7 @@ UID/GID 追従、(2) 共有ボリューム経由の認証共有（claude / codex
 | 認証ファイル（.credentials.json / .claude.json） | 起動時 chmod 600・30秒ごと共有ボリュームへ書き戻し | entrypoint | 共有元コピーは cli 側。symlink 不使用（D-3） |
 | codex 認証ファイル（/workspace/.codex/auth.json） | 起動時 chmod 600・30秒ごと `~/.claude-shared/codex/auth.json` へ書き戻し | entrypoint | 共有元コピーは cli 側（`login-codex`/`start`）。`config.toml`・セッション履歴は共有しない（D-27） |
 | /workspace/.claude/settings.json | 生成（無い時）・host-hooks.json を jq で深いマージ | entrypoint | コンテナローカル（共有しない） |
+| /workspace/.codex/config.toml | 生成（無い時のみ。`sandbox_mode`/`approval_policy`）。存在時は不変 | entrypoint | コンテナローカル（共有しない）。Codex サンドボックス無効化の既定（D-27 ⑥） |
 | /workspace/.mcp.json | chrome-devtools / computer-use エントリを jq で追加 | entrypoint | VNC 時のみ |
 | /workspace/.claude/.claude.json | enabledMcpjsonServers に chrome-devtools を追加 | entrypoint | VNC 時のみ |
 | /workspace/CLAUDE.md | マーカー範囲を毎回削除→再生成 | entrypoint | KVM/VNC/Docker ネットワーク情報 |
@@ -196,6 +200,8 @@ CLI が動的割り当てで公開する。
 | （自動テストなし・実機確認） | 結合 | `/workspace` 所有者に UID/GID が追従しファイル所有権齟齬が無い | 契約: cli→コンテナ/entrypoint／要件 core/2 |
 | （自動テストなし・実機確認） | 結合 | 認証が共有ボリューム経由でコピー・30秒書き戻しされ再接続できる | 契約: cli→コンテナ/entrypoint／要件 core/3 |
 | （自動テストなし・実機確認。ローカル検証済み: symlink 化・`chmod 600`・共有 `codex/` 作成・書き戻し伝播） | 結合 | codex 認証（auth.json）がコピーされ `codex` が再ログイン不要で動き、更新が 30 秒で共有ボリュームへ書き戻る | 契約: cli→コンテナ/entrypoint／要件 core/3-7,8,9（E2E-6） |
+| （自動テストなし・実機確認） | 単体 | `config.toml` が無いコンテナで起動すると `sandbox_mode = "danger-full-access"`・`approval_policy = "never"` を含む `config.toml` が生成され、codex のシェルコマンドが成功する | 要件 core/12-4,12-5（E2E-6） |
+| （自動テストなし・実機確認） | 単体 | 利用者が書き換えた `config.toml` を持つコンテナを再起動しても内容が変わらない | 要件 core/12-6 |
 | （自動テストなし・実機確認） | 結合 | VNC イメージで Chrome/noVNC が起動し chrome-devtools MCP で操作できる | 要件 core/11 |
 
 実行方法: 自動テストコマンドなし。`claude-dev start`（VNC あり/`--no-vnc`）でコンテナを起動し、

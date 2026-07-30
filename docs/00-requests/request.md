@@ -5,7 +5,7 @@ title: claude-dev-env 要求定義書
 version: 1.1.0
 updated: 2026-07-30
 verified:
-  at: 2026-07-30
+  at: 2026-07-31
   version: 1.1.0
   against: []
 summary: >

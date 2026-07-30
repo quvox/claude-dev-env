@@ -2,16 +2,16 @@
 id: acceptance
 layer: request
 title: claude-dev-env 受入シナリオ
-version: 1.1.0
-updated: 2026-07-30
+version: 1.2.0
+updated: 2026-07-31
 verified:
-  at: 2026-07-30
-  version: 1.1.0
+  at: 2026-07-31
+  version: 1.2.0
   against: []
 summary: >
   ユーザー言語の受入シナリオ集。01のUC・E2Eシナリオの種。開発環境の基本操作と
-  オーケストレーターの並列開発フロー、Codex CLI の認証共有を含む。
-keywords: [受入シナリオ, start, forward, orchestrate, 介入, 復旧, CodexCLI認証共有]
+  オーケストレーターの並列開発フロー、Codex CLI の認証共有と実行可否を含む。
+keywords: [受入シナリオ, start, forward, orchestrate, 介入, 復旧, CodexCLI認証共有, Codex実行可否]
 source: null
 ---
 
@@ -99,9 +99,12 @@ source: null
   1. ホストで `claude-dev login-codex` を実行する。表示された URL と認証コードをクライアント PC の
      ブラウザで開き、デバイス認証を済ませる。
   2. 別のプロジェクトディレクトリで `claude-dev start` を実行する。
-  3. コンテナ内の tmux で `codex` を実行する。
+  3. コンテナ内の tmux で `codex` を実行し、ファイルの読み書きやコマンド実行を伴う作業を依頼する。
 - **期待する結果**: 2 回目以降・別プロジェクトのコンテナでもログインし直さずに codex が使える。
+  **依頼した作業で codex が実行するシェルコマンドが実際に成功し、`/workspace` のファイルを読み書きできる。**
   トークンが更新されても共有ボリュームへ書き戻され、次に起動するコンテナへ引き継がれる。codex の設定・
   セッション履歴はコンテナ（プロジェクト）ごとに独立している。
 - **こうなったら不合格**: プロジェクトごとに codex のログインを求められる／トークン更新が他のコンテナへ
-  伝わらず再ログインが必要になる／API キーやトークンがイメージに焼き込まれている。
+  伝わらず再ログインが必要になる／API キーやトークンがイメージに焼き込まれている／**codex が起こす
+  シェルコマンドが毎回失敗する（`bwrap: No permissions to create new namespace` 等）／コマンドが失敗した
+  のに codex が成功したかのような応答を返す**。
