@@ -9,7 +9,7 @@ verified:
   version: 1.4.0
   against:
     - doc: docs/02-design/system.md
-      version: 1.5
+      version: 1.6
 summary: >
   ビルド・初回セットアップ・install/uninstall・login・upgrade・orch-sample 等の入口を
   `make <target>` の統一インタフェースで提供する Makefile。イメージビルドはマルチステージ

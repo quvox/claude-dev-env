@@ -9,7 +9,7 @@ verified:
   version: 1.7.2
   against:
     - doc: docs/02-design/system.md
-      version: 1.5
+      version: 1.6
 summary: >
   ホスト Linux 用 `claude-dev`（単一 bash スクリプト）の実装。case ディスパッチで
   start/stop/list/attach/forward/orchestrate/login/login-codex 等のサブコマンドを提供し、Docker

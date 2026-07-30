@@ -2,18 +2,18 @@
 id: system
 layer: design
 title: claude-dev-env 全体設計書
-version: 1.5.0
+version: 1.6.0
 updated: 2026-07-30
 verified:
   at: 2026-07-30
-  version: 1.5.0
+  version: 1.6.0
   against:
     - doc: docs/01-requirements/core.md
       version: 1.6
     - doc: docs/01-requirements/orchestration.md
-      version: 1.0
+      version: 1.1
 summary: >
-  隔離Docker開発環境＋AIオーケストレーターの全体設計。14モジュール分割定義、モジュール間契約、
+  隔離Docker開発環境＋AIオーケストレーターの全体設計。14モジュール分割定義、モジュール間契約5件、
   CLI/TUIのUI設計、テスト戦略（単体/結合/E2E）とE2Eシナリオ一覧を定める。同梱エージェント CLI
   （Claude Code / Codex CLI）の導入位置と認証共有の構造を含む。
 keywords: [全体設計, モジュール分割, docker-proxy, orchestrator, VMモード, テスト戦略, E2E, CodexCLI]
@@ -123,6 +123,15 @@ graph TD
     別ボリュームを増やさず logout/reset の分岐も増やさない）
 ```
 
+### entrypoint → firewall（起動時の適用呼び出し）
+
+```
+起動シーケンス中に 1 度だけ実行:
+  /usr/local/bin/init-firewall.sh          # 引数なし。OUTPUT チェインへブラックリストを適用
+前提: NET_ADMIN/NET_RAW（cli が docker run で付与）、iptables/ipset/dig/curl/jq（イメージ同梱）
+結果: 適用の成否に関わらず entrypoint は継続する（失敗は無視して起動を止めない）
+```
+
 ### コンテナ → docker-proxy（HTTP Docker API）
 
 ```
@@ -229,7 +238,7 @@ sequenceDiagram
 | レベル | 対象 | ツール/実行環境 | 方針(テストデータ・範囲・実行タイミング) |
 |---|---|---|---|
 | 単体 | docker-proxy の検査ロジック / orchestrator の状態・レビュー・モデル選択等 | `go test`（docker-proxy）, `go test -mod=vendor`（orchestrator） | 各 Go モジュールで実装同梱。PR/変更時に実行（[tech steering](../_steering/tech.md)） |
-| 結合 | コンテナ→docker-proxy 契約 / cli→orchestrator 起動契約 | go test（proxy 側で API ボディ検査）＋実機（コンテナ起動） | 契約ごとに担当モジュールの 03-impl テスト対応表へ（下表） |
+| 結合 | 「モジュール間インターフェース(契約)」の全 5 契約（cli→コンテナ/entrypoint / entrypoint→firewall / コンテナ→docker-proxy / cli(orchestrate)→orchestrator / orchestrator→worker・対話Claude） | `go test`（docker-proxy の API ボディ検査、orchestrator のプロンプト生成・`control.json` 検知）＋実機（コンテナ起動・`make orch-sample` 実走） | 契約ごとに担当モジュールを下表で定め、担当モジュールの 03-impl テスト対応表に結合レベルの行を置く。ホスト CLI（bash）側は自動テストランナーを持たないため、当該契約の手段は実機確認になる |
 | E2E | ユースケース（下のシナリオ一覧） | 実機（`claude-dev` 実操作）＋ orchestrator 自己検証（`make orch-sample` で題材を scaffold し `claude-dev orchestrate` で実走） | シェル系は自動テストなし＝実機確認。orchestrator は題材を用意して実走・観測 |
 
 備考: core/7-5（compose プロジェクト名の一意化）はシェル系のため自動テスト対象外。実機確認は「異なる 2 プロジェクトで同時に `claude-dev start` → 各コンテナで `COMPOSE_PROJECT_NAME` が別値になり、`docker compose` の生成リソース（ネットワーク／コンテナ名）がプロジェクト間で衝突しない」ことを確認する（cli/cli-mac が `docker run` に `-e COMPOSE_PROJECT_NAME` を付与）。
@@ -242,11 +251,17 @@ sequenceDiagram
 
 ### 結合テスト対象
 
+「モジュール間インターフェース(契約)」の全 5 契約を列挙する。担当は原則「呼び出し元」だが、本システムでは
+**検証が観測可能な側**（呼び出し先）へ寄せている契約が 3 件ある（理由は下表の担当欄に併記）。ホスト CLI 側は bash で自動
+テストランナーを持たないため、呼び出し元担当にすると全件が実機確認になり検証の所在が曖昧になるからである。
+
 | 契約(呼び出し元→呼び出し先) | 検証観点 | 担当モジュール |
 |---|---|---|
-| コンテナ → docker-proxy | 危険 bind/privileged/host mode 拒否・/workspace bind 書換・通常操作透過 | docker-proxy |
-| cli(orchestrate) → orchestrator | 生存判定による attach/resume 分岐・設定受け渡し | orchestrator |
+| cli → コンテナ/entrypoint | 環境変数・マウントが渡り、UID/GID が `/workspace` 所有者に追従し、認証（claude/codex）がコンテナローカルへコピーされ 30 秒書き戻しが働く | entrypoint（呼び出し元 cli は bash で自動テスト不可のため観測側が担当。手段は実機確認） |
 | entrypoint → firewall | 起動時に FW が適用される | entrypoint |
+| コンテナ → docker-proxy | 危険 bind/privileged/host mode 拒否・/workspace bind 書換・通常操作透過 | docker-proxy（観測側。`go test` で機械検証） |
+| cli(orchestrate) → orchestrator | 生存判定による attach/resume 分岐・設定受け渡し | orchestrator（観測側。実 tmux＋実 claude を要するため手段は実機確認＝E2E-4/E2E-5） |
+| orchestrator → worker / 対話Claude | プロンプト注入（instruction テンプレ・`ORCHESTRATOR.md` 前置・VM 前置）と `control.json` による受け渡し・消費 | orchestrator（orchestrator 側の生成・検知は `go test` で機械検証。実 `claude` プロセスとの結合は実機確認＝E2E-4） |
 
 ### E2Eシナリオ一覧
 

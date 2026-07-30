@@ -9,7 +9,7 @@ verified:
   version: 1.0.0
   against:
     - doc: docs/02-design/system.md
-      version: 1.5
+      version: 1.6
 summary: >
   オプトインのゲスト VM モード。claude コンテナ内で QEMU/KVM のゲスト VM を起動し、
   virtiofs で /workspace を同一パス共有、ゲスト内ネイティブ dockerd を DOCKER_HOST 経由で

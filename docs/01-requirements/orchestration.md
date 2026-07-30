@@ -2,11 +2,11 @@
 id: orchestration
 layer: requirements
 title: オーケストレーション 要件定義書
-version: 1.0.0
-updated: 2026-07-18
+version: 1.1.0
+updated: 2026-07-30
 verified:
   at: 2026-07-30
-  version: 1.0.0
+  version: 1.1.0
   against:
     - doc: docs/00-requests/request.md
       version: 1.1
@@ -60,7 +60,7 @@ AIオーケストレーターの要件を定める。上流: [要求定義](../0
   - plan が実行不可（未 ready／`completion` 欠落）のとき: システムは理由を端末に明示しブレインストーミングへ戻す
   - 完了時: システムは成果を統合し Slack に「完了」を通知する
 - **事後条件(成功時):** 要判断のタスクだけが待機し他 worker は継続、回答後に実行復帰、完了で成果統合
-- **関連要件:** 要件12〜18
+- **関連要件:** 要件12〜19（基本フロー2・7 のダッシュボード表示とセレクタ選択、および要判断の日本語提示が要件19）
 
 ### UC-5:端末が壊れても復旧する（AS-5）
 

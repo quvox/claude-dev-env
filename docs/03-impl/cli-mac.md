@@ -9,7 +9,7 @@ verified:
   version: 1.2.0
   against:
     - doc: docs/02-design/system.md
-      version: 1.5
+      version: 1.6
 summary: >
   macOS 版ホスト CLI `claude-dev-mac`（単一 bash）。cli との差分のみを持つ——SSH agent を
   専用 agent＋socat TCP ブリッジ（127.0.0.1）で転送・ポート直結（SSH トンネルなし）・VM/KVM 非対応・

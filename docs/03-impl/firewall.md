@@ -9,7 +9,7 @@ verified:
   version: 1.0.0
   against:
     - doc: docs/02-design/system.md
-      version: 1.5
+      version: 1.6
 summary: >
   Claude コンテナ内で起動時に適用する iptables ブラックリスト方式ファイアウォールの実装。
   デフォルト全許可（ACCEPT）とし、ペーストサイト等の危険ドメイン(ipset)・メタデータ・SMTP・

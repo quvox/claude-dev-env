@@ -2,14 +2,14 @@
 id: entrypoint
 layer: impl
 title: entrypoint 実装説明書
-version: 1.3.0
+version: 1.4.0
 updated: 2026-07-30
 verified:
   at: 2026-07-30
-  version: 1.3.0
+  version: 1.4.0
   against:
     - doc: docs/02-design/system.md
-      version: 1.5
+      version: 1.6
 summary: >
   Claude コンテナの ENTRYPOINT として root で起動し、UID/GID 追従・認証共有（claude/codex）・
   settings/MCP 生成・firewall/portsync 起動・VNC/Chrome 起動・tmux セッション開始までを行う
@@ -185,12 +185,17 @@ CLI が動的割り当てで公開する。
 なし＝実機確認」）。以下の受け入れ基準・契約は **実機確認**で検証する（`claude-dev start` 実操作。E2E-1）。
 自動テストが存在しないため、下表はいずれも**未検証（自動テストなし）**であり、実機確認の対応関係を示す。
 
+**本モジュールは 02-design のテスト戦略「結合テスト対象」で 2 契約の担当である**——`entrypoint → firewall`
+（呼び出し元担当の原則どおり）と `cli → コンテナ/entrypoint`（呼び出し元 cli が bash で自動テストを持たないため
+観測側の本モジュールへ寄せたもの）。いずれも手段は実機確認であり、下表で対応関係を示す。
+
 | テスト(ファイル::ケース名) | レベル | 検証内容 | 対応する受け入れ基準/契約 |
 |---|---|---|---|
 | （自動テストなし・実機確認） | 結合 | 起動時に firewall が適用される | 契約: entrypoint→firewall／要件 core/5 |
-| （自動テストなし・実機確認） | 結合 | `/workspace` 所有者に UID/GID が追従しファイル所有権齟齬が無い | 要件 core/2 |
-| （自動テストなし・実機確認） | 結合 | 認証が共有ボリューム経由でコピー・30秒書き戻しされ再接続できる | 要件 core/3 |
-| （自動テストなし・実機確認。ローカル検証済み: symlink 化・`chmod 600`・共有 `codex/` 作成・書き戻し伝播） | 結合 | codex 認証（auth.json）がコピーされ `codex` が再ログイン不要で動き、更新が 30 秒で共有ボリュームへ書き戻る | 要件 core/3-7,8,9（E2E-6） |
+| （自動テストなし・実機確認） | 結合 | cli が `docker run` で渡した環境変数（`DOCKER_HOST`／`CLAUDE_DEV_DOOD_PORTSYNC`／`CLAUDE_DEV_VM`／`COMPOSE_PROJECT_NAME`）とマウント（`/workspace`・共有 3 ボリューム・ssh-agent ソケット）を受け取り、両 rc への永続化と portsync 起動条件の判定が意図どおり働く | 契約: cli→コンテナ/entrypoint |
+| （自動テストなし・実機確認） | 結合 | `/workspace` 所有者に UID/GID が追従しファイル所有権齟齬が無い | 契約: cli→コンテナ/entrypoint／要件 core/2 |
+| （自動テストなし・実機確認） | 結合 | 認証が共有ボリューム経由でコピー・30秒書き戻しされ再接続できる | 契約: cli→コンテナ/entrypoint／要件 core/3 |
+| （自動テストなし・実機確認。ローカル検証済み: symlink 化・`chmod 600`・共有 `codex/` 作成・書き戻し伝播） | 結合 | codex 認証（auth.json）がコピーされ `codex` が再ログイン不要で動き、更新が 30 秒で共有ボリュームへ書き戻る | 契約: cli→コンテナ/entrypoint／要件 core/3-7,8,9（E2E-6） |
 | （自動テストなし・実機確認） | 結合 | VNC イメージで Chrome/noVNC が起動し chrome-devtools MCP で操作できる | 要件 core/11 |
 
 実行方法: 自動テストコマンドなし。`claude-dev start`（VNC あり/`--no-vnc`）でコンテナを起動し、

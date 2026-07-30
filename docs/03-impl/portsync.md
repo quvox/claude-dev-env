@@ -9,7 +9,7 @@ verified:
   version: 1.0.0
   against:
     - doc: docs/02-design/system.md
-      version: 1.5
+      version: 1.6
 summary: >
   DooD モードでホスト公開されたコンテナポートを claude コンテナの 127.0.0.1 へ届かせる
   実行時ネットワークヘルパ。dood-portsync.sh が docker ps で 0.0.0.0:PORT を検出し、

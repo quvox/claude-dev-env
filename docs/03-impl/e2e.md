@@ -9,7 +9,7 @@ verified:
   version: 1.2.0
   against:
     - doc: docs/02-design/system.md
-      version: 1.5
+      version: 1.6
 summary: >
   02-design のE2Eシナリオ一覧(E2E-1〜6)に対応するE2E検証の実装説明。専用E2Eフレームワークは持たず、
   実機操作(claude-dev)とオーケストレーター自己検証(make orch-sample)で担保する。

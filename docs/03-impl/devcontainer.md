@@ -9,7 +9,7 @@ verified:
   version: 1.5.0
   against:
     - doc: docs/02-design/system.md
-      version: 1.5
+      version: 1.6
 summary: >
   Claude コンテナイメージ定義。Dockerfile.claude（orch-builder / base / vnc-base と、配布する
   終端ステージ claude-cli / claude-vnc）と Dockerfile.docker-proxy（Go 多段）、

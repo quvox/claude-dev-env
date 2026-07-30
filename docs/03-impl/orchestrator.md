@@ -2,14 +2,14 @@
 id: orchestrator
 layer: impl
 title: orchestrator 実装説明書
-version: 1.0.1
-updated: 2026-07-19
+version: 1.1.0
+updated: 2026-07-30
 verified:
   at: 2026-07-30
-  version: 1.0.1
+  version: 1.1.0
   against:
     - doc: docs/02-design/system.md
-      version: 1.5
+      version: 1.6
 summary: >
   プロジェクトに1体立てる AIオーケストレーター（Go 製単一プロセス `claude-orchestrator`）の実装。
   tmux 常駐（orch-<CNAME>-main:dashboard）で外部制御ループを所有し、ブレインストーミング/実行の2モード状態機械・
@@ -288,18 +288,26 @@ config は 3 段マージ（下ほど強い）：組込既定 → `~/.config/cla
 | worker_stream_test.go::TestParseWorkerResult*（StreamJSON/Bare/RealSample） / TestParseCompletionVerdict | 単体 | stream-json 結果解析・完了検証パース | 要件14, 18-2 |
 | streamlog_test.go::TestFormatStreamLine / TestStreamPrettyWriter_SplitsAndBuffersPartialLines | 単体 | ログ整形・部分行バッファ | 要件14-2 |
 | session_test.go::TestNormalizeCName / TestSessionNames / TestSplitTarget / TestExpectedWindows / TestNewSessionManager_UsesComposeProjectName | 単体 | セッション命名・ウィンドウターゲット・復旧対象算出 | 要件13-2, 14-2 |
-| mode_test.go::TestWriteLaunchScript / _NoPromptOmitsPositional / TestShellSingleQuote | 単体 | launch script 生成（model/effort・quoting・sidecar） | 要件13-3, 18-1 |
+| mode_test.go::TestWriteLaunchScript / _NoPromptOmitsPositional / TestShellSingleQuote | 単体 | launch script 生成（model/effort・quoting・sidecar） | 契約: orchestrator→worker/対話Claude／要件13-3, 18-1 |
 | dashtui_test.go::TestDashView_RendersTasksAndCursor / TestDashCursor_MovesAndClamps / TestDashEnter_OnWaitingHumanSendsResolve / TestDashQuit_SendsQuit / TestDashView_BrainstormingIsCursorSelect | 単体 | カーソル選択・Enter 移動・⏸ で resolve・q で中断・ホーム描画 | 要件19-1 |
 | dashboard_test.go::TestReadVMHealthBanner_*（WarnFresh/OKIsSilent/StaleIgnored/NonVMMode） | 単体 | VM 資源逼迫バナー | 要件（可観測性・VMモード） |
 | term_test.go::TestResolveMenu_*（EnterPicksDefault/ArrowThenEnter/JKMovement/NumberImmediate/NoInputReturnsCurrent） / TestSelectMenu_NonTTYReturnsDefault / TestTerminalConfirm_NonTTYContinue / TestBuildQuestion_NumbersOptions | 単体 | 選択メニュー・非 TTY 既定・質問の番号付き整形 | 要件19-1, 19-2, 19-3 |
-| policy_test.go::TestLoadProjectPolicy_* / TestBuildPrompt_* / TestBuildReviewPrompt_* / TestModeArgs_* / TestVMModePreamble_* | 単体 | ORCHESTRATOR.md 前置・VM 前置の各プロンプトへの反映 | 要件19-5 |
-| handoff_test.go::TestWaitConsume_ReturnsWhenControlAppears / _UntilEndsWithoutControl | 単体 | control.json 出現検知・until 終了 | 契約: 対話Claude→orchestrator |
+| policy_test.go::TestLoadProjectPolicy_* / TestBuildPrompt_* / TestBuildReviewPrompt_* / TestModeArgs_* / TestVMModePreamble_* | 単体 | ORCHESTRATOR.md 前置・VM 前置の各プロンプトへの反映 | 契約: orchestrator→worker/対話Claude／要件19-5 |
+| handoff_test.go::TestWaitConsume_ReturnsWhenControlAppears / _UntilEndsWithoutControl | 単体 | control.json 出現検知・until 終了 | 契約: orchestrator→worker/対話Claude（`control.json` による受け渡し・消費） |
 | controller_test.go::TestFreshDispatch_NewSession / TestResolveOne | 単体 | 新 Attempt の新規セッション・介入 1 件解決 | 要件16-5, 15-3 |
+| （自動テストなし・実機確認＝`make orch-sample` 後の実走／E2E-4・E2E-5） | 結合 | 生存判定（`--print-main-session`・`pgrep` 判定）による attach/resume 分岐と、`max_workers` 等の設定受け渡し | 契約: cli(orchestrate)→orchestrator — **未検証(自動テストなし)** |
+| （自動テストなし・実機確認＝`make orch-sample` 後の実走／E2E-4） | 結合 | 実 `claude` プロセスに対し launch script／`--append-system-prompt` が効き、`ORCHESTRATOR.md`・VM 前置がプロンプト先頭に届き、対話の `/exit` で `control.json` が返って消費される（orchestrator 側の生成・検知ロジックは上記 `mode_test.go`／`policy_test.go`／`handoff_test.go` が機械検証済み） | 契約: orchestrator→worker/対話Claude — **未検証(自動テストなし)** |
 
-**cli(orchestrate)→orchestrator 契約**（生存判定による attach/resume 分岐・設定受け渡し）の結合テスト対象は
-02-design のテスト戦略上 orchestrator 担当だが、実 tmux＋実 claude を要するため自動単体テストでは検証不能。
-生存判定ロジック（`--print-main-session`・pgrep 判定）と設定受け渡しはコード実装済みで、実機（`make orch-sample`）と
-E2E-4/E2E-5 で確認する（03-impl/e2e.md 側の対応表が持つ）。
+本モジュールは 02-design のテスト戦略「結合テスト対象」で **2 契約の担当**である。
+
+- **orchestrator→worker/対話Claude**（プロンプト注入・`control.json` 受け渡し）: orchestrator 側の
+  生成・検知ロジック（launch script 生成、`ORCHESTRATOR.md`／VM 前置の付加、`control.json` 出現検知）は
+  上表の `mode_test.go`／`policy_test.go`／`handoff_test.go` が `go test` で機械検証する。実 `claude`
+  プロセスを相手にした結合部分は実機確認（E2E-4）であり **未検証(自動テストなし)**。
+- **cli(orchestrate)→orchestrator**（生存判定による attach/resume 分岐・設定受け渡し）: 実 tmux＋実 claude を
+  要するため自動テストでは検証不能。生存判定ロジック（`--print-main-session`・pgrep 判定）と設定受け渡しは
+  コード実装済みで、実機（`make orch-sample` 後の実走）と E2E-4/E2E-5 で確認する（E2E としての対応表は
+  03-impl/e2e.md が持つ）。上表末尾の行がこの対応関係を示し、状態は **未検証(自動テストなし)** である。
 
 実行方法: `cd orchestrator && go test -mod=vendor ./...`（[tech steering](../_steering/tech.md)。`-race` 併用可）。
 
