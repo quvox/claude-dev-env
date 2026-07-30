@@ -5,8 +5,8 @@ title: claude-dev-env 受入シナリオ
 version: 1.1.0
 updated: 2026-07-30
 verified:
-  at: 2026-07-29
-  version: 1.0.0
+  at: 2026-07-30
+  version: 1.1.0
   against: []
 summary: >
   ユーザー言語の受入シナリオ集。01のUC・E2Eシナリオの種。開発環境の基本操作と

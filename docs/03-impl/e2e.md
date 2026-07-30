@@ -5,11 +5,11 @@ title: E2Eテスト実装説明書
 version: 1.2.0
 updated: 2026-07-30
 verified:
-  at: 2026-07-29
-  version: 1.0.0
+  at: 2026-07-30
+  version: 1.2.0
   against:
     - doc: docs/02-design/system.md
-      version: 1.4
+      version: 1.5
 summary: >
   02-design のE2Eシナリオ一覧(E2E-1〜6)に対応するE2E検証の実装説明。専用E2Eフレームワークは持たず、
   実機操作(claude-dev)とオーケストレーター自己検証(make orch-sample)で担保する。

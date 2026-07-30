@@ -2,14 +2,14 @@
 id: cli
 layer: impl
 title: cli 実装説明書
-version: 1.7.1
+version: 1.7.2
 updated: 2026-07-30
 verified:
-  at: 2026-07-29
-  version: 1.5.1
+  at: 2026-07-30
+  version: 1.7.2
   against:
     - doc: docs/02-design/system.md
-      version: 1.4
+      version: 1.5
 summary: >
   ホスト Linux 用 `claude-dev`（単一 bash スクリプト）の実装。case ディスパッチで
   start/stop/list/attach/forward/orchestrate/login/login-codex 等のサブコマンドを提供し、Docker
@@ -100,7 +100,7 @@ source:
   未起動なら `claude-dev-net` 上に `--restart unless-stopped`・ソケット RO マウント・
   `-e CLAUDE_DEV_ALLOW_WORKSPACE_BINDS=${...:-1}` 付きで起動）。
 
-### サブコマンド（case ディスパッチ、L422〜1387）
+### サブコマンド（case ディスパッチ、L422〜1449）
 
 - **`setup`**: `.env` 生成（example から）、ネットワーク・共有 3 ボリューム作成、`IMG_CLAUDE`(`claude-cli`)・
   `IMG_CLAUDE_VNC`(`claude-vnc`)・`IMG_DOCKER_PROXY` を順にビルド、次手順と PATH 用 symlink コマンドを案内。
@@ -221,10 +221,10 @@ source:
 | `.claude-dev.yaml` 不在 | `ensure_project_config` | TTY は鍵選択、非 TTY は空作成。停止しない | core/4 |
 | SSH 鍵 0 件/存在しない鍵 | `ensure_ssh_agent` | 転送なしで続行し `ssh_keys:` 記述を案内、欠落鍵は警告スキップ | core/4 |
 | noVNC ポート競合 | `start` の `docker run` リトライ | 途中コンテナ掃除→別ポートで最大 20 回再試行 | core/1,6 |
-| tmux 起動タイムアウト | `start` L882〜 | 終了せず状況案内し `exit 0`（コンテナは稼働継続） | core/1 |
+| tmux 起動タイムアウト | `start` L930〜 | 終了せず状況案内し `exit 0`（コンテナは稼働継続） | core/1 |
 | コンテナ未起動での操作 | `code`/`attach`/`forward`/`ports`/`firewall` | 日本語エラーで `exit 1` | core/1,6 |
 | pull 全失敗 | `pull` | `docker login ghcr.io` 案内し `exit 1` | core/9 |
-| VM モードで `/dev/kvm` 不在 | `start` L643 | `exit 1`（`--kvm` のみの場合は警告のみで続行） | core/8 |
+| VM モードで `/dev/kvm` 不在 | `start` L697 | `exit 1`（`--kvm` のみの場合は警告のみで続行） | core/8 |
 
 - 前提不足は停止せず日本語で案内する方針（system.md エラーハンドリング方針「cli」）に一致。
 

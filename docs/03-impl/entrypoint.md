@@ -5,11 +5,11 @@ title: entrypoint 実装説明書
 version: 1.3.0
 updated: 2026-07-30
 verified:
-  at: 2026-07-29
-  version: 1.1.0
+  at: 2026-07-30
+  version: 1.3.0
   against:
     - doc: docs/02-design/system.md
-      version: 1.4
+      version: 1.5
 summary: >
   Claude コンテナの ENTRYPOINT として root で起動し、UID/GID 追従・認証共有（claude/codex）・
   settings/MCP 生成・firewall/portsync 起動・VNC/Chrome 起動・tmux セッション開始までを行う

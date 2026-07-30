@@ -5,11 +5,11 @@ title: claude-dev-env 全体設計書
 version: 1.5.0
 updated: 2026-07-30
 verified:
-  at: 2026-07-29
-  version: 1.4.0
+  at: 2026-07-30
+  version: 1.5.0
   against:
     - doc: docs/01-requirements/core.md
-      version: 1.5
+      version: 1.6
     - doc: docs/01-requirements/orchestration.md
       version: 1.0
 summary: >

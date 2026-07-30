@@ -5,17 +5,17 @@ title: 開発環境基盤 要件定義書
 version: 1.6.0
 updated: 2026-07-30
 verified:
-  at: 2026-07-29
-  version: 1.5.0
+  at: 2026-07-30
+  version: 1.6.0
   against:
     - doc: docs/00-requests/request.md
-      version: 1.0
+      version: 1.1
     - doc: docs/00-requests/decisions.md
-      version: 1.4
+      version: 1.5
     - doc: docs/00-requests/glossary.md
-      version: 1.0
+      version: 1.1
     - doc: docs/00-requests/acceptance.md
-      version: 1.0
+      version: 1.1
 summary: >
   Claude Code を隔離Dockerコンテナで動かす開発環境基盤の要件。コンテナ管理・認証・SSH鍵・
   ネットワーク/FW・ブラウザ確認・ポートフォワード・Dockerアクセス制限・VMモード・配布/プラットフォーム・

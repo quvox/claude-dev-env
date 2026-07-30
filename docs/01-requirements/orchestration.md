@@ -5,17 +5,17 @@ title: オーケストレーション 要件定義書
 version: 1.0.0
 updated: 2026-07-18
 verified:
-  at: 2026-07-29
+  at: 2026-07-30
   version: 1.0.0
   against:
     - doc: docs/00-requests/request.md
-      version: 1.0
+      version: 1.1
     - doc: docs/00-requests/decisions.md
-      version: 1.4
+      version: 1.5
     - doc: docs/00-requests/glossary.md
-      version: 1.0
+      version: 1.1
     - doc: docs/00-requests/acceptance.md
-      version: 1.0
+      version: 1.1
 summary: >
   プロジェクトに1体のAIオーケストレーターを立て、ブレインストーミング/実行の2モード・外部制御ループ・
   タスク単位介入・相互レビュー品質ゲート・中断復旧により、人間の管理負荷を下げ並列度を上げる要件。

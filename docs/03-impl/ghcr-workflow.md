@@ -2,14 +2,14 @@
 id: ghcr-workflow
 layer: impl
 title: ghcr-workflow 実装説明書
-version: 1.4.0
+version: 1.5.0
 updated: 2026-07-30
 verified:
-  at: 2026-07-29
-  version: 1.2.0
+  at: 2026-07-30
+  version: 1.5.0
   against:
     - doc: docs/02-design/system.md
-      version: 1.4
+      version: 1.5
 summary: >
   コンテナイメージ（claude / claude-vnc / docker-proxy）を GHCR へ毎日・マルチアーキ
   (amd64/arm64) で push する GitHub Actions ワークフロー。prepare→build(matrix, push-by-digest)
@@ -195,6 +195,7 @@ source:
 | CI 実機（`workflow_dispatch` 手動実行 → GHCR 確認） | 実機 | 3 イメージ × amd64/arm64 の manifest list が `YYYYMMDDHHmm` と `latest` で push される | core/9 受入基準1,2 |
 | CI 実機（配布イメージ内で `claude --version` を確認） | 実機 | 同梱 Claude Code のバージョンが、そのビルド時点の `latest` チャネル値と一致する | core/9 受入基準3 |
 | CI 実機（`claude_version` を指定して手動実行） | 実機 | 指定した特定バージョンが同梱される | core/9 受入基準4 |
+| CI 実機（`docker buildx imagetools inspect` / pull 後の `docker image inspect`） | 実機 | push されたイメージのラベル `io.github.quvox.claude-dev.version` / `org.opencontainers.image.version` が当該ビルドの `YYYYMMDDHHmm` を持ち、利用者が同梱バージョンを参照できる（`claude-dev start` のバージョン表示はこのラベルを読む） | core/9 受入基準5 |
 | CI 実機（配布イメージ内で `codex --version` を確認） | 実機 | 同梱 Codex CLI のバージョンが、そのビルド時点の npm registry 最新版と一致する | core/9 受入基準6 |
 | CI 実機（`codex_version` を指定して手動実行） | 実機 | 指定した特定バージョンが同梱される | core/9 受入基準7 |
 | CI 実機（新版が出ていない日の再実行ログ） | 実機 | claude 導入層が `CACHED` となり、`base`/`vnc-base` の高コスト層も再ビルドされない | 非機能:性能（pull 増分性） |

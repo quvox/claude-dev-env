@@ -5,8 +5,8 @@ title: claude-dev-env 決定台帳
 version: 1.5.0
 updated: 2026-07-30
 verified:
-  at: 2026-07-29
-  version: 1.4.0
+  at: 2026-07-30
+  version: 1.5.0
   against: []
 summary: >
   既存実装に埋め込まれた設計判断を「決定/委任/要確認」に仕分けた台帳。逆生成のため証跡は

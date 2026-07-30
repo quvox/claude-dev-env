@@ -5,8 +5,8 @@ title: claude-dev-env 用語集
 version: 1.1.0
 updated: 2026-07-30
 verified:
-  at: 2026-07-29
-  version: 1.0.0
+  at: 2026-07-30
+  version: 1.1.0
   against: []
 summary: >
   claude-dev-env 固有の用語定義。下流の誤読・表記ゆれを潰す。
