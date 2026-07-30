@@ -2,8 +2,14 @@
 id: entrypoint
 layer: impl
 title: entrypoint 実装説明書
-version: 1.5.1
+version: 1.6.0
 updated: 2026-07-31
+verified:
+  at: 2026-07-31
+  version: 1.6.0
+  against:
+    - doc: docs/02-design/system.md
+      version: 1.8
 summary: >
   Claude コンテナの ENTRYPOINT として root で起動し、UID/GID 追従・認証共有（claude/codex）・
   既定設定生成（claude settings.json / codex config.toml）・MCP 生成・firewall/portsync 起動・
@@ -22,9 +28,10 @@ source:
 コンテナ内部の初期化を上から順に実行する初期化スクリプトである（上流: [全体設計](../02-design/system.md)、
 契約「cli → コンテナ/entrypoint」「entrypoint → firewall」）。主な責務は、(1) `/workspace` 所有者に合わせた
 UID/GID 追従、(2) 共有ボリューム経由の認証共有（claude / codex）と `~/.claude`・`~/.codex` の symlink 化、
-(3) `settings.json`・MCP 設定生成、
+(3) 既定設定生成（claude `settings.json`／codex `config.toml`＝Codex サンドボックス無効化の既定）と MCP 設定生成、
 (4) `firewall` 起動、(5) `portsync`（DooD ポート転送）起動、(6) VNC/Chrome/noVNC 起動（VNC イメージ時のみ）、
-(7) `tmux` セッション開始。最後に `exec tail -f /dev/null` で常駐する。要件 core/2,3,5,11 を担う。
+(7) `tmux` セッション開始。最後に `exec tail -f /dev/null` で常駐する。
+要件 core/2,3,5,11,12(12-4〜12-6) を担う。
 
 ## ファイル構成
 
@@ -196,7 +203,7 @@ CLI が動的割り当てで公開する。
 | テスト(ファイル::ケース名) | レベル | 検証内容 | 対応する受け入れ基準/契約 |
 |---|---|---|---|
 | （自動テストなし・実機確認） | 結合 | 起動時に firewall が適用される | 契約: entrypoint→firewall／要件 core/5 |
-| （自動テストなし・実機確認） | 結合 | cli が `docker run` で渡した環境変数（`DOCKER_HOST`／`CLAUDE_DEV_DOOD_PORTSYNC`／`CLAUDE_DEV_VM`／`COMPOSE_PROJECT_NAME`）とマウント（`/workspace`・共有 3 ボリューム・ssh-agent ソケット）を受け取り、両 rc への永続化と portsync 起動条件の判定が意図どおり働く | 契約: cli→コンテナ/entrypoint |
+| （自動テストなし・実機確認） | 結合 | cli が `docker run` で渡した環境変数（`DOCKER_HOST`／`CLAUDE_DEV_DOOD_PORTSYNC`／`CLAUDE_DEV_VM`／`COMPOSE_PROJECT_NAME`）とマウント（`<cwd>`→`/workspace`、`claude-dev-auth`→`~/.claude-shared`、`claude-dev-config`→`~/.config-shared`、`$SSH_AUTH_SOCK`→`/tmp/ssh-agent.sock`）を受け取り、`SSH_AUTH_SOCK`/`DOCKER_HOST` の export 行が `/etc/zsh/zshrc`・`/etc/bash.bashrc` の両方に追記され、`CLAUDE_DEV_VM != 1` かつ `CLAUDE_DEV_DOOD_PORTSYNC != 0` かつ `DOCKER_HOST` が `docker-proxy` を含むときに限り portsync が常駐起動する | 契約: cli→コンテナ/entrypoint |
 | （自動テストなし・実機確認） | 結合 | `/workspace` 所有者に UID/GID が追従しファイル所有権齟齬が無い | 契約: cli→コンテナ/entrypoint／要件 core/2 |
 | （自動テストなし・実機確認） | 結合 | 認証が共有ボリューム経由でコピー・30秒書き戻しされ再接続できる | 契約: cli→コンテナ/entrypoint／要件 core/3 |
 | （自動テストなし・実機確認。ローカル検証済み: symlink 化・`chmod 600`・共有 `codex/` 作成・書き戻し伝播） | 結合 | codex 認証（auth.json）がコピーされ `codex` が再ログイン不要で動き、更新が 30 秒で共有ボリュームへ書き戻る | 契約: cli→コンテナ/entrypoint／要件 core/3-7,8,9（E2E-6） |
