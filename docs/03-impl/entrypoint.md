@@ -2,14 +2,14 @@
 id: entrypoint
 layer: impl
 title: entrypoint 実装説明書
-version: 1.6.0
+version: 1.8.0
 updated: 2026-07-31
 verified:
   at: 2026-07-31
-  version: 1.6.0
+  version: 1.8.0
   against:
     - doc: docs/02-design/system.md
-      version: 1.8
+      version: 1.9
 summary: >
   Claude コンテナの ENTRYPOINT として root で起動し、UID/GID 追従・認証共有（claude/codex）・
   既定設定生成（claude settings.json / codex config.toml）・MCP 生成・firewall/portsync 起動・
@@ -28,10 +28,10 @@ source:
 コンテナ内部の初期化を上から順に実行する初期化スクリプトである（上流: [全体設計](../02-design/system.md)、
 契約「cli → コンテナ/entrypoint」「entrypoint → firewall」）。主な責務は、(1) `/workspace` 所有者に合わせた
 UID/GID 追従、(2) 共有ボリューム経由の認証共有（claude / codex）と `~/.claude`・`~/.codex` の symlink 化、
-(3) 既定設定生成（claude `settings.json`／codex `config.toml`＝Codex サンドボックス無効化の既定）と MCP 設定生成、
+(3) 既定設定生成（claude `settings.json`／codex `config.toml`＝既定でのサンドボックス無効化と読み取り専用用途の landlock 有効化）と MCP 設定生成、
 (4) `firewall` 起動、(5) `portsync`（DooD ポート転送）起動、(6) VNC/Chrome/noVNC 起動（VNC イメージ時のみ）、
 (7) `tmux` セッション開始。最後に `exec tail -f /dev/null` で常駐する。
-要件 core/2,3,5,11,12(12-4〜12-6) を担う。
+要件 core/2,3,5,11,12(12-4〜12-6,12-9) を担う。
 
 ## ファイル構成
 
@@ -87,15 +87,52 @@ UID/GID 追従、(2) 共有ボリューム経由の認証共有（claude / codex
      一度も実行していない場合でも同期ループが書き戻せるようにするため）。
   10. **settings.json 生成:** `$LOCAL_CLAUDE/settings.json` が無ければ
       `{"permissions":{"defaultMode":"bypassPermissions"},"model":"sonnet"}` を生成（共有しない）。
-      **同じ考え方で codex 側も既定設定を置く**——`$LOCAL_CODEX/config.toml` が無ければ
-      `sandbox_mode = "danger-full-access"` と `approval_policy = "never"` の 2 行を生成し、
-      所有権を `$USERNAME` に整える（共有しない）。既に存在する場合は内容を読まず一切変更しない
-      （利用者が書いた設定を保持する。要件 core/12-5,12-6・D-27 ⑥）。
-      これは codex の自前サンドボックス（bubblewrap 実装）がコンテナ内で起動できないため必要な設定である
+      **同じ考え方で codex 側も既定設定を置く**——`$LOCAL_CODEX/config.toml` に対し、既定 3 鍵
+      `sandbox_mode = "danger-full-access"` / `approval_policy = "never"` /
+      `[features]` テーブルの `use_legacy_landlock = true` を保証し、所有権を `$USERNAME` に整える
+      （共有しない）。ファイルが無ければ 3 鍵を生成する。既に存在する場合は**書かれている鍵とその値を
+      一切書き換えず、不足している鍵だけを追記する**。同じ設定で何度起動しても結果は変わらない（冪等）。
+      要件 core/12-5,12-6・D-27 ⑥。
+      **不足鍵の判定と追記（TOML の構造を壊さないこと）:** 行単位の正規表現では TOML の構文状態を
+      追えないため、判定・生成・検証は `/usr/bin/python3` の `tomllib` で行う（ubuntu 24.04 標準。
+      root の素の PATH で到達でき、pyenv 初期化を必要としない）。手順は
+      **「候補を作る → 意味的に検証する → 通ったときだけ原子的に置き換える」**:
+      - **判定**: ファイルを `tomllib` でパースし、キーパス（`sandbox_mode` /`approval_policy` /
+        `features.use_legacy_landlock`）の有無で判断する。パーサが正規化するので、quoted key
+        （`"sandbox_mode" = ...`）・ドット記法（`features.use_legacy_landlock = ...`）・
+        コメント行が自動的に正しく扱われる。**パースできないファイルは何も書かず警告のみ**。
+      - **追記位置**: トップレベル 2 鍵は**ファイルの先頭**へ入れる（先頭は常にトップレベルなので、
+        「最初のテーブル見出しより前」を満たす最も安全な位置）。`use_legacy_landlock` は
+        **①`[features]` 見出し行の直後 → ②末尾に見出しごと追記** の 2 戦略を、下の検証を通った
+        最初の候補が採られる形で順に試す。見出しの検出は正規表現で行い、行末コメント
+        （`[features] # ...`）・quoted key（`["features"]`）・空白（`[ features ]`）を許容する。
+        暗黙の親テーブルしか無い場合（`[features.child]` だけがある等）は ① が空振りして ② が通る。
+      - **追記できない場合**: `features` が配列テーブル（`[[features]]`）で定義されている、または
+        インラインテーブル（`features = { ... }`）に当該鍵が無い場合は、既存値を変えずに鍵を足す
+        書き方が TOML に無いので landlock だけ諦めて理由を警告する（トップレベル鍵の補完は行う）。
+      - **検証（この方式の要）**: 書き込む前に候補を再度パースし、**既存の全キーパスの値が
+        1 つも変わっていないこと**と**増えたキーが意図した鍵だけであること**を確かめる。
+        外れたら書き込まない。挿入位置のヒューリスティックが想定外の入力で外れても、
+        要件 core/12-6 違反はこの検証で必ず止まる。
+      - **置き換え**: 同じディレクトリに `mkstemp`（`O_EXCL`・0600）で一時ファイルを作り、元ファイルの
+        uid/gid を写してから mode を写し（この順序でないと Linux が setuid/setgid を落とす）、
+        `os.replace` で原子的に差し替える。リダイレクトによる truncate は使わない（途中で失敗すると
+        元ファイルを壊し、「失敗時は元ファイルを温存」の契約を破るため）。所有者を復元できない場合は
+        差し替えを中止する（黙って利用者のファイルの所有者を変えないため）。
+      - `python3`／`tomllib` が使えない環境では、**既存ファイルには一切触れず**警告のみ出す
+        （新規生成は影響を受けない）。
+      （配置規則は 2026-07-31 の人間判断。feedback/log.md [17]。tomllib 方式への作り直しは
+      同日の独立レビュー指摘による。feedback/log.md [19]）
+      前 2 鍵が必要な理由は、codex の既定サンドボックス（bubblewrap 実装）がコンテナ内で起動できないこと
       ——Docker 既定 seccomp が `CLONE_NEWUSER` を拒否し、それを外しても `docker-default` AppArmor が
       `mount --make-rslave /` を拒否するため、既定の `sandbox_mode` では codex のシェルコマンドが例外なく
-      `exited 1` になる（設計判断は 02-design 判断5）。コンテナ側の `--security-opt` を緩める対処は取らない
-      （要件 core/12-7）。
+      `exited 1` になる。3 鍵目が必要な理由は、`--sandbox read-only` のようにサンドボックスを**明示要求
+      する呼び出し**（コードレビューや文書監査を codex に依頼する経路）が config の既定を上書きして
+      bwrap 経路に戻ってしまうこと——landlock バックエンドはユーザー名前空間を必要としないため、
+      confinement を緩めずに読み取り専用を成立させられる（要件 core/12-9、設計判断は 02-design 判断5）。
+      コンテナ側の `--security-opt` を緩める対処は取らない（要件 core/12-7）。
+      なお `use_legacy_landlock` は codex 0.146.0 時点で deprecated（起動時に警告が出る）であり、
+      版更新で撤去された場合は監査を添付方式へ退避する（検知は E2E-6 の疎通確認）。
   11. **ホスト設定マージ:** `host-hooks.json`（名称は歴史的経緯で `hooks`/`env` 両方を運ぶ）があり `.hooks` か
       `.env` を含むなら `jq '. * $overlay[0]'` で `settings.json` へ深いマージし、元ファイル削除。失敗時は警告し継続。
   12. **ユーザー hook スクリプト配置:** `host-local-bin/` があれば `~/.local/bin/` へ `cp -a --update=none`
@@ -144,6 +181,14 @@ UID/GID 追従、(2) 共有ボリューム経由の認証共有（claude / codex
   その場書き換えで symlink でも壊れないが、同期ループと片付け経路を 2 方式に分けない判断（設計判断3/D-27）。
   共有ボリューム内の codex 認証パスが `~/.claude-shared/codex/auth.json` になるのは、認証ボリュームを
   claude と共用する決定（D-27 ③）によるもので、名称は claude 由来のまま据え置く。
+  `config.toml` の不足鍵補完は `ensure_codex_config()` に閉じる。**当初は awk による行単位の実装だったが、
+  独立レビューで「複数行文字列内の `[features]` を見出しと誤認して文字列の値を書き換える」「quoted key を
+  見落として同一鍵を二重定義し TOML を壊す」という要件違反の反例が出たため、`tomllib` による
+  パース＋検証方式へ作り直した**（feedback/log.md [19]）。教訓は
+  `docs/knowledge/append-missing-defaults-must-respect-file-structure.md`。
+  補完に失敗した場合は元ファイルを温存し、警告のみ出して起動を続ける（`ensure_codex_config || true`
+  で `set -e` 下でも起動を止めない）——codex を使わない利用者のコンテナ起動を、codex の設定補完で
+  止めてはならないため。
 
 ## データアクセス
 
@@ -152,7 +197,7 @@ UID/GID 追従、(2) 共有ボリューム経由の認証共有（claude / codex
 | 認証ファイル（.credentials.json / .claude.json） | 起動時 chmod 600・30秒ごと共有ボリュームへ書き戻し | entrypoint | 共有元コピーは cli 側。symlink 不使用（D-3） |
 | codex 認証ファイル（/workspace/.codex/auth.json） | 起動時 chmod 600・30秒ごと `~/.claude-shared/codex/auth.json` へ書き戻し | entrypoint | 共有元コピーは cli 側（`login-codex`/`start`）。`config.toml`・セッション履歴は共有しない（D-27） |
 | /workspace/.claude/settings.json | 生成（無い時）・host-hooks.json を jq で深いマージ | entrypoint | コンテナローカル（共有しない） |
-| /workspace/.codex/config.toml | 生成（無い時のみ。`sandbox_mode`/`approval_policy`）。存在時は不変 | entrypoint | コンテナローカル（共有しない）。Codex サンドボックス無効化の既定（D-27 ⑥） |
+| /workspace/.codex/config.toml | 既定 3 鍵（`sandbox_mode`/`approval_policy`/`features.use_legacy_landlock`）を保証。無い時は生成、存在時は不足鍵のみ追記（既存の鍵と値は不変・冪等） | entrypoint | コンテナローカル（共有しない）。既定でのサンドボックス無効化＋読み取り専用用途の landlock 有効化（D-27 ⑥・core/12-5,12-6,12-9） |
 | /workspace/.mcp.json | chrome-devtools / computer-use エントリを jq で追加 | entrypoint | VNC 時のみ |
 | /workspace/.claude/.claude.json | enabledMcpjsonServers に chrome-devtools を追加 | entrypoint | VNC 時のみ |
 | /workspace/CLAUDE.md | マーカー範囲を毎回削除→再生成 | entrypoint | KVM/VNC/Docker ネットワーク情報 |
@@ -184,7 +229,7 @@ CLI が動的割り当てで公開する。
 | 異常系 | 実装箇所 | 実際の振る舞い | 対応する要件 |
 |---|---|---|---|
 | UID/GID 衝突 | UID/GID 追従ブロック | 競合エントリを一時 ID（9900〜）へ退避してから割当。`|| true` で継続 | core/2 |
-| firewall 適用失敗 | `init-firewall.sh` 呼び出し | `2>/dev/null || true` で無視し継続 | core/5 |
+| firewall 適用失敗 | `init-firewall.sh` 呼び出し | `2>/dev/null || true` で起動は中止せず継続（警告は firewall スクリプト自身が標準出力へ出す） | core/5-3 |
 | host-hooks.json マージ失敗 | jq マージブロック | `.tmp` を削除し「⚠️ ホスト設定のマージに失敗」を出力、元 settings 維持 | core/3 |
 | .mcp.json / .claude.json 更新失敗 | MCP 設定ブロック | `.tmp` 削除・警告出力し当該追加をスキップ、以降継続 | core/11 |
 | VM 起動失敗 | VM モードブロック | 「⚠️ VM の起動に失敗」を出力、`DOCKER_HOST` を変えず proxy 既定で継続 | core/8（vm-mode） |
@@ -194,7 +239,12 @@ CLI が動的割り当てで公開する。
 
 シェルスクリプトのため自動テストは無い（[テスト戦略](../02-design/system.md) の方針「シェル系は自動テスト
 なし＝実機確認」）。以下の受け入れ基準・契約は **実機確認**で検証する（`claude-dev start` 実操作。E2E-1）。
-自動テストが存在しないため、下表はいずれも**未検証（自動テストなし）**であり、実機確認の対応関係を示す。
+自動テストランナーが無いため、**下表はいずれも「未検証(テスト未実装)」の状態にある**（自動化された
+回帰検出手段が無い、という意味）。その上で各行の左欄に実機確認の実施状況を記録する——
+**「実施済み」と書かれた行は、その日付時点で実際に観測した内容を示す**（回帰時は同じ観測を繰り返す）。
+記載の無い行は実機確認そのものが未実施である。とくに `codex` に実際の作業を依頼する観点
+（core/12-4 のシェル実行成功、core/12-9 の `codex exec -s read-only` での読み取り成功）は、
+codex のデバイス認証を要するため本モジュール単体では実施できず、**E2E-6 が担う**。
 
 **本モジュールは 02-design のテスト戦略「結合テスト対象」で 2 契約の担当である**——`entrypoint → firewall`
 （呼び出し元担当の原則どおり）と `cli → コンテナ/entrypoint`（呼び出し元 cli が bash で自動テストを持たないため
@@ -207,8 +257,9 @@ CLI が動的割り当てで公開する。
 | （自動テストなし・実機確認） | 結合 | `/workspace` 所有者に UID/GID が追従しファイル所有権齟齬が無い | 契約: cli→コンテナ/entrypoint／要件 core/2 |
 | （自動テストなし・実機確認） | 結合 | 認証が共有ボリューム経由でコピー・30秒書き戻しされ再接続できる | 契約: cli→コンテナ/entrypoint／要件 core/3 |
 | （自動テストなし・実機確認。ローカル検証済み: symlink 化・`chmod 600`・共有 `codex/` 作成・書き戻し伝播） | 結合 | codex 認証（auth.json）がコピーされ `codex` が再ログイン不要で動き、更新が 30 秒で共有ボリュームへ書き戻る | 契約: cli→コンテナ/entrypoint／要件 core/3-7,8,9（E2E-6） |
-| （自動テストなし・実機確認。2026-07-31 実測済み: 生成内容・所有権と、`codex exec` の成果物〈`/workspace` に残ったファイル〉で確認。対照として `-c sandbox_mode="workspace-write"` では `exited 1`＋`bwrap` エラーで成果物なしを確認し、既定設定が故障を解消していることを確定） | 単体 | `config.toml` が無いコンテナで起動すると `sandbox_mode = "danger-full-access"`・`approval_policy = "never"` を含む `config.toml` が生成され、codex のシェルコマンドが成功する | 要件 core/12-4,12-5（E2E-6） |
-| （自動テストなし・実機確認。2026-07-31 実測済み: 利用者設定を置いて `docker restart` し md5 が前後で不変） | 単体 | 利用者が書き換えた `config.toml` を持つコンテナを再起動しても内容が変わらない | 要件 core/12-6 |
+| （自動テストなし・実機確認。**2026-07-31 実施済み**: `claude-dev-claude:latest` に更新後の entrypoint をマウントした使い捨てコンテナで、3 鍵を含む `config.toml` が生成され所有者が `dev:dev`・パーミッション 644 になることを確認。生成物は `python3 -m tomllib` でパースでき、`sandbox_mode`/`approval_policy`/`features.use_legacy_landlock` の 3 鍵が読み取れる。codex のシェル実行成功は E2E-6 が担う） | 単体 | `config.toml` が無いコンテナで起動すると既定 3 鍵（`sandbox_mode`・`approval_policy`・`features.use_legacy_landlock`）を含む `config.toml` が生成され、codex のシェルコマンドが成功する | 要件 core/12-4,12-5（E2E-6） |
+| （自動テストなし・実機確認。**2026-07-31 実施済み**: `model`・`approval_policy = "on-request"`・`[tui]`・**複数行文字列の中に `[features]` を含む** `config.toml` を置いて `docker restart` → 利用者の鍵は値ごと不変（`note` が `'[features]\ntext\n'` のまま）、不足していた `sandbox_mode` と `[features] use_legacy_landlock` だけが追記され、再起動しても md5 不変＝冪等。ホスト側の関数単体ハーネス 15 ケースを `tomllib` でパース検証済み〈トップレベルのみ／`[features]` がファイル途中／ドット記法／インラインテーブル（鍵あり・鍵なし）／配列テーブル／quoted key／複数行文字列／コメントアウト／3 鍵とも既存／空ファイル／壊れた TOML／CRLF／末尾改行なし〉） | 単体 | 利用者が書き換えた `config.toml` を持つコンテナを再起動しても既存の鍵と値は変わらず、不足していた既定鍵だけが追記される（2 回目の再起動で内容が変化しない＝冪等） | 要件 core/12-6 |
+| （自動テストなし・実機確認。**2026-07-31 実施済み**: entrypoint が生成した 3 鍵の `config.toml` を持つコンテナで、**フラグを付けずに** `codex sandbox -- /bin/true` が exit 0（＝config 経由で landlock が起動する）、同経路の `touch /tmp/e2e-deny` は `Permission denied` でファイル未生成、`cat` による読み取りは成功。`--enable use_legacy_landlock` を明示した形でも exit 0。`codex exec -s read-only` を伴う実依頼は認証が要るため E2E-6 が担う） | 単体 | `--sandbox read-only` を明示指定した呼び出しでも codex の読み取りが成功し、書き込みは拒否される | 要件 core/12-9（E2E-6） |
 | （自動テストなし・実機確認） | 結合 | VNC イメージで Chrome/noVNC が起動し chrome-devtools MCP で操作できる | 要件 core/11 |
 
 実行方法: 自動テストコマンドなし。`claude-dev start`（VNC あり/`--no-vnc`）でコンテナを起動し、
@@ -217,6 +268,12 @@ CLI が動的割り当てで公開する。
 ## 既知の制限・技術的負債
 
 - 自動テストが無く、回帰検出は実機確認に依存する。
+- `config.toml` の差し替えは inode を作り直すため、**POSIX ACL・拡張属性は引き継がれない**
+  （復元するのは uid/gid と mode のみ）。設定ファイルに ACL を付ける運用は想定していない。
+- 既存 `config.toml` の `features` がインラインテーブルで、その中に `use_legacy_landlock` が
+  無い場合、TOML の仕様上インラインテーブルへ後から要素を足せないため landlock を補完できない
+  （警告のみ・無変更）。その環境で読み取り専用の依頼を使うには、利用者が `[features]` テーブル形式へ
+  書き換えるか、呼び出し側で `--enable use_legacy_landlock` を明示する必要がある。
 - `host-hooks.json` の名称は歴史的経緯で、実際には `hooks` と `env` の両方を運ぶ（改名していない）。
 - VNC 関連ポート（VNC 5999・Chrome DevTools 9222）はコンテナ内限定。ホスト公開は noVNC 6080 のみ。
 - `docker compose` の host 公開ポート（`ports:`）衝突は `COMPOSE_PROJECT_NAME` 一意化では解決せず、
@@ -226,7 +283,8 @@ CLI が動的割り当てで公開する。
 
 - `CLAUDE.md` はマーカー範囲だけを毎回再生成するため、マーカー外にユーザーが書いた内容は保持される。
 - codex の `config.toml` はプロジェクト配下（`/workspace/.codex/config.toml`）の実体である。既定へ
-  戻したいときは削除して再起動すれば再生成される（存在する限り entrypoint は触らない）。
+  戻したいときは削除して再起動すれば 3 鍵が再生成される。ファイルが存在する場合に entrypoint が行うのは
+  **不足している既定鍵の追記だけ**で、既に書かれている鍵とその値は変更しない（要件 core/12-6）。
 - `--kvm`/`--vm` の切り替えは再起動で追従する（KVM 追記の有無・VM_DEV.md 生成が変わる）。
 - VM モード時、`vm-up.sh` は `$USERNAME` 権限で走るため、root 所有のマウント点を entrypoint が事前に
   `install -d -o $USERNAME` で用意している（これが無いと `mkdir` が Permission denied で失敗する）。

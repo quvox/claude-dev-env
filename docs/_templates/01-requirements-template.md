@@ -2,15 +2,15 @@
 id: <domain-slug>              # 業務領域スラッグ。最初は core(全体で1ファイル)でよい
 layer: requirements
 title: <業務領域名> 要件定義書
-version: 0.1.0                 # MAJOR.MINOR.PATCH。意味に影響する変更はMINOR以上、
+version: 1.0.0                 # 初版は 1.0.0(履歴エントリ不要)。MAJOR.MINOR.PATCH。意味に影響する変更はMINOR以上、
                                # 誤字・表記等の軽微修正はPATCHのみ(検証を失効させない)。迷ったらMINOR
 updated: YYYY-MM-DD
 # verified:                    # /doc-check がPASS時に記録する検証の証拠(このブロックの有無+照合が
 #   at: YYYY-MM-DD             # 検証状態のすべて。statusフィールドは存在しない)
 #   version: X.Y.Z             # 検証した時点の自分自身の version(照合はMAJOR.MINORのみ)
-#   against:                   # 検証した時点の source 各ドキュメントの version
+#   against:                   # 検証した時点の source 各ドキュメントの version(X.Y.Z で書く。照合はMAJOR.MINORのみ)
 #     - doc: <sourceのパス>
-#       version: X.Y
+#       version: X.Y.Z
 summary: >
   (要件の1〜3行要約)
 keywords: []                   # 上流の keywords を継承しつつ必要に応じ追加
@@ -37,6 +37,10 @@ source:                        # 00-requests/ のうち参照するファイル�
   - WHERE:      <機能>が有効な場合、システムは<応答>しなければならない
 各受け入れ基準は「テストが1つ書ける粒度」であること。
 曖昧語(適切に・正しく・高速に)は禁止。数値・条件に置換する。
+深さの基準(/doc-check チェックD11): 正常系だけの基準は未完成とみなす。各要件について
+境界値(上限・下限・空・最大長)と異常系(入力不正・重複・タイムアウト・権限なし)の
+振る舞いを明記する。ここで書き切らなかった分は実装時の「未決点」として跳ね返り、
+層をまたぐ手戻りになる。
 -->
 
 ## 概要

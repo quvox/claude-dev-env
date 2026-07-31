@@ -9,7 +9,7 @@ verified:
   version: 1.0.0
   against:
     - doc: docs/02-design/system.md
-      version: 1.8
+      version: 1.9
 summary: >
   コンテナ内でユーザが使う 2 つの資産の実装説明。レート制限リセット待ちユーティリティ
   wait-limit-reset.sh と、実行時に ~/.tmux.conf へマウントされる tmux 設定 tmux.conf。

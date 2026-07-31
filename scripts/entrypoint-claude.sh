@@ -241,18 +241,173 @@ if [ ! -f "$LOCAL_CLAUDE/settings.json" ]; then
 fi
 
 # --- codex の config.toml もコンテナローカル（共有しない）---
-# codex 自前のサンドボックス（Linux では bubblewrap 実装）はこのコンテナ内では起動できない。
-# Docker 既定 seccomp が CLONE_NEWUSER を拒否し、それを外しても docker-default AppArmor が
-# mount --make-rslave / を拒否する 2 段構えのため。既定の sandbox_mode（read-only /
-# workspace-write）のままでは codex が起こすシェルコマンドが例外なく exited 1 になるので、
-# 隔離はコンテナ境界に委ねて codex 側のサンドボックスを無効化する（D-27 ⑥ / 要件 core/12-4,12-5）。
+# 既定 3 鍵を保証する（要件 core/12-5,12-6,12-9 / D-27 ⑥）:
+#   sandbox_mode = "danger-full-access"   … 既定でサンドボックスを無効化
+#   approval_policy = "never"
+#   [features] use_legacy_landlock = true … --sandbox read-only を明示要求された場合の受け皿
+# 前 2 鍵が必要な理由: codex 自前のサンドボックス（Linux では bubblewrap 実装）はこのコンテナ内では
+# 起動できない。Docker 既定 seccomp が CLONE_NEWUSER を拒否し、それを外しても docker-default
+# AppArmor が mount --make-rslave / を拒否する 2 段構えのため。既定の sandbox_mode のままでは
+# codex が起こすシェルコマンドが例外なく exited 1 になるので、隔離はコンテナ境界に委ねる。
+# 3 鍵目が必要な理由: --sandbox read-only のような明示指定は config の既定を上書きして bwrap 経路へ
+# 戻ってしまう。landlock はユーザー名前空間を必要としないため confinement を緩めずに成立する。
 # コンテナ側の --security-opt は緩めない（要件 core/12-7。ホスト CLI の責務）。
-# 既存ファイルは内容を読まず一切変更しない（利用者が書いた設定を保持。要件 core/12-6）。
-if [ ! -f "$LOCAL_CODEX/config.toml" ]; then
-    printf '%s\n%s\n' 'sandbox_mode = "danger-full-access"' 'approval_policy = "never"' \
-        > "$LOCAL_CODEX/config.toml"
-    chown "$USERNAME":"$USERNAME" "$LOCAL_CODEX/config.toml"
-fi
+#
+# 既存ファイルがある場合は「書かれている鍵とその値を一切書き換えず、不足している鍵だけを追記」する
+# （要件 core/12-6・冪等）。TOML はテーブル見出し以降の鍵が当該テーブルに属するため、単純な末尾追記は
+# トップレベル鍵の意味を変えてしまう。よって追記位置を次のとおり固定する:
+#   - sandbox_mode / approval_policy … 最初のテーブル見出し（[...] 行）の直前
+#   - use_legacy_landlock            … [features] 見出しの直後（無ければ末尾に見出しごと）
+# 位置を特定できない（TOML として壊れている）場合は何も書かず警告のみ出して継続する。
+ensure_codex_config() {
+    _cfg="$LOCAL_CODEX/config.toml"
+
+    if [ ! -f "$_cfg" ]; then
+        printf '%s\n%s\n\n%s\n%s\n' \
+            'sandbox_mode = "danger-full-access"' \
+            'approval_policy = "never"' \
+            '[features]' \
+            'use_legacy_landlock = true' \
+            > "$_cfg"
+        chown "$USERNAME":"$USERNAME" "$_cfg"
+        return 0
+    fi
+
+    # 既存ファイルの補完には TOML パーサが要る。行単位の正規表現では、複数行文字列の中の
+    # `[features]` を見出しと誤認する・quoted key（`"sandbox_mode" = ...`）を見落として
+    # 重複定義を作る・`[[features]]`（配列テーブル）を通常テーブルと混同する、といった形で
+    # 「既存の鍵と値を変更しない」を破りうるため（2026-07-31 の独立レビュー指摘）。
+    if ! command -v python3 >/dev/null 2>&1 || ! python3 -c 'import tomllib' >/dev/null 2>&1; then
+        echo "⚠️  python3/tomllib が無いため codex config.toml の既定鍵補完をスキップします: $_cfg"
+        return 0
+    fi
+
+    python3 - "$_cfg" <<'PYEOF'
+import os, re, sys, tempfile, tomllib
+
+path = sys.argv[1]
+WANT = [(("sandbox_mode",),  'sandbox_mode = "danger-full-access"',  "danger-full-access"),
+        (("approval_policy",), 'approval_policy = "never"',          "never"),
+        (("features", "use_legacy_landlock"), "use_legacy_landlock = true", True)]
+
+def flatten(d, prefix=()):
+    out = {}
+    for k, v in d.items():
+        p = prefix + (k,)
+        if isinstance(v, dict):
+            out.update(flatten(v, p))
+        else:
+            out[p] = v
+    return out
+
+try:
+    raw = open(path, "rb").read()
+    orig = tomllib.loads(raw.decode("utf-8"))
+except Exception as e:
+    print(f"⚠️  codex config.toml を TOML として読めません。既定鍵の補完をスキップします: {path} ({e})")
+    sys.exit(0)
+
+oflat = flatten(orig)
+missing = [w for w in WANT if w[0] not in oflat]
+if not missing:
+    sys.exit(0)                                   # 3 鍵とも揃っている（冪等）
+
+text = raw.decode("utf-8")
+nl = "\r\n" if "\r\n" in text else "\n"
+lines = text.splitlines()
+
+need_top = [m for m in missing if len(m[0]) == 1]
+need_ll  = [m for m in missing if m[0] == ("features", "use_legacy_landlock")]
+
+# features が配列テーブル（[[features]]）等で定義済みなら、既存値を変えずに鍵を足す方法が無い。
+feat = orig.get("features")
+ll_blocked = bool(need_ll) and feat is not None and not isinstance(feat, dict)
+ll_reason = "既存の features が通常テーブルではない（配列テーブル等）"
+
+# [features] 見出し行。空白・quoted key（["features"]）・行末コメントを許容する。
+HDR = re.compile(r"""^\s*\[\s*(?:features|"features"|'features')\s*\]\s*(?:#.*)?\r?$""")
+hdr_idx = next((i for i, l in enumerate(lines) if HDR.match(l)), None)
+
+def build(strategy):
+    """挿入位置の候補を 1 つ作る。作れない戦略には None を返す。"""
+    out = list(lines)
+    if need_ll and not ll_blocked:
+        if strategy == "after_header":
+            if hdr_idx is None:
+                return None
+            out.insert(hdr_idx + 1, "use_legacy_landlock = true")
+        else:                       # "append": 末尾に [features] ごと足す
+            out = out + ["", "[features]", "use_legacy_landlock = true"]
+    # トップレベル鍵はファイル先頭へ。先頭は常にトップレベルなので最も安全。
+    if need_top:
+        out = [m[1] for m in need_top] + out
+    return nl.join(out) + nl
+
+def verify(cand, expect_ll):
+    """既存の全キーパスの値が不変で、増分が意図した鍵だけかを意味的に確かめる。"""
+    try:
+        new = tomllib.loads(cand)
+    except Exception:
+        return None
+    nflat = flatten(new)
+    for kp, v in oflat.items():
+        if kp not in nflat or nflat[kp] != v:
+            return None
+    want = {m[0]: m[2] for m in need_top}
+    if expect_ll:
+        want[("features", "use_legacy_landlock")] = True
+    extra = set(nflat) - set(oflat)
+    if extra != set(want) or any(nflat[kp] != want[kp] for kp in extra):
+        return None
+    return cand
+
+cand = None
+if not ll_blocked:
+    # 見出しの直後 → 末尾に見出しごと、の順に試し、検証を通った最初の候補を採る。
+    # 行単位の見出し検出が外れても（複数行文字列の中の [features] 等）、検証が弾いて次へ進む。
+    for st in ("after_header", "append"):
+        c = build(st)
+        if c is not None and verify(c, bool(need_ll)):
+            cand = c
+            break
+    if cand is None and need_ll:
+        ll_blocked = True
+        ll_reason = "既存の features 定義と両立する追記位置が見つからない"
+if cand is None:
+    if ll_blocked:
+        print(f"⚠️  landlock を追記できません（{ll_reason}）: {path}")
+        if not need_top:
+            sys.exit(0)                      # 追記できるものが何も無い＝無変更
+        cand = verify(build("none"), False)  # トップレベル鍵だけ補完する
+    if cand is None:
+        print(f"⚠️  既定鍵を安全に追記できないため書き込みません（無変更）: {path}")
+        sys.exit(0)
+
+# --- 置き換え: 一時ファイルを作って属性を移し、rename で原子的に差し替える ---
+# リダイレクトによる truncate は使わない（途中で失敗すると元ファイルを壊すため）。
+st = os.stat(path)
+d = os.path.dirname(path) or "."
+fd, tmp = tempfile.mkstemp(dir=d, prefix=".config.toml.")   # O_EXCL・0600
+try:
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        f.write(cand)
+    # chown を先、chmod を後にする（逆順だと Linux が setuid/setgid ビットを落とす）。
+    # 所有者を復元できないなら差し替えない——利用者のファイルの所有者を変えてしまうため。
+    os.chown(tmp, st.st_uid, st.st_gid)
+    os.chmod(tmp, st.st_mode & 0o7777)
+    os.replace(tmp, path)
+except Exception as e:
+    try:
+        os.unlink(tmp)
+    except OSError:
+        pass
+    print(f"⚠️  codex config.toml の書き換えに失敗しました（元ファイルは無変更）: {path} ({e})")
+    sys.exit(0)
+print("✓ codex config.toml に不足していた既定鍵を追記しました: " + path
+      + ("（landlock を除く。上記の理由により）" if ll_blocked else ""))
+PYEOF
+}
+ensure_codex_config || true
 
 # --- ホストの hooks / env 設定をマージ ---
 # claude-dev start 時にコピーされた host-hooks.json があれば settings.json にマージ

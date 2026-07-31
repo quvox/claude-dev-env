@@ -2,14 +2,14 @@
 id: cli
 layer: impl
 title: cli 実装説明書
-version: 1.8.0
+version: 1.10.0
 updated: 2026-07-31
 verified:
   at: 2026-07-31
-  version: 1.8.0
+  version: 1.10.0
   against:
     - doc: docs/02-design/system.md
-      version: 1.8
+      version: 1.9
 summary: >
   ホスト Linux 用 `claude-dev`（単一 bash スクリプト）の実装。case ディスパッチで
   start/stop/list/attach/forward/orchestrate/login/login-codex 等のサブコマンドを提供し、Docker
@@ -190,8 +190,15 @@ source:
 - **`list`**: 全 Claude コンテナ（`ancestor` フィルタ）を NAME/STATUS/WORKSPACE/noVNC/各フォワードで列挙し、
   最後に proxy 稼働状態を表示。
 - **`ssh-keys [reset|select]`**: 対象はカレントプロジェクト。引数なし/`select` は `select_ssh_keys_interactive`。
-  `reset` は `.claude-dev.yaml` から `ssh_keys` 関連行を `grep -vE` 除去（他記述なしなら削除）し、専用 agent
-  （`<NAME>.sock`/`.pid`）を kill・削除。その他は使い方表示し `exit 1`。
+  `reset` は `.claude-dev.yaml` から `grep -vE '^ssh_keys:|^[[:space:]]*-[[:space:]]|^# claude-dev プロジェクト設定|^# 再選択は'`
+  で該当行を除去し（残りが空白のみならファイルごと削除）、専用 agent（`<NAME>.sock`/`.pid`）を
+  kill・削除する。その他は使い方表示し `exit 1`。
+  **削除は best-effort:** kill と削除の失敗はすべて `|| true` で握りつぶし、残骸の有無を再確認せずに
+  完了メッセージを出す。権限等で消せなかった場合、成功表示にもかかわらず残骸が残る（次回 `start` の
+  `ensure_ssh_agent` 側で検出・案内される）。
+  **注意（実装の制約）:** この除去は**セクション境界を解釈しない**。`ssh_keys:` 配下かどうかに関わらず
+  ファイル中の全リスト項目（`- ` で始まる行）が消える。現在 `.claude-dev.yaml` は `ssh_keys` しか
+  持たないため実害は無いが、他のリスト形式のキーを足す場合はこの実装を先に直す必要がある。
 - **`upgrade`**: 3 イメージ（`claude-cli`/`claude-vnc`/docker-proxy）を `--no-cache` 再ビルド（反映は stop→start）。
 - **`firewall`**: 稼働中コンテナで `iptables -L OUTPUT -n --line-numbers`。
 - **`reset`**: 確認プロンプト後、全 Claude コンテナ・全 `fwd-*`・proxy を削除、共有 3 ボリューム・全
@@ -223,6 +230,7 @@ source:
 | イメージ未ビルド | `require_setup`/`ensure_docker_proxy_container` | 自動ビルド（build-arg 付き） | core/1,9 |
 | `.claude-dev.yaml` 不在 | `ensure_project_config` | TTY は鍵選択、非 TTY は空作成。停止しない | core/4 |
 | SSH 鍵 0 件/存在しない鍵 | `ensure_ssh_agent` | 転送なしで続行し `ssh_keys:` 記述を案内、欠落鍵は警告スキップ | core/4 |
+| agent ソケットのパスがソケットでない（Docker が bind-mount のソースとして作った root 所有ディレクトリ等の残骸） | `ensure_ssh_agent` | `rm -rf` で自己修復。消せなければ**停止せず** `sudo rm -rf` を案内し SSH 転送なしで続行（`set -e` 下で `rm -f` が失敗すると `start` ごと落ちるため） | core/4 |
 | noVNC ポート競合 | `start` の `docker run` リトライ | 途中コンテナ掃除→別ポートで最大 20 回再試行 | core/1,6 |
 | tmux 起動タイムアウト | `start` L930〜 | 終了せず状況案内し `exit 0`（コンテナは稼働継続） | core/1 |
 | コンテナ未起動での操作 | `code`/`attach`/`forward`/`ports`/`firewall` | 日本語エラーで `exit 1` | core/1,6 |
@@ -242,10 +250,13 @@ bash スクリプトのため**自動テストランナーは存在しない**�
 |---|---|---|---|
 | （自動テストなし） | — | `start`→マウント/認証/再接続、`list`/`stop`（proxy 連動） | core/要件1-1〜6 未検証(自動テストなし) |
 | （自動テストなし） | — | `login`→認証ボリューム保存、`logout`→削除 | core/要件3-1,2,5 未検証(自動テストなし) |
-| （自動テストなし。書き戻し/コピー/`.gitignore` 経路はローカル検証済み。対話デバイス認証は実機） | — | `login-codex`→デバイス認証→`codex/auth.json` 保存、`start`→`.codex/auth.json` コピー | core/要件3-6,7 未検証(自動テストなし) |
-| （自動テストなし） | — | `ssh-keys` 対話選択→`.claude-dev.yaml` 生成、専用 agent 限定転送 | core/要件4-4 ほか 未検証(自動テストなし) |
-| （自動テストなし） | — | `forward`/`unforward`/`ports`（8100〜割当） | core/要件6-2,3,4 未検証(自動テストなし) |
-| （自動テストなし） | — | `orchestrate`→未起動自動起動・生存判定 attach/resume | orchestration/要件13-2 未検証(自動テストなし) |
+| （自動テストなし。`start` によるコピー経路と 30 秒書き戻しは `scripts/e2e6-codex.sh` の ⑤⑥ が自動判定する〈2026-07-31 実施: PASS〉。`login-codex` の対話デバイス認証はブラウザ操作を伴うため無人化不可） | — | `login-codex`→デバイス認証→`codex/auth.json` 保存、`start`→`.codex/auth.json` コピー | core/要件3-6,7 未検証(自動テストなし。3-7/3-8 は E2E-6 スクリプトでカバー) |
+| （自動テストなし） | — | `ssh-keys` 対話選択→`.claude-dev.yaml` 生成、専用 agent 限定転送（秘密鍵ファイルを渡さない／`ssh_keys` 指定鍵だけ登録／未指定時は転送なしで案内） | core/要件4-1,4-2,4-3,4-4 未検証(自動テストなし) |
+| （自動テストなし） | — | `start` 直後は Webアプリ用のポートが公開されていない（`docker port <name>` に noVNC 6080 以外が現れない）→`forward`/`unforward`/`ports`（8100〜割当） | core/要件6-1,6-2,6-3,6-4 未検証(自動テストなし) |
+| （自動テストなし） | — | `orchestrate`→未起動自動起動・生存判定 attach/resume | orchestration/要件13-2 のうち cli 担当分（起動・attach/resume の入口）未検証(自動テストなし)。13-1（外部制御ループ）・13-3（文脈の再構成）は orchestrator の担当 |
+| （自動テストなし。実機: `docker inspect <container> --format '{{.HostConfig.SecurityOpt}}'` が空、かつ `claude-dev` の `docker run` 行に `--security-opt` が現れないこと） | — | `start` がコンテナ側の seccomp/AppArmor を緩めない（`--security-opt` を付けない） | core/要件12-7 未検証(自動テストなし) |
+| （自動テストなし。実機: 異なる 2 プロジェクトで同時に `start` し、各コンテナで `printenv COMPOSE_PROJECT_NAME` が別値になり、両者で `docker compose up` してもネットワーク名・コンテナ名が衝突しないこと） | — | `start` が `NAME` を compose 互換名へ正規化し `-e COMPOSE_PROJECT_NAME` で渡す | core/要件7-5 未検証(自動テストなし) |
+| （自動テストなし。実機: VNC ありで `start` → `docker port <name> 6080` が 6080〜の割当を返し、`ports`/`list` が noVNC URL を表示すること） | — | VNC あり起動時に noVNC ポートを 6080〜から動的割当して公開し、URL を案内する（Chrome/VNC の起動自体は entrypoint 側） | core/要件11-1 のうち cli 担当分（noVNC ポート割当と URL 表示）未検証(自動テストなし)。11-1 の VNC/Chrome/noVNC 起動と 11-2（MCP 設定）は entrypoint、11-3（日本語入力）は devcontainer の担当 |
 
 実行方法: 自動テストなし。実機で `claude-dev <subcommand>` を実行して確認する。
 
@@ -263,6 +274,10 @@ bash スクリプトのため**自動テストランナーは存在しない**�
   （`docs/knowledge/host-credentials-are-not-imported-into-containers.md`）。ホストから読むのは
   `~/.claude/settings.json` の `hooks`/`env` と `~/.gitconfig`・`~/.config/gh`(RO) のみ。
 - コンテナ名＝ディレクトリ名のため、別パスでも同名ディレクトリは同一セッション扱いになる。
+- `~/.claude-dev/agents/<name>.sock` にソケット以外のもの（多くは Docker デーモンが bind-mount の
+  ソースとして作った root 所有の空ディレクトリ）が残ることがある。現在は `docker run` へ渡す前に
+  `[ -S ... ]` で検査するので新たに作られることはないが、過去に作られた残骸は自動では消せない場合が
+  あり、その場合は案内を出して SSH 転送なしで続行する（起動自体は止めない）。
 - `.claude-dev.yaml` の SSH 鍵はローカル設定のみ参照し、グローバルへのフォールバックや鍵推測はしない
   （意図的な安全側設計）。
 

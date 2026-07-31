@@ -9,7 +9,7 @@ verified:
   version: 1.1.0
   against:
     - doc: docs/02-design/system.md
-      version: 1.8
+      version: 1.9
 summary: >
   Claude Code のフックスクリプト2種。save_prompt.sh が hook 入力 JSON から直近プロンプトを
   一時ファイルへ保存し、sendslackmsg.sh がそれを本文に添えて Slack へ通知する。両者はイメージに

@@ -9,7 +9,7 @@ verified:
   version: 1.5.0
   against:
     - doc: docs/02-design/system.md
-      version: 1.8
+      version: 1.9
 summary: >
   コンテナイメージ（claude / claude-vnc / docker-proxy）を GHCR へ毎日・マルチアーキ
   (amd64/arm64) で push する GitHub Actions ワークフロー。prepare→build(matrix, push-by-digest)

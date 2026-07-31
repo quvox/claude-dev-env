@@ -11,11 +11,11 @@ verified:
     - doc: docs/00-requests/request.md
       version: 1.1
     - doc: docs/00-requests/decisions.md
-      version: 1.6
+      version: 1.7
     - doc: docs/00-requests/glossary.md
-      version: 1.2
+      version: 1.3
     - doc: docs/00-requests/acceptance.md
-      version: 1.2
+      version: 1.3
 summary: >
   プロジェクトに1体のAIオーケストレーターを立て、ブレインストーミング/実行の2モード・外部制御ループ・
   タスク単位介入・相互レビュー品質ゲート・中断復旧により、人間の管理負荷を下げ並列度を上げる要件。

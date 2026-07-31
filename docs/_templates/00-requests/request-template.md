@@ -2,7 +2,7 @@
 id: request                    # 00-requests/ パッケージの中核ファイル(固定)
 layer: request
 title: <システム名> 要求定義書
-version: 0.1.0                 # MAJOR.MINOR.PATCH。意味に影響する変更はMINOR以上、
+version: 1.0.0                 # 初版は 1.0.0(履歴エントリ不要)。MAJOR.MINOR.PATCH。意味に影響する変更はMINOR以上、
                                # 誤字・表記等の軽微修正はPATCHのみ(検証を失効させない)。迷ったらMINOR
 updated: YYYY-MM-DD
 # verified:                    # /doc-check がPASS時に記録する検証の証拠(このブロックの有無+照合が
