@@ -26,10 +26,10 @@ source:
 
 `claude-dev-mac` は Linux 版 `cli`（`claude-dev`）の macOS（Docker Desktop）適応版で、単一の
 bash スクリプトである。サブコマンド体系・定数・大半のヘルパーは `cli` と同一実装であり、本書は
-**macOS 固有の差分のみ**を記述する。共通挙動は [cli.md](./cli.md) を正本とする。差分は 4 点＋
+**macOS 固有の差分のみ**を記述する。共通挙動は [cli.md](./cli.md) を正本とする。差分は 5 点＋
 プラットフォーム——(1) SSH agent 転送を専用 agent＋socat TCP ブリッジで行う、(2) Docker ソケット
-を検出する、(3) VM/KVM を早期拒否する、(4) ポートフォワードを直結案内する、(5) arm64 ネイティブで
-ビルド/実行する。対応要件は core/10（[全体設計](../02-design/system.md) の cli-mac 行）。コンテナ内
+を検出する、(3) VM/KVM を早期拒否する、(4) ポートフォワードを直結案内する、(5) **`orchestrate` が
+生存判定・resume を持たない簡易版**、(6) arm64 ネイティブでビルド/実行する。対応要件は core/10（[全体設計](../02-design/system.md) の cli-mac 行）。コンテナ内
 資産（firewall・docker-proxy・tmux.conf・entrypoint）は Linux 版と共有し、CLI だけを分岐させる。
 
 ## ファイル構成
@@ -66,7 +66,7 @@ stop_ssh_bridge <name>                                    # ブリッジ socat �
   - 鍵解決は **`<PROJECT_DIR>/.claude-dev.yaml` の `ssh_keys:` のみ**（`_parse_ssh_keys_yaml`
     の簡易パース、`~`→`$HOME` 展開）。グローバル config へのフォールバック・自動生成・対話選択は
     しない。無ければ 0 件＝SSH 転送なし。鍵解決方針・`ssh_keys` スキーマ・`ssh-keys` サブコマンドは
-    cli と共通（cli.md 正本）。
+    cli と共通（cli.md 正本。`reset` の YAML 除去がセクション境界を見ない点も共通）。
   - `ensure_dedicated_agent`:`ssh-add -l` の終了コードが 2（接続不可）または sock 非存在なら
     `ssh-agent -a <sock>` で（再）起動。登録済み鍵は指紋（`ssh-keygen -lf`）突き合わせで
     スキップし、未登録分をパスフレーズなし一括（`SSH_ASKPASS=/bin/false`）→残りを対話追加。
@@ -113,8 +113,26 @@ stop_ssh_bridge <name>                                    # ブリッジ socat �
   `exit 1`。この判定は `require_setup`（イメージ自動ビルド）**より前**に行い無駄なビルドを避ける。
   cli にある `KVM_OPTS`・`VM_OPTS`・VM 用長時間待機（tmux 待ちは常に 30 秒上限）は**存在しない**。
   `code` は VM 判定（`CLAUDE_DEV_VM` printenv・`--append-system-prompt` 注入）を行わず常に
-  `tmux new-window -t main "claude"`。`orchestrate` は `vm.env` 読み込みを挟まない（それ以外は
-  cli と同一）。
+  `tmux new-window -t main "claude"`。
+
+### orchestrate（生存判定・resume を持たない簡易版）
+
+- **責務:** コンテナ内の `claude-orchestrator` を起動する。**Linux 版とは実装が異なる**（cli.md の
+  記述をそのまま適用してはならない）。
+- **cli との差分（実装が正）:**
+  - **未起動時に自動起動しない。** `is_running` が偽なら「`claude-dev start` を先に実行」と表示して
+    `exit 1`（cli は `CLAUDE_DEV_NO_ATTACH=1 start` で自動起動する）。
+  - **コントローラの生存判定を行わない。** cli の `pgrep -f "claude-orchestrator --workspace"` に
+    相当する分岐が無く、attach か resume かを判定しない。毎回 `tmux new-window` で新規に起動する。
+  - **専用セッションを使わない。** cli は `orch-<project>-main` セッションを `new-session -d` で
+    作るが、mac 版は既存の `main` セッションに `tmux new-window -t main -c /workspace "<cmd>"` で
+    ウィンドウを足し、`tmux attach -t main` する。
+  - `/etc/claude-dev/vm.env` の読み込みを挟まない（VM モード非対応のため）。
+  - 引数解析（`--fresh` と `<ゴール>` の切り出し、ゴールの `"` エスケープ）は cli と同じ。
+- **既知の帰結:** 実行中の run に再接続したいときも新しいウィンドウで
+  `claude-orchestrator` がもう 1 つ起動しうる。復旧は `claude-dev attach` で `main` セッションへ
+  入り直す運用でしのぐ。契約「cli(orchestrate)→orchestrator」の生存判定・attach/resume 分岐は
+  **macOS では未実装**（orchestration/13 の macOS 差分。cli.md の記述は Linux 版のもの）。
 
 ### ポートフォワード直結（`forward` / `help`)
 
@@ -170,8 +188,8 @@ cli-commands 画面）。コンテナ→docker-proxy の HTTP 契約は docker-p
 
 | 異常系 | 実装箇所 | 実際の振る舞い | 対応する要件 |
 |---|---|---|---|
-| 必須コマンド不足（docker/jq/**socat**） | `check_host_deps`（`start` 冒頭） | 不足分を列挙し導入案内（docker=Docker Desktop URL、他=`brew install <cmd>`）して `exit 1` | core/10（socat は macOS 差分） |
-| `socat` 不在（SSH ブリッジ） | `ensure_ssh_bridge` | `brew install socat` を案内し非0で戻る。SSH 転送なしで start 継続 | core/10 受け入れ基準2 |
+| 必須コマンド不足（docker/jq/**socat**） | `check_host_deps`（`start` 冒頭） | 不足分を列挙し導入案内（docker=Docker Desktop URL、他=`brew install <cmd>`）して `exit 1` | core/10（socat は macOS 差分。Linux 版の必須は docker/jq のみ） |
+| `socat` 不在 | `check_host_deps`（`start` 冒頭） | **`docker`/`jq` と同じ必須コマンド**として扱い、`brew install socat` を案内して `exit 1`（`ensure_ssh_bridge` の「非0で戻り SSH 転送なしで継続」経路は、通常の `start` では到達しない。socat は SSH agent 転送に必須のため必須扱いにしている） | core/10 受け入れ基準2 |
 | `--kvm`/`--vm`/`--vm-fresh` 指定 | `start` フラグ解析 | 非対応理由を表示し `exit 1`（ビルド前） | core/10 受け入れ基準2 |
 | SSH 鍵未選択 | `start` SSH 部 | 日本語案内（`ssh-keys` 選択 or `.claude-dev.yaml` 作成）を出し転送なしで継続 | core/10（停止しない方針は cli 共通） |
 | agent ソケットのパスがソケットでない（Docker が bind-mount のソースとして作った root 所有ディレクトリ等の残骸） | `ensure_dedicated_agent` | `rm -rf` で自己修復。消せなければ**停止せず** `sudo rm -rf` を案内し SSH 転送なしで続行（`set -e` 下で `rm -f` が失敗すると `start` ごと落ちるため） | core/10（cli 共通） |
@@ -189,6 +207,7 @@ cli-commands 画面）。コンテナ→docker-proxy の HTTP 契約は docker-p
 | （自動テストなし・macOS 実機確認） | 単体 | `make install` で `/usr/local/bin/claude-dev`→`claude-dev-mac` symlink | core/10-基準1 |
 | （自動テストなし・macOS 実機確認） | 単体 | 鍵選択後 `start` で 127.0.0.1 ブリッジ確立・agent 転送到達／`forward` 後 `http://localhost:<port>` 直結／`--vm` 早期拒否 | core/10-基準2 |
 | （自動テストなし・macOS 実機確認） | 単体 | Apple Silicon で arm64 ネイティブ起動（エミュレーションなし） | core/10-基準3 |
+| （自動テストなし・macOS 実機確認） | 単体 | `orchestrate` が未起動時に `exit 1`、起動中は `main` セッションへ新規ウィンドウを足して attach する（生存判定・resume は行わない＝Linux 版との差分） | orchestration/13 の macOS 差分 — **未実装の観点あり（下記の既知の制限）** |
 
 実行方法:macOS 実機で `claude-dev`（=`claude-dev-mac`）を直接操作して確認する。core/10 の
 全受け入れ基準は上記のとおり **未検証(自動テストなし)** ＝実機確認扱い。
@@ -198,6 +217,11 @@ cli-commands 画面）。コンテナ→docker-proxy の HTTP 契約は docker-p
 - top-level `reset` はコンテナ・ボリューム・イメージを削除するが、プロジェクト専用 agent/ブリッジ
   （`${HOME}/.claude-dev/agents/`）は掃除しない。掃除は `ssh-keys reset`（当該プロジェクトのみ）が担う。
 - 自動テストがなく、回帰検出は実機操作に依存する（シェル系共通の方針）。
+- **`orchestrate` はコントローラの生存判定・attach/resume を実装していない**（Linux 版のみの機能）。
+  そのため要件 orchestration/13-2 が定める「`orch-<project>-main` の `dashboard` ウィンドウでの常駐」は
+  macOS では成立せず、既存 run への再接続も保証されない。要件 core/10 は VM/KVM のみを非対応と
+  宣言しており、オーケストレーターの扱いには触れていないため、**要件と実装の間にギャップが残っている**
+  （2026-07-31 の独立監査で検出。解消方針は未決）。
 - `image_version` はラベル `io.github.quvox.claude-dev.version` を参照する（コード内コメントの
   `org.opencontainers.image.version` は表記のみで実挙動は前者。cli と共通）。
 

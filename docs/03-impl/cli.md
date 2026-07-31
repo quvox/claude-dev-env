@@ -190,8 +190,12 @@ source:
 - **`list`**: 全 Claude コンテナ（`ancestor` フィルタ）を NAME/STATUS/WORKSPACE/noVNC/各フォワードで列挙し、
   最後に proxy 稼働状態を表示。
 - **`ssh-keys [reset|select]`**: 対象はカレントプロジェクト。引数なし/`select` は `select_ssh_keys_interactive`。
-  `reset` は `.claude-dev.yaml` から `ssh_keys` 関連行を `grep -vE` 除去（他記述なしなら削除）し、専用 agent
-  （`<NAME>.sock`/`.pid`）を kill・削除。その他は使い方表示し `exit 1`。
+  `reset` は `.claude-dev.yaml` から `grep -vE '^ssh_keys:|^[[:space:]]*-[[:space:]]|^# claude-dev プロジェクト設定|^# 再選択は'`
+  で該当行を除去し（残りが空白のみならファイルごと削除）、専用 agent（`<NAME>.sock`/`.pid`）を
+  kill・削除する。その他は使い方表示し `exit 1`。
+  **注意（実装の制約）:** この除去は**セクション境界を解釈しない**。`ssh_keys:` 配下かどうかに関わらず
+  ファイル中の全リスト項目（`- ` で始まる行）が消える。現在 `.claude-dev.yaml` は `ssh_keys` しか
+  持たないため実害は無いが、他のリスト形式のキーを足す場合はこの実装を先に直す必要がある。
 - **`upgrade`**: 3 イメージ（`claude-cli`/`claude-vnc`/docker-proxy）を `--no-cache` 再ビルド（反映は stop→start）。
 - **`firewall`**: 稼働中コンテナで `iptables -L OUTPUT -n --line-numbers`。
 - **`reset`**: 確認プロンプト後、全 Claude コンテナ・全 `fwd-*`・proxy を削除、共有 3 ボリューム・全
