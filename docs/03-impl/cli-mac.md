@@ -223,7 +223,11 @@ cli-commands 画面）。コンテナ→docker-proxy の HTTP 契約は docker-p
   そのため要件 orchestration/13-2 が定める「`orch-<project>-main` の `dashboard` ウィンドウでの常駐」は
   macOS では成立せず、既存 run への再接続も保証されない。要件 core/10 は VM/KVM のみを非対応と
   宣言しており、オーケストレーターの扱いには触れていないため、**要件と実装の間にギャップが残っている**
-  （2026-07-31 の独立監査で検出。解消方針は未決）。
+  （2026-07-31 の独立監査で検出）。
+  **扱い（2026-07-31 の人間判断）: macOS のオーケストレーター対応は後日あらためて開発する。それまで
+  現状のまま放置する。** したがって本ドキュメントは、02-design の契約
+  「cli(orchestrate)→orchestrator＝生存判定による attach/resume」と食い違ったままであり、
+  **意図的に合格証を持たない**。解消は `docs/tasks/macos-orchestrator-scope.md` の作業で行う。
 - `image_version` はラベル `io.github.quvox.claude-dev.version` を参照する（コード内コメントの
   `org.opencontainers.image.version` は表記のみで実挙動は前者。cli と共通）。
 
