@@ -6,7 +6,7 @@ version: 1.10.0
 updated: 2026-07-31
 verified:
   at: 2026-07-31
-  version: 1.9.0
+  version: 1.10.0
   against:
     - doc: docs/02-design/system.md
       version: 1.9
@@ -193,6 +193,9 @@ source:
   `reset` は `.claude-dev.yaml` から `grep -vE '^ssh_keys:|^[[:space:]]*-[[:space:]]|^# claude-dev プロジェクト設定|^# 再選択は'`
   で該当行を除去し（残りが空白のみならファイルごと削除）、専用 agent（`<NAME>.sock`/`.pid`）を
   kill・削除する。その他は使い方表示し `exit 1`。
+  **削除は best-effort:** kill と削除の失敗はすべて `|| true` で握りつぶし、残骸の有無を再確認せずに
+  完了メッセージを出す。権限等で消せなかった場合、成功表示にもかかわらず残骸が残る（次回 `start` の
+  `ensure_ssh_agent` 側で検出・案内される）。
   **注意（実装の制約）:** この除去は**セクション境界を解釈しない**。`ssh_keys:` 配下かどうかに関わらず
   ファイル中の全リスト項目（`- ` で始まる行）が消える。現在 `.claude-dev.yaml` は `ssh_keys` しか
   持たないため実害は無いが、他のリスト形式のキーを足す場合はこの実装を先に直す必要がある。
@@ -247,7 +250,7 @@ bash スクリプトのため**自動テストランナーは存在しない**�
 |---|---|---|---|
 | （自動テストなし） | — | `start`→マウント/認証/再接続、`list`/`stop`（proxy 連動） | core/要件1-1〜6 未検証(自動テストなし) |
 | （自動テストなし） | — | `login`→認証ボリューム保存、`logout`→削除 | core/要件3-1,2,5 未検証(自動テストなし) |
-| （自動テストなし。書き戻し/コピー/`.gitignore` 経路はローカル検証済み。対話デバイス認証は実機） | — | `login-codex`→デバイス認証→`codex/auth.json` 保存、`start`→`.codex/auth.json` コピー | core/要件3-6,7 未検証(自動テストなし) |
+| （自動テストなし。`start` によるコピー経路と 30 秒書き戻しは `scripts/e2e6-codex.sh` の ⑤⑥ が自動判定する〈2026-07-31 実施: PASS〉。`login-codex` の対話デバイス認証はブラウザ操作を伴うため無人化不可） | — | `login-codex`→デバイス認証→`codex/auth.json` 保存、`start`→`.codex/auth.json` コピー | core/要件3-6,7 未検証(自動テストなし。3-7/3-8 は E2E-6 スクリプトでカバー) |
 | （自動テストなし） | — | `ssh-keys` 対話選択→`.claude-dev.yaml` 生成、専用 agent 限定転送（秘密鍵ファイルを渡さない／`ssh_keys` 指定鍵だけ登録／未指定時は転送なしで案内） | core/要件4-1,4-2,4-3,4-4 未検証(自動テストなし) |
 | （自動テストなし） | — | `start` 直後は Webアプリ用のポートが公開されていない（`docker port <name>` に noVNC 6080 以外が現れない）→`forward`/`unforward`/`ports`（8100〜割当） | core/要件6-1,6-2,6-3,6-4 未検証(自動テストなし) |
 | （自動テストなし） | — | `orchestrate`→未起動自動起動・生存判定 attach/resume | orchestration/要件13-2 のうち cli 担当分（起動・attach/resume の入口）未検証(自動テストなし)。13-1（外部制御ループ）・13-3（文脈の再構成）は orchestrator の担当 |

@@ -90,7 +90,8 @@ stop_ssh_bridge <name>                                    # ブリッジ socat �
     ブリッジのみ停止・専用 agent は鍵保持のため残す）と `stop_proxy_if_idle` を呼ぶ。
 - **実装上の判断:** ブリッジポート帯は 9700〜9799（forward の 8100〜・noVNC の 6080〜 と非重複）。
   旧・単一 agent/ブリッジ（`LEGACY_*`:`ssh-agent.sock` 等）は生成しなくなったが `ssh-keys reset`
-  が残骸を掃除する（後方互換）。
+  が残骸を掃除する（後方互換）。**掃除は best-effort** で、kill と削除の失敗はすべて `|| true` で
+  握りつぶし、残骸の有無を再確認せずに完了メッセージを出す（cli と同じ挙動）。
 
 ### Docker ソケット検出（`detect_docker_sock` / `ensure_docker_proxy_container`)
 
@@ -216,6 +217,7 @@ cli-commands 画面）。コンテナ→docker-proxy の HTTP 契約は docker-p
 
 - top-level `reset` はコンテナ・ボリューム・イメージを削除するが、プロジェクト専用 agent/ブリッジ
   （`${HOME}/.claude-dev/agents/`）は掃除しない。掃除は `ssh-keys reset`（当該プロジェクトのみ）が担う。
+  ただしその掃除は best-effort で、消せなくても成功表示になる（上記）。
 - 自動テストがなく、回帰検出は実機操作に依存する（シェル系共通の方針）。
 - **`orchestrate` はコントローラの生存判定・attach/resume を実装していない**（Linux 版のみの機能）。
   そのため要件 orchestration/13-2 が定める「`orch-<project>-main` の `dashboard` ウィンドウでの常駐」は
