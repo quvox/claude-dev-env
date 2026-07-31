@@ -273,92 +273,127 @@ ensure_codex_config() {
         return 0
     fi
 
-    # 既存ファイル: 各鍵が「属すべきテーブル内」に書かれているかを調べる。
-    # コメント行は「書かれている」と見なさない。ドット記法（features.use_legacy_landlock = ...）と
-    # インラインテーブル（features = { ... }）も「書かれている」として扱う（重複定義で TOML を
-    # 壊さないため）。
-    _scan=$(awk '
-        function strip(s) { sub(/^[ \t]+/, "", s); return s }
-        BEGIN { cur=""; first_tbl=0; feat=0; bad=0; sm=0; ap=0; ll=0 }
-        {
-            s = strip($0)
-            if (s ~ /^#/ || s == "") next
-            if (s ~ /^\[/) {
-                if (s !~ /^\[\[?[^][]+\]\]?[ \t]*(#.*)?$/) { bad=1; next }
-                name = s
-                sub(/^\[\[?/, "", name); sub(/\]\]?[ \t]*(#.*)?$/, "", name)
-                gsub(/[ \t"'"'"']/, "", name)
-                cur = name
-                if (first_tbl == 0) first_tbl = NR
-                if (name == "features" && feat == 0) feat = NR
-                next
-            }
-            if (cur == "") {
-                if (s ~ /^sandbox_mode[ \t]*=/)               sm=1
-                if (s ~ /^approval_policy[ \t]*=/)            ap=1
-                if (s ~ /^features\.use_legacy_landlock[ \t]*=/) ll=1
-                if (s ~ /^features[ \t]*=/)                   ll=1
-            } else if (cur == "features") {
-                if (s ~ /^use_legacy_landlock[ \t]*=/)        ll=1
-            }
-        }
-        END { printf "%d %d %d %d %d %d\n", bad, first_tbl, feat, sm, ap, ll }
-    ' "$_cfg" 2>/dev/null) || _scan=""
-
-    if [ -z "$_scan" ]; then
-        echo "⚠️  codex config.toml を解析できませんでした。既定鍵の補完をスキップします: $_cfg"
+    # 既存ファイルの補完には TOML パーサが要る。行単位の正規表現では、複数行文字列の中の
+    # `[features]` を見出しと誤認する・quoted key（`"sandbox_mode" = ...`）を見落として
+    # 重複定義を作る・`[[features]]`（配列テーブル）を通常テーブルと混同する、といった形で
+    # 「既存の鍵と値を変更しない」を破りうるため（2026-07-31 の独立レビュー指摘）。
+    if ! command -v python3 >/dev/null 2>&1 || ! python3 -c 'import tomllib' >/dev/null 2>&1; then
+        echo "⚠️  python3/tomllib が無いため codex config.toml の既定鍵補完をスキップします: $_cfg"
         return 0
     fi
 
-    set -- $_scan
-    _bad=$1; _first_tbl=$2; _feat=$3; _has_sm=$4; _has_ap=$5; _has_ll=$6
+    python3 - "$_cfg" <<'PYEOF'
+import os, sys, tempfile, tomllib
 
-    if [ "$_bad" != "0" ]; then
-        echo "⚠️  codex config.toml に解釈できないテーブル見出しがあります。既定鍵の補完をスキップします: $_cfg"
-        return 0
-    fi
+path = sys.argv[1]
+WANT = [(("sandbox_mode",),  'sandbox_mode = "danger-full-access"',  "danger-full-access"),
+        (("approval_policy",), 'approval_policy = "never"',          "never"),
+        (("features", "use_legacy_landlock"), "use_legacy_landlock = true", True)]
 
-    _need_top=0
-    [ "$_has_sm" = "0" ] && _need_top=1
-    [ "$_has_ap" = "0" ] && _need_top=1
-    if [ "$_need_top" = "0" ] && [ "$_has_ll" = "1" ]; then
-        return 0   # 3 鍵すべて揃っている（冪等）
-    fi
+def flatten(d, prefix=()):
+    out = {}
+    for k, v in d.items():
+        p = prefix + (k,)
+        if isinstance(v, dict):
+            out.update(flatten(v, p))
+        else:
+            out[p] = v
+    return out
 
-    _tmp="${_cfg}.tmp.$$"
-    awk -v first_tbl="$_first_tbl" -v feat="$_feat" \
-        -v add_sm="$([ "$_has_sm" = "0" ] && echo 1 || echo 0)" \
-        -v add_ap="$([ "$_has_ap" = "0" ] && echo 1 || echo 0)" \
-        -v add_ll="$([ "$_has_ll" = "0" ] && echo 1 || echo 0)" '
-        function emit_top() {
-            if (add_sm) print "sandbox_mode = \"danger-full-access\""
-            if (add_ap) print "approval_policy = \"never\""
-            emitted_top = 1
-        }
-        BEGIN { emitted_top = 0; emitted_ll = 0 }
-        {
-            # トップレベル鍵は最初のテーブル見出しより前に置く
-            if (first_tbl > 0 && NR == first_tbl && !emitted_top && (add_sm || add_ap)) emit_top()
-            print
-            # [features] 配下の鍵は見出しの直後に置く
-            if (feat > 0 && NR == feat && add_ll && !emitted_ll) {
-                print "use_legacy_landlock = true"
-                emitted_ll = 1
-            }
-        }
-        END {
-            if (!emitted_top && (add_sm || add_ap)) emit_top()
-            if (add_ll && !emitted_ll) { print ""; print "[features]"; print "use_legacy_landlock = true" }
-        }
-    ' "$_cfg" > "$_tmp" 2>/dev/null || {
-        rm -f "$_tmp"
-        echo "⚠️  codex config.toml への既定鍵の補完に失敗しました（元ファイルは変更していません）: $_cfg"
-        return 0
-    }
+try:
+    raw = open(path, "rb").read()
+    orig = tomllib.loads(raw.decode("utf-8"))
+except Exception as e:
+    print(f"⚠️  codex config.toml を TOML として読めません。既定鍵の補完をスキップします: {path} ({e})")
+    sys.exit(0)
 
-    # cat で書き戻して元ファイルの所有者・パーミッションを保つ
-    cat "$_tmp" > "$_cfg" && rm -f "$_tmp"
-    echo "✓ codex config.toml に不足していた既定鍵を追記しました: $_cfg"
+oflat = flatten(orig)
+missing = [w for w in WANT if w[0] not in oflat]
+if not missing:
+    sys.exit(0)                                   # 3 鍵とも揃っている（冪等）
+
+text = raw.decode("utf-8")
+nl = "\r\n" if "\r\n" in text else "\n"
+lines = text.splitlines()
+
+need_top = [m for m in missing if len(m[0]) == 1]
+need_ll  = [m for m in missing if m[0] == ("features", "use_legacy_landlock")]
+
+# features が通常テーブル以外（インラインテーブル / 配列テーブル）で定義済みなら、
+# 既存値を変えずに鍵を足す方法が無いので landlock の補完だけ諦める。
+feat = orig.get("features")
+ll_blocked = bool(need_ll) and feat is not None and not isinstance(feat, dict)
+ll_reason = "既存の features が通常テーブルではない（配列テーブル等）" if ll_blocked else ""
+
+out = list(lines)
+# トップレベル鍵はファイル先頭へ入れる。先頭は常にトップレベルなので、どんな構造でも
+# 「最初のテーブル見出しより前」を満たす最も安全な位置。
+if need_top:
+    out = [m[1] for m in need_top] + out
+if need_ll and not ll_blocked:
+    if isinstance(feat, dict):
+        idx = next((i for i, l in enumerate(out)
+                    if l.strip().rstrip("\r").replace(" ", "") == "[features]"), None)
+        if idx is None:
+            # dict だが [features] 見出し行が無い＝インラインテーブルかドット記法で定義されている。
+            # どちらも「既存を変えずに鍵を足す」書き方が無いので触らない。
+            ll_blocked = True
+            ll_reason = "既存の features がインラインテーブル／ドット記法で定義されている"
+        else:
+            out.insert(idx + 1, "use_legacy_landlock = true")
+    else:
+        out += ["", "[features]", "use_legacy_landlock = true"]
+
+if ll_blocked:
+    print(f"⚠️  landlock を追記できません（{ll_reason}）: {path}")
+if not need_top and ll_blocked:
+    sys.exit(0)          # 追記できるものが何も無い＝無変更
+
+cand = nl.join(out) + nl
+
+# --- 検証: 「既存の鍵と値は一切変わらず、意図した鍵だけが増えた」ことを意味的に確かめる ---
+try:
+    new = tomllib.loads(cand)
+except Exception as e:
+    print(f"⚠️  補完結果が不正な TOML になるため書き込みません（無変更）: {path} ({e})")
+    sys.exit(0)
+nflat = flatten(new)
+added_ok = {m[0]: m[2] for m in ([] if ll_blocked else missing) if m in missing}
+if ll_blocked:
+    added_ok = {m[0]: m[2] for m in need_top}
+for p, v in oflat.items():
+    if p not in nflat or nflat[p] != v:
+        print(f"⚠️  補完すると既存の設定 {'.'.join(p)} が変わってしまうため書き込みません（無変更）: {path}")
+        sys.exit(0)
+extra = set(nflat) - set(oflat)
+if extra != set(added_ok) or any(nflat[p] != added_ok[p] for p in extra):
+    print(f"⚠️  補完結果が意図と一致しないため書き込みません（無変更）: {path}")
+    sys.exit(0)
+
+# --- 置き換え: 一時ファイルを作って属性を移し、rename で原子的に差し替える ---
+# リダイレクトによる truncate は使わない（途中で失敗すると元ファイルを壊すため）。
+st = os.stat(path)
+d = os.path.dirname(path) or "."
+fd, tmp = tempfile.mkstemp(dir=d, prefix=".config.toml.")   # O_EXCL・0600
+try:
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        f.write(cand)
+    os.chmod(tmp, st.st_mode & 0o7777)
+    try:
+        os.chown(tmp, st.st_uid, st.st_gid)
+    except PermissionError:
+        pass
+    os.replace(tmp, path)
+except Exception as e:
+    try:
+        os.unlink(tmp)
+    except OSError:
+        pass
+    print(f"⚠️  codex config.toml の書き換えに失敗しました（元ファイルは無変更）: {path} ({e})")
+    sys.exit(0)
+print("✓ codex config.toml に不足していた既定鍵を追記しました: " + path
+      + ("（landlock を除く。上記の理由により）" if ll_blocked else ""))
+PYEOF
 }
 ensure_codex_config || true
 
