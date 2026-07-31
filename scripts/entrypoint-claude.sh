@@ -241,18 +241,126 @@ if [ ! -f "$LOCAL_CLAUDE/settings.json" ]; then
 fi
 
 # --- codex の config.toml もコンテナローカル（共有しない）---
-# codex 自前のサンドボックス（Linux では bubblewrap 実装）はこのコンテナ内では起動できない。
-# Docker 既定 seccomp が CLONE_NEWUSER を拒否し、それを外しても docker-default AppArmor が
-# mount --make-rslave / を拒否する 2 段構えのため。既定の sandbox_mode（read-only /
-# workspace-write）のままでは codex が起こすシェルコマンドが例外なく exited 1 になるので、
-# 隔離はコンテナ境界に委ねて codex 側のサンドボックスを無効化する（D-27 ⑥ / 要件 core/12-4,12-5）。
+# 既定 3 鍵を保証する（要件 core/12-5,12-6,12-9 / D-27 ⑥）:
+#   sandbox_mode = "danger-full-access"   … 既定でサンドボックスを無効化
+#   approval_policy = "never"
+#   [features] use_legacy_landlock = true … --sandbox read-only を明示要求された場合の受け皿
+# 前 2 鍵が必要な理由: codex 自前のサンドボックス（Linux では bubblewrap 実装）はこのコンテナ内では
+# 起動できない。Docker 既定 seccomp が CLONE_NEWUSER を拒否し、それを外しても docker-default
+# AppArmor が mount --make-rslave / を拒否する 2 段構えのため。既定の sandbox_mode のままでは
+# codex が起こすシェルコマンドが例外なく exited 1 になるので、隔離はコンテナ境界に委ねる。
+# 3 鍵目が必要な理由: --sandbox read-only のような明示指定は config の既定を上書きして bwrap 経路へ
+# 戻ってしまう。landlock はユーザー名前空間を必要としないため confinement を緩めずに成立する。
 # コンテナ側の --security-opt は緩めない（要件 core/12-7。ホスト CLI の責務）。
-# 既存ファイルは内容を読まず一切変更しない（利用者が書いた設定を保持。要件 core/12-6）。
-if [ ! -f "$LOCAL_CODEX/config.toml" ]; then
-    printf '%s\n%s\n' 'sandbox_mode = "danger-full-access"' 'approval_policy = "never"' \
-        > "$LOCAL_CODEX/config.toml"
-    chown "$USERNAME":"$USERNAME" "$LOCAL_CODEX/config.toml"
-fi
+#
+# 既存ファイルがある場合は「書かれている鍵とその値を一切書き換えず、不足している鍵だけを追記」する
+# （要件 core/12-6・冪等）。TOML はテーブル見出し以降の鍵が当該テーブルに属するため、単純な末尾追記は
+# トップレベル鍵の意味を変えてしまう。よって追記位置を次のとおり固定する:
+#   - sandbox_mode / approval_policy … 最初のテーブル見出し（[...] 行）の直前
+#   - use_legacy_landlock            … [features] 見出しの直後（無ければ末尾に見出しごと）
+# 位置を特定できない（TOML として壊れている）場合は何も書かず警告のみ出して継続する。
+ensure_codex_config() {
+    _cfg="$LOCAL_CODEX/config.toml"
+
+    if [ ! -f "$_cfg" ]; then
+        printf '%s\n%s\n\n%s\n%s\n' \
+            'sandbox_mode = "danger-full-access"' \
+            'approval_policy = "never"' \
+            '[features]' \
+            'use_legacy_landlock = true' \
+            > "$_cfg"
+        chown "$USERNAME":"$USERNAME" "$_cfg"
+        return 0
+    fi
+
+    # 既存ファイル: 各鍵が「属すべきテーブル内」に書かれているかを調べる。
+    # コメント行は「書かれている」と見なさない。ドット記法（features.use_legacy_landlock = ...）と
+    # インラインテーブル（features = { ... }）も「書かれている」として扱う（重複定義で TOML を
+    # 壊さないため）。
+    _scan=$(awk '
+        function strip(s) { sub(/^[ \t]+/, "", s); return s }
+        BEGIN { cur=""; first_tbl=0; feat=0; bad=0; sm=0; ap=0; ll=0 }
+        {
+            s = strip($0)
+            if (s ~ /^#/ || s == "") next
+            if (s ~ /^\[/) {
+                if (s !~ /^\[\[?[^][]+\]\]?[ \t]*(#.*)?$/) { bad=1; next }
+                name = s
+                sub(/^\[\[?/, "", name); sub(/\]\]?[ \t]*(#.*)?$/, "", name)
+                gsub(/[ \t"'"'"']/, "", name)
+                cur = name
+                if (first_tbl == 0) first_tbl = NR
+                if (name == "features" && feat == 0) feat = NR
+                next
+            }
+            if (cur == "") {
+                if (s ~ /^sandbox_mode[ \t]*=/)               sm=1
+                if (s ~ /^approval_policy[ \t]*=/)            ap=1
+                if (s ~ /^features\.use_legacy_landlock[ \t]*=/) ll=1
+                if (s ~ /^features[ \t]*=/)                   ll=1
+            } else if (cur == "features") {
+                if (s ~ /^use_legacy_landlock[ \t]*=/)        ll=1
+            }
+        }
+        END { printf "%d %d %d %d %d %d\n", bad, first_tbl, feat, sm, ap, ll }
+    ' "$_cfg" 2>/dev/null) || _scan=""
+
+    if [ -z "$_scan" ]; then
+        echo "⚠️  codex config.toml を解析できませんでした。既定鍵の補完をスキップします: $_cfg"
+        return 0
+    fi
+
+    set -- $_scan
+    _bad=$1; _first_tbl=$2; _feat=$3; _has_sm=$4; _has_ap=$5; _has_ll=$6
+
+    if [ "$_bad" != "0" ]; then
+        echo "⚠️  codex config.toml に解釈できないテーブル見出しがあります。既定鍵の補完をスキップします: $_cfg"
+        return 0
+    fi
+
+    _need_top=0
+    [ "$_has_sm" = "0" ] && _need_top=1
+    [ "$_has_ap" = "0" ] && _need_top=1
+    if [ "$_need_top" = "0" ] && [ "$_has_ll" = "1" ]; then
+        return 0   # 3 鍵すべて揃っている（冪等）
+    fi
+
+    _tmp="${_cfg}.tmp.$$"
+    awk -v first_tbl="$_first_tbl" -v feat="$_feat" \
+        -v add_sm="$([ "$_has_sm" = "0" ] && echo 1 || echo 0)" \
+        -v add_ap="$([ "$_has_ap" = "0" ] && echo 1 || echo 0)" \
+        -v add_ll="$([ "$_has_ll" = "0" ] && echo 1 || echo 0)" '
+        function emit_top() {
+            if (add_sm) print "sandbox_mode = \"danger-full-access\""
+            if (add_ap) print "approval_policy = \"never\""
+            emitted_top = 1
+        }
+        BEGIN { emitted_top = 0; emitted_ll = 0 }
+        {
+            # トップレベル鍵は最初のテーブル見出しより前に置く
+            if (first_tbl > 0 && NR == first_tbl && !emitted_top && (add_sm || add_ap)) emit_top()
+            print
+            # [features] 配下の鍵は見出しの直後に置く
+            if (feat > 0 && NR == feat && add_ll && !emitted_ll) {
+                print "use_legacy_landlock = true"
+                emitted_ll = 1
+            }
+        }
+        END {
+            if (!emitted_top && (add_sm || add_ap)) emit_top()
+            if (add_ll && !emitted_ll) { print ""; print "[features]"; print "use_legacy_landlock = true" }
+        }
+    ' "$_cfg" > "$_tmp" 2>/dev/null || {
+        rm -f "$_tmp"
+        echo "⚠️  codex config.toml への既定鍵の補完に失敗しました（元ファイルは変更していません）: $_cfg"
+        return 0
+    }
+
+    # cat で書き戻して元ファイルの所有者・パーミッションを保つ
+    cat "$_tmp" > "$_cfg" && rm -f "$_tmp"
+    echo "✓ codex config.toml に不足していた既定鍵を追記しました: $_cfg"
+}
+ensure_codex_config || true
 
 # --- ホストの hooks / env 設定をマージ ---
 # claude-dev start 時にコピーされた host-hooks.json があれば settings.json にマージ
