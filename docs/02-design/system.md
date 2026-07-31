@@ -2,14 +2,14 @@
 id: system
 layer: design
 title: claude-dev-env 全体設計書
-version: 1.8.0
+version: 1.9.0
 updated: 2026-07-31
 verified:
   at: 2026-07-31
-  version: 1.8.0
+  version: 1.9.0
   against:
     - doc: docs/01-requirements/core.md
-      version: 1.8
+      version: 1.9
     - doc: docs/01-requirements/orchestration.md
       version: 1.1
 summary: >
@@ -79,7 +79,7 @@ graph TD
 | cli | ホスト CLI（Linux `claude-dev`）。start/stop/list/attach/forward/unforward/ports/login/login-codex/logout/ssh-keys/orchestrate/code/upgrade 等 | core/1,3,4,6,7(7-5 compose 名一意化),11,12(login-codex, 12-7 `--security-opt` 不付与) orchestration/13(起動) | container-tools, hooks, portsync, devcontainer | なし | 03-impl/cli.md |
 | cli-mac | macOS 版 `claude-dev-mac` の差分（SSH agent TCP ブリッジ・ポート直結・VM/KVM 非対応・arm64） | core/10（cli が担う要件の macOS 差分を含む） | cli | なし | 03-impl/cli-mac.md |
 | makefile | ビルド・セットアップ・install/uninstall・login・upgrade・orch-sample 等の入口 | core/9(build),全般 | devcontainer, docker-proxy, orchestrator, sample-project | なし | 03-impl/makefile.md |
-| entrypoint | `entrypoint-claude.sh`：UID/GID 追従・認証コピー（claude/codex）・既定設定生成（claude `settings.json` / codex `config.toml`）・firewall 起動・MCP/VNC/Chrome・tmux・認証同期（claude/codex）・portsync 起動 | core/2,3,5,11,12(12-4〜12-6) | firewall, portsync | なし | 03-impl/entrypoint.md |
+| entrypoint | `entrypoint-claude.sh`：UID/GID 追従・認証コピー（claude/codex）・既定設定生成（claude `settings.json` / codex `config.toml`）・firewall 起動・MCP/VNC/Chrome・tmux・認証同期（claude/codex）・portsync 起動 | core/2,3,5,11,12(12-4〜12-6,12-9) | firewall, portsync | なし | 03-impl/entrypoint.md |
 | firewall | `init-firewall-claude.sh`：iptables ファイアウォール | core/5 | — | なし | 03-impl/firewall.md |
 | devcontainer | `Dockerfile.claude`(base / vnc-base / claude-cli / claude-vnc の4ステージ)・`Dockerfile.docker-proxy`・`.devcontainer/tmux.conf` 等イメージ定義。各モジュールの資産をイメージへ同梱し、エージェント CLI（Claude Code / Codex CLI）を終端ステージで導入する | core/1,11,9,12 | — | なし | 03-impl/devcontainer.md |
 | docker-proxy | Go 製 Docker API 検査プロキシ（危険操作拒否・/workspace bind 書換） | core/7 | — | なし | 03-impl/docker-proxy.md |
@@ -201,7 +201,7 @@ stateDiagram-v2
 | state.json / *.jsonl（audit/assumptions/interventions） | orchestrator | 運用状態・追記型ログ |
 | 認証ファイル（.credentials.json / .claude.json） | entrypoint(共有はcli) | claude-dev-auth ボリューム経由で共有 |
 | codex 認証ファイル（auth.json） | entrypoint(共有はcli) | 同ボリュームの `codex/` 経由で共有（D-27）。`config.toml`・セッション履歴は共有せずコンテナ固有 |
-| codex 設定（config.toml） | entrypoint | 共有しない。不在時のみ Codex サンドボックス無効化の既定（`sandbox_mode`/`approval_policy`）を生成し、既存ファイルは上書きしない（D-27 ⑥・core/12-5,12-6） |
+| codex 設定（config.toml） | entrypoint | 共有しない。既定 3 鍵（`sandbox_mode`/`approval_policy`/`features.use_legacy_landlock`）を不在時は生成、存在時は不足鍵のみ追記（既存の値は不変。D-27 ⑥・core/12-5,12-6,12-9） |
 | .claude-dev.yaml（ssh_keys） | cli | プロジェクト単位の SSH 鍵指定 |
 | Docker リソース（claude-dev-net / 各ボリューム / イメージ） | cli, makefile, devcontainer | 命名は claude-dev- 接頭辞 |
 
@@ -245,12 +245,16 @@ sequenceDiagram
 備考: core/7-5（compose プロジェクト名の一意化）はシェル系のため自動テスト対象外。実機確認は「異なる 2 プロジェクトで同時に `claude-dev start` → 各コンテナで `COMPOSE_PROJECT_NAME` が別値になり、`docker compose` の生成リソース（ネットワーク／コンテナ名）がプロジェクト間で衝突しない」ことを確認する（cli/cli-mac が `docker run` に `-e COMPOSE_PROJECT_NAME` を付与）。
 
 備考: core/12（同梱エージェント CLI）もシェル/Dockerfile 系のため自動テスト対象外。実機確認は
-「配布 2 イメージで `codex --version` が期待バージョンを返す」「対話シェル・`bash -c`・`docker exec` の
+「配布 2 イメージで `codex --version` が、当該ビルドの prepare ジョブが解決し build-arg
+`CODEX_VERSION` として渡した具体バージョン文字列と完全一致する」「対話シェル・`bash -c`・`docker exec` の
 いずれからも `codex` が解決できる」ことを確認する（認証共有と**シェル実行の成否**〈12-4〉の実機確認は
 E2E-6 が担う）。サンドボックス既定設定（12-5,12-6）は entrypoint の担当で、確認観点は「`config.toml` が
-無いコンテナでは既定が生成される」「利用者が書き換えた `config.toml` を持つコンテナでは再起動しても
-内容が変わらない」の 2 点（03-impl/entrypoint.md のテスト対応表が持つ）。12-7 は `docker run` に
-`--security-opt` を付けない実装上の禁止事項で、cli/cli-mac の起動引数として確認する。
+無いコンテナでは既定 3 鍵が生成される」「利用者が書き換えた `config.toml` を持つコンテナでは既存の鍵と値が
+変わらず、不足していた既定鍵だけが追記される（再起動しても結果が変わらない）」の 2 点
+（03-impl/entrypoint.md のテスト対応表が持つ）。12-7 は `docker run` に
+`--security-opt` を付けない実装上の禁止事項で、cli/cli-mac の起動引数として確認する。12-9（明示
+`--sandbox read-only` での成功）は landlock バックエンドの疎通が本質なので E2E-6 が担う（版更新で
+`use_legacy_landlock` が撤去された場合の回帰検知も同じ観点）。
 
 備考: core/1-6（stop 時の compose 片付け, D-24 ライフサイクル）もシェル系のため自動テスト対象外。実機確認は「コンテナ内で `docker compose up` → ホストで `claude-dev stop` → ラベル `com.docker.compose.project=<正規化NAME>` のコンテナと当該プロジェクトの compose デフォルトネットワークが消え、名前付きボリュームと共有の `claude-dev-net`／docker-proxy は残る」ことを確認する。VM モードは compose がゲスト内で完結するため対象外。
 
@@ -277,7 +281,7 @@ E2E-6 が担う）。サンドボックス既定設定（12-5,12-6）は entrypo
 | E2E-3 | UC-3 | コンテナ内 `docker run -v /:/host` 等 → docker-proxy が拒否／`/workspace` bind 許可／通常許可 | Must |
 | E2E-4 | UC-4 | `orchestrate` → ブレスト→plan→worker 並列→要判断1件のみ待機・他継続→回答復帰→完了（`make orch-sample` で題材を scaffold し `claude-dev orchestrate` で実走） | Must |
 | E2E-5 | UC-5 | 実行中に端末全終了→`orchestrate` 再実行→attach/resume・完了済み非再実行・plan/履歴保持 | Should |
-| E2E-6 | UC-6 | `claude-dev login-codex` → デバイス認証 → 別プロジェクトで `start` → コンテナ内 `codex` が再ログイン不要で起動し、**codex が起こすシェルコマンドが成功して `/workspace` を読み書きできる**。トークン更新が共有ボリュームへ書き戻り次のコンテナへ引き継がれる | Must |
+| E2E-6 | UC-6 | `claude-dev login-codex` → デバイス認証 → 別プロジェクトで `start` → コンテナ内 `codex` が再ログイン不要で起動し、**codex が起こすシェルコマンドが成功して `/workspace` を読み書きできる**。さらに **landlock 疎通確認**（`codex sandbox --enable use_legacy_landlock -- /bin/true` が exit 0、同じ経路での書き込みは失敗）が通り、`--sandbox read-only` を明示した依頼で読み取りが成功する（12-9）。トークン更新が共有ボリュームへ書き戻り次のコンテナへ引き継がれる | Must |
 
 ## 設計判断と代替案
 
@@ -323,14 +327,20 @@ E2E-6 が担う）。サンドボックス既定設定（12-5,12-6）は entrypo
   内容と無関係に動く値を入れてはならない（`docs/knowledge/changing-label-busts-layer-cache.md`）。
   内容由来であっても、失効の波及範囲を最小化できる位置——依存される側ではなく終端——に置く。
 
-### 判断5:Codex サンドボックスはコンテナ境界に委ねて無効化する
+### 判断5:Codex サンドボックスは既定で無効化し、読み取り専用用途だけ landlock で生かす
 
-- **採用:** entrypoint が `config.toml` 不在時に限り `sandbox_mode = "danger-full-access"` /
-  `approval_policy = "never"` を置き、codex 自前のサンドボックスを使わない（D-27 ⑥）。既存の
-  `config.toml` は上書きしない。
+- **採用:** entrypoint が既定 3 鍵——`sandbox_mode = "danger-full-access"` /
+  `approval_policy = "never"` / `[features] use_legacy_landlock = true`——を置く（D-27 ⑥）。
+  `config.toml` 不在なら 3 鍵を生成し、存在するなら**書かれていない鍵だけを追記**して既存の値は
+  書き換えない（core/12-5,12-6）。既定では codex 自前のサンドボックスを使わないが、`--sandbox
+  read-only` を明示要求する呼び出し（コードレビュー・文書監査を codex に依頼する経路）だけは
+  landlock バックエンドで成立させる（core/12-9）。`workspace-write` は landlock でも書き込みが
+  失敗するため実用外とし、書き込みを伴う自動化・QA は `danger-full-access` で走らせる。
 - **却下した代替案:** ①`docker run` に `--security-opt seccomp=unconfined --security-opt
   apparmor=unconfined` を足して bwrap を動かす ②`sandbox_mode = "workspace-write"` のまま運用する
-  ③イメージに `config.toml` を焼き込む。
+  ③イメージに `config.toml` を焼き込む ④landlock を使わず、読み取り専用の依頼は常に「対象ファイルの
+  内容をプロンプトへ添付し codex にシェルを使わせない方式」で回避する ⑤entrypoint が起動時に
+  サンドボックス疎通確認を実行して警告を出す。
 - **理由:** codex の Linux サンドボックスは bubblewrap 実装で、ユーザー名前空間の作成とマウント伝播の
   変更を要する。Claude コンテナは Docker 既定 seccomp と `docker-default` AppArmor の下で動くため、
   seccomp が `CLONE_NEWUSER` を拒否し、それを外しても AppArmor が `mount --make-rslave /` を拒否する
@@ -340,10 +350,16 @@ E2E-6 が担う）。サンドボックス既定設定（12-5,12-6）は entrypo
   却下。コンテナ内の二重サンドボックスは元から前提にしていないので、claude 側の
   `permissions.defaultMode=bypassPermissions` と同じ扱いに揃えるのが構造的に一貫する。③は
   `~/.codex → /workspace/.codex` の symlink 化（プロジェクト単位の実体）より前に固定値を焼くことになり、
-  プロジェクトごとに利用者が設定を変える余地を失うため却下。
+  プロジェクトごとに利用者が設定を変える余地を失うため却下。④は退避手段としては有効だが、恒久策に
+  すると codex にファイルを読ませる経路（`codex exec review` 等）が使えないままになる。landlock が
+  ユーザー名前空間を必要とせずコンテナの confinement 下で動くことを実測で確認できたため、内側の隔離を
+  捨てずに済む④より上位の解を採った（④は `use_legacy_landlock` が撤去された場合の退避先として残す）。
+  ⑤は codex を使わない利用者にも毎起動のコストがかかるため却下し、疎通確認は E2E-6 に持たせる。
 - **副作用として設計に織り込む点:** 失敗が静かに起きる形（コマンド失敗をモデルが認識せず出力を捏造する、
-  `codex doctor` も検知しない）だったため、E2E-6 は「起動する」ではなく**シェル実行が成功する**ところまで
-  観測する（テスト戦略の E2Eシナリオ一覧）。
+  `codex doctor` も検知しない。**失敗しても `codex exec` の終了コードは 0**）だったため、E2E-6 は
+  「起動する」ではなく**シェル実行が成功する**ところまで観測し、判定は成果物で行う
+  （テスト戦略の E2Eシナリオ一覧）。`use_legacy_landlock` は codex 0.146.0 時点で deprecated であり
+  版更新で撤去されうるため、E2E-6 に landlock の疎通確認を含めて回帰を検知する。
 
 ## 要件カバレッジ確認
 
@@ -359,8 +375,8 @@ E2E-6 が担う）。サンドボックス既定設定（12-5,12-6）は entrypo
 | core/8 VM モード | vm-mode |
 | core/9 配布・ビルド | makefile, ghcr-workflow, devcontainer |
 | core/10 macOS | cli-mac, makefile(install 判定) |
-| core/11 ブラウザ確認 | entrypoint, devcontainer, container-tools(tmux) |
-| core/12 同梱エージェント CLI | devcontainer(導入), cli/cli-mac(login-codex, 12-7 `--security-opt` 不付与), entrypoint(認証コピー・同期, 12-4〜12-6 サンドボックス既定設定), ghcr-workflow(版解決) |
+| core/11 ブラウザ確認 | entrypoint(11-1 の VNC/Chrome/noVNC 起動・11-2 MCP 設定), devcontainer(11-3 IBus-Mozc 同梱), container-tools(tmux), cli/cli-mac(11-1 のうち noVNC ポートの動的割当と URL 表示。分割定義の cli 行が持つ core/11 はこの範囲) |
+| core/12 同梱エージェント CLI | devcontainer(導入), cli/cli-mac(login-codex, 12-7 `--security-opt` 不付与), entrypoint(認証コピー・同期, 12-4〜12-6,12-9 サンドボックス既定設定), ghcr-workflow(版解決)。※12-9 の landlock 疎通確認は E2E-6 が担う（`03-impl/e2e.md`。分割定義外の標準例外であり、モジュールではない） |
 | orchestration/12〜19 | orchestrator, hooks(Slack) |
 | orchestration/20 自己検証 | sample-project, orchestrator, makefile |
 | core 非機能(セキュリティ/性能/保守/環境) | docker-proxy, devcontainer, ghcr-workflow(pull 増分性), cli/cli-mac |

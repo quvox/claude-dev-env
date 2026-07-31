@@ -2,7 +2,7 @@
 id: acceptance                 # 受入シナリオ(固定)
 layer: request
 title: <システム名> 受入シナリオ
-version: 0.1.0                 # MAJOR.MINOR.PATCH。シナリオの変更はMINOR以上、誤字はPATCH
+version: 1.0.0                 # MAJOR.MINOR.PATCH。シナリオの変更はMINOR以上、誤字はPATCH
 updated: YYYY-MM-DD
 # verified:                    # /doc-check がPASS時に記録(request-template と同形式)
 summary: >

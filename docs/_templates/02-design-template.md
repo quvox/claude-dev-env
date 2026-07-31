@@ -2,15 +2,15 @@
 id: system                     # 全体設計は system 固定。モジュール詳細設計は <module-slug>
 layer: design
 title: <システム名> 全体設計書
-version: 0.1.0                 # MAJOR.MINOR.PATCH。意味に影響する変更はMINOR以上、
+version: 1.0.0                 # 初版は 1.0.0(履歴エントリ不要)。MAJOR.MINOR.PATCH。意味に影響する変更はMINOR以上、
                                # 誤字・表記等の軽微修正はPATCHのみ(検証を失効させない)。迷ったらMINOR
 updated: YYYY-MM-DD
 # verified:                    # /doc-check がPASS時に記録する検証の証拠(このブロックの有無+照合が
 #   at: YYYY-MM-DD             # 検証状態のすべて。statusフィールドは存在しない)
 #   version: X.Y.Z             # 検証した時点の自分自身の version(照合はMAJOR.MINORのみ)
-#   against:                   # 検証した時点の source 各ドキュメントの version
+#   against:                   # 検証した時点の source 各ドキュメントの version(X.Y.Z で書く。照合はMAJOR.MINORのみ)
 #     - doc: <sourceのパス>
-#       version: X.Y
+#       version: X.Y.Z
 summary: >
   (設計方針の1〜3行要約。採用したアーキテクチャの骨子とモジュール分割の考え方)
 keywords: []
@@ -65,13 +65,20 @@ graph LR
 
 ## モジュール間インターフェース(契約)
 
-<!-- モジュールをまたぐ呼び出し・イベント・データ受け渡しの契約。型つきで -->
+<!-- モジュールをまたぐ呼び出し・イベント・データ受け渡しの契約。型つきで。
+     深さの基準(/doc-check チェックD11): 型だけでは契約は決まらない。契約ごとに
+     エラーケース(何が起きたときどの失敗が返るか)を必ず書き、振る舞いが依存する場合は
+     呼び出し順序・冪等性・並行呼び出し時の扱いも明記する。
+     実装者が値や方針を発明しなければならない契約は未完成 -->
 
 ### <呼び出し元> → <呼び出し先>
 
 ```
 methodName(param: Type) -> ReturnType
 ```
+
+- エラーケース: (条件 → 返る失敗/例外。呼び出し元の責務)
+- 順序・冪等性・並行性: (依存する場合のみ。なければ「制約なし」)
 
 ## UI設計 ※必須(UIがないシステムは「UIなし(理由)」と明記)
 

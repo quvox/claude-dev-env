@@ -2,15 +2,15 @@
 id: e2e                        # 固定。モジュール別03-implの唯一の標準例外
 layer: impl
 title: E2Eテスト実装説明書
-version: 0.1.0                 # MAJOR.MINOR.PATCH。意味に影響する変更はMINOR以上、
+version: 1.0.0                 # 初版は 1.0.0(履歴エントリ不要)。MAJOR.MINOR.PATCH。意味に影響する変更はMINOR以上、
                                # 誤字・表記等の軽微修正はPATCHのみ(検証を失効させない)。迷ったらMINOR
 updated: YYYY-MM-DD
 # verified:                    # /doc-check がPASS時に記録する検証の証拠(このブロックの有無+照合が
 #   at: YYYY-MM-DD             # 検証状態のすべて。statusフィールドは存在しない)
 #   version: X.Y.Z             # 検証した時点の自分自身の version(照合はMAJOR.MINORのみ)
-#   against:                   # 検証した時点の source 各ドキュメントの version
+#   against:                   # 検証した時点の source 各ドキュメントの version(X.Y.Z で書く。照合はMAJOR.MINORのみ)
 #     - doc: <sourceのパス>
-#       version: X.Y
+#       version: X.Y.Z
 summary: >
   (E2Eテスト実装の1〜3行要約。ツールと実行環境の骨子)
 keywords: [e2e]
