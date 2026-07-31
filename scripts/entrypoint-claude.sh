@@ -283,7 +283,7 @@ ensure_codex_config() {
     fi
 
     python3 - "$_cfg" <<'PYEOF'
-import os, sys, tempfile, tomllib
+import os, re, sys, tempfile, tomllib
 
 path = sys.argv[1]
 WANT = [(("sandbox_mode",),  'sandbox_mode = "danger-full-access"',  "danger-full-access"),
@@ -319,56 +319,69 @@ lines = text.splitlines()
 need_top = [m for m in missing if len(m[0]) == 1]
 need_ll  = [m for m in missing if m[0] == ("features", "use_legacy_landlock")]
 
-# features が通常テーブル以外（インラインテーブル / 配列テーブル）で定義済みなら、
-# 既存値を変えずに鍵を足す方法が無いので landlock の補完だけ諦める。
+# features が配列テーブル（[[features]]）等で定義済みなら、既存値を変えずに鍵を足す方法が無い。
 feat = orig.get("features")
 ll_blocked = bool(need_ll) and feat is not None and not isinstance(feat, dict)
-ll_reason = "既存の features が通常テーブルではない（配列テーブル等）" if ll_blocked else ""
+ll_reason = "既存の features が通常テーブルではない（配列テーブル等）"
 
-out = list(lines)
-# トップレベル鍵はファイル先頭へ入れる。先頭は常にトップレベルなので、どんな構造でも
-# 「最初のテーブル見出しより前」を満たす最も安全な位置。
-if need_top:
-    out = [m[1] for m in need_top] + out
-if need_ll and not ll_blocked:
-    if isinstance(feat, dict):
-        idx = next((i for i, l in enumerate(out)
-                    if l.strip().rstrip("\r").replace(" ", "") == "[features]"), None)
-        if idx is None:
-            # dict だが [features] 見出し行が無い＝インラインテーブルかドット記法で定義されている。
-            # どちらも「既存を変えずに鍵を足す」書き方が無いので触らない。
-            ll_blocked = True
-            ll_reason = "既存の features がインラインテーブル／ドット記法で定義されている"
-        else:
-            out.insert(idx + 1, "use_legacy_landlock = true")
-    else:
-        out += ["", "[features]", "use_legacy_landlock = true"]
+# [features] 見出し行。空白・quoted key（["features"]）・行末コメントを許容する。
+HDR = re.compile(r"""^\s*\[\s*(?:features|"features"|'features')\s*\]\s*(?:#.*)?\r?$""")
+hdr_idx = next((i for i, l in enumerate(lines) if HDR.match(l)), None)
 
-if ll_blocked:
-    print(f"⚠️  landlock を追記できません（{ll_reason}）: {path}")
-if not need_top and ll_blocked:
-    sys.exit(0)          # 追記できるものが何も無い＝無変更
+def build(strategy):
+    """挿入位置の候補を 1 つ作る。作れない戦略には None を返す。"""
+    out = list(lines)
+    if need_ll and not ll_blocked:
+        if strategy == "after_header":
+            if hdr_idx is None:
+                return None
+            out.insert(hdr_idx + 1, "use_legacy_landlock = true")
+        else:                       # "append": 末尾に [features] ごと足す
+            out = out + ["", "[features]", "use_legacy_landlock = true"]
+    # トップレベル鍵はファイル先頭へ。先頭は常にトップレベルなので最も安全。
+    if need_top:
+        out = [m[1] for m in need_top] + out
+    return nl.join(out) + nl
 
-cand = nl.join(out) + nl
+def verify(cand, expect_ll):
+    """既存の全キーパスの値が不変で、増分が意図した鍵だけかを意味的に確かめる。"""
+    try:
+        new = tomllib.loads(cand)
+    except Exception:
+        return None
+    nflat = flatten(new)
+    for kp, v in oflat.items():
+        if kp not in nflat or nflat[kp] != v:
+            return None
+    want = {m[0]: m[2] for m in need_top}
+    if expect_ll:
+        want[("features", "use_legacy_landlock")] = True
+    extra = set(nflat) - set(oflat)
+    if extra != set(want) or any(nflat[kp] != want[kp] for kp in extra):
+        return None
+    return cand
 
-# --- 検証: 「既存の鍵と値は一切変わらず、意図した鍵だけが増えた」ことを意味的に確かめる ---
-try:
-    new = tomllib.loads(cand)
-except Exception as e:
-    print(f"⚠️  補完結果が不正な TOML になるため書き込みません（無変更）: {path} ({e})")
-    sys.exit(0)
-nflat = flatten(new)
-added_ok = {m[0]: m[2] for m in ([] if ll_blocked else missing) if m in missing}
-if ll_blocked:
-    added_ok = {m[0]: m[2] for m in need_top}
-for p, v in oflat.items():
-    if p not in nflat or nflat[p] != v:
-        print(f"⚠️  補完すると既存の設定 {'.'.join(p)} が変わってしまうため書き込みません（無変更）: {path}")
+cand = None
+if not ll_blocked:
+    # 見出しの直後 → 末尾に見出しごと、の順に試し、検証を通った最初の候補を採る。
+    # 行単位の見出し検出が外れても（複数行文字列の中の [features] 等）、検証が弾いて次へ進む。
+    for st in ("after_header", "append"):
+        c = build(st)
+        if c is not None and verify(c, bool(need_ll)):
+            cand = c
+            break
+    if cand is None and need_ll:
+        ll_blocked = True
+        ll_reason = "既存の features 定義と両立する追記位置が見つからない"
+if cand is None:
+    if ll_blocked:
+        print(f"⚠️  landlock を追記できません（{ll_reason}）: {path}")
+        if not need_top:
+            sys.exit(0)                      # 追記できるものが何も無い＝無変更
+        cand = verify(build("none"), False)  # トップレベル鍵だけ補完する
+    if cand is None:
+        print(f"⚠️  既定鍵を安全に追記できないため書き込みません（無変更）: {path}")
         sys.exit(0)
-extra = set(nflat) - set(oflat)
-if extra != set(added_ok) or any(nflat[p] != added_ok[p] for p in extra):
-    print(f"⚠️  補完結果が意図と一致しないため書き込みません（無変更）: {path}")
-    sys.exit(0)
 
 # --- 置き換え: 一時ファイルを作って属性を移し、rename で原子的に差し替える ---
 # リダイレクトによる truncate は使わない（途中で失敗すると元ファイルを壊すため）。
@@ -378,11 +391,10 @@ fd, tmp = tempfile.mkstemp(dir=d, prefix=".config.toml.")   # O_EXCL・0600
 try:
     with os.fdopen(fd, "w", encoding="utf-8") as f:
         f.write(cand)
+    # chown を先、chmod を後にする（逆順だと Linux が setuid/setgid ビットを落とす）。
+    # 所有者を復元できないなら差し替えない——利用者のファイルの所有者を変えてしまうため。
+    os.chown(tmp, st.st_uid, st.st_gid)
     os.chmod(tmp, st.st_mode & 0o7777)
-    try:
-        os.chown(tmp, st.st_uid, st.st_gid)
-    except PermissionError:
-        pass
     os.replace(tmp, path)
 except Exception as e:
     try:
