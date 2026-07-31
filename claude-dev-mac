@@ -1126,15 +1126,18 @@ ssh-keys)
                 _f=$(dev_agent_path "$NAME" "$_kind")
                 [ -f "$_f" ] && kill "$(cat "$_f" 2>/dev/null)" 2>/dev/null || true
             done
-            rm -f "$(dev_agent_path "$NAME" sock)" "$(dev_agent_path "$NAME" pid)" \
+            # sock はディレクトリ残骸（Docker が bind-mount ソースとして作ったもの）のことがあるので -r 付き
+            rm -rf "$(dev_agent_path "$NAME" sock)" 2>/dev/null || true
+            rm -f "$(dev_agent_path "$NAME" pid)" \
                   "$(dev_agent_path "$NAME" bpid)" "$(dev_agent_path "$NAME" bport)" 2>/dev/null || true
             # 後方互換: 旧・単一 agent／ブリッジ（グローバル方式時代）の残骸も掃除
             [ -S "$LEGACY_AGENT_SOCK" ] && SSH_AUTH_SOCK="$LEGACY_AGENT_SOCK" ssh-add -D 2>/dev/null || true
             for _f in "$LEGACY_BRIDGE_PID_FILE" "$LEGACY_AGENT_PID_FILE"; do
                 [ -f "$_f" ] && kill "$(cat "$_f" 2>/dev/null)" 2>/dev/null || true
             done
+            rm -rf "$LEGACY_AGENT_SOCK" 2>/dev/null || true
             rm -f "$LEGACY_BRIDGE_PID_FILE" "$LEGACY_BRIDGE_PORT_FILE" \
-                  "$LEGACY_AGENT_PID_FILE" "$LEGACY_AGENT_SOCK" 2>/dev/null || true
+                  "$LEGACY_AGENT_PID_FILE" 2>/dev/null || true
             echo "✅ このプロジェクト（${NAME}）の SSH 鍵選択をリセットしました。再設定は 'claude-dev ssh-keys' で選択するか .claude-dev.yaml を作成してください"
             ;;
         ""|select)

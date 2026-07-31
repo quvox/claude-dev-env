@@ -38,7 +38,8 @@ Web アプリのような自動E2Eフレームワーク（Playwright 等）は�
 |---|---|
 | scripts/orch-sample.sh | 自己検証題材の scaffold（[sample-project](sample-project.md) が正本） |
 | examples/orch-sample/ | オーケストレーター自己検証の題材（Python+pytest、seed/plan.json 等） |
-| （専用E2Eテストコードなし） | CLI/コンテナ系は自動E2Eを持たず実機確認 |
+| scripts/e2e6-codex.sh | E2E-6 の実施スクリプト（デバイス認証以外を自動判定・冪等・`--keep`/`--cleanup`） |
+| （E2E-1〜5 は専用テストコードなし） | 実機確認に依存 |
 
 ## テスト対応表
 
@@ -49,11 +50,12 @@ Web アプリのような自動E2Eフレームワーク（Playwright 等）は�
 | 実機確認(手動): コンテナ内 `docker run -v /:/host` 等 → 拒否／`/workspace` bind 許可／通常許可 | E2E-3 | UC-3 | docker-proxy の許可/拒否/書換（契約は [docker-proxy](docker-proxy.md) の結合テストが機械検証、E2E としては実機確認）＝**部分自動(結合テスト)＋実機確認** |
 | 自己検証: `make orch-sample`（scaffold）→ `claude-dev orchestrate`（実走） | E2E-4 | UC-4 | ブレスト→plan→worker 並列→要判断タスク単位待機→回答復帰→完了。題材に対し実走で確認＝**半自動(自己検証題材で実走・観測)** |
 | 実機確認(手動): 実行中に端末全終了 → `claude-dev orchestrate` 再実行 | E2E-5 | UC-5 | attach/resume・完了済み非再実行・plan/履歴保持。自動化なし＝**未検証(自動化なし・実機確認)** |
-| 実機確認(手動): `claude-dev login-codex` → デバイス認証 → 別プロジェクトで `claude-dev start` → コンテナ内 `codex` にファイル読み書きを伴う作業を依頼 → 続けて landlock 疎通確認と読み取り専用での依頼 | E2E-6 | UC-6 | 共有ボリュームへ `codex/auth.json` が保存され、別プロジェクトのコンテナで再ログイン不要に `codex` が起動する。**依頼した作業で codex が起こすシェルコマンドが成功し（`bwrap` エラーで失敗しない）、`/workspace` のファイルを読み書きできる**。**landlock 疎通確認**として、entrypoint が置いた既定 `config.toml` があるコンテナで**フラグを付けずに** `codex sandbox -- /bin/true` が exit 0（＝config 経由で landlock が効いている。ここが要件 core/12-9 の本体）、同経路の `codex sandbox -- /bin/sh -c 'touch /tmp/x'` が失敗しファイルが生成されない。`--enable use_legacy_landlock` を明示した形でも exit 0 になる（フラグ経路の回帰確認）。さらに `codex exec -s read-only` を明示した依頼でファイル読み取りが成功する（要件 core/12-9）。トークン更新が 30 秒同期で共有ボリュームへ書き戻り次のコンテナへ引き継がれる。`config.toml`/セッション履歴はコンテナごとに独立。自動化なし＝**未検証(自動化なし・実機確認)** |
+| **`scripts/e2e6-codex.sh`（半自動）** ＋ 実機確認(手動): `claude-dev login-codex` のデバイス認証部分のみ手動 | E2E-6 | UC-6 | 共有ボリュームへ `codex/auth.json` が保存され、別プロジェクトのコンテナで再ログイン不要に `codex` が起動する。**依頼した作業で codex が起こすシェルコマンドが成功し（`bwrap` エラーで失敗しない）、`/workspace` のファイルを読み書きできる**。**landlock 疎通確認**として、entrypoint が置いた既定 `config.toml` があるコンテナで**フラグを付けずに** `codex sandbox -- /bin/true` が exit 0（＝config 経由で landlock が効いている。ここが要件 core/12-9 の本体）、同経路の `codex sandbox -- /bin/sh -c 'touch /tmp/x'` が失敗しファイルが生成されない。`--enable use_legacy_landlock` を明示した形でも exit 0 になる（フラグ経路の回帰確認）。さらに `codex exec -s read-only` を明示した依頼でファイル読み取りが成功する（要件 core/12-9）。トークン更新が 30 秒同期で共有ボリュームへ書き戻り次のコンテナへ引き継がれる。`config.toml`/セッション履歴はコンテナごとに独立。**デバイス認証以外は `scripts/e2e6-codex.sh` が自動判定する（16 チェック）。判定は成果物とファイルの不在のみで行い、codex の応答は根拠にしない（読み取り成功の判定だけは「依頼文に含めていないランダムマーカーが応答に現れた」という観測を使う）。2026-07-31 実施: 16 PASS / 0 FAIL**＝**半自動（デバイス認証のみ手動）** |
 
 ## 既知の制限・技術的負債
 
-- CLI/コンテナ系（E2E-1,2,3,5,6）の**自動E2Eは未整備**で、実機確認に依存する。回帰検出は手動。
+- CLI/コンテナ系のうち **E2E-1,2,3,5 は自動E2Eが未整備**で、実機確認に依存する。回帰検出は手動。
+  E2E-6 のみ `scripts/e2e6-codex.sh` があり、デバイス認証を除いて自動判定できる。
 - E2E-6 はデバイス認証にブラウザ操作（クライアント PC 側）を伴うため、原理的に無人自動化できない。
   実施前にイメージの再ビルド（`make build`、または `make build-claude` と `make build-claude-vnc` の両方。
   codex 同梱層が新設されるため）が必要。
