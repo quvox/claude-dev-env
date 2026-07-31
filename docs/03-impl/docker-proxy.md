@@ -9,7 +9,7 @@ verified:
   version: 1.0.0
   against:
     - doc: docs/02-design/system.md
-      version: 1.8
+      version: 1.9
 summary: >
   Docker API を中継しつつ危険操作を拒否する Go 製リバースプロキシ。POST /containers/create と
   exec のボディを検査し、privileged・host namespace・危険 cap・デバイス・/workspace 外 bind を

@@ -2,14 +2,14 @@
 id: firewall
 layer: impl
 title: firewall 実装説明書
-version: 1.0.0
-updated: 2026-07-18
+version: 1.1.0
+updated: 2026-07-31
 verified:
   at: 2026-07-31
-  version: 1.0.0
+  version: 1.1.0
   against:
     - doc: docs/02-design/system.md
-      version: 1.8
+      version: 1.9
 summary: >
   Claude コンテナ内で起動時に適用する iptables ブラックリスト方式ファイアウォールの実装。
   デフォルト全許可（ACCEPT）とし、ペーストサイト等の危険ドメイン(ipset)・メタデータ・SMTP・
@@ -120,7 +120,8 @@ allowlist/blocklist のカスタマイズは**環境変数ではなくスクリ�
 
 | テスト(ファイル::ケース名) | レベル | 検証内容 | 対応する受け入れ基準/契約 |
 |---|---|---|---|
-| （自動テストなし。実機: `claude-dev start` 後にスクリプト自身のスモークテスト出力を確認） | 結合 | 起動時に FW が適用される／pastebin ブロック・anthropic 到達 | 契約: entrypoint→firewall（core/5）— 未検証(自動テストなし) |
+| （自動テストなし。実機: `claude-dev start` 後にスクリプト自身のスモークテスト出力を確認） | 結合 | 起動時に FW が適用される／pastebin ブロック・anthropic 到達 | 契約: entrypoint→firewall（core/5-1）— 未検証(自動テストなし) |
+| （自動テストなし。実機: `iptables` を使えない状態で起動し、起動が中止されないこと・警告行が出ることを確認） | 結合 | 適用に失敗しても起動を中止せず、警告を起動ログへ出す（成否はサマリとスモークテストの警告行で判別できる） | 要件 core/5-3 — 未検証(自動テストなし) |
 
 実行方法: 自動テストコマンドなし。実機では entrypoint 経由で自動実行され、標準出力に
 `=== Firewall rules (blacklist mode) ===` 以下のサマリとスモークテスト結果が出る。手動確認は

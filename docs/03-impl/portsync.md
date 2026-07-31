@@ -2,14 +2,14 @@
 id: portsync
 layer: impl
 title: portsync 実装説明書
-version: 1.0.0
-updated: 2026-07-18
+version: 1.0.1
+updated: 2026-07-31
 verified:
   at: 2026-07-31
-  version: 1.0.0
+  version: 1.0.1
   against:
     - doc: docs/02-design/system.md
-      version: 1.8
+      version: 1.9
 summary: >
   DooD モードでホスト公開されたコンテナポートを claude コンテナの 127.0.0.1 へ届かせる
   実行時ネットワークヘルパ。dood-portsync.sh が docker ps で 0.0.0.0:PORT を検出し、
@@ -90,7 +90,7 @@ dood-portsync.sh --loop    # 常駐し INTERVAL 秒ごとに定期同期（entry
 |---|---|---|---|
 | socat 不在 | 前提チェック | `FATAL: socat not found` をログ出力し `exit 1` | core/6 |
 | デフォルトGW を引けない | 前提チェック | `FATAL: default gateway not found` をログ出力し `exit 1` | core/6 |
-| 内部サービスポートの先取り競合 | `is_excluded`/`EXCLUDE` | 6080/5999/9222 等を転送対象から除外し bind 競合を回避 | core/6, core/11 |
+| 内部サービスポートの先取り競合 | `is_excluded`/`EXCLUDE` | `EXCLUDE`（既定 `6080 5999 9222`、`CLAUDE_DEV_DOOD_PORTSYNC_EXCLUDE` で上書き）に列挙されたポートだけを転送対象から除外し bind 競合を回避 | core/6, core/11 |
 | 同一ポートの二重転送 | `STATE`/`local_listening` | 記録済み・ローカル待受中はスキップ | core/6 |
 
 ## テスト

@@ -2,14 +2,14 @@
 id: cli
 layer: impl
 title: cli 実装説明書
-version: 1.8.0
+version: 1.9.0
 updated: 2026-07-31
 verified:
   at: 2026-07-31
-  version: 1.8.0
+  version: 1.9.0
   against:
     - doc: docs/02-design/system.md
-      version: 1.8
+      version: 1.9
 summary: >
   ホスト Linux 用 `claude-dev`（単一 bash スクリプト）の実装。case ディスパッチで
   start/stop/list/attach/forward/orchestrate/login/login-codex 等のサブコマンドを提供し、Docker
@@ -243,9 +243,12 @@ bash スクリプトのため**自動テストランナーは存在しない**�
 | （自動テストなし） | — | `start`→マウント/認証/再接続、`list`/`stop`（proxy 連動） | core/要件1-1〜6 未検証(自動テストなし) |
 | （自動テストなし） | — | `login`→認証ボリューム保存、`logout`→削除 | core/要件3-1,2,5 未検証(自動テストなし) |
 | （自動テストなし。書き戻し/コピー/`.gitignore` 経路はローカル検証済み。対話デバイス認証は実機） | — | `login-codex`→デバイス認証→`codex/auth.json` 保存、`start`→`.codex/auth.json` コピー | core/要件3-6,7 未検証(自動テストなし) |
-| （自動テストなし） | — | `ssh-keys` 対話選択→`.claude-dev.yaml` 生成、専用 agent 限定転送 | core/要件4-4 ほか 未検証(自動テストなし) |
-| （自動テストなし） | — | `forward`/`unforward`/`ports`（8100〜割当） | core/要件6-2,3,4 未検証(自動テストなし) |
-| （自動テストなし） | — | `orchestrate`→未起動自動起動・生存判定 attach/resume | orchestration/要件13-2 未検証(自動テストなし) |
+| （自動テストなし） | — | `ssh-keys` 対話選択→`.claude-dev.yaml` 生成、専用 agent 限定転送（秘密鍵ファイルを渡さない／`ssh_keys` 指定鍵だけ登録／未指定時は転送なしで案内） | core/要件4-1,4-2,4-3,4-4 未検証(自動テストなし) |
+| （自動テストなし） | — | `start` 直後は Webアプリ用のポートが公開されていない（`docker port <name>` に noVNC 6080 以外が現れない）→`forward`/`unforward`/`ports`（8100〜割当） | core/要件6-1,6-2,6-3,6-4 未検証(自動テストなし) |
+| （自動テストなし） | — | `orchestrate`→未起動自動起動・生存判定 attach/resume | orchestration/要件13-2 のうち cli 担当分（起動・attach/resume の入口）未検証(自動テストなし)。13-1（外部制御ループ）・13-3（文脈の再構成）は orchestrator の担当 |
+| （自動テストなし。実機: `docker inspect <container> --format '{{.HostConfig.SecurityOpt}}'` が空、かつ `claude-dev` の `docker run` 行に `--security-opt` が現れないこと） | — | `start` がコンテナ側の seccomp/AppArmor を緩めない（`--security-opt` を付けない） | core/要件12-7 未検証(自動テストなし) |
+| （自動テストなし。実機: 異なる 2 プロジェクトで同時に `start` し、各コンテナで `printenv COMPOSE_PROJECT_NAME` が別値になり、両者で `docker compose up` してもネットワーク名・コンテナ名が衝突しないこと） | — | `start` が `NAME` を compose 互換名へ正規化し `-e COMPOSE_PROJECT_NAME` で渡す | core/要件7-5 未検証(自動テストなし) |
+| （自動テストなし。実機: VNC ありで `start` → `docker port <name> 6080` が 6080〜の割当を返し、`ports`/`list` が noVNC URL を表示すること） | — | VNC あり起動時に noVNC ポートを 6080〜から動的割当して公開し、URL を案内する（Chrome/VNC の起動自体は entrypoint 側） | core/要件11-1 のうち cli 担当分（noVNC ポート割当と URL 表示）未検証(自動テストなし)。11-1 の VNC/Chrome/noVNC 起動と 11-2（MCP 設定）は entrypoint、11-3（日本語入力）は devcontainer の担当 |
 
 実行方法: 自動テストなし。実機で `claude-dev <subcommand>` を実行して確認する。
 

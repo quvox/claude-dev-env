@@ -2,7 +2,7 @@
 id: e2e
 layer: impl
 title: E2Eテスト実装説明書
-version: 1.4.0
+version: 1.5.0
 updated: 2026-07-31
 summary: >
   02-design のE2Eシナリオ一覧(E2E-1〜6)に対応するE2E検証の実装説明。専用E2Eフレームワークは持たず、
