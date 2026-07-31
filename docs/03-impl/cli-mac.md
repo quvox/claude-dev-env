@@ -2,8 +2,8 @@
 id: cli-mac
 layer: impl
 title: cli-mac 実装説明書
-version: 1.2.0
-updated: 2026-07-19
+version: 1.3.0
+updated: 2026-07-31
 verified:
   at: 2026-07-31
   version: 1.2.0
@@ -174,6 +174,7 @@ cli-commands 画面）。コンテナ→docker-proxy の HTTP 契約は docker-p
 | `socat` 不在（SSH ブリッジ） | `ensure_ssh_bridge` | `brew install socat` を案内し非0で戻る。SSH 転送なしで start 継続 | core/10 受け入れ基準2 |
 | `--kvm`/`--vm`/`--vm-fresh` 指定 | `start` フラグ解析 | 非対応理由を表示し `exit 1`（ビルド前） | core/10 受け入れ基準2 |
 | SSH 鍵未選択 | `start` SSH 部 | 日本語案内（`ssh-keys` 選択 or `.claude-dev.yaml` 作成）を出し転送なしで継続 | core/10（停止しない方針は cli 共通） |
+| agent ソケットのパスがソケットでない（Docker が bind-mount のソースとして作った root 所有ディレクトリ等の残骸） | `ensure_dedicated_agent` | `rm -rf` で自己修復。消せなければ**停止せず** `sudo rm -rf` を案内し SSH 転送なしで続行（`set -e` 下で `rm -f` が失敗すると `start` ごと落ちるため） | core/10（cli 共通） |
 | Docker ソケット不在 | `detect_docker_sock` 空 | docker-proxy を起動せず `DOCKER_HOST` 未付与で継続 | core/7 周辺 |
 
 方針（前提不足は停止せず日本語案内・人間向け表示は日本語）は cli と共通。

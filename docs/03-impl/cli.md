@@ -2,7 +2,7 @@
 id: cli
 layer: impl
 title: cli 実装説明書
-version: 1.9.0
+version: 1.10.0
 updated: 2026-07-31
 verified:
   at: 2026-07-31
@@ -223,6 +223,7 @@ source:
 | イメージ未ビルド | `require_setup`/`ensure_docker_proxy_container` | 自動ビルド（build-arg 付き） | core/1,9 |
 | `.claude-dev.yaml` 不在 | `ensure_project_config` | TTY は鍵選択、非 TTY は空作成。停止しない | core/4 |
 | SSH 鍵 0 件/存在しない鍵 | `ensure_ssh_agent` | 転送なしで続行し `ssh_keys:` 記述を案内、欠落鍵は警告スキップ | core/4 |
+| agent ソケットのパスがソケットでない（Docker が bind-mount のソースとして作った root 所有ディレクトリ等の残骸） | `ensure_ssh_agent` | `rm -rf` で自己修復。消せなければ**停止せず** `sudo rm -rf` を案内し SSH 転送なしで続行（`set -e` 下で `rm -f` が失敗すると `start` ごと落ちるため） | core/4 |
 | noVNC ポート競合 | `start` の `docker run` リトライ | 途中コンテナ掃除→別ポートで最大 20 回再試行 | core/1,6 |
 | tmux 起動タイムアウト | `start` L930〜 | 終了せず状況案内し `exit 0`（コンテナは稼働継続） | core/1 |
 | コンテナ未起動での操作 | `code`/`attach`/`forward`/`ports`/`firewall` | 日本語エラーで `exit 1` | core/1,6 |
@@ -266,6 +267,10 @@ bash スクリプトのため**自動テストランナーは存在しない**�
   （`docs/knowledge/host-credentials-are-not-imported-into-containers.md`）。ホストから読むのは
   `~/.claude/settings.json` の `hooks`/`env` と `~/.gitconfig`・`~/.config/gh`(RO) のみ。
 - コンテナ名＝ディレクトリ名のため、別パスでも同名ディレクトリは同一セッション扱いになる。
+- `~/.claude-dev/agents/<name>.sock` にソケット以外のもの（多くは Docker デーモンが bind-mount の
+  ソースとして作った root 所有の空ディレクトリ）が残ることがある。現在は `docker run` へ渡す前に
+  `[ -S ... ]` で検査するので新たに作られることはないが、過去に作られた残骸は自動では消せない場合が
+  あり、その場合は案内を出して SSH 転送なしで続行する（起動自体は止めない）。
 - `.claude-dev.yaml` の SSH 鍵はローカル設定のみ参照し、グローバルへのフォールバックや鍵推測はしない
   （意図的な安全側設計）。
 

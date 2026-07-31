@@ -193,7 +193,18 @@ ensure_dedicated_agent() {
     local rc=0
     SSH_AUTH_SOCK="$sock" ssh-add -l >/dev/null 2>&1 || rc=$?
     if [ "$rc" -eq 2 ] || [ ! -S "$sock" ]; then
-        rm -f "$sock"
+        # 残骸の掃除。ソケット以外のもの（Docker が bind-mount のソースとして作った
+        # root 所有のディレクトリ等）が居座っていることがある。`rm -f` はディレクトリに
+        # 失敗し、`set -e` の下では start ごと落ちてしまうため、消せなかった場合は
+        # 停止せず案内して SSH 転送だけ諦める（前提不足は停止しない方針）。
+        if [ -e "$sock" ] || [ -L "$sock" ]; then
+            rm -rf "$sock" 2>/dev/null || true
+        fi
+        if [ -e "$sock" ] || [ -L "$sock" ]; then
+            echo "⚠️  ${sock} がソケットではなく、削除もできませんでした"
+            echo "    sudo rm -rf '${sock}' で取り除いてください。SSH 転送なしで続行します"
+            return 1
+        fi
         local out
         out=$(ssh-agent -a "$sock" 2>/dev/null) || {
             echo "⚠️  専用 ssh-agent の起動に失敗しました"; return 1; }
