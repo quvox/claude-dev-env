@@ -14,7 +14,8 @@
 | [006-modify-e2e-procedures-lack-reproducibility](006-modify-e2e-procedures-lack-reproducibility.md) | modify | 中 | 2026-07-31 | E2E-01, E2E-02, E2E-03, E2E-04, E2E-05, E2E-06, docs/03-impl/tests/e2e.md | E2E シナリオの実施手順に固定入力・観測点・合否判定の根拠・後始末が無く、実施者によって結果が変わる |
 | [007-future-heterogeneous-vendor-reviewer](007-future-heterogeneous-vendor-reviewer.md) | future | 中 | 2026-07-31 | D0-orch-17, FR-orch-06, FR-env-12 | 品質ゲートのレビュアーを別ベンダー(Codex)常用へ昇格する。人間の回答は「決定へ昇格。ただしフォールバック付き」で取得済み |
 | [008-modify-spec-depth-contracts-and-wording](008-modify-spec-depth-contracts-and-wording.md) | modify | 中 | 2026-07-31 | FR-orch-01, FR-orch-04, FR-orch-06, CTR-cli-orchestrator, CTR-orchestrator-prompt | モジュール間契約の深度が実装可能な粒度に達しておらず、オーケストレーション要件の判定語が測定不能 |
+| [009-modify-relations-prose-signatures-drift-from-code](009-modify-relations-prose-signatures-drift-from-code.md) | modify | 中 | 2026-08-03 | MODULE-orchestrator-session, MODULE-orchestrator-worktree, MODULE-orchestrator-worker, MODULE-orchestrator-mode, MODULE-orchestrator-review, MODULE-orchestrator-slack, MODULE-orchestrator-term, MODULE-orchestrator-handoff, MODULE-orchestrator-claude-exec, MODULE-orchestrator-dashboard | relations の「処理の流れ」本文が書く関数シグネチャが実コードと一致しない箇所が約27件あり、省略記法として許容するのか誤りとして直すのかの規約が無い |
 
-件数: 8
+件数: 9
 
 <!-- END GENERATED -->

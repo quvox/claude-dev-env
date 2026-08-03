@@ -1,387 +1,364 @@
 ---
 id: system
-layer: design
-title: claude-dev-env 全体設計書
-version: 1.9.0
-updated: 2026-07-31
-verified:
-  at: 2026-07-31
-  version: 1.9.0
-  against:
-    - doc: docs/01-requirements/core.md
-      version: 1.9
-    - doc: docs/01-requirements/orchestration.md
-      version: 1.1
-summary: >
-  隔離Docker開発環境＋AIオーケストレーターの全体設計。14モジュール分割定義、モジュール間契約5件、
-  CLI/TUIのUI設計、テスト戦略（単体/結合/E2E）とE2Eシナリオ一覧を定める。同梱エージェント CLI
-  （Claude Code / Codex CLI）の導入位置・認証共有・Codex サンドボックス方針の構造を含む。
-keywords: [全体設計, モジュール分割, docker-proxy, orchestrator, VMモード, テスト戦略, E2E, CodexCLI, Codexサンドボックス]
+version: 2.0.0
+updated: 2026-08-03
 source:
-  - docs/01-requirements/core.md
-  - docs/01-requirements/orchestration.md
+  - docs/01-requirements/functional.md
+  - docs/01-requirements/non-functional.md
+  - docs/01-requirements/usecases.md
+  - docs/02-design/architecture.md
+summary: >
+  29モジュールの分割定義とその根拠(DSN-mod-*)、要件カバレッジ確認、テスト戦略(単体/結合/E2E)と
+  E2Eシナリオ一覧、UI設計を定める。アーキテクチャと契約と設計判断は architecture.md / contracts/ が持つ。
+keywords: [モジュール分割, DSN-mod, テスト戦略, E2E, UI設計, 要件カバレッジ]
+verified:
+  at: 2026-08-03
+  version: 2.0.0
+  against:
+    - doc: docs/01-requirements/functional.md
+      version: 1.0.0
+    - doc: docs/01-requirements/non-functional.md
+      version: 1.0.1
+    - doc: docs/01-requirements/usecases.md
+      version: 1.0.0
+    - doc: docs/02-design/architecture.md
+      version: 1.0.0
 ---
 
-# 全体設計書:claude-dev-env
+# モジュール分割・テスト戦略・UI設計
 
-## 概要
+## モジュール分割定義
 
-Claude Code を隔離 Docker コンテナで動かす開発環境基盤（[core](../01-requirements/core.md)）と、その上で
-複数エージェントを連携させる AIオーケストレーター（[orchestration](../01-requirements/orchestration.md)）を
-実現する構造を定める。OS 依存はホスト CLI に閉じ、コンテナ内資産（イメージ・entrypoint・firewall・
-docker-proxy）は OS 非依存に保つ。
+<!-- 29モジュール。CLI はサブコマンド単位で1モジュール(決定シート 論点3)。
+     機能(relations)は82本で、その境界は docs/03-impl/features.md が持つ。 -->
 
-## アーキテクチャ
-
-```mermaid
-graph TD
-  subgraph Host[ホスト Linux/macOS]
-    CLI[cli / cli-mac]
-    MK[makefile]
-    VM[vm-mode]
-    GH[ghcr-workflow]
-  end
-  subgraph Images[コンテナイメージ devcontainer]
-    EP[entrypoint]
-    FW[firewall]
-    PS[portsync]
-    HK[hooks]
-    CT[container-tools]
-    ORCH[orchestrator]
-  end
-  DP[docker-proxy 共有]
-  SP[sample-project]
-
-  MK --> Images
-  MK --> DP
-  MK --> SP
-  GH --> Images
-  CLI -->|start/stop/forward/login| Images
-  CLI -->|orchestrate| ORCH
-  CLI --> VM
-  EP --> FW
-  EP --> PS
-  ORCH --> HK
-  ORCH --> SP
-  Images -->|DOCKER_HOST| DP
-```
-
-- 開発者はホスト CLI（`cli`／macOS は `cli-mac`）で Claude コンテナのライフサイクルを操作する。
-- コンテナ起動時は `entrypoint` が UID/GID 追従・認証コピー・`firewall` 起動・MCP/VNC 設定・tmux 開始を行う。
-- コンテナ内 Docker は `docker-proxy`（共有）を介して制限付きで使う。重い案件は `vm-mode`。
-- `orchestrator`（Go, コンテナ内常駐）が 2 モードで worker を並列制御する。`sample-project` で自己検証する。
-- イメージは `makefile` でビルド、`ghcr-workflow` で GHCR 配布する。
-
-## モジュール分割定義 ※この体系の要
-
-| モジュール(slug) | 責務 | 対応する要件(領域/要件番号) | 依存モジュール | 詳細設計 | 03-impl |
+| モジュールID | 責務 | 対応要件 | 依存 | 詳細設計 | relations の接頭辞 |
 |---|---|---|---|---|---|
-| cli | ホスト CLI（Linux `claude-dev`）。start/stop/list/attach/forward/unforward/ports/login/login-codex/logout/ssh-keys/orchestrate/code/upgrade 等 | core/1,3,4,6,7(7-5 compose 名一意化),11,12(login-codex, 12-7 `--security-opt` 不付与) orchestration/13(起動) | container-tools, hooks, portsync, devcontainer | なし | 03-impl/cli.md |
-| cli-mac | macOS 版 `claude-dev-mac` の差分（SSH agent TCP ブリッジ・ポート直結・VM/KVM 非対応・arm64） | core/10（cli が担う要件の macOS 差分を含む） | cli | なし | 03-impl/cli-mac.md |
-| makefile | ビルド・セットアップ・install/uninstall・login・upgrade・orch-sample 等の入口 | core/9(build),全般 | devcontainer, docker-proxy, orchestrator, sample-project | なし | 03-impl/makefile.md |
-| entrypoint | `entrypoint-claude.sh`：UID/GID 追従・認証コピー（claude/codex）・既定設定生成（claude `settings.json` / codex `config.toml`）・firewall 起動・MCP/VNC/Chrome・tmux・認証同期（claude/codex）・portsync 起動 | core/2,3,5,11,12(12-4〜12-6,12-9) | firewall, portsync | なし | 03-impl/entrypoint.md |
-| firewall | `init-firewall-claude.sh`：iptables ファイアウォール | core/5 | — | なし | 03-impl/firewall.md |
-| devcontainer | `Dockerfile.claude`(base / vnc-base / claude-cli / claude-vnc の4ステージ)・`Dockerfile.docker-proxy`・`.devcontainer/tmux.conf` 等イメージ定義。各モジュールの資産をイメージへ同梱し、エージェント CLI（Claude Code / Codex CLI）を終端ステージで導入する | core/1,11,9,12 | — | なし | 03-impl/devcontainer.md |
-| docker-proxy | Go 製 Docker API 検査プロキシ（危険操作拒否・/workspace bind 書換） | core/7 | — | なし | 03-impl/docker-proxy.md |
-| orchestrator | Go 製コントローラ：2モード・外部制御ループ・worker並列・タスク単位介入・相互レビュー・TUI・Slack・状態保全 | orchestration/12〜19 | hooks(Slack通知) | なし | 03-impl/orchestrator.md |
-| sample-project | `examples/orch-sample/`（Python+pytest 題材）・`workspace/orch-sample`・`scripts/orch-sample.sh`（scaffold）：自己検証 | orchestration/20 | orchestrator | なし | 03-impl/sample-project.md |
-| vm-mode | `scripts/vm`・`vm-up.sh`・`vm-portsync.sh`・`vm-healthd.sh`・`VM_DEV.md.tmpl`：ゲスト VM とネイティブ Docker | core/8 | cli | なし | 03-impl/vm-mode.md |
-| ghcr-workflow | `.github/workflows/ghcr-images.yml`：GHCR マルチアーキ日次配布 | core/9 | devcontainer | なし | 03-impl/ghcr-workflow.md |
-| hooks | Claude Code フック（イメージ同梱・`cli` が settings に配線）：`save_prompt.sh`（プロンプト保存）・`sendslackmsg.sh`（Slack通知） | orchestration/18 core周辺 | — | なし | 03-impl/hooks.md |
-| container-tools | コンテナ内でユーザが使う資産：`wait-limit-reset.sh`（レート制限リセット待ち）・`scripts/tmux.conf`（実行時に `~/.tmux.conf` へマウントする tmux 設定） | core/1(tmux),運用補助 | — | なし | 03-impl/container-tools.md |
-| portsync | `dood-portsync.sh`：DooD 実行時ポート同期ヘルパ（Dockerfile 同梱・entrypoint が起動、`127.0.0.1:PORT`→ホスト転送） | core/6 | — | なし | 03-impl/portsync.md |
+| MOD-cli-common | ホスト CLI の共有基盤。コンテナ名の導出、稼働・存在・イメージの判定、インフラ(ネットワーク・共有ボリューム)の用意、SSH 鍵の選択と保存、noVNC URL の組み立て、実行ユーザの解決 | FR-env-01, FR-env-02, FR-env-03, FR-env-04, FR-env-09, FR-env-10, FR-env-11, NFR-ops-02, NFR-ops-03, NFR-scale-01, SR-01, SR-10, SR-11, SR-12, SR-20 | — | なし | `MODULE-cli-common-*` |
+| MOD-cli-setup | イメージをビルドし、ネットワークと共有ボリュームを作る初回セットアップ | FR-env-01, FR-env-09, SR-01 | MOD-cli-common | なし | `MODULE-cli-setup` |
+| MOD-cli-start | 開発コンテナの起動(既定はブラウザ確認あり)。再接続・VM モード・認証受け渡し・鍵転送・ポート割当を含む | FR-env-01〜08, FR-env-11, FR-env-12, NFR-avail-02, NFR-scale-01, NFR-sec-01, NFR-ops-02, SR-04, SR-14, SR-20 | MOD-cli-common | なし | `MODULE-cli-start` |
+| MOD-cli-stop | セッションの停止と compose 生成物の片付け。遊休なら docker-proxy と SSH ブリッジも停止する | FR-env-01, FR-env-07, NFR-ops-02, SR-20 | MOD-cli-common | なし | `MODULE-cli-stop` |
+| MOD-cli-attach | 実行中コンテナの tmux セッションへ接続する | FR-env-01, NFR-ops-02, SR-20 | MOD-cli-common | なし | `MODULE-cli-attach` |
+| MOD-cli-code | 新しい tmux ウィンドウで Claude Code を起動する | FR-env-01, FR-env-08, FR-env-12, NFR-ops-02, SR-20 | MOD-cli-common | なし | `MODULE-cli-code` |
+| MOD-cli-list | 実行中セッションの一覧と noVNC URL を表示する | FR-env-01, FR-env-11, NFR-ops-02, SR-20 | MOD-cli-common | なし | `MODULE-cli-list` |
+| MOD-cli-login | Claude の OAuth ログインをコンテナ内で実行し共有ボリュームへ保存する | FR-env-03, NFR-ops-02, SR-03, SR-15, SR-20 | MOD-cli-common | なし | `MODULE-cli-login` |
+| MOD-cli-login-codex | Codex のデバイス認証を実行し共有ボリュームの `codex/` へ保存する | FR-env-03, FR-env-12, NFR-scale-02, NFR-ops-02, SR-03, SR-15, SR-20 | MOD-cli-common | なし | `MODULE-cli-login-codex` |
+| MOD-cli-logout | Claude と Codex の認証情報を共有ボリュームごと削除する | FR-env-03, NFR-scale-02, NFR-ops-02, SR-20 | MOD-cli-common | なし | `MODULE-cli-logout` |
+| MOD-cli-forward | 指定ポートのホスト側フォワードを動的に追加する | FR-env-06, NFR-scale-01, NFR-ops-02, SR-20 | MOD-cli-common | なし | `MODULE-cli-forward` |
+| MOD-cli-unforward | 指定ポートのフォワードを解除する | FR-env-06, NFR-ops-02, SR-20 | MOD-cli-common | なし | `MODULE-cli-unforward` |
+| MOD-cli-ports | フォワード一覧と noVNC URL を表示する | FR-env-06, FR-env-11, NFR-ops-02, SR-20 | MOD-cli-common | なし | `MODULE-cli-ports` |
+| MOD-cli-ssh-keys | 使う SSH 鍵の対話選択・保存・初期化(`select` / `reset` のディスパッチを含む) | FR-env-04, NFR-ops-02, SR-20 | MOD-cli-common | なし | `MODULE-cli-ssh-keys*` |
+| MOD-cli-firewall | コンテナ内のファイアウォールルールを表示する | FR-env-05, NFR-ops-02, SR-20 | MOD-cli-common | なし | `MODULE-cli-firewall` |
+| MOD-cli-orchestrate | コンテナ内で orchestrator を起動する(ゴール指定・`--fresh` 対応、未起動時の自動起動) | FR-orch-01, FR-orch-02, NFR-avail-01, NFR-ops-02, SR-20 | MOD-cli-common | なし | `MODULE-cli-orchestrate` |
+| MOD-cli-pull | GHCR からビルド済みイメージを取得して以降の判定名へ付け替える | FR-env-09, NFR-ops-02, SR-20 | — | なし | `MODULE-cli-pull` |
+| MOD-cli-upgrade | 全イメージをキャッシュ無しで再ビルドして更新する | FR-env-01, FR-env-09, NFR-ops-02, SR-20 | — | なし | `MODULE-cli-upgrade` |
+| MOD-cli-reset | コンテナ・ボリューム・イメージを全削除して初期状態へ戻す | FR-env-01, FR-env-03, NFR-ops-02, SR-20 | — | なし | `MODULE-cli-reset` |
+| MOD-makefile | ビルド・セットアップ・CLI の導入/除去・ログイン・更新・自己検証題材の配置といった入口 | FR-env-01, FR-env-03, FR-env-07, FR-env-09, FR-env-10, FR-env-11, FR-env-12, FR-orch-01, FR-orch-09, NFR-ops-03, SR-10, SR-20, SR-30 | — | なし | `MODULE-makefile-*` |
+| MOD-entrypoint | コンテナ起動時の初期化(UID/GID 追従・認証コピー・既定設定の生成/補完・ファイアウォール起動・MCP/VNC/Chrome・tmux・同期ループ・ポート同期の起動) | FR-env-02, FR-env-03, FR-env-05〜08, FR-env-11, FR-env-12, NFR-avail-02, NFR-avail-03, NFR-ops-02, NFR-scale-02, SR-02, SR-20 | MOD-firewall, MOD-portsync, MOD-vm-mode | なし | `MODULE-entrypoint-claude` |
+| MOD-firewall | コンテナ内のブラックリスト型ファイアウォールの構成 | FR-env-05, NFR-sec-01, NFR-sec-02, NFR-avail-03, SR-02, SR-20 | — | なし | `MODULE-firewall-init` |
+| MOD-docker-proxy | Docker API を検査・書き換えして透過中継する常駐プロキシ | FR-env-07, NFR-sec-01, SR-02, SR-04, SR-21, SR-31 | — | なし | `MODULE-docker-proxy-serve` |
+| MOD-portsync | DooD 環境で公開ポートを検出し転送する | FR-env-06, FR-env-07, SR-20 | — | なし | `MODULE-portsync-dood` |
+| MOD-vm-mode | ゲスト VM の起動・provision・ポート同期・資源逼迫の監視と操作ヘルパー | FR-env-06, FR-env-08, NFR-ops-01, NFR-avail-03, SR-14, SR-20 | — | なし | `MODULE-vm-mode-*` |
+| MOD-orchestrator | 2モードの制御ループ、worker の並列実行と分離、タスク単位の介入、相互レビュー、TUI、通知、状態保全 | FR-orch-01〜FR-orch-08, NFR-perf-03, NFR-avail-01, NFR-avail-03, NFR-sec-03, NFR-ops-04, SR-21, SR-22, SR-31 | — | なし | `MODULE-orchestrator-*` |
+| MOD-hooks | エージェントのフックからプロンプトを保存し、通知を送る | FR-orch-07, NFR-ops-01, NFR-sec-03, NFR-avail-03 | — | なし | `MODULE-hooks-*` |
+| MOD-container-tools | コンテナ内で利用者が使う補助資産(レート制限の解除待ちなど) | FR-env-01, NFR-ops-01, SR-20 | — | なし | `MODULE-container-tools-*` |
+| MOD-sample-project | 自己検証題材の配置と、題材そのもの | FR-orch-09, SR-23 | — | なし | `MODULE-sample-project-*` |
 
-### 分割の根拠
+**分割定義に含めないもの**: コンテナイメージの定義(`Dockerfile.*`)と GHCR 配布ワークフローは
+モジュールではなく、**イメージの作り方は `03-impl/environments/images.md`、GHCR への公開構成は
+`03-impl/infra/local/ghcr.md`** が持つ(理由は `DSN-mod-05`)。
 
-- **物理配置と1対1**: 各モジュールはリポジトリの実体（1スクリプト／1 Go モジュール／1 Dockerfile 群／
-  1 ワークフロー）に対応する（[structure steering](../_steering/structure.md)）。変更が起きる単位＝ファイル単位で切った。
-- **OS 依存の局所化**: `cli` と `cli-mac` を分け、OS 差分を macOS 側に閉じる（D-10）。共通ロジックは `cli`。
-- **補助スクリプトは「役割」で分ける**: 旧一括の scripts 群を、担う役割ごとに独立モジュール化した——
-  `hooks`（Claude Code フック）／`container-tools`（コンテナ内でユーザが使う資産）／`portsync`（実行時
-  ネットワークヘルパ）。`entrypoint`・`firewall`・VM 系スクリプトは元々独立し、`orch-sample.sh` は題材の
-  scaffold として `sample-project` に属する。役割が違うものを1モジュールに混ぜない方針。
-- **orchestrator は最大モジュール**: Go の単一プログラムだが責務が多い。詳細は 03-impl/orchestrator.md が担い、
-  肥大化時は本表に `02-design/orchestrator.md`（詳細設計）を足す判断を /change で行う。
-- **共有 vs プロジェクト単位**: `docker-proxy` は全 Claude コンテナで共有、他はプロジェクト/イメージ単位。
+**どのモジュールにも属さない要件(8件)とその担い手**。上の表の「対応要件」に現れないのはこの8件
+だけであり、いずれも「振る舞いを実装するモジュール」が原理的に存在しない種類の要件である
+(割り当て漏れではない)。下の「要件カバレッジ確認」にも同じ担い手を書く。
 
-## モジュール間インターフェース(契約)
-
-### cli → コンテナ/entrypoint（環境変数・マウント）
-
-```
-起動時に渡す主な契約:
-  DOCKER_HOST = tcp://claude-dev-docker-proxy:2375     # docker-proxy 経由（既定 DooD）
-  CLAUDE_DEV_DOOD_PORTSYNC = 0|1(既定1)                # dood-portsync 有効/無効
-  CLAUDE_DEV_VM = 0|1                                  # VM モード連携フラグ
-  CLAUDE_DEV_ALLOW_WORKSPACE_BINDS = 0|1(既定1)        # docker-proxy の /workspace bind 許可
-  mount: <cwd> -> /workspace (RW), claude-dev-auth -> ~/.claude-shared (RW),
-         claude-dev-config -> ~/.config-shared (RW), $SSH_AUTH_SOCK -> /tmp/ssh-agent.sock (RO)
-認証の受け渡し（cli が起動前に用意し、entrypoint が引き取る）:
-  claude: 共有ボリューム直下 -> <cwd>/.claude/{.credentials.json,.claude.json}
-  codex : 共有ボリューム codex/ -> <cwd>/.codex/auth.json
-  ※ codex 認証は claude-dev-auth ボリュームの codex/ サブディレクトリに相乗りする（D-27。
-    別ボリュームを増やさず logout/reset の分岐も増やさない）
-```
-
-### entrypoint → firewall（起動時の適用呼び出し）
-
-```
-起動シーケンス中に 1 度だけ実行:
-  /usr/local/bin/init-firewall.sh          # 引数なし。OUTPUT チェインへブラックリストを適用
-前提: NET_ADMIN/NET_RAW（cli が docker run で付与）、iptables/ipset/dig/curl/jq（イメージ同梱）
-結果: 適用の成否に関わらず entrypoint は継続する（失敗は無視して起動を止めない）
-```
-
-### コンテナ → docker-proxy（HTTP Docker API）
-
-```
-GET/POST http://claude-dev-docker-proxy:2375/<docker-api>
-  検査: POST /containers/create のボディ Binds/Privileged/NetworkMode/PidMode を検査し拒否 or 書換
-  結果: 許可(透過) | 拒否(4xx) | /workspace 配下 bind を実ホストパスへ rewrite
-```
-
-### cli(orchestrate) → orchestrator（起動・復旧・設定）
-
-```
-claude-dev orchestrate [--fresh] ["<goal>"]           # コントローラ起動/attach/resume
-  生存判定: コンテナ内の claude-orchestrator プロセス生存（pgrep 相当）で分岐
-  設定: max_workers / stuck_limit / max_review_rounds / review_format_error_limit /
-        worker_grace_seconds / merge_strategy / worker_permission_mode / reviewer_vendor
-```
-
-### orchestrator → worker / 対話Claude（プロンプト注入）
-
-```
-worker:     claude -p [--resume <session-id>] --model <opus|sonnet> --effort <high> ...
-brainstorm/intervene: claude --append-system-prompt <brainstorming.md|intervene.md>
-状態受け渡し: .orchestrator/{plan.json, control.json, state.json} + *.jsonl（機械のみ編集）
-ORCHESTRATOR.md（あれば）を各プロンプト先頭へ前置
-```
-
-## UI設計 ※必須
-
-本システムの UI はターミナル主体（Web GUI なし。ブラウザ確認は noVNC で提供するがアプリ UI ではない）。
-接点は「ホスト CLI のコマンド体系」と「orchestrator の TUI」の 2 つ。
-
-### 画面一覧
-
-| 画面(slug) | 目的 | 主要項目 | 状態(loading/empty/error等) | 対応する要件 |
-|---|---|---|---|---|
-| cli-commands | コンテナ/認証/ポート/鍵の操作 | start/stop/list/attach/forward/unforward/ports/login/login-codex/logout/ssh-keys/orchestrate | 起動中/未セットアップ/エラー案内 | core/1,3,4,6 |
-| orch-dashboard | 実行モードの俯瞰・worker 選択 | goal, worker 一覧(状態), ⏸要判断一覧, 直近サマリ, 仮定/要判断件数 | 実行中/一時停止/空(worker なし) | orchestration/19 |
-| orch-brainstorming | ゴール/仕様を対話で固める | 対話Claude TUI, 番号付き選択肢 | 対話中 | orchestration/12,19 |
-| orch-worker | worker のライブ出力 | claude -p ログ tail | 実行中/レビュー待ち/⏸要判断 | orchestration/14,15 |
-| orch-intervention | 要判断1件への回答 | 質問・番号付き選択肢（日本語） | 回答待ち | orchestration/15,19 |
-| orch-endmenu | 引き渡し不明時の選択 | 続ける/実行(実行可時のみ)/終了 | メニュー | orchestration/12,19 |
-
-### 画面遷移（orchestrator）
-
-```mermaid
-stateDiagram-v2
-  [*] --> Dashboard: orchestrate（ホーム表示）
-  Dashboard --> Brainstorming: カーソル選択→Enter
-  Brainstorming --> Execute: plan確定(execute)・/exit
-  Brainstorming --> Dashboard: 実行不可→理由表示で戻す
-  Execute --> Worker: ⏸以外をEnter
-  Execute --> Intervention: ⏸をEnter
-  Intervention --> Worker: 回答→/exit（同ウィンドウで実行復帰）
-  Worker --> Execute: 完了(kill-window)
-  Execute --> [*]: 全タスクdone（Slack完了）
-```
-
-- **カーソル選択→Enter 確定でのみ移動**（数字キー即移動・全画面再描画は行わない、D-17/要件19）。
-- **抜け方は全対話モードで統一＝対話 Claude を `/exit`**。モード遷移時に日本語バナーを印字する。
-
-## データモデル(全体)
-
-| エンティティ | 所有モジュール | 概要 |
+| 要件 | 担い手 | なぜモジュールでないか |
 |---|---|---|
-| plan.json（タスク計画・各タスクの kind/completion/status/attempt/session-id） | orchestrator | 実行の中核状態。機械が読み書き |
-| control.json（execute/continue_brainstorming/abort、answer 記録） | orchestrator | モード引き渡し・介入回答 |
-| state.json / *.jsonl（audit/assumptions/interventions） | orchestrator | 運用状態・追記型ログ |
-| 認証ファイル（.credentials.json / .claude.json） | entrypoint(共有はcli) | claude-dev-auth ボリューム経由で共有 |
-| codex 認証ファイル（auth.json） | entrypoint(共有はcli) | 同ボリュームの `codex/` 経由で共有（D-27）。`config.toml`・セッション履歴は共有せずコンテナ固有 |
-| codex 設定（config.toml） | entrypoint | 共有しない。既定 3 鍵（`sandbox_mode`/`approval_policy`/`features.use_legacy_landlock`）を不在時は生成、存在時は不足鍵のみ追記（既存の値は不変。D-27 ⑥・core/12-5,12-6,12-9） |
-| .claude-dev.yaml（ssh_keys） | cli | プロジェクト単位の SSH 鍵指定 |
-| Docker リソース（claude-dev-net / 各ボリューム / イメージ） | cli, makefile, devcontainer | 命名は claude-dev- 接頭辞 |
+| NFR-perf-01, NFR-perf-02 | `03-impl/environments/images.md`, `03-impl/infra/local/ghcr.md` | イメージのレイヤー構成とビルド設定が決める性能であり、実行される入口を持たない(`DSN-mod-05`) |
+| SR-13(マルチアーキ), SR-24(マルチステージ), SR-33(CI 日次実行) | 同上 | 同上。ビルド・配布の構成そのもの |
+| SR-05(信頼できる社内開発用途に限る) | `00-requests/request.md`「やらないこと」2 | 利用の前提条件であり、実装物を持たない |
+| SR-32(Bash に自動テストを設けない) | 本書「テスト戦略」`DSN-test-01` | 「作らない」ことの宣言であり、実装物を持たない |
+| SR-34(Codex を confinement を緩めずに実行) | `02-design/environments.md`「Codex実行設定」 | 外部エージェントの実行設定であり、製品コードのモジュールではない |
 
-## 主要フロー(モジュール横断)
+## 分割の根拠
 
-```mermaid
-sequenceDiagram
-  participant U as 開発者
-  participant CLI as cli
-  participant EP as entrypoint
-  participant DP as docker-proxy
-  participant O as orchestrator
-  U->>CLI: claude-dev start
-  CLI->>EP: コンテナ起動（マウント/環境変数）
-  EP->>EP: UID/GID追従・認証コピー・firewall・MCP/VNC・tmux
-  U->>CLI: claude-dev orchestrate
-  CLI->>O: コントローラ常駐起動/attach/resume
-  O->>O: ブレスト→plan確定→worker並列（worktree）
-  O->>DP: worker が docker 利用（検査・許可/拒否）
-  O-->>U: Slack サマリ / 要判断通知
-```
+### DSN-mod-01 モジュールは「利用者から見た入口」と1対1にする
 
-## エラーハンドリング方針
+- 判断: ホスト CLI をサブコマンド単位で1モジュールに割り、Makefile・スクリプト・Go プログラムも
+  それぞれ入口の単位で割る。全 29 モジュール。
+- 理由: 変更が起きる単位が入口(サブコマンド・ターゲット・常駐プロセス)であり、影響範囲を
+  「どのコマンドが変わるか」で説明できる。旧構成では `cli` が1モジュールで 18 サブコマンドを
+  抱えており、`start` の変更と `ports` の変更が同じ影響範囲に見えていた。
+- 却下した案: ファイル単位で割る(旧構成) — 1ファイルに 18 の入口が同居し、影響範囲が引けない。
+  機能グループ(認証系・ポート系など)で割る — 境界が主観的になり、コードとの1対1が崩れる。
 
-- **docker-proxy**: 危険操作は 4xx で拒否し理由を返す。判定不能は安全側（拒否）。
-- **orchestrator**: LLM 起因の失敗（レビュー format error 等）は要件17の打切り規則で介入へ回す。
-  中断は要件16のクリーン終了（コード0・状態保存）。plan/履歴は自動削除しない。
-- **cli**: 前提不足（未セットアップ・認証なし・`.claude-dev.yaml` なし）は停止せず日本語で案内する。
-- **人間向け表示は日本語**（要件19）。ファイル直接編集を促さない。
+### DSN-mod-02 macOS 実装は同名サブコマンドのモジュールへ相乗りさせる
+
+- 判断: macOS 版(`claude-dev-mac`)を独立モジュール群にせず、同名サブコマンドのモジュールに
+  `impl` パスとして相乗りさせる。旧 `cli-mac` モジュールは解体する。
+- 理由: `claude-dev-mac` は同じコマンド面の別 OS 実装であり、サブコマンド単位で割ると同一ロジックの
+  モジュールが 18 本増えて依存表が読めなくなる。OS 差分は「同じ入口の別実装」として1箇所で
+  対比できる方がよい。
+- 却下した案: `MOD-cli-mac-*` を 18 本立てる — モジュール数が倍になり、対応要件も重複する。
+  旧構成のまま `cli-mac` を1モジュールで残す — `DSN-mod-01` の1対1と矛盾する。
+
+### DSN-mod-03 共有基盤は1モジュールに集約する
+
+- 判断: ホスト CLI の先頭にある定数・ヘルパー関数群を `MOD-cli-common` として独立させる。
+- 理由: 全サブコマンドがここへファンインする(実測で 25 関数、最大ファンイン 10)。集約しないと
+  18 モジュールが同じ実装パスを重複して持ち、実装とドキュメントの 1 対 1 が崩れる。
+- 却下した案: 各サブコマンドのモジュールに複製して書く — 重複により整合検査が落ちる。
+  共有基盤を作らず呼び出し関係だけで表す — 境界の無いコードが機能表から漏れる。
+
+### DSN-mod-04 共有するものとプロジェクト単位のものを分ける
+
+- 判断: `docker-proxy` は全 Claude コンテナで共有し、それ以外はプロジェクト単位(またはイメージ単位)
+  とする。共有ボリュームは認証・シェル設定・履歴の3本に限る。
+- 理由: 共有すると常駐が1つで済む一方、プロジェクト間の干渉が起きうる。干渉が問題になるもの
+  (セッション・Chrome プロファイル・運用状態)はプロジェクト単位に置く。
+- 却下した案: すべてをプロジェクト単位にする — docker-proxy がプロジェクト数だけ常駐する。
+  すべてを共有する — セッションと運用状態が混ざる。
+
+### DSN-mod-05 コールグラフに入口を持たない資産はモジュールにしない
+
+- 判断: コンテナイメージの定義(`Dockerfile.*`)と GHCR 配布ワークフロー(GitHub Actions)は
+  モジュール分割定義から外し、`03-impl/environments/`(仕組み)と `03-impl/infra/local/`(構成値)
+  に置く。
+- 理由: この2つは実行される関数の入口を持たないため、コールグラフに現れない。モジュールとして
+  機能表に載せると、機械検査 FT1(入口がコールグラフに存在するか)が重大度「高」で落ち、FT1 は
+  落ちると以降の検査を打ち切るゲートであるため、CG1〜CG7 まで含めた機械検査が丸ごと無効になる。
+  記述内容は `environments/` と `infra/` が保持するため失われない(`.claude/directions/03-impl.md`
+  の「仕組みは environments/、具体的な構成値は infra/」に合致する)。
+- 却下した案: モジュールとして残す — 上記のとおり機械検査が無効になる。Dockerfile と GitHub
+  Actions のコールグラフ抽出器を作る — 本タスクの範囲外(`/kit-improve` 案件として申し送る)。
+
+### DSN-mod-06 モジュールあたりの機能数の上限を超えている2モジュールを許容する
+
+- 判断: `MOD-orchestrator`(19機能)と `MOD-makefile`(19機能)は、1モジュールあたり 15 本という
+  分割見直しの目安を超えるが、分割しない。
+- 理由: `MOD-orchestrator` は入口が1つ(単一バイナリ)で 219 シンボルを持ち、ファイル境界=責務境界で
+  機能へ昇格させた結果が 19 本である。これを1機能に畳むと「1機能=1バイナリ」になり境界が消える。
+  逆にモジュールを分けると、単一バイナリが複数モジュールにまたがることになり `DSN-mod-01` の
+  1対1が崩れる。`MOD-makefile` も同様に、入口(ターゲット)が 19 個ある単一ファイルである。
+- 却下した案: Makefile のターゲットを用途別に束ねる — 束ねた内部に境界が埋没し、記述量は減らない。
+  orchestrator を複数モジュールへ割る — 物理配置との1対1が崩れる。
+
+## 要件カバレッジ確認
+
+| 要件 ID | 割り当てモジュール | 備考 |
+|---|---|---|
+| FR-env-01 | MOD-cli-start, MOD-cli-stop, MOD-cli-attach, MOD-cli-list, MOD-cli-code, MOD-cli-setup, MOD-cli-upgrade, MOD-cli-reset, MOD-cli-common, MOD-makefile, MOD-container-tools | 起動・再接続・停止・一覧 |
+| FR-env-02 | MOD-entrypoint, MOD-cli-start, MOD-cli-common | UID/GID 追従は entrypoint が実施 |
+| FR-env-03 | MOD-cli-login, MOD-cli-login-codex, MOD-cli-logout, MOD-cli-start, MOD-cli-reset, MOD-cli-common, MOD-entrypoint, MOD-makefile | 保存は CLI、コピーと同期は entrypoint |
+| FR-env-04 | MOD-cli-ssh-keys, MOD-cli-start, MOD-cli-common | macOS の TCP ブリッジも同モジュール群 |
+| FR-env-05 | MOD-firewall, MOD-entrypoint, MOD-cli-start, MOD-cli-firewall | 適用は firewall、起動は entrypoint、表示は CLI |
+| FR-env-06 | MOD-cli-forward, MOD-cli-unforward, MOD-cli-ports, MOD-portsync, MOD-vm-mode, MOD-entrypoint | VM 経路のポート同期は vm-mode |
+| FR-env-07 | MOD-docker-proxy, MOD-cli-start, MOD-cli-stop, MOD-portsync, MOD-makefile | compose 名の一意化は start |
+| FR-env-08 | MOD-vm-mode, MOD-cli-start, MOD-cli-code, MOD-entrypoint | 起動判定は start、常駐は vm-mode |
+| FR-env-09 | MOD-cli-pull, MOD-cli-setup, MOD-cli-upgrade, MOD-cli-common, MOD-makefile | 配布側の構成は `03-impl/infra/local/ghcr.md` |
+| FR-env-10 | MOD-makefile(install/uninstall), MOD-cli-common, 各 MOD-cli-*(macOS 実装の相乗り) | `DSN-mod-02` |
+| FR-env-11 | MOD-entrypoint, MOD-cli-start, MOD-cli-list, MOD-cli-ports, MOD-cli-common, MOD-makefile | イメージ側の同梱は `03-impl/environments/images.md` |
+| FR-env-12 | MOD-entrypoint, MOD-cli-start, MOD-cli-code, MOD-cli-login-codex, MOD-makefile | 同梱そのものは `03-impl/environments/images.md` |
+| FR-orch-01 | MOD-orchestrator, MOD-cli-orchestrate, MOD-makefile | |
+| FR-orch-02 | MOD-orchestrator, MOD-cli-orchestrate | |
+| FR-orch-03 | MOD-orchestrator | worker・worktree・統合 |
+| FR-orch-04 | MOD-orchestrator | 介入キューとハンドオフ |
+| FR-orch-05 | MOD-orchestrator | 状態の永続化と再開 |
+| FR-orch-06 | MOD-orchestrator | レビューと改訂ループ |
+| FR-orch-07 | MOD-orchestrator, MOD-hooks | 通知の発信源はコントローラに一本化 |
+| FR-orch-08 | MOD-orchestrator | ダッシュボード・端末制御・整形 |
+| FR-orch-09 | MOD-sample-project, MOD-makefile, MOD-orchestrator | |
+| NFR-perf-01, NFR-perf-02 | (モジュール外)`03-impl/environments/images.md`, `03-impl/infra/local/ghcr.md` | レイヤー構成とビルド設定が担う |
+| NFR-perf-03 | MOD-orchestrator | worker の割り当て粒度と文脈の絞り込み |
+| NFR-avail-01 | MOD-orchestrator, MOD-cli-orchestrate | |
+| NFR-avail-02 | MOD-cli-start, MOD-entrypoint | |
+| NFR-avail-03 | MOD-entrypoint, MOD-firewall, MOD-orchestrator, MOD-hooks, MOD-vm-mode | 補助機能の失敗を主機能へ波及させない |
+| NFR-sec-01 | MOD-docker-proxy, MOD-firewall, MOD-cli-start, MOD-cli-common | |
+| NFR-sec-02 | MOD-firewall | |
+| NFR-sec-03 | MOD-orchestrator, MOD-hooks | |
+| NFR-ops-01 | MOD-orchestrator, MOD-hooks, MOD-container-tools, MOD-vm-mode | |
+| NFR-ops-02 | MOD-cli-common, 各 MOD-cli-*, MOD-entrypoint | OS 依存をホスト CLI に閉じる |
+| NFR-ops-03 | MOD-makefile, MOD-cli-common | `make help` と CLI のヘルプ |
+| NFR-ops-04 | MOD-orchestrator | |
+| NFR-scale-01 | MOD-cli-start, MOD-cli-common, MOD-cli-forward | 命名・ポート割当・プロファイル分離 |
+| NFR-scale-02 | MOD-cli-login-codex, MOD-cli-logout, MOD-entrypoint | |
+
+**システム要件(`SR-nn`)の割り当て**。SR は「システムが満たす振る舞い」ではなく**技術前提と制約**
+であるため、モジュールが実装するとは限らない。担い手がモジュールでないものは、その制約を保持する
+02 のドキュメントを担い手として書く(空欄を作らないための規約)。
+
+| 要件 ID | 割り当てモジュール / 担い手 | 備考 |
+|---|---|---|
+| SR-01 | MOD-cli-common, MOD-cli-setup | 前提コマンドの検査とインフラ作成が Docker の存在に依存する |
+| SR-02 | MOD-entrypoint, MOD-firewall, MOD-docker-proxy, (モジュール外)`03-impl/environments/images.md` | OS 依存はホスト CLI 側に閉じる(`DSN-mod-02`) |
+| SR-03 | MOD-cli-login, MOD-cli-login-codex, MOD-cli-common, (モジュール外)`03-impl/environments/images.md` | 認証は共有ボリューム経由のみ。イメージへ焼き込まない |
+| SR-04 | MOD-cli-start, MOD-docker-proxy, (担い手)`02-design/environments.md`「Codex実行設定」 | `--security-opt` を付けない=既定の confinement を維持する |
+| SR-05 | (担い手)`00-requests/request.md`「やらないこと」2 | 利用前提。設計上の実装物を持たない |
+| SR-10 | MOD-cli-common, MOD-makefile | 前提コマンド検査と `make setup` の対象環境 |
+| SR-11 | MOD-cli-common | Docker API の版に依存する判定を持つ |
+| SR-12 | MOD-cli-common | 不足コマンドを列挙して導入方法を案内する |
+| SR-13 | (モジュール外)`03-impl/infra/local/ghcr.md` | マルチアーキ配布は CI が担う(`DSN-mod-05`) |
+| SR-14 | MOD-vm-mode, MOD-cli-start | `/dev/kvm` の有無で分岐する。macOS では提供しない |
+| SR-15 | MOD-cli-login, MOD-cli-login-codex | 認証方式の選択そのもの |
+| SR-20 | MOD-cli-common, 各 MOD-cli-*, MOD-makefile, MOD-portsync, MOD-vm-mode, MOD-entrypoint, MOD-firewall, MOD-container-tools | Bash 実装のモジュール群 |
+| SR-21 | MOD-docker-proxy, MOD-orchestrator | Go 実装の2モジュール |
+| SR-22 | MOD-orchestrator | TUI のみ外部依存を許容し vendor へ同梱する |
+| SR-23 | MOD-sample-project | Python + pytest の自己検証題材 |
+| SR-24 | (モジュール外)`03-impl/environments/images.md` | マルチステージと終端レイヤー(`DSN-dist-01` / `DSN-mod-05`) |
+| SR-30 | MOD-makefile | 単一の入口 |
+| SR-31 | MOD-docker-proxy, MOD-orchestrator | 実コマンドは `environments.md` が正 |
+| SR-32 | (担い手)本書「テスト戦略」`DSN-test-01` | 自動テストを設けないという明示的な割り切り |
+| SR-33 | (モジュール外)`03-impl/infra/local/ghcr.md` | GitHub Actions の日次実行 |
+| SR-34 | (担い手)`02-design/environments.md`「Codex実行設定」 | legacy landlock で confinement を緩めずに実行する |
+
+**要件を持たないモジュールは無い**(全 29 モジュールが上表のいずれかに現れる)。
+**割り当て先の無い要件も無い**(FR 21 件・NFR 15 件・SR 21 件がすべて上の3表に現れる)。
 
 ## テスト戦略
 
 ### レベル別方針
 
-| レベル | 対象 | ツール/実行環境 | 方針(テストデータ・範囲・実行タイミング) |
-|---|---|---|---|
-| 単体 | docker-proxy の検査ロジック / orchestrator の状態・レビュー・モデル選択等 | `go test`（docker-proxy）, `go test -mod=vendor`（orchestrator） | 各 Go モジュールで実装同梱。PR/変更時に実行（[tech steering](../_steering/tech.md)） |
-| 結合 | 「モジュール間インターフェース(契約)」の全 5 契約（cli→コンテナ/entrypoint / entrypoint→firewall / コンテナ→docker-proxy / cli(orchestrate)→orchestrator / orchestrator→worker・対話Claude） | `go test`（docker-proxy の API ボディ検査、orchestrator のプロンプト生成・`control.json` 検知）＋実機（コンテナ起動・`make orch-sample` 実走） | 契約ごとに担当モジュールを下表で定め、担当モジュールの 03-impl テスト対応表に結合レベルの行を置く。ホスト CLI（bash）側は自動テストランナーを持たないため、当該契約の手段は実機確認になる |
-| E2E | ユースケース（下のシナリオ一覧） | 実機（`claude-dev` 実操作）＋ orchestrator 自己検証（`make orch-sample` で題材を scaffold し `claude-dev orchestrate` で実走） | シェル系は自動テストなし＝実機確認。orchestrator は題材を用意して実走・観測 |
+#### DSN-test-01 自動テストは Go の2モジュールに集中させ、シェル系は実機確認で担保する
 
-備考: core/7-5（compose プロジェクト名の一意化）はシェル系のため自動テスト対象外。実機確認は「異なる 2 プロジェクトで同時に `claude-dev start` → 各コンテナで `COMPOSE_PROJECT_NAME` が別値になり、`docker compose` の生成リソース（ネットワーク／コンテナ名）がプロジェクト間で衝突しない」ことを確認する（cli/cli-mac が `docker run` に `-e COMPOSE_PROJECT_NAME` を付与）。
+- 判断: 単体テストは Go(docker-proxy / orchestrator)と自己検証題材(Python)に置く。Bash と
+  Makefile には自動テストランナーを設けず、実機確認と E2E で担保する。結合テストは契約ごとに
+  **観測可能な側**へ責任を割り当てる。
+- 理由: Bash 実装に自動テストランナーを導入すると、実行環境(Docker・tmux・実 SSH)を用意する
+  仕掛けが本体より大きくなる。一方、検査ロジックと状態遷移という間違えやすい部分は Go 側に
+  集中しており、そこは機械検証できる。「本物のバイナリで通す E2E は、モックでは見つからない
+  欠陥を捕まえる」という実測経験も、この配分の根拠である。
+- 却下した案: bats 等で Bash の単体テストを整備する — 実行環境の用意が本体より重い。
+  すべてを E2E に寄せる — 失敗時の切り分けができない。
 
-備考: core/12（同梱エージェント CLI）もシェル/Dockerfile 系のため自動テスト対象外。実機確認は
-「配布 2 イメージで `codex --version` が、当該ビルドの prepare ジョブが解決し build-arg
-`CODEX_VERSION` として渡した具体バージョン文字列と完全一致する」「対話シェル・`bash -c`・`docker exec` の
-いずれからも `codex` が解決できる」ことを確認する（認証共有と**シェル実行の成否**〈12-4〉の実機確認は
-E2E-6 が担う）。サンドボックス既定設定（12-5,12-6）は entrypoint の担当で、確認観点は「`config.toml` が
-無いコンテナでは既定 3 鍵が生成される」「利用者が書き換えた `config.toml` を持つコンテナでは既存の鍵と値が
-変わらず、不足していた既定鍵だけが追記される（再起動しても結果が変わらない）」の 2 点
-（03-impl/entrypoint.md のテスト対応表が持つ）。12-7 は `docker run` に
-`--security-opt` を付けない実装上の禁止事項で、cli/cli-mac の起動引数として確認する。12-9（明示
-`--sandbox read-only` での成功）は landlock バックエンドの疎通が本質なので E2E-6 が担う（版更新で
-`use_legacy_landlock` が撤去された場合の回帰検知も同じ観点）。
-
-備考: core/1-6（stop 時の compose 片付け, D-24 ライフサイクル）もシェル系のため自動テスト対象外。実機確認は「コンテナ内で `docker compose up` → ホストで `claude-dev stop` → ラベル `com.docker.compose.project=<正規化NAME>` のコンテナと当該プロジェクトの compose デフォルトネットワークが消え、名前付きボリュームと共有の `claude-dev-net`／docker-proxy は残る」ことを確認する。VM モードは compose がゲスト内で完結するため対象外。
+| レベル | 方針 | ツール | 実行環境 | データ | 実行タイミング |
+|---|---|---|---|---|---|
+| 単体 | 検査ロジック・状態遷移・レビュー判定・プロンプト生成を機械検証する | `go test`(各 Go モジュール)、`pytest`(題材) | ホストまたはコンテナ内。外部サービスに接続しない | テスト内で組み立てる。一時ディレクトリを使い後始末する | 変更時と PR |
+| 結合 | モジュール間の全5契約を、観測可能な側から検証する | `go test`(docker-proxy の API ボディ検査、orchestrator のプロンプト生成と制御ファイル検知)+ 実機確認 | Go は単体と同じ。実機分はコンテナ起動を伴う | 契約ごとに下表の担当モジュールが用意する | 変更時。実機分はリリース前 |
+| E2E | ユースケースを実操作で通す。オーケストレーターは自己検証題材で実走する | 実機(`claude-dev` の実操作)+ `make orch-sample` | 実際のホストとコンテナ。実 tmux・実エージェント | 自己検証題材(使い捨ての作業コピー) | リリース前と、関係する変更のたび |
 
 ### 結合テスト対象
 
-「モジュール間インターフェース(契約)」の全 5 契約を列挙する。担当は原則「呼び出し元」だが、本システムでは
-**検証が観測可能な側**（呼び出し先）へ寄せている契約が 3 件ある（理由は下表の担当欄に併記）。ホスト CLI 側は bash で自動
-テストランナーを持たないため、呼び出し元担当にすると全件が実機確認になり検証の所在が曖昧になるからである。
-
-| 契約(呼び出し元→呼び出し先) | 検証観点 | 担当モジュール |
+| 契約 ID | 契約の当事者 | テストを持つ責任モジュール |
 |---|---|---|
-| cli → コンテナ/entrypoint | 環境変数・マウントが渡り、UID/GID が `/workspace` 所有者に追従し、認証（claude/codex）がコンテナローカルへコピーされ 30 秒書き戻しが働く | entrypoint（呼び出し元 cli は bash で自動テスト不可のため観測側が担当。手段は実機確認） |
-| entrypoint → firewall | 起動時に FW が適用される | entrypoint |
-| コンテナ → docker-proxy | 危険 bind/privileged/host mode 拒否・/workspace bind 書換・通常操作透過 | docker-proxy（観測側。`go test` で機械検証） |
-| cli(orchestrate) → orchestrator | 生存判定による attach/resume 分岐・設定受け渡し | orchestrator（観測側。実 tmux＋実 claude を要するため手段は実機確認＝E2E-4/E2E-5） |
-| orchestrator → worker / 対話Claude | プロンプト注入（instruction テンプレ・`ORCHESTRATOR.md` 前置・VM 前置）と `control.json` による受け渡し・消費 | orchestrator（orchestrator 側の生成・検知は `go test` で機械検証。実 `claude` プロセスとの結合は実機確認＝E2E-4） |
+| CTR-cli-container | MOD-cli-start → MOD-entrypoint | MOD-entrypoint(呼び出し元はシェルで自動テストを持てないため観測側が担当。手段は実機確認) |
+| CTR-entrypoint-firewall | MOD-entrypoint → MOD-firewall | MOD-entrypoint(手段は実機確認) |
+| CTR-docker-api | Claude コンテナ → MOD-docker-proxy | MOD-docker-proxy(観測側。`go test` で機械検証) |
+| CTR-cli-orchestrator | MOD-cli-orchestrate → MOD-orchestrator | MOD-orchestrator(観測側。実 tmux と実エージェントを要するため手段は実機確認=E2E-04 / E2E-05) |
+| CTR-orchestrator-prompt | MOD-orchestrator → worker / 対話 Claude | MOD-orchestrator(生成と検知は `go test`。実プロセスとの結合は実機確認=E2E-04) |
 
 ### E2Eシナリオ一覧
 
-| シナリオID | 対応ユースケース | 検証するフロー | 優先度 |
+| E2E ID | 対応 UC | シナリオ | 対象/対象外(理由) |
 |---|---|---|---|
-| E2E-1 | UC-1 | `claude-dev start`（VNC あり/`--no-vnc`）→ /workspace マウント・認証・FW・tmux → claude 起動・再接続 | Must |
-| E2E-2 | UC-2 | `claude-dev forward` → 8100〜割当・SSH トンネル → クライアントブラウザで表示・`ports` 確認 | Must |
-| E2E-3 | UC-3 | コンテナ内 `docker run -v /:/host` 等 → docker-proxy が拒否／`/workspace` bind 許可／通常許可 | Must |
-| E2E-4 | UC-4 | `orchestrate` → ブレスト→plan→worker 並列→要判断1件のみ待機・他継続→回答復帰→完了（`make orch-sample` で題材を scaffold し `claude-dev orchestrate` で実走） | Must |
-| E2E-5 | UC-5 | 実行中に端末全終了→`orchestrate` 再実行→attach/resume・完了済み非再実行・plan/履歴保持 | Should |
-| E2E-6 | UC-6 | `claude-dev login-codex` → デバイス認証 → 別プロジェクトで `start` → コンテナ内 `codex` が再ログイン不要で起動し、**codex が起こすシェルコマンドが成功して `/workspace` を読み書きできる**。さらに **landlock 疎通確認**（`codex sandbox --enable use_legacy_landlock -- /bin/true` が exit 0、同じ経路での書き込みは失敗）が通り、`--sandbox read-only` を明示した依頼で読み取りが成功する（12-9）。トークン更新が共有ボリュームへ書き戻り次のコンテナへ引き継がれる | Must |
+| E2E-01 | UC-01 | `claude-dev start`(ブラウザ確認あり / `--no-vnc`)→ `/workspace` マウント・認証・ファイアウォール・tmux → `claude` 起動 → 再実行での再接続 | 対象(Must) |
+| E2E-02 | UC-02 | `claude-dev forward` → 8100 番台の割当と SSH トンネル → クライアントのブラウザで表示 → `claude-dev ports` で確認 | 対象(Must) |
+| E2E-03 | UC-03 | コンテナ内で危険な `docker run` → 拒否 / `/workspace` bind の許可 / 通常操作の透過 | 対象(Must) |
+| E2E-04 | UC-04 | `orchestrate` → ブレインストーミング → plan 確定 → worker 並列 → 要判断1件のみ待機・他は継続 → 回答で復帰 → 完了(`make orch-sample` で題材を配置して実走) | 対象(Must) |
+| E2E-05 | UC-05 | 実行中に端末を全終了 → `orchestrate` 再実行 → 合流/再開・完了済みの非再実行・plan と履歴の保持 | 対象(Should) |
+| E2E-06 | UC-06 | `claude-dev login-codex` → デバイス認証 → 別プロジェクトで `start` → 再ログイン不要で `codex` が起動し、**シェルコマンドが成功して `/workspace` を読み書きできる**。landlock の疎通確認が通り、読み取り専用の明示指定で読み取りが成功する。トークン更新が次のコンテナへ引き継がれる | 対象(Must) |
 
-## 設計判断と代替案
+**全 UC がカバーされている**(UC-01〜UC-06 → E2E-01〜E2E-06)。上流の UC を持たない E2E シナリオは
+作らない。
 
-### 判断1:自作の外部制御ループ（Docker Agent 不採用）
+## UI設計
 
-- **採用:** コントローラがループを所有する外部制御ループ。L1 は claude から借りる。
-- **却下した代替案:** Docker Agent（L1+L2 委譲配管）／Stop-hook 力技での連続走行。
-- **理由:** 暴走しない・コンテキストを汚さない・再開可能。変化の速い依存を中核に据えると配布安定性にリスク（D-12）。
+本システムの UI はターミナル主体である(Web GUI は無い。ブラウザ確認は noVNC で提供するが、
+これは本システムのアプリ UI ではなく、利用者が開発中の Web アプリを見るための窓である)。
+接点は「ホスト CLI のコマンド体系」と「オーケストレーターの TUI」の2つ。
 
-### 判断2:tmux 常駐（完全デーモン化しない）
+### 画面一覧
 
-- **採用:** コントローラを `orch-<project>-main:dashboard` で常駐。tmux サーバを「常駐の器」にする。
-- **却下した代替案:** setsid の完全デーモン化。
-- **理由:** 完全デーモン化はダッシュボード描画を別プロセス化し複雑。tmux なら 1 プロセスのまま端末破壊耐性を得る（D-14）。
+#### DSN-ui-01 UI はターミナル主体とし、Web GUI を持たない
 
-### 判断3:認証はコピー＋同期（symlink 不採用）
+- 判断: 利用者との接点をホスト CLI と TUI の2つに限る。下表の6画面で全操作を賄う。
+- 理由: 利用者は開発者であり、作業の場が端末と SSH の中にある。Web GUI を足すと、ホストへ新たな
+  待ち受けを開くことになり(`NFR-sec-01`)、認証も別途必要になる。
+- 却下した案: Web ダッシュボードを提供する — ポート公開と認証の追加が必要で、隔離方針と衝突する。
 
-- **採用:** 認証ファイル実体コピー＋30秒同期。claude（`.credentials.json`/`.claude.json`）と
-  codex（`auth.json`）で同一方式・同一の同期ループを使う。
-- **却下した代替案:** symlink 共有。
-- **理由:** Claude Code のアトミック書き込み（tmp→rename）で symlink が壊れる（D-3）。codex の
-  `auth.json` はその場書き換えのため symlink でも壊れないが、**方式を 2 つ持たない**ことを優先し
-  コピー＋同期に揃える（同期ループ・logout・reset の分岐を増やさない）。トークンリフレッシュで内容が
-  変わる点は claude と同じで、書き戻しは双方に必要（D-27）。
+| 画面ID | 画面名 | 目的 | 関連 UC |
+|---|---|---|---|
+| SCR-01 | cli-commands | コンテナ・認証・ポート・鍵の操作 | UC-01, UC-02, UC-03, UC-06 |
+| SCR-02 | orch-dashboard | 実行モードの俯瞰と worker の選択 | UC-04, UC-05 |
+| SCR-03 | orch-brainstorming | ゴール・仕様を対話で固める | UC-04 |
+| SCR-04 | orch-worker | worker のライブ出力 | UC-04 |
+| SCR-05 | orch-intervention | 要判断1件への回答 | UC-04 |
+| SCR-06 | orch-endmenu | 引き渡しの意図が判別できないときの選択 | UC-04 |
 
-### 判断4:エージェント CLI の導入は「内容由来キー」で配布ステージの終端レイヤーに置く
+### 画面遷移
 
-- **採用:** `Dockerfile.claude` を 4 ステージに分ける——重い共通層を持つ `base`、VNC 資産を積む
-  `vnc-base`(`FROM base`)、そして配布する 2 つの終端ステージ `claude-cli`(`FROM base`) /
-  `claude-vnc`(`FROM vnc-base`)。Claude Code と Codex CLI の導入 `RUN` は**終端ステージの最終
-  レイヤーにのみ**置き、キャッシュキーには具体バージョン（claude は `latest` チャネル、codex は npm
-  registry の最新版を CI で解決した値）を使う（D-26／D-27）。
-- **却下した代替案:** ①`base` の途中で導入したまま、日次タイムスタンプで cache-bust する
-  ②`base` の途中で導入したまま、バージョンで cache-bust する ③導入をやめて実行時に自動更新させる。
-- **理由:** `vnc-base` は `FROM base` で連なるため、`base` 途中の層を失効させると VNC の高コスト層
-  （apt VNC 群・Chrome・`cargo install`）まで巻き込んで再ビルド・再 push・再 pull になる（①②が該当。
-  ①は加えて新版が無い日も毎日失効する）。終端レイヤーへ移すと、失効の波及先がエージェント CLI の
-  バイナリ層だけになり、鮮度（core/9 受入基準3・6）と pull の増分性（非機能:性能）を同時に満たせる。
-  ③はファイアウォール下・オフライン起動で不確定になり、イメージが「同一構成の保証」を失うため却下
-  （codex を `@latest` 直書きで焼く案も、文字列が変わらずキャッシュが永久ヒットして**中身だけ凍結**
-  するため同様に却下。D-26 で実際に起きた事象）。
-- **一般原則:** レイヤーチェーンに入れてよいのは**内容由来**の値（実バージョン等）に限る。時刻など
-  内容と無関係に動く値を入れてはならない（`docs/knowledge/changing-label-busts-layer-cache.md`）。
-  内容由来であっても、失効の波及範囲を最小化できる位置——依存される側ではなく終端——に置く。
+#### DSN-ui-02 移動はカーソル選択と Enter 確定でのみ行う
 
-### 判断5:Codex サンドボックスは既定で無効化し、読み取り専用用途だけ landlock で生かす
+- 判断: ダッシュボードからの移動は、カーソル選択(↑↓/jk)と Enter 確定でのみ発生させる。
+  数字キーでの即時移動と全画面再描画は行わない。対話モードからの抜け方は全モードで統一する。
+- 理由: 選択と確定を分離しないと、カーソルを動かしただけで画面が飛び、利用者が現在地を見失う。
+  全画面再描画はちらつきの原因になる。TUI と子プロセスが同じ端末を共有するため、描画の主導権を
+  一箇所に持たせる必要もある。
+- 却下した案: 数字キーで即時移動する(旧実装) — 誤操作で意図しないウィンドウへ飛ぶ。
+  全消去・全再描画 — ちらつく。
 
-- **採用:** entrypoint が既定 3 鍵——`sandbox_mode = "danger-full-access"` /
-  `approval_policy = "never"` / `[features] use_legacy_landlock = true`——を置く（D-27 ⑥）。
-  `config.toml` 不在なら 3 鍵を生成し、存在するなら**書かれていない鍵だけを追記**して既存の値は
-  書き換えない（core/12-5,12-6）。既定では codex 自前のサンドボックスを使わないが、`--sandbox
-  read-only` を明示要求する呼び出し（コードレビュー・文書監査を codex に依頼する経路）だけは
-  landlock バックエンドで成立させる（core/12-9）。`workspace-write` は landlock でも書き込みが
-  失敗するため実用外とし、書き込みを伴う自動化・QA は `danger-full-access` で走らせる。
-- **却下した代替案:** ①`docker run` に `--security-opt seccomp=unconfined --security-opt
-  apparmor=unconfined` を足して bwrap を動かす ②`sandbox_mode = "workspace-write"` のまま運用する
-  ③イメージに `config.toml` を焼き込む ④landlock を使わず、読み取り専用の依頼は常に「対象ファイルの
-  内容をプロンプトへ添付し codex にシェルを使わせない方式」で回避する ⑤entrypoint が起動時に
-  サンドボックス疎通確認を実行して警告を出す。
-- **理由:** codex の Linux サンドボックスは bubblewrap 実装で、ユーザー名前空間の作成とマウント伝播の
-  変更を要する。Claude コンテナは Docker 既定 seccomp と `docker-default` AppArmor の下で動くため、
-  seccomp が `CLONE_NEWUSER` を拒否し、それを外しても AppArmor が `mount --make-rslave /` を拒否する
-  2 段構えで bwrap が起動できない。②はこの状態を放置することであり、codex のシェルコマンドが例外なく
-  失敗する（`exited 1`）。①は bwrap を動かせるが、隔離境界はコンテナ／ホスト間のみという前提（D-1）を
-  支えている confinement 自体を外すことになり、生ソケット非マウント（D-2）等で守っている境界を弱めるため
-  却下。コンテナ内の二重サンドボックスは元から前提にしていないので、claude 側の
-  `permissions.defaultMode=bypassPermissions` と同じ扱いに揃えるのが構造的に一貫する。③は
-  `~/.codex → /workspace/.codex` の symlink 化（プロジェクト単位の実体）より前に固定値を焼くことになり、
-  プロジェクトごとに利用者が設定を変える余地を失うため却下。④は退避手段としては有効だが、恒久策に
-  すると codex にファイルを読ませる経路（`codex exec review` 等）が使えないままになる。landlock が
-  ユーザー名前空間を必要とせずコンテナの confinement 下で動くことを実測で確認できたため、内側の隔離を
-  捨てずに済む④より上位の解を採った（④は `use_legacy_landlock` が撤去された場合の退避先として残す）。
-  ⑤は codex を使わない利用者にも毎起動のコストがかかるため却下し、疎通確認は E2E-6 に持たせる。
-- **副作用として設計に織り込む点:** 失敗が静かに起きる形（コマンド失敗をモデルが認識せず出力を捏造する、
-  `codex doctor` も検知しない。**失敗しても `codex exec` の終了コードは 0**）だったため、E2E-6 は
-  「起動する」ではなく**シェル実行が成功する**ところまで観測し、判定は成果物で行う
-  （テスト戦略の E2Eシナリオ一覧）。`use_legacy_landlock` は codex 0.146.0 時点で deprecated であり
-  版更新で撤去されうるため、E2E-6 に landlock の疎通確認を含めて回帰を検知する。
+```mermaid
+stateDiagram-v2
+  [*] --> SCR_02: orchestrate(ホーム表示)
+  SCR_02 --> SCR_03: カーソル選択 → Enter
+  SCR_03 --> SCR_02: 実行不可 → 理由を表示して戻す
+  SCR_03 --> SCR_06: 引き渡しの意図が不明
+  SCR_06 --> SCR_02: 続ける / 終了
+  SCR_03 --> SCR_04: plan 確定 → 実行モードで worker 起動
+  SCR_02 --> SCR_04: 待機中でない worker を Enter
+  SCR_02 --> SCR_05: 待機中(要判断)の worker を Enter
+  SCR_05 --> SCR_04: 回答 → 同じウィンドウで実行復帰
+  SCR_04 --> SCR_02: 完了(ウィンドウを閉じる)
+  SCR_02 --> [*]: 全タスク完了(完了を通知)
+```
 
-## 要件カバレッジ確認
+### 画面ごとの項目と状態
 
-| 要件(領域/番号) | 対応モジュール |
-|---|---|
-| core/1 コンテナ管理 | cli, entrypoint, devcontainer |
-| core/2 UID/GID・共有 | entrypoint, cli |
-| core/3 認証 | cli, entrypoint |
-| core/4 SSH 鍵 | cli (mac 差分は cli-mac) |
-| core/5 FW・ネットワーク | firewall, entrypoint, cli |
-| core/6 ポートフォワード | cli, portsync |
-| core/7 docker-proxy | docker-proxy, cli/cli-mac（7-5 compose プロジェクト名一意化） |
-| core/8 VM モード | vm-mode |
-| core/9 配布・ビルド | makefile, ghcr-workflow, devcontainer |
-| core/10 macOS | cli-mac, makefile(install 判定) |
-| core/11 ブラウザ確認 | entrypoint(11-1 の VNC/Chrome/noVNC 起動・11-2 MCP 設定), devcontainer(11-3 IBus-Mozc 同梱), container-tools(tmux), cli/cli-mac(11-1 のうち noVNC ポートの動的割当と URL 表示。分割定義の cli 行が持つ core/11 はこの範囲) |
-| core/12 同梱エージェント CLI | devcontainer(導入), cli/cli-mac(login-codex, 12-7 `--security-opt` 不付与), entrypoint(認証コピー・同期, 12-4〜12-6,12-9 サンドボックス既定設定), ghcr-workflow(版解決)。※12-9 の landlock 疎通確認は E2E-6 が担う（`03-impl/e2e.md`。分割定義外の標準例外であり、モジュールではない） |
-| orchestration/12〜19 | orchestrator, hooks(Slack) |
-| orchestration/20 自己検証 | sample-project, orchestrator, makefile |
-| core 非機能(セキュリティ/性能/保守/環境) | docker-proxy, devcontainer, ghcr-workflow(pull 増分性), cli/cli-mac |
-| orchestration 非機能(耐障害/保守/性能/可観測) | orchestrator |
+#### SCR-01 cli-commands
 
-## 未解決事項(Open Questions)
+| 項目 | 型・制約 | 必須 | 備考 |
+|---|---|---|---|
+| サブコマンド | 18 種の列挙 | 必須 | 未知の語とヘルプ要求は使い方を表示する |
+| 対象セッション名 | 文字列(省略時はカレントディレクトリから導出) | 任意 | `stop` / `ports` / `forward` など |
+| フラグ | `--no-vnc` / `--kvm` / `--vm` / `--vm-fresh` / `--fresh` | 任意 | 非対応の組み合わせは実行前に拒否する |
 
-- なし（要確認事項は decisions.md D-21〜D-23 に集約）
+状態: **初期**=使い方の表示 / **実行中**=進捗行(イメージ名・バージョン・待機の経過)/
+**エラー**=日本語の原因と次の操作の案内 / **空**=対象セッションが無い旨 /
+**完了**=接続 URL とアタッチ。
+
+#### SCR-02 orch-dashboard
+
+| 項目 | 型・制約 | 必須 | 備考 |
+|---|---|---|---|
+| ゴール | 文字列 | 必須 | plan 未確定なら未設定と表示する |
+| worker 一覧 | タスクID・状態・カーソル選択 | 必須 | 状態は実行中/レビュー中/待機(要判断)/完了/失敗/ブロック |
+| 要判断の件数 | 整数 | 必須 | 0 件でも項目は表示する |
+| 直近サマリ・仮定の件数 | 文字列・整数 | 任意 | 取得に失敗しても描画を止めない |
+
+状態: **初期**=ホーム表示 / **読込中**=状態の読み取り中 / **エラー**=補助情報の取得失敗を
+警告として表示(描画は継続) / **空**=worker が無い(ブレインストーミングへ誘導) /
+**完了**=全タスク完了の表示。
+
+#### SCR-03 orch-brainstorming / SCR-04 orch-worker / SCR-05 orch-intervention / SCR-06 orch-endmenu
+
+| 項目 | 型・制約 | 必須 | 備考 |
+|---|---|---|---|
+| 対話本文 | エージェントの TUI をそのまま表示 | 必須 | SCR-03 / SCR-05 |
+| 番号付き選択肢 | 1 から始まる連番 | 必須(選択を求めるとき) | 番号での回答を受理する |
+| ライブ出力 | 整形済みのログ | 必須 | SCR-04 |
+| メニュー項目 | 続ける / 実行する(実行可能なときのみ)/ 終了する | 必須 | SCR-06 |
+
+状態: **初期**=モード遷移のバナー(日本語)/ **対話中**=エージェントの応答待ち /
+**回答待ち**=要判断の質問を表示 / **エラー**=理由を日本語で表示 / **完了**=ウィンドウを閉じて
+ダッシュボードへ戻る。
+
+### デザイン方針
+
+- 人間の判断・入力を求める表示はすべて日本語にする。選択肢には必ず番号を付ける。
+- 利用者に運用状態ファイルの直接編集を促さない(修正は対話へ誘導する)。
+- 前提不足(未セットアップ・未認証・設定ファイルが無い)は、止めずに次の操作を案内する。
+  止めざるを得ない場合は、原因と復旧手段を日本語1行で示してから終了する。
+- 端末が対話的でない場合は、選択を求めずに既定値で進む。
+
+## 未解決事項
+
+- なし

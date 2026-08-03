@@ -16,8 +16,7 @@
 - どうなったら解消が必要か: E2E スクリプトが増えて相互に呼び合うようになったとき、または
   テスト資産にも呼び出し関係の機械検査を効かせたくなったとき。そのときは excludes から外し、
   テスト用の機能表を別に持つか、`tests/` 側の検査手段を用意する。
-- 関連: 03-impl/tests/e2e.md(task-docs-restructure の `new-features/03-impl/tests/e2e.md` として作成済み。
-  `/task-close` の反映で SSOT に現れる)/ issues: なし
+- 関連: `docs/03-impl/tests/e2e.md`(2026-08-03 の `/task-close` で SSOT へ反映済み)/ issues: なし
 
 ## P-002 PR での CI 自動実行を導入しない
 
