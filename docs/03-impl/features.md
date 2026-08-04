@@ -1,6 +1,6 @@
 ---
 id: features
-updated: 2026-08-02
+updated: 2026-08-05
 summary: claude-dev 開発環境の機能一覧と入口。CLI サブコマンド・Makefile ターゲット・常駐スクリプト・Go バイナリの入口を列挙する
 keywords: [機能表, 境界, claude-dev, Makefile, orchestrator, docker-proxy]
 # version / verified は持たない(relations 層の代表として docs/03-impl/index.md が持つ)
@@ -42,7 +42,7 @@ keywords: [機能表, 境界, claude-dev, Makefile, orchestrator, docker-proxy]
 | MODULE-cli-orchestrate | tool | dispatch orchestrate @ claude-dev::main, dispatch orchestrate @ claude-dev-mac::main | MOD-cli-orchestrate | コンテナ内で orchestrator を起動する(ゴール指定・--fresh 対応) |
 | MODULE-cli-ports | tool | dispatch ports @ claude-dev::main, dispatch ports @ claude-dev-mac::main | MOD-cli-ports | コンテナのポートフォワード一覧を表示する |
 | MODULE-cli-pull | tool | dispatch pull @ claude-dev::main, dispatch pull @ claude-dev-mac::main | MOD-cli-pull | GHCR からビルド済みイメージを取得する(既定タグ latest) |
-| MODULE-cli-reset | tool | dispatch reset @ claude-dev::main, dispatch reset @ claude-dev-mac::main | MOD-cli-reset | コンテナ・ボリューム・イメージを全削除する |
+| MODULE-cli-reset | tool | dispatch reset @ claude-dev::main, dispatch reset @ claude-dev-mac::main | MOD-cli-reset | 管理ラベルを持つ Claude コンテナと固定名の共有資源を削除して初期状態へ戻す |
 | MODULE-cli-setup | tool | dispatch setup @ claude-dev::main, dispatch setup @ claude-dev-mac::main | MOD-cli-setup | イメージをビルドし docker network とボリュームを作る |
 | MODULE-cli-ssh-keys | tool | dispatch ssh-keys @ claude-dev::main, dispatch ssh-keys @ claude-dev-mac::main | MOD-cli-ssh-keys | ssh-keys の引数を reset / select へ振り分けるディスパッチャ |
 | MODULE-cli-ssh-keys-reset | tool | dispatch ssh-keys.reset @ claude-dev::main, dispatch ssh-keys.reset @ claude-dev-mac::main | MOD-cli-ssh-keys | このプロジェクトの SSH 鍵選択を初期化する |

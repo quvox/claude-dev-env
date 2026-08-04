@@ -1,19 +1,19 @@
 ---
 id: cli-container
-version: 1.4.1
-updated: 2026-08-04
+version: 1.5.0
+updated: 2026-08-05
 source:
   - docs/02-design/contracts/cli-container.md
 kind: other
-impl: claude-dev::main#start
+impl: claude-dev::main#start, claude-dev-mac::main#start
 summary: ホスト CLI がコンテナへ渡す環境変数・マウント・起動オプションの取り決め(実装側)
 keywords: [契約, CTR, 実装]
 verified:
-  at: 2026-08-04
-  version: 1.4.1
+  at: 2026-08-05
+  version: 1.5.0
   against:
     - doc: docs/02-design/contracts/cli-container.md
-      version: 1.4.0
+      version: 1.4.1
 ---
 
 # CTR-cli-container ホスト CLI → コンテナ/entrypoint(実装)
@@ -30,7 +30,7 @@ verified:
 | 起動コマンド | `docker run -d --name <NAME> --hostname <NAME> --network claude-dev-net --cap-add NET_ADMIN --cap-add NET_RAW --restart unless-stopped -t` | `claude-dev:1381`〜`:1409` |
 | `--security-opt` | **付けていない**(Docker 既定の seccomp と `docker-default` AppArmor が有効なまま) | `claude-dev:1381`〜(不在であることが実装) |
 | **管理ラベル** | Claude コンテナにだけ `--label claude-dev.managed=1 --label claude-dev.role=claude --label "claude-dev.project-dir=${PROJECT_DIR}"` の3つを付ける。**他のオプションと違い変数にまとめず、引用付きの引数として直接渡す**(`project-dir` の値は利用者のパスでスペースを含みうるため)。**docker-proxy と `fwd-*` には付けない** | `claude-dev:1388`〜`:1390`(付与), `claude-dev:710`〜`:717`(docker-proxy は付けない) |
-| `DOCKER_HOST` | `tcp://claude-dev-docker-proxy:2375`。**ホストの `/var/run/docker.sock` がソケットとして存在するときだけ**付与する(`[ -S ... ]`)。VM モードでは entrypoint がゲスト VM 側の値へ上書きする | `claude-dev:1291`〜`:1294`, `scripts/entrypoint-claude.sh:476`〜 |
+| `DOCKER_HOST` | `tcp://claude-dev-docker-proxy:2375`。**ホストに Docker ソケットがあるときだけ**付与する(`[ -S ... ]`)。**探す場所は OS で違う**: Linux 版は `/var/run/docker.sock` だけを見る。macOS 版は `detect_docker_sock` が `/var/run/docker.sock` → `${HOME}/.docker/run/docker.sock`(Docker Desktop のユーザソケット)の順に見て、**どちらかがあれば付与する**。VM モードでは entrypoint がゲスト VM 側の値へ上書きする | `claude-dev:1291`〜`:1294`(Linux), `claude-dev-mac:310`〜`:316`(`detect_docker_sock`), `scripts/entrypoint-claude.sh:476`〜 |
 | `COMPOSE_PROJECT_NAME` | **`<正規化名>-<起動ディレクトリの絶対パスの SHA-256 先頭6桁>`**。正規化は `tr '[:upper:]' '[:lower:]'` → `sed 's/[^a-z0-9_-]/-/g'`、ハッシュは Linux が `sha256sum` / macOS が `shasum -a 256`(入力は `printf '%s'` で改行を付けない)。**`start` と `stop` が同じ関数 `compose_project_name` を通す**。**常に付与する** | `claude-dev:539`〜`:559`(関数), `:1300`(`start` の付与), `:1684`(`stop` の再計算) |
 | `CLAUDE_DEV_VM` | CLI は `--vm` / `--vm-fresh` のときだけ `1` を付与する。entrypoint は **`= "1"` の厳密一致**で判定する | `claude-dev:1354`〜`:1360`, `scripts/entrypoint-claude.sh:476` |
 | `VM_PORTS` / `VM_MEM` / `VM_SMP` / `VM_DISK` / `VM_SWAP` | VM モードで、かつホスト側の同名変数が**非空のときだけ**そのまま転送する(値の検証なし) | `claude-dev:1361`〜`:1364` |

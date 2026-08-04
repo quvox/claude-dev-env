@@ -9,11 +9,11 @@ source:
 summary: テストのレベル別実行方法・状態列の語彙・受入基準の配分規約
 keywords: [テスト, 方針]
 verified:
-  at: 2026-08-04
+  at: 2026-08-05
   version: 1.1.1
   against:
     - doc: docs/02-design/system.md
-      version: 2.1.1
+      version: 2.2.0
     - doc: docs/02-design/environments.md
       version: 1.0.0
 ---

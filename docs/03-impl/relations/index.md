@@ -29,7 +29,7 @@
 | [MODULE-cli-orchestrate](MODULE-cli-orchestrate.md) | MOD-cli-orchestrate | tool | sync | なし | MODULE-cli-common-container-name, MODULE-cli-common-is-running, MODULE-cli-common-require-setup, MODULE-cli-common-resolve-container-user, MODULE-cli-start | コンテナ内で orchestrator を起動する(ゴール指定・--fresh 対応) |
 | [MODULE-cli-ports](MODULE-cli-ports.md) | MOD-cli-ports | tool | sync | なし | MODULE-cli-common-container-name, MODULE-cli-common-get-novnc-url, MODULE-cli-common-is-running | コンテナのポートフォワード一覧と noVNC URL を表示する |
 | [MODULE-cli-pull](MODULE-cli-pull.md) | MOD-cli-pull | tool | sync | なし | なし | GHCR からビルド済みイメージを取得して latest へ retag する |
-| [MODULE-cli-reset](MODULE-cli-reset.md) | MOD-cli-reset | tool | sync | なし | MODULE-cli-common-container-exists, MODULE-cli-common-image-exists, MODULE-cli-common-lock | コンテナ・ボリューム・イメージを全削除して初期状態へ戻す |
+| [MODULE-cli-reset](MODULE-cli-reset.md) | MOD-cli-reset | tool | sync | なし | MODULE-cli-common-container-exists, MODULE-cli-common-image-exists, MODULE-cli-common-lock | 管理ラベルを持つ Claude コンテナと固定名の共有資源(ボリューム・イメージ・docker-proxy・ネットワーク)を削除して初期状態へ戻す(共有 docker-proxy とネットワークは遊休のときだけ) |
 | [MODULE-cli-setup](MODULE-cli-setup.md) | MOD-cli-setup | tool | sync | なし | なし | イメージをビルドし docker network と共有ボリュームを作る初回セットアップ |
 | [MODULE-cli-ssh-keys](MODULE-cli-ssh-keys.md) | MOD-cli-ssh-keys | tool | sync | なし | MODULE-cli-common-container-name | ssh-keys の引数を reset / select へ振り分けるディスパッチャ |
 | [MODULE-cli-ssh-keys-reset](MODULE-cli-ssh-keys-reset.md) | MOD-cli-ssh-keys | tool | sync | なし | MODULE-cli-common-container-name, MODULE-cli-common-dev-agent-path | このプロジェクトの SSH 鍵選択を初期化する |

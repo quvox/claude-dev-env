@@ -43,7 +43,10 @@
 | [050-modify-unparseable-docker-request-is-relayed-against-its-own-guardrail](050-modify-unparseable-docker-request-is-relayed-against-its-own-guardrail.md) | modify | 中 | 2026-08-04 | FR-env-07, D0-sec-05, NFR-sec-01, MODULE-docker-proxy-serve, CTR-docker-api | FR-env-07 受入基準8 は解釈できない Docker API のボディを中継してよいと定めるが、その根拠である委任 D0-sec-05 のガードレールは「拒否すべき操作を通してはならない」と定めており、解釈できないボディに禁止操作が含まれる場合に両立しない |
 | [051-bug-cli-output-leaks-raw-docker-ids](051-bug-cli-output-leaks-raw-docker-ids.md) | bug | 低 | 2026-08-04 | MODULE-cli-stop, MODULE-cli-common-ensure-infrastructure, docs/02-design/logging.md | CLI の利用者向け出力に生の Docker ID が混じる(docker network create と xargs docker rm -f の標準出力を捨てていない)。本変更より前から存在する |
 | [052-bug-logout-skips-unmanaged-warning-when-nothing-to-delete](052-bug-logout-skips-unmanaged-warning-when-nothing-to-delete.md) | bug | 中 | 2026-08-04 | FR-env-03, MODULE-cli-logout, CTR-cli-container, D0-env-08 | logout は削除対象が0件のとき早期に終了するため、管理ラベルを持たない稼働中コンテナの列挙と「認証が書き戻される」警告に到達せず、利用者は logout が効かない理由を知る手段が無い |
+| [053-bug-logout-treats-unlistable-auth-volume-as-empty](053-bug-logout-treats-unlistable-auth-volume-as-empty.md) | bug | 中 | 2026-08-05 | FR-env-03, MODULE-cli-logout, CTR-cli-container, D0-env-08, docs/issues/052 | logout の「共有ボリュームが空か」の判定が列挙の成否を見ないため、一時コンテナを起動できない状態では認証が残っていても「削除対象がありません」と表示して終了コード 0 で終わる |
+| [054-modify-ssot-references-deleted-issue-paths](054-modify-ssot-references-deleted-issue-paths.md) | modify | 低 | 2026-08-05 | docs/00-requests/decisions/env.md, docs/02-design/contracts/cli-container.md, docs/03-impl/relations/MODULE-cli-stop.md, docs/03-impl/relations/MODULE-cli-reset.md, docs/03-impl/index.md, docs/issues/030 | 解消して削除された issue のファイルパス(docs/issues/NNN)が仕様ドキュメントの根拠として残り続けるため、10 個の ID・20 以上のファイルで参照先が実在しない |
+| [055-modify-ac17-demands-listing-stopped-unlabeled-containers](055-modify-ac17-demands-listing-stopped-unlabeled-containers.md) | modify | 中 | 2026-08-05 | FR-env-03, D0-env-08, CTR-cli-container, MODULE-cli-logout, MODULE-cli-reset, docs/02-design/contracts/cli-container.md | FR-env-03 受入基準17 は管理ラベルを持たない Claude コンテナの名前を「表示して残す」ことを稼働中に限定せずに要求するが、02 の契約は停止中のものを列挙できないことを意図した限界として明記しており、01 と 02 が食い違う |
 
-件数: 37
+件数: 40
 
 <!-- END GENERATED -->

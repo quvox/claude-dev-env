@@ -8,11 +8,11 @@ kind: other
 summary: コンテナからの Docker Engine API 要求を docker-proxy が検査・書き換え・拒否する取り決め
 keywords: [契約, CTR]
 verified:
-  at: 2026-08-04
+  at: 2026-08-05
   version: 1.0.0
   against:
     - doc: docs/02-design/system.md
-      version: 2.1.1
+      version: 2.2.0
 ---
 
 <!-- 2026-08-04 /doc-check ssot task-impl-depth(新しい実行): **合格証を再発行した(1.0.0)。**

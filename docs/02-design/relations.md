@@ -1,7 +1,7 @@
 ---
 id: relations
-version: 1.2.0
-updated: 2026-08-04
+version: 1.3.0
+updated: 2026-08-05
 source:
   - docs/01-requirements/functional.md
   - docs/01-requirements/usecases.md
@@ -9,15 +9,15 @@ source:
 summary: 設計が想定する機能連携 PLAN-* の一覧。03-impl/relations との突き合わせの当事者
 keywords: [想定機能連携, PLAN]
 verified:
-  at: 2026-08-04
-  version: 1.2.0
+  at: 2026-08-05
+  version: 1.3.0
   against:
     - doc: docs/01-requirements/functional.md
       version: 1.5.0
     - doc: docs/01-requirements/usecases.md
       version: 1.1.0
     - doc: docs/02-design/system.md
-      version: 2.1.1
+      version: 2.2.0
 ---
 
 # 想定機能連携一覧
@@ -58,7 +58,7 @@ verified:
 | PLAN-cli-orchestrate | MOD-cli-orchestrate | tool | sync | なし | PLAN-cli-common-container-name, PLAN-cli-common-is-running, PLAN-cli-common-require-setup, PLAN-cli-common-resolve-container-user, PLAN-cli-start | CTR-cli-orchestrator | FR-orch-01, FR-orch-02 | コンテナ内で orchestrator を起動する(ゴール指定・--fresh 対応) |
 | PLAN-cli-ports | MOD-cli-ports | tool | sync | なし | PLAN-cli-common-container-name, PLAN-cli-common-get-novnc-url, PLAN-cli-common-is-running | なし | FR-env-06, FR-env-11 | コンテナのポートフォワード一覧と noVNC URL を表示する |
 | PLAN-cli-pull | MOD-cli-pull | tool | sync | なし | なし | なし | FR-env-09 | GHCR からビルド済みイメージを取得して latest へ retag する |
-| PLAN-cli-reset | MOD-cli-reset | tool | sync | なし | PLAN-cli-common-container-exists, PLAN-cli-common-image-exists, PLAN-cli-common-lock | CTR-cli-container | FR-env-01, FR-env-03 | コンテナ・ボリューム・イメージを全削除して初期状態へ戻す(実在するものだけを削除対象に列挙する) |
+| PLAN-cli-reset | MOD-cli-reset | tool | sync | なし | PLAN-cli-common-container-exists, PLAN-cli-common-image-exists, PLAN-cli-common-lock | CTR-cli-container | FR-env-01, FR-env-03 | 管理ラベルを持つ Claude コンテナと固定名の共有資源(ボリューム・イメージ・docker-proxy・ネットワーク)を削除して初期状態へ戻す(共有 docker-proxy とネットワークは遊休のときだけ) |
 | PLAN-cli-setup | MOD-cli-setup | tool | sync | なし | なし | なし | FR-env-01, FR-env-09 | イメージをビルドし docker network と共有ボリュームを作る初回セットアップ |
 | PLAN-cli-ssh-keys | MOD-cli-ssh-keys | tool | sync | なし | PLAN-cli-common-container-name | なし | FR-env-04 | ssh-keys の引数を reset / select へ振り分けるディスパッチャ |
 | PLAN-cli-ssh-keys-reset | MOD-cli-ssh-keys | tool | sync | なし | PLAN-cli-common-container-name, PLAN-cli-common-dev-agent-path | なし | FR-env-04 | このプロジェクトの SSH 鍵選択を初期化する |
