@@ -1,7 +1,7 @@
 ---
 id: strategy
 scope: 全体
-version: 1.1.0
+version: 1.1.1
 updated: 2026-08-04
 source:
   - docs/02-design/system.md
@@ -10,7 +10,7 @@ summary: テストのレベル別実行方法・状態列の語彙・受入基�
 keywords: [テスト, 方針]
 verified:
   at: 2026-08-04
-  version: 1.1.0
+  version: 1.1.1
   against:
     - doc: docs/02-design/system.md
       version: 2.0.0
@@ -112,7 +112,7 @@ verified:
 | 指標 | 目標 | 現状 | 測定コマンド |
 |---|---|---|---|
 | 行カバレッジ(Go) | **目標値なし**(01 の非機能要件にカバレッジの目標は無い) | 測定していない | `cd docker-proxy && go test -cover ./...` |
-| 受入基準のカバレッジ | すべての受入基準が対応表に行を持つこと(状態は問わない) | 機能要件の全 180 基準に行がある(非機能要件の 15 行を合わせて対応表は 195 行) | `python3 .claude/scripts/build-index.py --check` で集計を再生成して確認する |
+| 受入基準のカバレッジ | すべての受入基準が対応表に行を持つこと(状態は問わない) | 機能要件の全 182 基準に行がある(非機能要件の 15 行を合わせて対応表は 197 行) | `python3 .claude/scripts/build-index.py --check` で集計を再生成して確認する |
 
 **カバレッジ率ではなく「受入基準に行があるか」を指標にする。** 自動テストを持てない領域が大きい
 (Bash と Makefile)ため、行カバレッジは実態を表さない。

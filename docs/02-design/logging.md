@@ -1,7 +1,7 @@
 ---
 id: logging
-version: 1.0.0
-updated: 2026-08-03
+version: 1.1.0
+updated: 2026-08-04
 source:
   - docs/01-requirements/non-functional.md
   - docs/02-design/architecture.md
@@ -9,10 +9,10 @@ summary: 端末出力・常駐プロセスログ・機械が読む追記型ロ�
 keywords: [ログ, 可観測性]
 verified:
   at: 2026-08-04
-  version: 1.0.0
+  version: 1.1.0
   against:
     - doc: docs/01-requirements/non-functional.md
-      version: 1.2.0
+      version: 1.2.1
     - doc: docs/02-design/architecture.md
       version: 1.2.0
 ---
@@ -73,6 +73,7 @@ verified:
 | イベント | レベル | 出力内容 | 対応要件 |
 |---|---|---|---|
 | コンテナ起動の開始 | INFO | 使用イメージ名とバージョン | FR-env-01 |
+| **コンテナ名の衝突による起動の中止** | ERROR | 同名のコンテナが稼働中であること、別ディレクトリの同名プロジェクトである可能性、次に取るべき操作(そのディレクトリで再接続するか、`stop` してから起動し直すか)。**既存のコンテナには触れていないことが分かる表現にする** | FR-env-01(受け入れ基準12) |
 | noVNC の URL 提示 | INFO | 接続 URL(未公開なら出さない) | FR-env-11 |
 | ポート割当 | INFO | ホスト側ポートと転送先 | FR-env-06 |
 | ファイアウォールの適用結果 | INFO / WARN | 適用サマリ。失敗時は警告 | FR-env-05(受け入れ基準5) |

@@ -21,13 +21,13 @@
 | [cli-reset](cli-reset.md) | MOD-cli-reset | 0 / **1** / 2 | 1.0.0 | 2026-08-03 | MOD-cli-reset(環境の初期化)の受入基準⇄テスト対応 |
 | [cli-setup](cli-setup.md) | MOD-cli-setup | 0 / **1** / 2 | 1.0.0 | 2026-08-03 | MOD-cli-setup(初回セットアップ)の受入基準⇄テスト対応 |
 | [cli-ssh-keys](cli-ssh-keys.md) | MOD-cli-ssh-keys | 0 / **5** / 1 | 1.0.0 | 2026-08-03 | MOD-cli-ssh-keys(転送する SSH 鍵の選択と解除)の受入基準⇄テスト対応 |
-| [cli-start](cli-start.md) | MOD-cli-start | 0 / **34** / 1 | 1.0.0 | 2026-08-03 | MOD-cli-start(開発コンテナの起動)の受入基準⇄テスト対応 |
+| [cli-start](cli-start.md) | MOD-cli-start | 2 / **34** / 1 | 1.1.0 | 2026-08-04 | MOD-cli-start(開発コンテナの起動)の受入基準⇄テスト対応 |
 | [cli-stop](cli-stop.md) | MOD-cli-stop | 0 / **5** / 1 | 1.0.0 | 2026-08-03 | MOD-cli-stop(コンテナの停止)の受入基準⇄テスト対応 |
 | [cli-unforward](cli-unforward.md) | MOD-cli-unforward | 0 / **3** / 1 | 1.1.0 | 2026-08-04 | MOD-cli-unforward(ポートフォワードの解除)の受入基準⇄テスト対応 |
 | [cli-upgrade](cli-upgrade.md) | MOD-cli-upgrade | 0 / **1** / 2 | 1.0.0 | 2026-08-03 | MOD-cli-upgrade(CLI とイメージの更新)の受入基準⇄テスト対応 |
 | [container-tools](container-tools.md) | MOD-container-tools | 0 / **1** / 2 | 1.0.0 | 2026-08-03 | MOD-container-tools(コンテナ内補助ツール)の受入基準⇄テスト対応 |
 | [docker-proxy](docker-proxy.md) | MOD-docker-proxy | 8 / **2** / 0 | 1.0.0 | 2026-08-03 | MOD-docker-proxy(Docker API の検査と中継)の受入基準⇄テスト対応 |
-| [e2e](e2e.md) | E2E | 0 / **6** / 1 | 1.0.0 | 2026-08-03 | E2Eシナリオ E2E-01〜E2E-06 ⇄ テスト対応 |
+| [e2e](e2e.md) | E2E | 0 / **6** / 1 | 1.1.0 | 2026-08-04 | E2Eシナリオ E2E-01〜E2E-06 ⇄ テスト対応 |
 | [entrypoint](entrypoint.md) | MOD-entrypoint | 0 / **23** / 0 | 1.0.0 | 2026-08-03 | MOD-entrypoint(コンテナ起動シーケンス)の受入基準⇄テスト対応 |
 | [firewall](firewall.md) | MOD-firewall | 0 / **5** / 1 | 1.0.0 | 2026-08-03 | MOD-firewall(外向き通信のブラックリスト適用)の受入基準⇄テスト対応 |
 | [hooks](hooks.md) | MOD-hooks | 0 / **4** / 1 | 1.0.0 | 2026-08-03 | MOD-hooks(Claude Code フック)の受入基準⇄テスト対応 |
@@ -36,7 +36,7 @@
 | [orchestrator](orchestrator.md) | MOD-orchestrator | 38 / **47** / 0 | 1.1.1 | 2026-08-04 | MOD-orchestrator(AIオーケストレーター)の受入基準⇄テスト対応 |
 | [portsync](portsync.md) | MOD-portsync | 0 / **1** / 2 | 1.0.0 | 2026-08-03 | MOD-portsync(DooD 経路のポート同期)の受入基準⇄テスト対応 |
 | [sample-project](sample-project.md) | MOD-sample-project | 2 / **5** / 1 | 1.0.0 | 2026-08-03 | MOD-sample-project(自己検証用サンプル)の受入基準⇄テスト対応 |
-| [strategy](strategy.md) | 全体 | - | 1.1.0 | 2026-08-04 | テストのレベル別実行方法・状態列の語彙・受入基準の配分規約 |
+| [strategy](strategy.md) | 全体 | - | 1.1.1 | 2026-08-04 | テストのレベル別実行方法・状態列の語彙・受入基準の配分規約 |
 | [vm-mode](vm-mode.md) | MOD-vm-mode | 0 / **8** / 1 | 1.0.0 | 2026-08-03 | MOD-vm-mode(ゲスト VM 内ネイティブ Docker)の受入基準⇄テスト対応 |
 
 件数: 32

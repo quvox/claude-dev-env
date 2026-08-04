@@ -13,9 +13,9 @@ verified:
   version: 1.2.0
   against:
     - doc: docs/01-requirements/functional.md
-      version: 1.3.1
+      version: 1.4.0
     - doc: docs/01-requirements/non-functional.md
-      version: 1.2.0
+      version: 1.2.1
     - doc: docs/01-requirements/system.md
       version: 1.0.0
 ---

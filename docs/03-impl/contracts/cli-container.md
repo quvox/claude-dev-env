@@ -1,6 +1,6 @@
 ---
 id: cli-container
-version: 1.2.0
+version: 1.3.0
 updated: 2026-08-04
 source:
   - docs/02-design/contracts/cli-container.md
@@ -10,10 +10,10 @@ summary: ホスト CLI がコンテナへ渡す環境変数・マウント・起
 keywords: [契約, CTR, 実装]
 verified:
   at: 2026-08-04
-  version: 1.2.0
+  version: 1.3.0
   against:
     - doc: docs/02-design/contracts/cli-container.md
-      version: 1.2.0
+      version: 1.3.0
 ---
 
 # CTR-cli-container ホスト CLI → コンテナ/entrypoint(実装)
@@ -45,7 +45,7 @@ verified:
 | `~/.ssh/config` の加工 | `sed -E '/^[[:space:]]*(IdentityFile\|IdentitiesOnly\|IdentityAgent)/d'` で3種の行を落とした一時コピーを作り、それを ro マウントする(**ホストの設定は変更しない**) | `claude-dev:834`〜`:843` |
 | 公開ポート | ブラウザ確認資産を使うときだけ `-p <空きポート>:6080`。空きポートは専用の探索関数が選ぶ | `claude-dev:845`〜`:849` |
 | デバイス | `--kvm` / `--vm` / `--vm-fresh` 指定時に `/dev/kvm` `/dev/vhost-net` `/dev/net/tun` のうち**実在するものだけ**を渡す。`/dev/kvm` が**無いとき**の扱いは指定の仕方で分かれる: **`--kvm` だけなら警告して続行**、**`--vm` または `--vm-fresh`(どちらも `USE_VM=1` にする)なら中止して終了コード 1**(TCG では実用にならないため)。`--vm` 系はデバイス判定より前、フラグ解析の直後に判定する | `claude-dev:703`〜`:704`(フラグ), `:708`〜`:711`(中止), `:856`〜`:871`(警告と付与) |
-| 起動の再試行 | `docker run` が失敗したら作りかけのコンテナを `docker rm -f` してから、**ブラウザ確認資産あり かつ 20 回以内 かつ エラー文言がポート競合(`port is already allocated` / `address already in use` / `bind for … failed`)** のときだけ、別のポートを取り直して再試行する。それ以外はエラーを表示して**終了コード 1** | `claude-dev:899`〜`:939` |
+| 起動の再試行 | `docker run` が失敗したときの後片付けは、**エラー文言が名前衝突(`Conflict.` / `already in use by container`)でなく、かつ対象コンテナが稼働中でない**ときだけ `docker rm -f` する。そのうえで、**ブラウザ確認資産あり かつ 20 回以内 かつ エラー文言がポート競合(`port is already allocated` / `address already in use` / `bind for … failed`)** のときだけ、別のポートを取り直して再試行する。**エラー文言が名前衝突のときは何も削除せず、再試行もせず**、同名のコンテナが稼働中である旨と別ディレクトリの同名プロジェクトである可能性を stderr へ出して**終了コード 1**。それ以外の失敗と上限超過もエラーを表示して**終了コード 1** | `claude-dev:899`〜`:939`(Linux), `claude-dev-mac` の同一箇所 |
 | 常駐セッションの待ち | `tmux has-session -t main` を 1 秒間隔で最大 **30 回**(VM モードは **420 回**)試す。時間内に上がらなければ状況を案内して**終了コード 0** で戻る(コンテナは残す) | `claude-dev:941`〜`:967` |
 | 認証の受け渡し | 一時コンテナで共有ボリューム(ro)から `${PROJECT_DIR}/.claude/`(`.credentials.json` / `.claude.json`)と `${PROJECT_DIR}/.codex/auth.json` へコピーし、ホストの UID/GID へ `chown` する。**無い鍵は黙って飛ばす**(未ログインでも起動できる) | `claude-dev:749`〜`:766` |
 | 認証の書き戻し | コンテナ内で 30 秒間隔のバックグラウンドループ | `scripts/entrypoint-claude.sh:449` |

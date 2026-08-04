@@ -13,7 +13,7 @@ verified:
   version: 1.0.0
   against:
     - doc: docs/01-requirements/functional.md
-      version: 1.3.1
+      version: 1.4.0
     - doc: docs/02-design/system.md
       version: 2.0.0
 ---

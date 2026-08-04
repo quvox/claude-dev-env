@@ -1,8 +1,8 @@
 ---
 id: cli-start
 scope: MOD-cli-start
-version: 1.0.0
-updated: 2026-08-03
+version: 1.1.0
+updated: 2026-08-04
 source:
   - docs/01-requirements/functional.md
   - docs/02-design/system.md
@@ -10,10 +10,10 @@ summary: MOD-cli-start(開発コンテナの起動)の受入基準⇄テスト�
 keywords: [テスト]
 verified:
   at: 2026-08-04
-  version: 1.0.0
+  version: 1.1.0
   against:
     - doc: docs/01-requirements/functional.md
-      version: 1.3.1
+      version: 1.4.0
     - doc: docs/02-design/system.md
       version: 2.0.0
 ---
@@ -30,6 +30,8 @@ verified:
 | FR-env-01 | 4 | 正常系 | E2E | E2E-01(実機確認手順) | 未検証(テスト未実装) |
 | FR-env-01 | 7 | 境界値 | E2E | E2E-01(実機確認手順) | 未検証(テスト未実装) |
 | FR-env-01 | 10 | 異常系 | E2E | E2E-01(実機確認手順) | 未検証(テスト未実装) |
+| FR-env-01 | 12 | 異常系 | E2E | E2E-01(実機確認手順 手順7) | 実装済み |
+| FR-env-01 | 13 | 境界値 | E2E | E2E-01(実機確認手順 手順7) | 実装済み |
 | FR-env-02 | 2 | 正常系 | E2E | E2E-01(実機確認手順) | 未検証(テスト未実装) |
 | FR-env-02 | 3 | 正常系 | E2E | E2E-01(実機確認手順) | 未検証(テスト未実装) |
 | FR-env-02 | 6 | 異常系 | E2E | E2E-01(実機確認手順) | 未検証(テスト未実装) |
