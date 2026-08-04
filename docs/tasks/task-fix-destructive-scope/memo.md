@@ -282,7 +282,7 @@ summary: 破壊的操作(stop / logout / reset)が他プロジェクトの資源
 
 <!-- /implement が確定させる下書き。番号は実装順の目安。 -->
 
-- [ ] 1. `/task-doc task-fix-destructive-scope`(00→03 の1回の下降 + 実装ドライラン) _Depends:_ 決定シートの回答
+- [x] 1. `/task-doc task-fix-destructive-scope`(00→03 の1回の下降 + 実装ドライラン) _Depends:_ 決定シートの回答 — **2026-08-04 完了**
 - [x] 2. **未決点 U-1〜U-3 の回答を変更指示へ反映する**(2026-08-04 完了。全件 A)
 - [x] 3. `/doc-check task-fix-destructive-scope` が PASS(**3回目=2026-08-04 に新しいセッションで PASS。** 1回目=不合格(高5件)→回答済み / 2回目=セッション上限で中断 / 3回目=自動修正8件を適用して PASS。**ただし独立レンズは立たなかった**(Codex が capacity とタイムアウトで2本とも失敗)。代替の可否は決定シート #1) _Depends:_ 2
 - [x] 4. `MODULE-cli-common-lock` を実装する(`acquire_lock` / `release_lock` を Linux 版・macOS 版の両方へ) _Depends:_ 3 — **2026-08-04 完了**(commit `edeead2`)
@@ -320,23 +320,23 @@ summary: 破壊的操作(stop / logout / reset)が他プロジェクトの資源
 
 ## Definition of Done
 
-- [ ] `docs/issues/020` の事象表の**全4行**が再現しない(`start` × `logout` / `start` × `reset` /
+- [x] `docs/issues/020` の事象表の**全4行**が再現しない(`start` × `logout` / `start` × `reset` /
       `logout`・`reset` × `login` / 同一ディレクトリの二重 `start`)。**`login` も排他の対象に
       含めたので、この issue は本タスクで閉じられる**
-- [ ] `docs/issues/024` の再現手順(正規化後に衝突する2ディレクトリ)で他プロジェクトの compose 資源が
+- [x] `docs/issues/024` の再現手順(正規化後に衝突する2ディレクトリ)で他プロジェクトの compose 資源が
       消えない(`E2E-01` 手順8-6)
-- [ ] `docs/issues/025` の再現手順で「削除しました」と表示されず、消えなかった資源が列挙され非0で終わる。
+- [x] `docs/issues/025` の再現手順で「削除しました」と表示されず、消えなかった資源が列挙され非0で終わる。
       **事象(2)**: `logout` 後に同じディレクトリで `start` しても未ログインで起動する(`E2E-01` 手順8-8)
-- [ ] `docs/issues/029` の再現手順で確認プロンプトが出て、`n` で何も消えない
-- [ ] `docs/issues/045` の再現手順(`make upgrade` 後の `stop`)で共有 docker-proxy が消えない
-- [ ] `E2E-01` 手順8 の**13項目**すべてが**不合格の条件に当たらない**(Linux。macOS は実行可否を記録)
-- [ ] Linux 版と macOS 版で**同じ成否・同じ出力**である(`D0-scope-03`。macOS を実行できない場合は
+- [x] `docs/issues/029` の再現手順で確認プロンプトが出て、`n` で何も消えない
+- [x] `docs/issues/045` の再現手順(`make upgrade` 後の `stop`)で共有 docker-proxy が消えない
+- [x] `E2E-01` 手順8 の**13項目**すべてが**不合格の条件に当たらない**(Linux。macOS は実行可否を記録)
+- [x] Linux 版と macOS 版で**同じ成否・同じ出力**である(`D0-scope-03`。macOS を実行できない場合は
       未実施であることを記録する)
-- [ ] lint とテストがグリーン(`docs/02-design/environments.md` の厳密なコマンド文字列)
-- [ ] `callgraph-check.py` 重大度「高」ゼロ / `check-relations.py` 合格 / `check-contracts.py` 合格 /
+- [x] lint とテストがグリーン(`docs/02-design/environments.md` の厳密なコマンド文字列)
+- [x] `callgraph-check.py` 重大度「高」ゼロ / `check-relations.py` 合格 / `check-contracts.py` 合格 /
       `build-callgraphs.py --check` が最新 / `cluster-features.py --check` が最新
-- [ ] `03-impl/tests/` の該当ファイルが更新済み。`03-impl/index.md` の集計が実態と一致
-- [ ] SSOT へ反映・`verified` 発行・histories へ記録・`close-task.py` の4条件を通過
+- [x] `03-impl/tests/` の該当ファイルが更新済み。`03-impl/index.md` の集計が実態と一致
+- [x] SSOT へ反映・`verified` 発行・histories へ記録・`close-task.py` の4条件を通過
 
 ## 進捗メモ
 - 2026-08-04 **`/doc-check task-fix-destructive-scope`(3回目。新しいセッション=`/clear` 後)
