@@ -883,23 +883,161 @@ login-codex)
 # ログイン情報削除
 # -----------------------------------------------------------------------------
 logout)
+    # 引数解析（--yes のみ。それ以外は無視する）
+    _yes=0
+    for _a in "$@"; do [ "$_a" = "--yes" ] && _yes=1; done
+
     require_setup
-    echo "🗑️  認証情報を削除中..."
-    # auth ボリューム（= ~/.claude-shared/）をクリア
-    # 実行中のコンテナがあるとボリュームが使用中なので先に停止
-    echo "   実行中のコンテナを停止中..."
-    docker ps -a --filter "ancestor=$IMG_CLAUDE" --filter "ancestor=$IMG_CLAUDE_VNC" -q | xargs -r docker rm -f 2>/dev/null || true
-    # Docker Socket Proxy コンテナも停止
-    if container_exists "$DOCKER_PROXY_CONTAINER"; then
-        docker rm -f "$DOCKER_PROXY_CONTAINER" >/dev/null 2>&1 || true
+    # 共有ボリュームを空にする操作なので共有資源単位のロックを取る。取れなければ
+    # 何も削除しない（start の認証コピーと重なると認証が空のまま起動する = issue 020）
+    acquire_lock shared logout || exit 1
+
+    # --- 削除対象の列挙（CTR-cli-container 規則A）---
+    # Claude コンテナは管理ラベルを持つものだけ。イメージからの逆引きは使わない
+    # （イメージ更新前に起動したコンテナを取りこぼし、他人の資源を巻き込むため）。
+    _targets=()
+    while IFS= read -r _c; do
+        [ -n "$_c" ] && _targets+=("$_c")
+    done < <(docker ps -a --filter "label=claude-dev.managed=1" --format '{{.Names}}' 2>/dev/null || true)
+
+    # 管理ラベルを持たない Claude コンテナ（削除しない。名前を表示して残す）。
+    # ラベルが無いのでラベルでは引けない。遊休判定と同じ集合の求め方を使う。
+    _unmanaged=()
+    _idle_query_ok=1
+    if _others=$(net_other_running_containers); then
+        while IFS= read -r _c; do
+            [ -n "$_c" ] || continue
+            _known=0
+            for _t in "${_targets[@]}"; do [ "$_t" = "$_c" ] && _known=1; done
+            [ "$_known" = "0" ] && _unmanaged+=("$_c")
+        done <<< "$_others"
+    else
+        _idle_query_ok=0
     fi
-    # ボリュームを空にする
-    docker run --rm --entrypoint bash \
+
+    # カレントディレクトリのプロジェクト配下にコピーされた認証（3ファイルだけ）。
+    # ディレクトリと settings.json / host-hooks.json は認証ではないので消さない。
+    _authfiles=()
+    for _f in "$(pwd)/.claude/.credentials.json" "$(pwd)/.claude/.claude.json" "$(pwd)/.codex/auth.json"; do
+        [ -f "$_f" ] && _authfiles+=("$_f")
+    done
+
+    # 共有ボリュームが空か（削除対象0件の判定に使う）
+    _auth_empty=1
+    if [ -n "$(docker run --rm --entrypoint bash -v "${VOL_AUTH}:/auth" "$IMG_CLAUDE" -c 'ls -A /auth 2>/dev/null' 2>/dev/null)" ]; then
+        _auth_empty=0
+    fi
+
+    # 削除対象が0件なら確認を求めない（消すものが無いのに確認を求めると誤解させる）
+    if [ ${#_targets[@]} -eq 0 ] && [ ${#_authfiles[@]} -eq 0 ] && [ "$_auth_empty" = "1" ]; then
+        echo "ℹ️  削除対象がありません（管理ラベルを持つコンテナ・共有ボリュームの認証・"
+        echo "   カレントディレクトリの認証コピーのいずれも見つかりませんでした）"
+        exit 0
+    fi
+
+    # --- 確認 ---
+    if [ "$_yes" != "1" ]; then
+        if [ ! -t 0 ]; then
+            echo "❌ 端末が無いため確認を求められません。何も削除していません。" >&2
+            echo "   確認なしで実行するには 'claude-dev logout --yes' を指定してください。" >&2
+            exit 1
+        fi
+        echo "⚠️  以下を削除します:"
+        for _t in "${_targets[@]}"; do echo "   - コンテナ: ${_t}"; done
+        for _f in "${_authfiles[@]}"; do echo "   - ファイル: ${_f}"; done
+        echo "   - 共有ボリューム ${VOL_AUTH} の認証情報（Claude Code と Codex CLI の両方が消えます）"
+        if [ ${#_unmanaged[@]} -gt 0 ]; then
+            echo "   （管理ラベルを持たない次のコンテナは削除しません: ${_unmanaged[*]}）"
+        fi
+        echo ""
+        read -p "実行しますか？ (y/N) " -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            echo "キャンセルしました"
+            exit 0
+        fi
+    fi
+
+    # --- 削除 ---
+    echo "🗑️  認証情報を削除中..."
+    for _t in "${_targets[@]}"; do destructive_plan "コンテナ: ${_t}"; done
+    for _f in "${_authfiles[@]}"; do destructive_plan "ファイル: ${_f}"; done
+    destructive_plan "Docker Socket Proxy コンテナ"
+    destructive_plan "共有ボリューム ${VOL_AUTH} の認証情報"
+    # ここから先は INT / TERM を遅延させる（1件の削除を途中で切ると、より中途半端になる）
+    destructive_arm_interrupt
+
+    for _t in "${_targets[@]}"; do
+        destructive_abort_if_interrupted
+        if container_exists "$_t"; then
+            destructive_rm "コンテナ: ${_t}" docker rm -f "$_t"
+        else
+            destructive_skipped "コンテナ: ${_t}"   # 既に消えている。失敗には数えない
+        fi
+    done
+    destructive_abort_if_interrupted
+
+    # docker-proxy は遊休判定を通してから消す。管理ラベルを持たない既存コンテナを
+    # 残しているため、この判定は空にならないことがある（FR-env-01 受入基準9）。
+    if _others=$(net_other_running_containers); then
+        if [ -n "$_others" ]; then
+            echo "🐳 ${NETWORK} に接続している稼働中のコンテナが残っているため Docker Socket Proxy コンテナを残します:"
+            printf '%s\n' "$_others" | sed 's/^/   - /'
+            destructive_skipped "Docker Socket Proxy コンテナ"
+        elif container_exists "$DOCKER_PROXY_CONTAINER"; then
+            destructive_rm "Docker Socket Proxy コンテナ" docker rm -f "$DOCKER_PROXY_CONTAINER"
+        else
+            destructive_skipped "Docker Socket Proxy コンテナ"
+        fi
+    else
+        echo "⚠️  遊休判定に必要な Docker への問い合わせに失敗しました。安全側に倒して Docker Socket Proxy コンテナを残します。"
+        destructive_skipped "Docker Socket Proxy コンテナ"
+    fi
+    destructive_abort_if_interrupted
+
+    for _f in "${_authfiles[@]}"; do
+        destructive_abort_if_interrupted
+        destructive_rm "ファイル: ${_f}" rm -f "$_f"
+    done
+    destructive_abort_if_interrupted
+
+    # 共有ボリュームを空にする。成否は「削除後の列挙結果」だけで判定し、rm -rf の
+    # 終了コードでは判定しない（rm -rf /auth/* /auth/.* は . と .. に当たって非0を
+    # 返しうる一方、通常のファイルは消えているため、終了コードは「消えたか」を表さない）。
+    _auth_left=$(docker run --rm --entrypoint bash \
         -v "${VOL_AUTH}:/auth" \
         "$IMG_CLAUDE" \
-        -c "rm -rf /auth/* /auth/.*" 2>/dev/null || true
+        -c 'rm -rf /auth/* /auth/.* >/dev/null 2>&1; ls -A /auth 2>/dev/null' 2>/dev/null || true)
+    if [ -n "$_auth_left" ]; then
+        destructive_skipped "共有ボリューム ${VOL_AUTH} の認証情報"
+        while IFS= read -r _p; do
+            [ -n "$_p" ] && destructive_failed "共有ボリューム ${VOL_AUTH} 内: /auth/${_p}"
+        done <<< "$_auth_left"
+    else
+        destructive_deleted "共有ボリューム ${VOL_AUTH} の認証情報"
+    fi
+
+    # --- 結果 ---
+    if [ ${#_DESTRUCTIVE_FAILED[@]} -gt 0 ]; then
+        echo "❌ 削除できなかった資源があります。" >&2
+        destructive_report >&2
+        exit 1
+    fi
     echo "✅ 認証情報を削除しました"
+    destructive_report
+    if [ ${#_unmanaged[@]} -gt 0 ]; then
+        echo "ℹ️  管理ラベルを持たないため削除しなかったコンテナ（本変更より前に起動した可能性があります）:"
+        for _c in "${_unmanaged[@]}"; do echo "     - ${_c}"; done
+        echo "   1件ずつ止めるには 'claude-dev stop <name>' を使ってください。"
+        echo "   停止中のものは列挙していません（ネットワークの接続情報からは稼働中しか分かりません）。"
+    elif [ "$_idle_query_ok" = "0" ]; then
+        echo "ℹ️  ${NETWORK} への問い合わせに失敗したため、管理ラベルを持たないコンテナの列挙はできませんでした。"
+    fi
+    if [ ${#_authfiles[@]} -gt 0 ]; then
+        echo "ℹ️  他のディレクトリにコピーされた認証には触れていません（本システムはその場所を記録していません）。"
+    fi
     echo "   再ログイン: claude-dev login / claude-dev login-codex"
+    release_lock shared
     ;;
 
 # -----------------------------------------------------------------------------
