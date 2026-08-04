@@ -451,7 +451,20 @@ image_version() {
 #   プロジェクト単位 = 対象コンテナ名 / 共有資源単位 = 固定文字列 shared
 # 両方を取る操作は「プロジェクト単位 → 共有資源単位」の固定順で取る。待たない。
 LOCK_DIR="${DEV_DIR}/locks"
-_HELD_LOCK_KEYS=()
+_HELD_LOCK_PATHS=()
+
+# ロックファイルのパスを決める。<種別> は project / shared。
+# **種別ごとに名前空間を分ける**のは、プロジェクト名が `shared` のとき（`~/work/shared` で
+# `claude-dev start` したとき）にプロジェクト単位のキーと共有資源単位の固定キーが同じ
+# ファイルを指し、2 段目の取得が「自分が持っているロック」を他人と誤認して必ず失敗する
+# ためである（キーの値そのものは契約 CTR-cli-container のとおりコンテナ名 / shared）。
+_lock_path() {
+    if [ "$2" = "shared" ]; then
+        printf '%s/shared.lock' "$LOCK_DIR"
+    else
+        printf '%s/proj-%s.lock' "$LOCK_DIR" "$1"
+    fi
+}
 
 # ロックの実体を作る。`ln -s` は同名パスがあると失敗するため、これが原子的な取得である。
 # 向き先の文字列 "<PID> <操作名>" が保持者の記録を兼ねるので、「ロックはあるが所有者が
@@ -474,17 +487,17 @@ _lock_busy_message() {
 # 保持中のロックをすべて解放する（EXIT / INT / TERM の trap から呼ぶ）。
 # 終了コードを変えない。
 _release_all_locks() {
-    local _rc=$? _keys=("${_HELD_LOCK_KEYS[@]}") k
-    for k in "${_keys[@]}"; do
-        release_lock "$k"
+    local _rc=$? _paths=("${_HELD_LOCK_PATHS[@]}") p
+    for p in "${_paths[@]}"; do
+        _release_lock_path "$p"
     done
     return $_rc
 }
 
-# acquire_lock <key> <操作名>
+# acquire_lock <key> <操作名> <種別: project|shared>
 #   取得できたら 0、できなければ理由を stderr に出して非 0 を返す（待たない）。
 acquire_lock() {
-    local key="$1" op="$2" lockfile holder pid hop stale
+    local key="$1" op="$2" kind="${3:-project}" lockfile holder pid hop stale taken tpid
     case "$key" in
         ""|*[!A-Za-z0-9._-]*)
             echo "❌ ロックキーに受理できない文字が含まれています: '${key}'" >&2
@@ -503,16 +516,16 @@ acquire_lock() {
     trap '_release_all_locks' EXIT
     trap '_release_all_locks; exit 130' INT TERM
 
-    lockfile="${LOCK_DIR}/${key}.lock"
+    lockfile="$(_lock_path "$key" "$kind")"
     if _lock_link "$lockfile" "$op"; then
-        _HELD_LOCK_KEYS+=("$key")
+        _HELD_LOCK_PATHS+=("$lockfile")
         return 0
     fi
 
     if ! holder=$(readlink "$lockfile" 2>/dev/null); then
         # リンクが消えていた（直前に別プロセスが解放した）。もう一度だけ試す。
         if _lock_link "$lockfile" "$op"; then
-            _HELD_LOCK_KEYS+=("$key")
+            _HELD_LOCK_PATHS+=("$lockfile")
             return 0
         fi
         _lock_busy_message "$key" "" ""
@@ -526,30 +539,45 @@ acquire_lock() {
         return 1
     fi
 
-    # 残骸。回収は mv（rename）による「原子的な引き取り」で行う。同じ残骸を同時に
-    # 見つけた複数プロセスのうち 1 つだけが成功するので、引き取り権が一意に決まる。
-    # 直接 rm -f すると、引き取った側が張り直した新しいロックを消しうる（判断6）。
+    # 残骸の回収。mv（rename）で引き取ってから、**引き取った中身を必ず検証する**。
+    # mv が原子的なのは「そのパスの rename に成功するのは 1 プロセスだけ」という点であって、
+    # **引き取った中身が観測した残骸と同じであることは保証しない**。同じ残骸を見つけた別
+    # プロセスが先に引き取りを完走していると、その後に張られた「生きているロック」を奪える。
+    # 検証せずに rm -f すると、その時点で 2 プロセスが同じ臨界区間に入る（判断6）。
     stale="${lockfile}.stale.$$"
     if ! mv "$lockfile" "$stale" 2>/dev/null; then
-        _lock_busy_message "$key" "$pid" "$hop"
+        # 既に他プロセスが引き取った、または解放された。取得失敗として扱う。
+        _lock_busy_message "$key" "" ""
         return 1
     fi
+    taken=$(readlink "$stale" 2>/dev/null) || taken=""
+    tpid="${taken%% *}"
+    if [ "$taken" != "$holder" ] && [ -n "$taken" ] && kill -0 "$tpid" 2>/dev/null; then
+        # 観測した残骸ではなく、別プロセスが張り直した「生きているロック」を奪ってしまった。
+        # 元に戻してから取得失敗として扱う（奪ったまま自分が取ると二重取得になる）。
+        if ! ln -s "$taken" "$lockfile" 2>/dev/null; then
+            echo "❌ ロックを元に戻せませんでした（キー: ${key}）。別の操作が同じキーを取得した可能性があります。" >&2
+            echo "   実行中の操作をすべて終えてから、${lockfile} を確認してください。" >&2
+        fi
+        rm -f "$stale" 2>/dev/null || true
+        _lock_busy_message "$key" "$tpid" "${taken#* }"
+        return 1
+    fi
+    # ここまで来たものは、観測した残骸そのものか、保持者が同じく存在しない別の残骸である。
     echo "⚠️  ${hop}（PID ${pid}）のロックが残っていたため引き継ぎます（キー: ${key}）" >&2
     rm -f "$stale" 2>/dev/null || true
     if _lock_link "$lockfile" "$op"; then
-        _HELD_LOCK_KEYS+=("$key")
+        _HELD_LOCK_PATHS+=("$lockfile")
         return 0
     fi
     _lock_busy_message "$key" "" ""
     return 1
 }
 
-# release_lock <key>
+# _release_lock_path <lockfile>
 #   向き先の PID が自分と一致するときだけ削除する（他人のロックを消さない）。冪等。
-release_lock() {
-    local key="$1" lockfile holder pid k rest=()
-    # 同じ local 文の中では ${key} がまだ展開されないので、lockfile は別の文で組み立てる
-    lockfile="${LOCK_DIR}/${key}.lock"
+_release_lock_path() {
+    local lockfile="$1" holder pid p rest=()
     holder=$(readlink "$lockfile" 2>/dev/null) || holder=""
     [ -n "$holder" ] || return 0
     pid="${holder%% *}"
@@ -557,10 +585,15 @@ release_lock() {
     rm -f "$lockfile" 2>/dev/null || true
     # 明示解放したキーは trap 用の配列から外す（外さないと、後から別の操作が同じキーを
     # 取り直した場合に、こちらの終了時の trap が他人のロックを消す）。
-    for k in "${_HELD_LOCK_KEYS[@]}"; do
-        [ "$k" = "$key" ] || rest+=("$k")
+    for p in "${_HELD_LOCK_PATHS[@]}"; do
+        [ "$p" = "$lockfile" ] || rest+=("$p")
     done
-    _HELD_LOCK_KEYS=("${rest[@]}")
+    _HELD_LOCK_PATHS=("${rest[@]}")
+}
+
+# release_lock <key> <種別: project|shared>
+release_lock() {
+    _release_lock_path "$(_lock_path "$1" "${2:-project}")"
 }
 
 # =============================================================================
@@ -667,10 +700,15 @@ destructive_failed()  { _destructive_done "$1"; _DESTRUCTIVE_FAILED+=("$1"); }
 destructive_skipped() { _destructive_done "$1"; }
 
 # destructive_rm <表示名> <コマンド...>
+#   **削除コマンドはサブシェルで INT / TERM を無視させてから起動する。** 非対話シェルでは
+#   ジョブ制御が無効で子プロセスがシェルと同じプロセスグループに入るため、端末で Ctrl-C を
+#   押すと docker にも SIGINT が直接届き、「進行中の 1 件を終えてから中断する」が成立しない。
+#   `trap '' INT TERM` が設定する SIG_IGN は exec した子へ継承されるので、docker 自身が
+#   シグナルを無視して削除を完了する（両 OS で同じ形に書ける）。
 destructive_rm() {
     local label="$1"
     shift
-    if "$@" >/dev/null 2>&1; then
+    if ( trap '' INT TERM; "$@" ) >/dev/null 2>&1; then
         destructive_deleted "$label"
     else
         destructive_failed "$label"
@@ -835,7 +873,7 @@ login)
     # require_setup / ensure_infrastructure は冪等な共有資源の準備でロックの保護対象外
     # （CTR-cli-container「排他（ロックキー）」）なので、その後に取る。
     # 対話認証の全区間で保持する（書き込みは対話の終了後なので、前後で取り直すと窓が開く）。
-    acquire_lock shared login || exit 1
+    acquire_lock shared login shared || exit 1
     echo "📋 Claude OAuth ログイン"
     echo ""
     echo "Claude Code が起動します。ログインを完了してから /exit で終了してください。"
@@ -895,7 +933,7 @@ login)
             "
         '
 
-    release_lock shared
+    release_lock shared shared
     echo "✅ ログイン処理完了"
     ;;
 
@@ -911,7 +949,7 @@ login-codex)
     # 共有ボリュームの codex/ へ認証を書く経路。login と同じキーを使う（claude と codex の
     # 認証は同じボリュームに同居するため。キーを分けると排他が成立しない）。
     # デバイス認証の全区間で保持する。
-    acquire_lock shared login-codex || exit 1
+    acquire_lock shared login-codex shared || exit 1
     echo "📋 Codex デバイス認証ログイン"
     echo ""
     echo "codex が認証 URL と認証コードを表示します。ブラウザで開いて認証を完了し、"
@@ -953,7 +991,7 @@ login-codex)
             "
         '
 
-    release_lock shared
+    release_lock shared shared
     echo "✅ Codex ログイン処理完了"
     echo "   次回以降の claude-dev start で全プロジェクトのコンテナに共有されます"
     ;;
@@ -969,7 +1007,7 @@ logout)
     require_setup
     # 共有ボリュームを空にする操作なので共有資源単位のロックを取る。取れなければ
     # 何も削除しない（start の認証コピーと重なると認証が空のまま起動する = issue 020）
-    acquire_lock shared logout || exit 1
+    acquire_lock shared logout shared || exit 1
 
     # --- 削除対象の列挙（CTR-cli-container 規則A）---
     # Claude コンテナは管理ラベルを持つものだけ。イメージからの逆引きは使わない
@@ -1083,10 +1121,21 @@ logout)
     # 共有ボリュームを空にする。成否は「削除後の列挙結果」だけで判定し、rm -rf の
     # 終了コードでは判定しない（rm -rf /auth/* /auth/.* は . と .. に当たって非0を
     # 返しうる一方、通常のファイルは消えているため、終了コードは「消えたか」を表さない）。
-    _auth_left=$(docker run --rm --entrypoint bash \
+    # 一時コンテナ自体が起動できなかった場合（daemon 断・イメージ欠落・マウント不能）と
+    # 「消去に成功して空になった」場合は、どちらも出力が空になって区別できない。
+    # 列挙の直前に印を出させ、印が無ければ「削除できなかった」と判定する。
+    _auth_out=$( ( trap '' INT TERM; docker run --rm --entrypoint bash \
         -v "${VOL_AUTH}:/auth" \
         "$IMG_CLAUDE" \
-        -c 'rm -rf /auth/* /auth/.* >/dev/null 2>&1; ls -A /auth 2>/dev/null' 2>/dev/null || true)
+        -c 'rm -rf /auth/* /auth/.* >/dev/null 2>&1; echo "__CLAUDE_DEV_AUTH_LISTED__"; ls -A /auth 2>/dev/null' ) 2>/dev/null || true)
+    if ! printf '%s\n' "$_auth_out" | grep -qxF '__CLAUDE_DEV_AUTH_LISTED__'; then
+        echo "❌ 共有ボリューム ${VOL_AUTH} の消去を確認できませんでした（一時コンテナを起動できていません）。" >&2
+        destructive_failed "共有ボリューム ${VOL_AUTH} の認証情報（消去を確認できず）"
+        _auth_left=""
+    else
+        # grep -v は一致行が無いとき（＝印だけ＝ボリュームが空）に 1 を返すので || true が要る
+        _auth_left=$(printf '%s\n' "$_auth_out" | grep -vxF '__CLAUDE_DEV_AUTH_LISTED__' || true)
+    fi
     if [ -n "$_auth_left" ]; then
         destructive_skipped "共有ボリューム ${VOL_AUTH} の認証情報"
         while IFS= read -r _p; do
@@ -1095,6 +1144,8 @@ logout)
     else
         destructive_deleted "共有ボリューム ${VOL_AUTH} の認証情報"
     fi
+
+    destructive_abort_if_interrupted
 
     # --- 結果 ---
     if [ ${#_DESTRUCTIVE_FAILED[@]} -gt 0 ]; then
@@ -1109,6 +1160,9 @@ logout)
         for _c in "${_unmanaged[@]}"; do echo "     - ${_c}"; done
         echo "   1件ずつ止めるには 'claude-dev stop <name>' を使ってください。"
         echo "   停止中のものは列挙していません（ネットワークの接続情報からは稼働中しか分かりません）。"
+        echo "⚠️  これらのコンテナは 30 秒ごとに認証を共有ボリュームへ書き戻すため、"
+        echo "   稼働したままだと共有ボリュームの認証が復活します。完全に消すには、"
+        echo "   'claude-dev stop <name>' で止めてから 'claude-dev logout' を実行し直してください。"
     elif [ "$_idle_query_ok" = "0" ]; then
         echo "ℹ️  ${NETWORK} への問い合わせに失敗したため、管理ラベルを持たないコンテナの列挙はできませんでした。"
     fi
@@ -1116,7 +1170,7 @@ logout)
         echo "ℹ️  他のディレクトリにコピーされた認証には触れていません（本システムはその場所を記録していません）。"
     fi
     echo "   再ログイン: claude-dev login / claude-dev login-codex"
-    release_lock shared
+    release_lock shared shared
     ;;
 
 # -----------------------------------------------------------------------------
@@ -1161,7 +1215,7 @@ start)
     # （ensure_project_config による .claude-dev.yaml 生成）より前に取る。取れなければ
     # 以降の生成物と Docker コンテナを一切作らずに終わる（FR-env-01 受入基準16）。
     # macOS の --kvm / --vm 早期拒否はこの後に来るが、そこで exit しても trap が解放する。
-    acquire_lock "$NAME" start || exit 1
+    acquire_lock "$NAME" start project || exit 1
     ensure_project_config "$PROJECT_DIR"
     shift || true
 
@@ -1196,7 +1250,7 @@ start)
             sleep 0.5
         fi
         # アタッチは利用者の対話であり長時間続くので、その前にロックを解放する（手順17 と同じ理由）
-        release_lock "$NAME"
+        release_lock "$NAME" project
         docker exec -it -u "$CUSER" "$NAME" tmux attach -t main
         exit 0
     fi
@@ -1222,7 +1276,7 @@ start)
     # 直後に作られたコンテナの同期ループが認証を書き戻して logout が静かに巻き戻る。
     # あわせて ensure_docker_proxy_container もこの区間に入るので、stop の遊休判定との
     # 競合も同じロックで防げる（CTR-cli-container「排他（ロックキー）」）。
-    if ! acquire_lock shared start; then
+    if ! acquire_lock shared start shared; then
         echo "   logout / reset / login が同時に走っています。認証が空のままコンテナを起動しないため中止しました。" >&2
         exit 1
     fi
@@ -1424,7 +1478,7 @@ start)
 
     # 共有資源単位のロックはここで解放する（コンテナ作成が確定した＝再試行ループを抜けた）。
     # 再試行の途中で離すと、次の試行で作られるコンテナが保護の外に出る。
-    release_lock shared
+    release_lock shared shared
 
     # tmux 起動を待つ
     for i in $(seq 1 30); do
@@ -1445,7 +1499,7 @@ start)
     [ -n "$_url" ] && echo "🖥️  noVNC: $_url"
     # プロジェクト単位のロックは tmux attach の前に解放する。アタッチ中は利用者が端末を
     # 占有しており、その間ロックを保持すると 'claude-dev stop' が実行できなくなる。
-    release_lock "$NAME"
+    release_lock "$NAME" project
     docker exec -it -u "$CUSER" "$NAME" tmux attach -t main
     ;;
 
@@ -1548,11 +1602,14 @@ stop)
     fi
 
     # プロジェクト単位のロック。取れなければ何も削除しない（FR-env-01 受入基準16）
-    acquire_lock "$NAME" stop || exit 1
+    acquire_lock "$NAME" stop project || exit 1
 
     # フォワードコンテナも停止。中継コンテナは本システムが決めた固定接頭辞 fwd- と
     # 対象コンテナ名から名前が一意に決まるので、管理ラベルではなく名前で識別する。
-    docker ps -a --filter "name=^fwd-${NAME}-" -q | xargs -r docker rm -f 2>/dev/null || true
+    # xargs -r は GNU 拡張で macOS の xargs には無い（両 OS で同じ成否にするため明示ループ）
+    while IFS= read -r _fwd; do
+        [ -n "$_fwd" ] && docker rm -f "$_fwd" >/dev/null 2>&1 || true
+    done < <(docker ps -a --filter "name=^fwd-${NAME}-" --format '{{.Names}}' 2>/dev/null || true)
 
     # 本体を削除する「前」に管理ラベルを読む（この順序は固定）。削除するとラベルが失われ、
     # 以降 compose の一意化名（ハッシュ源＝起動ディレクトリの絶対パス）を再現できない。
@@ -1583,7 +1640,9 @@ stop)
     _cproj_legacy_hint="$(compose_project_name_legacy "$NAME")-<ハッシュ6桁>"
     if [ -n "$_stop_proj_dir" ]; then
         _cproj=$(compose_project_name "$NAME" "$_stop_proj_dir")
-        docker ps -a --filter "label=com.docker.compose.project=${_cproj}" -q | xargs -r docker rm -f 2>/dev/null || true
+        while IFS= read -r _cc; do
+            [ -n "$_cc" ] && docker rm -f "$_cc" >/dev/null 2>&1 || true
+        done < <(docker ps -a --filter "label=com.docker.compose.project=${_cproj}" --format '{{.Names}}' 2>/dev/null || true)
         docker network rm "${_cproj}_default" >/dev/null 2>&1 || true
     else
         # ハッシュ源は claude-dev.project-dir ラベルにしか無い。推測して作った名前で
@@ -1610,13 +1669,13 @@ stop)
 
     # 共有資源単位のロックを取り、遊休判定と docker-proxy の削除を同一区間で行う
     # （他プロジェクトの start が docker-proxy を作った直後に消す競合を防ぐ）。
-    if acquire_lock shared stop; then
+    if acquire_lock shared stop shared; then
         stop_proxy_if_idle
-        release_lock shared
+        release_lock shared shared
     else
         echo "ℹ️  他の操作が共有資源を使用中のため、docker-proxy には触れていません（次回の stop が回収します）。"
     fi
-    release_lock "$NAME"
+    release_lock "$NAME" project
     ;;
 
 # -----------------------------------------------------------------------------
@@ -1863,7 +1922,7 @@ reset)
 
     # 共有ボリュームとイメージまで消す操作なので共有資源単位のロックを取る。
     # 取れなければ何も削除しない（FR-env-01 受入基準16）
-    acquire_lock shared reset || exit 1
+    acquire_lock shared reset shared || exit 1
 
     # --- 削除対象の列挙 ---
     # Claude コンテナは管理ラベルを持つものだけ（イメージからの逆引きは使わない）。
@@ -1891,6 +1950,7 @@ reset)
     done
     # 管理ラベルを持たない Claude コンテナ（削除しない。名前を表示して残す）
     _rc_unmanaged=()
+    _rc_idle_query_ok=1
     if _others=$(net_other_running_containers); then
         while IFS= read -r _c; do
             [ -n "$_c" ] || continue
@@ -1898,6 +1958,10 @@ reset)
             for _t in "${_rc_containers[@]}"; do [ "$_t" = "$_c" ] && _known=1; done
             [ "$_known" = "0" ] && _rc_unmanaged+=("$_c")
         done <<< "$_others"
+    else
+        # 問い合わせに失敗した。「1つも無かった」と読み違えられないよう明示する（logout と同じ扱い）
+        _rc_idle_query_ok=0
+        echo "⚠️  ${NETWORK} への問い合わせに失敗したため、管理ラベルを持たないコンテナの列挙はできませんでした。"
     fi
 
     echo "⚠️  以下を削除します:"
@@ -2021,7 +2085,7 @@ reset)
         echo "   1件ずつ止めるには 'claude-dev stop <name>' を使ってください。"
         echo "   停止中のものは列挙していません（ネットワークの接続情報からは稼働中しか分かりません）。"
     fi
-    release_lock shared
+    release_lock shared shared
     ;;
 
 # -----------------------------------------------------------------------------
