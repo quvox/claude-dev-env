@@ -1,6 +1,6 @@
 ---
 id: cli-container
-version: 1.4.0
+version: 1.4.1
 updated: 2026-08-04
 source:
   - docs/02-design/contracts/cli-container.md
@@ -10,10 +10,10 @@ summary: ホスト CLI がコンテナへ渡す環境変数・マウント・起
 keywords: [契約, CTR, 実装]
 verified:
   at: 2026-08-04
-  version: 1.3.0
+  version: 1.4.1
   against:
     - doc: docs/02-design/contracts/cli-container.md
-      version: 1.3.0
+      version: 1.4.0
 ---
 
 # CTR-cli-container ホスト CLI → コンテナ/entrypoint(実装)
@@ -36,7 +36,7 @@ verified:
 | `VM_PORTS` / `VM_MEM` / `VM_SMP` / `VM_DISK` / `VM_SWAP` | VM モードで、かつホスト側の同名変数が**非空のときだけ**そのまま転送する(値の検証なし) | `claude-dev:1361`〜`:1364` |
 | `CLAUDE_DEV_VNC` | **イメージの `ENV`** で `1`(ブラウザ確認資産入りイメージのみ)。CLI は付与しない。entrypoint は `= "1"` の厳密一致で判定する | `.devcontainer/Dockerfile.claude:473`, `scripts/entrypoint-claude.sh:556`, `:613`, `:678` |
 | `CLAUDE_DEV_DOOD_PORTSYNC` | CLI は付与しない。entrypoint は **`!= "0"`(未設定を含む)** かつ VM モードでない かつ `DOCKER_HOST` が `docker-proxy` を含む かつ同期スクリプトが実行可能、の4条件が揃ったときだけ同期を起動する | `scripts/entrypoint-claude.sh:509`〜`:515` |
-| `CLAUDE_DEV_SSH_BRIDGE_PORT` | macOS のみ付与。entrypoint は**非空かつ `socat` があるとき**に `TCP:host.docker.internal:<値>` へのブリッジを起動し、`/tmp/ssh-agent.sock`(所有者 `$USERNAME`・`mode=600`)を用意する。**値の形式・範囲を検証しない**。ソケットの出現を **0.2 秒 × 最大 20 回(= 最大 4 秒)** 待ち、現れなくても起動を続ける | `claude-dev-mac:274`, `:899`, `scripts/entrypoint-claude.sh:96`〜`:103` |
+| `CLAUDE_DEV_SSH_BRIDGE_PORT` | macOS のみ付与。entrypoint は**非空かつ `socat` があるとき**に `TCP:host.docker.internal:<値>` へのブリッジを起動し、`/tmp/ssh-agent.sock`(所有者 `$USERNAME`・`mode=600`)を用意する。**値の形式・範囲を検証しない**。ソケットの出現を **0.2 秒 × 最大 20 回(= 最大 4 秒)** 待ち、現れなくても起動を続ける | `claude-dev-mac:1375`(CLI の付与), `:274`(ブリッジ起動側が値を読む), `scripts/entrypoint-claude.sh:96`〜`:103` |
 | `SSH_AUTH_SOCK` | Linux は `-e SSH_AUTH_SOCK=/tmp/ssh-agent.sock` を付け、同じパスへ agent ソケットを読み取り専用でマウントする。`su -l` で失われるため、entrypoint が `/etc/zsh/zshrc` と `/etc/bash.bashrc` へ `export` を追記して全シェルで有効にする | `claude-dev:1306`〜`:1309`, `scripts/entrypoint-claude.sh:105`〜`:116` |
 | `NODE_OPTIONS` | `--max-old-space-size=4096`。常に付与する | `claude-dev` の `docker run` 引数 |
 | `container` | `docker`。**起動時ではなくイメージの `ENV` で付与** | `.devcontainer/Dockerfile.claude:307` |
@@ -50,12 +50,12 @@ verified:
 | 常駐セッションの待ち | `tmux has-session -t main` を 1 秒間隔で最大 **30 回**(VM モードは **420 回**)試す。時間内に上がらなければ状況を案内して**終了コード 0** で戻る(コンテナは残す) | `claude-dev:1453`〜`:1479` |
 | 認証の受け渡し | 一時コンテナで共有ボリューム(ro)から `${PROJECT_DIR}/.claude/`(`.credentials.json` / `.claude.json`)と `${PROJECT_DIR}/.codex/auth.json` へコピーし、ホストの UID/GID へ `chown` する。**無い鍵は黙って飛ばす**(未ログインでも起動できる)。**この区間は共有資源単位のロックの中にある**(取得は `:1222`、解放はコンテナ作成の確定後 `:1450`) | `claude-dev:1229`〜`:1242` |
 | 認証の書き戻し | コンテナ内で 30 秒間隔のバックグラウンドループ | `scripts/entrypoint-claude.sh:449` |
-| **排他ロックの実体** | `${HOME}/.claude-dev/locks/` 配下の**シンボリックリンク**。向き先の文字列 `<PID> <操作名>` が保持者の記録を兼ねる(`ln -s` は同名パスがあると失敗するので、生成と所有者の記録が1回の原子的操作で成立する)。**ファイル名は種別で名前空間を分ける**: プロジェクト単位 `proj-<キー>.lock` / 共有資源単位 `shared.lock`(分けないとプロジェクト名が `shared` のとき2つのキーが同じファイルを指す)。ディレクトリは `mkdir -p` + `chmod 700` | `claude-dev:388`(置き場所), `:396`〜`:404`(パス), `:407`〜`:409`(生成), `:434`〜`:512`(取得), `:514`〜`:534`(解放) |
-| **ロックを取る操作と区間** | `start`(プロジェクト単位 = 全区間 `:1150`〜`:1484` / 共有資源単位 = 認証コピー〜コンテナ作成の確定 `:1222`〜`:1450`)、`stop`(プロジェクト単位 = 全区間 `:1647`〜`:1717` / 共有資源単位 = 遊休判定〜proxy 削除 `:1711`〜`:1713`)、`logout`(`:942`)、`reset`(`:1952`)、`login`(`:803`)、`login-codex`(`:879`)。**取得順はプロジェクト単位 → 共有資源単位で固定**。**待たない** | `claude-dev` の各分岐 |
-| **ロック残骸の回収** | 向き先の PID を `kill -0` で見て、存在しなければ `mv` で引き取る。**引き取った中身を `readlink` で検証し、観測した残骸と違ってその PID が生きているなら `ln -s` で元に戻して取得失敗にする**(`mv` は「そのパスの rename に成功するのは1プロセスだけ」を保証するだけで、中身が観測時と同じであることは保証しないため)。**時間による判定は一切しない** | `claude-dev:459`〜`:512` |
-| **ロックの解放** | `trap '_release_all_locks' EXIT` と `trap '_release_all_locks; exit 130' INT TERM`。**取得より前に仕掛ける**。**向き先の PID が自分と一致するときだけ**削除し、明示解放したパスは trap 用の配列から外す | `claude-dev:415`〜`:423`(一括解放), `:450`〜`:451`(仕掛け), `:514`〜`:528`(所有者確認) |
+| **排他ロックの実体** | `${HOME}/.claude-dev/locks/` 配下の**シンボリックリンク**。向き先の文字列 `<PID> <操作名>` が保持者の記録を兼ねる(`ln -s` は同名パスがあると失敗するので、生成と所有者の記録が1回の原子的操作で成立する)。**ファイル名は種別で名前空間を分ける**: プロジェクト単位 `proj-<キー>.lock` / 共有資源単位 `shared.lock`(分けないとプロジェクト名が `shared` のとき2つのキーが同じファイルを指す)。ディレクトリは `mkdir -p` + `chmod 700` | `claude-dev:388`(置き場所), `:396`〜`:404`(パス), `:407`〜`:409`(生成), `:434`〜`:510`(取得), `:514`〜`:532`(解放) |
+| **ロックを取る操作と区間** | `start`(プロジェクト単位 = 全区間 `:1150`〜`:1484` / 共有資源単位 = 認証コピー〜コンテナ作成の確定 `:1222`〜`:1450`)、`stop`(プロジェクト単位 = 全区間 `:1647`〜`:1717` / 共有資源単位 = 遊休判定〜proxy 削除 `:1711`〜`:1713`)、`logout`(`:942`)、`reset`(`:1952`)、`login`(`:808`)、`login-codex`(`:884`)。**取得順はプロジェクト単位 → 共有資源単位で固定**。**待たない** | `claude-dev` の各分岐 |
+| **ロック残骸の回収** | 向き先の PID を `kill -0` で見て、存在しなければ `mv` で引き取る。**引き取った中身を `readlink` で検証し、観測した残骸と違ってその PID が生きているなら `ln -s` で元に戻して取得失敗にする**(`mv` は「そのパスの rename に成功するのは1プロセスだけ」を保証するだけで、中身が観測時と同じであることは保証しないため)。**時間による判定は一切しない** | `claude-dev:472`〜`:509` |
+| **ロックの解放** | `trap '_release_all_locks' EXIT` と `trap '_release_all_locks; exit 130' INT TERM`。**取得より前に仕掛ける**。**向き先の PID が自分と一致するときだけ**削除し、明示解放したパスは trap 用の配列から外す | `claude-dev:424`〜`:430`(一括解放), `:451`〜`:452`(仕掛け), `:514`〜`:527`(所有者確認) |
 | **遊休判定** | `docker network inspect claude-dev-net` の接続コンテナと `docker ps` の稼働集合の**積**から、固定名 `claude-dev-docker-proxy` と接頭辞 `fwd-` を除いた集合。**空のときだけ** docker-proxy(と `reset` では `claude-dev-net` も)を削除する。**`--filter ancestor` も管理ラベルも使わない**。問い合わせに失敗したら非0を返し、呼び出し元は「遊休でない」と判定する | `claude-dev:582`〜`:594`(集合), `:596`〜`:612`(`stop` の削除) |
-| **破壊的操作の削除結果の記録** | 削除予定・削除済み・削除失敗の3つの配列で1件ずつ記録する。**削除コマンドは `( trap '' INT TERM; ... )` のサブシェルで起動する**(非対話シェルでは子プロセスがシェルと同じプロセスグループに入り、端末の `Ctrl-C` が `docker` にも直接届くため。`SIG_IGN` は `exec` した子へ継承される) | `claude-dev:640`〜`:660`(記録), `:648`〜`:655`(サブシェル) |
+| **破壊的操作の削除結果の記録** | 削除予定・削除済み・削除失敗の3つの配列で1件ずつ記録する。**削除コマンドは `( trap '' INT TERM; ... )` のサブシェルで起動する**(非対話シェルでは子プロセスがシェルと同じプロセスグループに入り、端末の `Ctrl-C` が `docker` にも直接届くため。`SIG_IGN` は `exec` した子へ継承される) | `claude-dev:617`〜`:635`(記録), `:643`〜`:651`(サブシェル) |
 | **共有ボリュームの消去の成否判定** | 一時コンテナで `rm -rf /auth/* /auth/.*` した後、**印 `__CLAUDE_DEV_AUTH_LISTED__` を出してから** `/auth` を列挙する。**印が無ければ一時コンテナが起動できていない**ので失敗に数える。**`rm -rf` の終了コードは見ない** | `claude-dev:1058`〜`:1070` |
 | ファイアウォールの起動 | `/usr/local/bin/init-firewall.sh 2>/dev/null \|\| true` | `scripts/entrypoint-claude.sh:471` |
 

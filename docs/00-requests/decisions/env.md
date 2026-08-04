@@ -1,18 +1,19 @@
 ---
 id: env
-version: 1.1.0
+version: 1.1.1
 updated: 2026-08-04
 source:
   - docs/00-requests/request.md
 summary: 開発環境・実行環境の構成に関する決定事項(D0-env-*)
 keywords: [開発環境, 決定事項]
 verified:
-  at: 2026-08-03
-  version: 1.0.0
+  at: 2026-08-04
+  version: 1.1.1
   against:
     - doc: docs/00-requests/request.md
       version: 1.2.0
 ---
+
 # 開発環境の決定事項
 
 ## D0-env-01 ブラウザ確認はコンテナ内 Chrome + noVNC で行う

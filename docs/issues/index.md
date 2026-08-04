@@ -42,7 +42,8 @@
 | [049-modify-ac-02-forbids-the-novnc-port-that-ac-01-requires](049-modify-ac-02-forbids-the-novnc-port-that-ac-01-requires.md) | modify | 中 | 2026-08-04 | AC-01, AC-02, D0-env-02, FR-env-06, FR-env-11 | AC-02 が「`start` しただけではホストにポートが公開されていない」を例外なしで要求する一方、AC-01 と D0-env-02 は既定構成(ブラウザ確認あり)で noVNC ポートを公開すると定めており、既定構成が AC-02 の不合格条件に当たる |
 | [050-modify-unparseable-docker-request-is-relayed-against-its-own-guardrail](050-modify-unparseable-docker-request-is-relayed-against-its-own-guardrail.md) | modify | 中 | 2026-08-04 | FR-env-07, D0-sec-05, NFR-sec-01, MODULE-docker-proxy-serve, CTR-docker-api | FR-env-07 受入基準8 は解釈できない Docker API のボディを中継してよいと定めるが、その根拠である委任 D0-sec-05 のガードレールは「拒否すべき操作を通してはならない」と定めており、解釈できないボディに禁止操作が含まれる場合に両立しない |
 | [051-bug-cli-output-leaks-raw-docker-ids](051-bug-cli-output-leaks-raw-docker-ids.md) | bug | 低 | 2026-08-04 | MODULE-cli-stop, MODULE-cli-common-ensure-infrastructure, docs/02-design/logging.md | CLI の利用者向け出力に生の Docker ID が混じる(docker network create と xargs docker rm -f の標準出力を捨てていない)。本変更より前から存在する |
+| [052-bug-logout-skips-unmanaged-warning-when-nothing-to-delete](052-bug-logout-skips-unmanaged-warning-when-nothing-to-delete.md) | bug | 中 | 2026-08-04 | FR-env-03, MODULE-cli-logout, CTR-cli-container, D0-env-08 | logout は削除対象が0件のとき早期に終了するため、管理ラベルを持たない稼働中コンテナの列挙と「認証が書き戻される」警告に到達せず、利用者は logout が効かない理由を知る手段が無い |
 
-件数: 36
+件数: 37
 
 <!-- END GENERATED -->

@@ -1,6 +1,6 @@
 ---
 id: logging
-version: 1.2.0
+version: 1.2.1
 updated: 2026-08-04
 source:
   - docs/01-requirements/non-functional.md
@@ -9,13 +9,14 @@ summary: 端末出力・常駐プロセスログ・機械が読む追記型ロ�
 keywords: [ログ, 可観測性]
 verified:
   at: 2026-08-04
-  version: 1.1.0
+  version: 1.2.1
   against:
     - doc: docs/01-requirements/non-functional.md
       version: 1.2.1
     - doc: docs/02-design/architecture.md
       version: 1.2.0
 ---
+
 # ログ戦略・ログ仕様
 
 本システムのログは性格の異なる3種類がある。**利用者向けの端末出力**(ホスト CLI・entrypoint)、

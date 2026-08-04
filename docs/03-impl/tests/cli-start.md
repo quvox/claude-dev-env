@@ -10,12 +10,12 @@ summary: MOD-cli-start(開発コンテナの起動)の受入基準⇄テスト�
 keywords: [テスト]
 verified:
   at: 2026-08-04
-  version: 1.1.0
+  version: 1.2.0
   against:
     - doc: docs/01-requirements/functional.md
-      version: 1.4.0
+      version: 1.5.0
     - doc: docs/02-design/system.md
-      version: 2.0.0
+      version: 2.1.1
 ---
 # MOD-cli-start のテスト対応
 

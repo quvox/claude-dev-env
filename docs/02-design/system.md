@@ -1,6 +1,6 @@
 ---
 id: system
-version: 2.1.0
+version: 2.1.1
 updated: 2026-08-04
 source:
   - docs/01-requirements/functional.md
@@ -13,10 +13,10 @@ summary: >
 keywords: [モジュール分割, DSN-mod, テスト戦略, E2E, UI設計, 要件カバレッジ]
 verified:
   at: 2026-08-04
-  version: 2.0.0
+  version: 2.1.1
   against:
     - doc: docs/01-requirements/functional.md
-      version: 1.4.0
+      version: 1.5.0
     - doc: docs/01-requirements/non-functional.md
       version: 1.2.1
     - doc: docs/01-requirements/usecases.md
@@ -24,6 +24,7 @@ verified:
     - doc: docs/02-design/architecture.md
       version: 1.2.0
 ---
+
 # モジュール分割・テスト戦略・UI設計
 
 ## モジュール分割定義

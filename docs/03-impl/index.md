@@ -1,6 +1,6 @@
 ---
 id: index
-version: 1.9.0
+version: 1.10.0
 updated: 2026-08-04
 source:
   - docs/02-design/system.md
@@ -9,12 +9,12 @@ summary: 03-impl 層の目次。機能間連携仕様書群の代表として層
 keywords: [目次]
 verified:
   at: 2026-08-04
-  version: 1.8.0
+  version: 1.10.0
   against:
     - doc: docs/02-design/system.md
-      version: 2.0.0
+      version: 2.1.1
     - doc: docs/02-design/relations.md
-      version: 1.0.0
+      version: 1.2.0
 ---
 
 <!-- 2026-08-04 /doc-check ssot task-impl-depth(新しい実行): **合格証を再発行した(1.5.0)。**
@@ -58,7 +58,7 @@ verified:
 | 網羅しているモジュール | MOD-cli-common, MOD-cli-setup, MOD-cli-start, MOD-cli-stop, MOD-cli-attach, MOD-cli-code, MOD-cli-list, MOD-cli-login, MOD-cli-login-codex, MOD-cli-logout, MOD-cli-forward, MOD-cli-unforward, MOD-cli-ports, MOD-cli-ssh-keys, MOD-cli-firewall, MOD-cli-orchestrate, MOD-cli-pull, MOD-cli-upgrade, MOD-cli-reset, MOD-makefile, MOD-entrypoint, MOD-firewall, MOD-docker-proxy, MOD-portsync, MOD-vm-mode, MOD-orchestrator, MOD-hooks, MOD-container-tools, MOD-sample-project(29モジュール) |
 | `check-relations.py` 最終結果 | 合格(2026-08-04 に再実行。83 ファイル / 83 ID。対称性・参照実在・impl パス・必須項目・機能表との 1:1 すべて問題なし) |
 | コードとの乖離として未解決のもの | **機能の欠落は 1 件**: macOS のコントローラ生存判定が無い(`docs/issues/003-future-macos-orchestrator-scope.md`)。**本文の叙述レベルの食い違いは、解消したものと残るものを分けて数える。** 解消済み: issue 009 (b) の10件、`MODULE-orchestrator-worker`(セッション ID の採番元・`--resume` 失敗時のフォールバック)/ `MODULE-orchestrator-slack`(`NopNotifier` を返すという記述)/ `MODULE-orchestrator-handoff`(壊れた制御ファイルの扱い)の3件、`MODULE-orchestrator-state-intervention`(同じ壊れた制御ファイルの扱い)/ `MODULE-orchestrator-streamlog`(戻り値と「追記」)/ `MODULE-orchestrator-term`(`selectMenu` の戻り値)の3件 — いずれも**実装に合わせて訂正した**。**未解決として残るもの**: `issue 009` (a) の17件(本文で `ctx` 等の定型引数を省略してよいかの規約が未決。`/kit-improve` 案件)/ `issue 019` の**残 1 件**(`TestReadyTasks_Basic`。`tests/orchestrator.md:57`・`:110` の2箇所。他の7件は 2026-08-04 に実名へ置換済みで、コードとの機械照合で残存 0 を確認した)/ `issue 032` の18件(この層のうち影響範囲外だった7本の叙述。高2件は上記のとおり解消済み)/ **`issue 038` の残 27 件(同 issue の表 #7〜#32。`task-impl-depth` が掘り下げた影響範囲内の21本のうち、`## 処理の流れ` / `## 連携先と連携内容` / `## 戻り値・副作用` と frontmatter の `callers` / `callees` — いずれも変更指示の `sections` に入っていなかった節。重大度は中20件・低7件で、**「高」5件(表 #1〜#5)は 2026-08-04 の再裁定=案B により `task-impl-depth` で解消済み**。#6 は `issue 037` の再裁定で解消)**。集計の維持そのものは `docs/issues/030` で追跡する |
-| 実装の欠陥として起票済み(コードは未修正) | **15件**。数え方は「`03-impl` のいずれかの `## 既知の制限` から参照されている `type: modify` / `type: bug` の issue」とし、`type: future` の `003` は除く: `docs/issues/001`(orchestrator の7シンボルが製品コードから呼ばれない)/ `002`(`.claude-dev.yaml` が全面上書きされる)/ `010`(forward のホストポート選択の競合)/ `011`(taskID を検証しないパス結合)/ `012`(`reviewer_vendor` が無効)/ `013`(Slack の API レベルの失敗を検出しない)/ `015`(列挙外の `needs_human.reason` が黙って捨てられる)/ `021`(`.orchestrator/` ストアにロックが無い)/ `022`(`merge_strategy` の列挙を検証しない)/ `023`(`CLAUDE_DEV_SSH_BRIDGE_PORT` を無検証で採る)/ `026`(コントローラが状態保存の失敗を握りつぶす)/ `028`(名前の一意性が `NFR-scale-01` を満たさない)/ `046`(`list` / `make status` / `make clean` が `--filter ancestor` でコンテナを数え落とす)/ `047`(`reset` が `claude-dev-vm-*` ボリュームを消さない)/ `051`(CLI の出力に生の Docker ID が混じる)。**`036`(`start` の後片付けが同名の稼働中コンテナを削除する)は `task-fix-start-cleanup` で、`020`(排他機構が無い)/ `024`(`stop` が別プロジェクトの compose 資源を巻き込む)/ `025`(削除失敗を握って成功と表示する)/ `029`(`logout` が確認なしで全プロジェクトのコンテナを落とす)/ `045`(遊休判定が古いイメージのコンテナを数え落とす)は `task-fix-destructive-scope` で修正して解消した**ため、この数から外れている。**`014`(追記型ログが必須フィールドを満たさない)はどの「既知の制限」からも参照されていない**ため上の数に含めない。**`045` は `MODULE-cli-stop` の「既知の制限」に書くと約束していたが、本タスクが修正して解消したため書かない**(約束は果たされた形で閉じた)。集計の維持そのものは `docs/issues/030` で追跡する |
+| 実装の欠陥として起票済み(コードは未修正) | **14件**。数え方は「`03-impl` のいずれかの `## 既知の制限` から参照されている `type: modify` / `type: bug` の issue」のうち、**本システムが未修正のもの**とし、`type: future` の `003` は除く: `docs/issues/001`(orchestrator の7シンボルが製品コードから呼ばれない)/ `002`(`.claude-dev.yaml` が全面上書きされる)/ `010`(forward のホストポート選択の競合)/ `011`(taskID を検証しないパス結合)/ `012`(`reviewer_vendor` が無効)/ `013`(Slack の API レベルの失敗を検出しない)/ `015`(列挙外の `needs_human.reason` が黙って捨てられる)/ `021`(`.orchestrator/` ストアにロックが無い)/ `022`(`merge_strategy` の列挙を検証しない)/ `023`(`CLAUDE_DEV_SSH_BRIDGE_PORT` を無検証で採る)/ `026`(コントローラが状態保存の失敗を握りつぶす)/ `028`(名前の一意性が `NFR-scale-01` を満たさない)/ `047`(`reset` が `claude-dev-vm-*` ボリュームを消さない)/ `052`(`logout` が削除対象0件の経路でラベル無しコンテナの警告を出さない)。**`036`(`start` の後片付けが同名の稼働中コンテナを削除する)は `task-fix-start-cleanup` で、`020`(排他機構が無い)/ `024`(`stop` が別プロジェクトの compose 資源を巻き込む)/ `025`(削除失敗を握って成功と表示する)/ `029`(`logout` が確認なしで全プロジェクトのコンテナを落とす)/ `045`(遊休判定が古いイメージのコンテナを数え落とす)は `task-fix-destructive-scope` で修正して解消した**ため、この数から外れている(`024` だけは `MODULE-cli-stop` の「既知の制限」から**移行期の残り**として今も参照されているが、根本は解消済みなので未修正には数えない)。**`014`(追記型ログが必須フィールドを満たさない)/ `046`(`list` / `make status` / `make clean` が `--filter ancestor` でコンテナを数え落とす)/ `051`(CLI の出力に生の Docker ID が混じる)は、どの「既知の制限」からも参照されていない**ため上の数に含めない(いずれもコードは未修正であり、次にそのモジュールを触るタスクで「既知の制限」へ載せる)。**`045` は `MODULE-cli-stop` の「既知の制限」に書くと約束していたが、本タスクが修正して解消したため書かない**(約束は果たされた形で閉じた)。集計の維持そのものは `docs/issues/030` で追跡する |
 | `relations-coverage.py` 最終結果 | 未記載 30 件を検出するが、**全件が `scan-entrypoints.py` の Go `switch` 誤検出**(設定キー `max_workers` 等・TUI のキー入力 `p`/`d`/`i`・JSON の型識別子・git のサブコマンド文字列)であり、実在する入口ではない。コードとの一致は `callgraph-check.py` と `check-relations.py` が担保する |
 
 ## 02 との差分(未解消のもの)

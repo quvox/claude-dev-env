@@ -13,9 +13,9 @@ verified:
   version: 1.1.1
   against:
     - doc: docs/01-requirements/functional.md
-      version: 1.4.0
+      version: 1.5.0
     - doc: docs/02-design/system.md
-      version: 2.0.0
+      version: 2.1.1
 ---
 
 # MOD-orchestrator のテスト対応

@@ -1,7 +1,7 @@
 ---
 id: cli-logout
 scope: MOD-cli-logout
-version: 1.1.0
+version: 1.2.0
 updated: 2026-08-04
 source:
   - docs/01-requirements/functional.md
@@ -10,12 +10,12 @@ summary: MOD-cli-logout(認証情報の破棄)の受入基準⇄テスト対応
 keywords: [テスト]
 verified:
   at: 2026-08-04
-  version: 1.0.0
+  version: 1.2.0
   against:
     - doc: docs/01-requirements/functional.md
-      version: 1.4.0
+      version: 1.5.0
     - doc: docs/02-design/system.md
-      version: 2.0.0
+      version: 2.1.1
 ---
 # MOD-cli-logout のテスト対応
 
@@ -48,7 +48,7 @@ verified:
 
 | 契約 ID | 相手 | テスト識別子 | 状態 |
 |---|---|---|---|
-| (なし) | — | - | 対象外(理由: 02 の「結合テスト対象」でこのモジュールが責任を持つ契約は無い) |
+| CTR-cli-container(破壊的操作の対象の識別) | MOD-cli-start(管理ラベルの発行側) | E2E-01(実機確認手順 手順8-5・8-8・8-9・8-10・8-13) | 未検証(テスト未実装) |
 
 ## 機能間連携仕様書 ⇄ テスト
 

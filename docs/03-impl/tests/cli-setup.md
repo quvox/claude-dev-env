@@ -13,9 +13,9 @@ verified:
   version: 1.0.0
   against:
     - doc: docs/01-requirements/functional.md
-      version: 1.4.0
+      version: 1.5.0
     - doc: docs/02-design/system.md
-      version: 2.0.0
+      version: 2.1.1
 ---
 
 # MOD-cli-setup のテスト対応

@@ -7,7 +7,7 @@ impl: claude-dev::main#start, claude-dev-mac::main#start
 callers: MODULE-cli-orchestrate
 callees: MODULE-entrypoint-claude, MODULE-cli-common-container-exists, MODULE-cli-common-container-name, MODULE-cli-common-dev-agent-path, MODULE-cli-common-ensure-infrastructure, MODULE-cli-common-get-novnc-url, MODULE-cli-common-image-exists, MODULE-cli-common-is-running, MODULE-cli-common-lock, MODULE-cli-common-require-setup, MODULE-cli-common-resolve-container-user, MODULE-cli-common-select-ssh-keys, MODULE-cli-common-write-project-ssh-keys
 contracts: CTR-cli-container
-design: DSN-mod-01, DSN-mod-02, DSN-arch-01, DSN-auth-01, DSN-dist-02, DSN-env-01, DSN-env-02
+design: DSN-mod-01, DSN-mod-02, DSN-arch-01, DSN-auth-01, DSN-dist-02, DSN-env-01, DSN-env-02, DSN-env-03
 requirements: FR-env-01, FR-env-02, FR-env-03, FR-env-04, FR-env-05, FR-env-06, FR-env-07, FR-env-08, FR-env-11, FR-env-12
 tests: なし(未実装。シェル実装のため自動テストランナーが無く実機確認で代替する)
 updated: 2026-08-04
@@ -127,7 +127,10 @@ docker-proxy 経由の Docker アクセス(FR-env-07)、VM モード(FR-env-08)�
 ## 呼び出され方
 
 - 契機: 利用者が `claude-dev start [--no-vnc] [--kvm] [--vm] [--vm-fresh]` を実行したとき。
-  `MODULE-cli-orchestrate` も未起動時に `CLAUDE_DEV_NO_ATTACH=1` を付けて本機能を再帰的に呼ぶ。
+  `MODULE-cli-orchestrate` も未起動時に `CLAUDE_DEV_NO_ATTACH=1` を付けて本機能を再帰的に呼ぶ
+  (**Linux 版だけの経路**。macOS 版の `orchestrate` はコンテナが未起動なら `claude-dev start` を
+  案内して `exit 1` で終わり、`start` を呼ばない。macOS 版 `start` は `CLAUDE_DEV_NO_ATTACH` を
+  判定せず常に `tmux attach` する。macOS 版 `orchestrate` の未実装部分は `docs/issues/003` で追跡)。
 - 前提条件: カレントディレクトリが対象プロジェクトであること。`docker` / `jq`(macOS は `socat` も)が
   導入済みであること。
 - 引数(**フラグは `case` の1回走査で解釈し、順序は結果に影響しない**):
@@ -243,7 +246,7 @@ docker-proxy 経由の Docker アクセス(FR-env-07)、VM モード(FR-env-08)�
 | 種別 | 内容 |
 |---|---|
 | 戻り値 | 0(tmux 待ちタイムアウトでも 0)。前提不足・KVM 不在・リトライ上限超過・**同名コンテナとの衝突**・**ロックを取得できない**場合は 1 |
-| 永続化 | コンテナ `<name>`(**管理ラベル `claude-dev.managed=1` / `claude-dev.role=claude` / `claude-dev.project-dir=<起動ディレクトリの絶対パス>` 付き**)。`${PROJECT_DIR}/.claude/`(認証・`host-hooks.json`・`host-local-bin/`)、`${PROJECT_DIR}/.codex/auth.json`、`${PROJECT_DIR}/.gitignore` への追記、`${PROJECT_DIR}/.claude-dev.yaml`。docker volume `claude-dev-auth` / `claude-dev-history` / `claude-dev-config` / `claude-dev-chrome-<name>` / (VM 時)`claude-dev-vm-<name>`。**ロックのシンボリックリンク `${HOME}/.claude-dev/locks/<name>.lock` と `shared.lock` を作成・削除する**。macOS では `~/.claude-dev/agents/<name>.{sock,pid,bridge.pid,bridge.port}`。**docker-proxy にはラベルを付けない** |
+| 永続化 | コンテナ `<name>`(**管理ラベル `claude-dev.managed=1` / `claude-dev.role=claude` / `claude-dev.project-dir=<起動ディレクトリの絶対パス>` 付き**)。`${PROJECT_DIR}/.claude/`(認証・`host-hooks.json`・`host-local-bin/`)、`${PROJECT_DIR}/.codex/auth.json`、`${PROJECT_DIR}/.gitignore` への追記、`${PROJECT_DIR}/.claude-dev.yaml`。docker volume `claude-dev-auth` / `claude-dev-history` / `claude-dev-config` / `claude-dev-chrome-<name>` / (VM 時)`claude-dev-vm-<name>`。**ロックのシンボリックリンク `${HOME}/.claude-dev/locks/proj-<name>.lock` と `shared.lock` を作成・削除する**。macOS では `~/.claude-dev/agents/<name>.{sock,pid,bridge.pid,bridge.port}`。**docker-proxy にはラベルを付けない** |
 | 発火するイベント | なし |
 | ログ | 標準出力へイメージ名・バージョン・noVNC URL・進捗。失敗とロックの取得失敗・残骸の引き継ぎは stderr |
 
@@ -308,7 +311,7 @@ docker-proxy 経由の Docker アクセス(FR-env-07)、VM モード(FR-env-08)�
 | リトライ上限を超えた/ポート競合以外の失敗 | stderr にエラーを出して `exit 1` | 起動しない |
 | tmux 起動タイムアウト(通常30秒 / VM 420秒) | 終了せず状況を案内して `exit 0`。コンテナは稼働を続ける | 再 `start` の attach 経路で接続できる |
 | `--vm` 指定で `/dev/kvm` が無い(Linux) | `exit 1`(`--kvm` のみなら警告して続行)。**ロックを取った直後だが `trap` が即座に解放する** | 起動しない |
-| **`--kvm` / `--vm` / `--vm-fresh` を macOS で指定した** | 早期に拒否して `exit 1`。**ロックは取得済みだが副作用は何も起きておらず `trap` が解放する** | 起動しない |
+| **`--kvm` / `--vm` / `--vm-fresh` を macOS で指定した** | 早期に拒否して `exit 1`。**ロックは取得済みで `trap` が解放する**。**このとき `ensure_project_config` は既に走っているので、`.claude-dev.yaml` が無かった場合はそれが作られた状態で終わる**(macOS 版はフラグ解析が `ensure_project_config` より後にあるため。判断11)。Docker 資源は何も作られない | 起動しない |
 
 ## 実装上の判断
 

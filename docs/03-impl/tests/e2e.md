@@ -10,10 +10,10 @@ summary: E2Eシナリオ E2E-01〜E2E-06 ⇄ テスト対応
 keywords: [テスト, E2E]
 verified:
   at: 2026-08-04
-  version: 1.1.0
+  version: 1.2.0
   against:
     - doc: docs/02-design/system.md
-      version: 2.0.0
+      version: 2.1.1
     - doc: docs/01-requirements/usecases.md
       version: 1.1.0
 ---

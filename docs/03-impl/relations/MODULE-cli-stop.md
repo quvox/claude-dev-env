@@ -7,7 +7,7 @@ impl: claude-dev::main#stop, claude-dev-mac::main#stop
 callers: なし
 callees: MODULE-cli-common-container-exists, MODULE-cli-common-container-name, MODULE-cli-common-dev-agent-path, MODULE-cli-common-is-running, MODULE-cli-common-lock
 contracts: CTR-cli-container
-design: DSN-mod-01, DSN-mod-02, DSN-env-01, DSN-env-02
+design: DSN-mod-01, DSN-mod-02, DSN-env-01, DSN-env-02, DSN-env-03
 requirements: FR-env-01, FR-env-07
 tests: なし(未実装。シェル実装のため自動テストランナーが無く実機確認で代替する)
 updated: 2026-08-04
@@ -97,7 +97,7 @@ compose 資源にはラベルが届かない(compose が Claude コンテナの�
 
 | 引数 | 型 | 必須 | 実装が行う検証 | 受理/拒否と結果 |
 |---|---|---|---|---|
-| `NAME` | 文字列 | 任意 | **非空かどうかだけ**を見る | 非空ならその文字列をコンテナ名として使う。省略・空文字ならカレントディレクトリ名を小文字化し `[a-z0-9._-]` 以外を `-` に置換した値を使う |
+| `NAME` | 文字列 | 任意 | 非空かどうかに加えて、**明示指定のときだけ受理する文字集合 `[A-Za-z0-9._-]` を検査する**(ロックキー=パス要素になるため。`FR-env-01` 受入基準18) | 非空かつ受理する文字だけならその文字列をコンテナ名として使う。**受理できない文字を含むならロックを取る前に何も削除せず終了コード 1**。省略・空文字ならカレントディレクトリ名を小文字化し `[a-z0-9._-]` 以外を `-` に置換した値を使う(この経路は既に受理する文字集合に収まるので検査しない) |
 | 第2引数以降 | — | — | — | **黙って無視する** |
 
 **`NAME` の境界値の実際の扱い**(検証が無く、名前の文字列一致だけで対象を決める):
@@ -148,8 +148,8 @@ compose 資源にはラベルが届かない(compose が Claude コンテナの�
 
 | 種別 | 内容 |
 |---|---|
-| 戻り値 | 通常は **0**(対象が存在しない場合も 0)。**1 になるのは**「`<name>` が受理できない文字を含む」と「プロジェクト単位のロックを取得できない」の2つ。加えて**本体コンテナの削除だけは失敗を握らない**(`docker rm -f "$NAME"` に `\|\| true` が無く `set -e` により非0終了する)。中継コンテナ・compose コンテナ・compose ネットワーク・docker-proxy の削除は握って続行する(`FR-env-01` 受入基準11) |
-| 永続化 | コンテナ `<name>` と `fwd-<name>-*` を削除。**compose の一意化名 `<正規化名>-<起動ディレクトリ絶対パスの SHA-256 先頭6桁>`** を持つ compose コンテナと、compose ネットワーク `<一意化名>_default` を削除。遊休のときだけ `claude-dev-docker-proxy` を削除。**共有ネットワーク `claude-dev-net`・名前付きボリューム・旧い名前の compose 資源は削除しない**。ロックのシンボリックリンク `${HOME}/.claude-dev/locks/<name>.lock` と `shared.lock` を作成・削除する。macOS では `~/.claude-dev/agents/<name>.bridge.{pid,port}` を後始末する |
+| 戻り値 | 通常は **0**(対象が存在しない場合も 0)。**1 になるのは**「`<name>` が受理できない文字を含む」と「プロジェクト単位のロックを取得できない」の2つ。加えて**本体コンテナの削除と docker-proxy の削除は失敗を握らない**(どちらも `docker rm -f` に `\|\| true` が無く `set -e` により非0終了する)。中継コンテナ・compose コンテナ・compose ネットワークの削除は握って続行する(`FR-env-01` 受入基準11) |
+| 永続化 | コンテナ `<name>` と `fwd-<name>-*` を削除。**compose の一意化名 `<正規化名>-<起動ディレクトリ絶対パスの SHA-256 先頭6桁>`** を持つ compose コンテナと、compose ネットワーク `<一意化名>_default` を削除。遊休のときだけ `claude-dev-docker-proxy` を削除。**共有ネットワーク `claude-dev-net`・名前付きボリューム・旧い名前の compose 資源は削除しない**。ロックのシンボリックリンク `${HOME}/.claude-dev/locks/proj-<name>.lock` と `shared.lock` を作成・削除する。macOS では `~/.claude-dev/agents/<name>.bridge.{pid,port}` を後始末する |
 | 発火するイベント | なし |
 | ログ | 標準出力へ停止結果・管理ラベルが無い場合の通知・compose の片付けを行わなかった理由・旧い名前の compose 資源の案内・docker-proxy を残した理由。ロックの取得失敗と残骸の引き継ぎは stderr |
 

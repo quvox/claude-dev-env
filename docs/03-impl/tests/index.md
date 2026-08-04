@@ -14,15 +14,15 @@
 | [cli-list](cli-list.md) | MOD-cli-list | 0 / **2** / 1 | 1.0.0 | 2026-08-03 | MOD-cli-list(セッション一覧の表示)の受入基準⇄テスト対応 |
 | [cli-login](cli-login.md) | MOD-cli-login | 0 / **3** / 1 | 1.0.0 | 2026-08-03 | MOD-cli-login(Claude の認証)の受入基準⇄テスト対応 |
 | [cli-login-codex](cli-login-codex.md) | MOD-cli-login-codex | 0 / **4** / 1 | 1.0.0 | 2026-08-03 | MOD-cli-login-codex(Codex CLI のデバイス認証)の受入基準⇄テスト対応 |
-| [cli-logout](cli-logout.md) | MOD-cli-logout | 0 / **14** / 1 | 1.1.0 | 2026-08-04 | MOD-cli-logout(認証情報の破棄)の受入基準⇄テスト対応 |
+| [cli-logout](cli-logout.md) | MOD-cli-logout | 0 / **15** / 0 | 1.2.0 | 2026-08-04 | MOD-cli-logout(認証情報の破棄)の受入基準⇄テスト対応 |
 | [cli-orchestrate](cli-orchestrate.md) | MOD-cli-orchestrate | 0 / **4** / 1 | 1.0.0 | 2026-08-03 | MOD-cli-orchestrate(オーケストレーターの起動と合流)の受入基準⇄テスト対応 |
 | [cli-ports](cli-ports.md) | MOD-cli-ports | 0 / **2** / 1 | 1.0.0 | 2026-08-03 | MOD-cli-ports(公開ポートの一覧)の受入基準⇄テスト対応 |
 | [cli-pull](cli-pull.md) | MOD-cli-pull | 0 / **5** / 1 | 1.1.0 | 2026-08-04 | MOD-cli-pull(GHCR からのイメージ取得)の受入基準⇄テスト対応 |
-| [cli-reset](cli-reset.md) | MOD-cli-reset | 0 / **1** / 2 | 1.0.0 | 2026-08-03 | MOD-cli-reset(環境の初期化)の受入基準⇄テスト対応 |
+| [cli-reset](cli-reset.md) | MOD-cli-reset | 0 / **2** / 1 | 1.1.0 | 2026-08-04 | MOD-cli-reset(環境の初期化)の受入基準⇄テスト対応 |
 | [cli-setup](cli-setup.md) | MOD-cli-setup | 0 / **1** / 2 | 1.0.0 | 2026-08-03 | MOD-cli-setup(初回セットアップ)の受入基準⇄テスト対応 |
 | [cli-ssh-keys](cli-ssh-keys.md) | MOD-cli-ssh-keys | 0 / **5** / 1 | 1.0.0 | 2026-08-03 | MOD-cli-ssh-keys(転送する SSH 鍵の選択と解除)の受入基準⇄テスト対応 |
 | [cli-start](cli-start.md) | MOD-cli-start | 2 / **35** / 1 | 1.2.0 | 2026-08-04 | MOD-cli-start(開発コンテナの起動)の受入基準⇄テスト対応 |
-| [cli-stop](cli-stop.md) | MOD-cli-stop | 0 / **10** / 1 | 1.1.0 | 2026-08-04 | MOD-cli-stop(コンテナの停止)の受入基準⇄テスト対応 |
+| [cli-stop](cli-stop.md) | MOD-cli-stop | 0 / **11** / 0 | 1.2.0 | 2026-08-04 | MOD-cli-stop(コンテナの停止)の受入基準⇄テスト対応 |
 | [cli-unforward](cli-unforward.md) | MOD-cli-unforward | 0 / **3** / 1 | 1.1.0 | 2026-08-04 | MOD-cli-unforward(ポートフォワードの解除)の受入基準⇄テスト対応 |
 | [cli-upgrade](cli-upgrade.md) | MOD-cli-upgrade | 0 / **1** / 2 | 1.0.0 | 2026-08-03 | MOD-cli-upgrade(CLI とイメージの更新)の受入基準⇄テスト対応 |
 | [container-tools](container-tools.md) | MOD-container-tools | 0 / **1** / 2 | 1.0.0 | 2026-08-03 | MOD-container-tools(コンテナ内補助ツール)の受入基準⇄テスト対応 |
