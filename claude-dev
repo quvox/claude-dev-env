@@ -763,6 +763,11 @@ setup)
 login)
     require_setup
     ensure_infrastructure
+    # 共有ボリュームへ認証を「書く」唯一の経路なので共有資源単位のロックを取る。
+    # require_setup / ensure_infrastructure は冪等な共有資源の準備でロックの保護対象外
+    # （CTR-cli-container「排他（ロックキー）」）なので、その後に取る。
+    # 対話認証の全区間で保持する（書き込みは対話の終了後なので、前後で取り直すと窓が開く）。
+    acquire_lock shared login || exit 1
     echo "📋 Claude OAuth ログイン"
     echo ""
     echo "Claude Code が起動します。ログインを完了してから /exit で終了してください。"
@@ -822,6 +827,7 @@ login)
             "
         '
 
+    release_lock shared
     echo "✅ ログイン処理完了"
     ;;
 
@@ -834,6 +840,10 @@ login)
 login-codex)
     require_setup
     ensure_infrastructure
+    # 共有ボリュームの codex/ へ認証を書く経路。login と同じキーを使う（claude と codex の
+    # 認証は同じボリュームに同居するため。キーを分けると排他が成立しない）。
+    # デバイス認証の全区間で保持する。
+    acquire_lock shared login-codex || exit 1
     echo "📋 Codex デバイス認証ログイン"
     echo ""
     echo "codex が認証 URL と認証コードを表示します。ブラウザ（手元の PC）で開いて認証を完了し、"
@@ -875,6 +885,7 @@ login-codex)
             "
         '
 
+    release_lock shared
     echo "✅ Codex ログイン処理完了"
     echo "   次回以降の claude-dev start で全プロジェクトのコンテナに共有されます"
     ;;
