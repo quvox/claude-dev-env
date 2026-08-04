@@ -443,16 +443,252 @@ image_version() {
     echo "${v} (id ${id}, built ${created})"
 }
 
-# Claude コンテナが 0 なら Docker Proxy コンテナを停止
-stop_proxy_if_idle() {
-    local count
-    count=$(docker ps --filter "ancestor=$IMG_CLAUDE" --filter "ancestor=$IMG_CLAUDE_VNC" -q 2>/dev/null | wc -l)
-    if [ "$count" -eq 0 ]; then
-        if is_running "$DOCKER_PROXY_CONTAINER"; then
-            docker rm -f "$DOCKER_PROXY_CONTAINER" >/dev/null
-            echo "🐳 Docker Socket Proxy コンテナを停止しました（Claude コンテナなし）"
-        fi
+# =============================================================================
+# 排他ロック（MODULE-cli-common-lock / CTR-cli-container「排他（ロックキー）」）
+# =============================================================================
+# 共有ボリュームまたは docker-proxy を触る 6 コマンド（start / stop / logout /
+# reset / login / login-codex）を直列化する。キーは 2 段:
+#   プロジェクト単位 = 対象コンテナ名 / 共有資源単位 = 固定文字列 shared
+# 両方を取る操作は「プロジェクト単位 → 共有資源単位」の固定順で取る。待たない。
+LOCK_DIR="${DEV_DIR}/locks"
+_HELD_LOCK_KEYS=()
+
+# ロックの実体を作る。`ln -s` は同名パスがあると失敗するため、これが原子的な取得である。
+# 向き先の文字列 "<PID> <操作名>" が保持者の記録を兼ねるので、「ロックはあるが所有者が
+# 未記録」という中間状態が原理的に存在しない（判断8）。向き先は実在パスでなくてよい。
+_lock_link() {
+    ln -s "$$ $2" "$1" 2>/dev/null
+}
+
+_lock_busy_message() {
+    local key="$1" pid="$2" op="$3"
+    echo "❌ 排他ロックを取得できませんでした（キー: ${key}）。削除も作成も行っていません。" >&2
+    if [ -n "$pid" ]; then
+        echo "   保持している操作: ${op}（PID ${pid}）" >&2
+    else
+        echo "   別の操作がほぼ同時に同じロックを取得しました。" >&2
     fi
+    echo "   待たずに終了します。その操作が終わってから再実行してください。" >&2
+}
+
+# 保持中のロックをすべて解放する（EXIT / INT / TERM の trap から呼ぶ）。
+# 終了コードを変えない。
+_release_all_locks() {
+    local _rc=$? _keys=("${_HELD_LOCK_KEYS[@]}") k
+    for k in "${_keys[@]}"; do
+        release_lock "$k"
+    done
+    return $_rc
+}
+
+# acquire_lock <key> <操作名>
+#   取得できたら 0、できなければ理由を stderr に出して非 0 を返す（待たない）。
+acquire_lock() {
+    local key="$1" op="$2" lockfile holder pid hop stale
+    case "$key" in
+        ""|*[!A-Za-z0-9._-]*)
+            echo "❌ ロックキーに受理できない文字が含まれています: '${key}'" >&2
+            echo "   受理する文字は [A-Za-z0-9._-] だけです。何も行っていません。" >&2
+            return 1
+            ;;
+    esac
+    if ! mkdir -p "$LOCK_DIR" 2>/dev/null; then
+        echo "❌ ロックの置き場所を作成できません: ${LOCK_DIR}" >&2
+        return 1
+    fi
+    chmod 700 "$LOCK_DIR" 2>/dev/null || true
+
+    # 取得より前に trap を仕掛ける（取得直後に中断しても後始末が走るように）。
+    # release_lock は所有者確認つきで冪等なので、ロックを持つ前に発火しても無害。
+    trap '_release_all_locks' EXIT
+    trap '_release_all_locks; exit 130' INT TERM
+
+    lockfile="${LOCK_DIR}/${key}.lock"
+    if _lock_link "$lockfile" "$op"; then
+        _HELD_LOCK_KEYS+=("$key")
+        return 0
+    fi
+
+    if ! holder=$(readlink "$lockfile" 2>/dev/null); then
+        # リンクが消えていた（直前に別プロセスが解放した）。もう一度だけ試す。
+        if _lock_link "$lockfile" "$op"; then
+            _HELD_LOCK_KEYS+=("$key")
+            return 0
+        fi
+        _lock_busy_message "$key" "" ""
+        return 1
+    fi
+    pid="${holder%% *}"
+    hop="${holder#* }"
+
+    if kill -0 "$pid" 2>/dev/null; then
+        _lock_busy_message "$key" "$pid" "$hop"
+        return 1
+    fi
+
+    # 残骸。回収は mv（rename）による「原子的な引き取り」で行う。同じ残骸を同時に
+    # 見つけた複数プロセスのうち 1 つだけが成功するので、引き取り権が一意に決まる。
+    # 直接 rm -f すると、引き取った側が張り直した新しいロックを消しうる（判断6）。
+    stale="${lockfile}.stale.$$"
+    if ! mv "$lockfile" "$stale" 2>/dev/null; then
+        _lock_busy_message "$key" "$pid" "$hop"
+        return 1
+    fi
+    echo "⚠️  ${hop}（PID ${pid}）のロックが残っていたため引き継ぎます（キー: ${key}）" >&2
+    rm -f "$stale" 2>/dev/null || true
+    if _lock_link "$lockfile" "$op"; then
+        _HELD_LOCK_KEYS+=("$key")
+        return 0
+    fi
+    _lock_busy_message "$key" "" ""
+    return 1
+}
+
+# release_lock <key>
+#   向き先の PID が自分と一致するときだけ削除する（他人のロックを消さない）。冪等。
+release_lock() {
+    local key="$1" lockfile holder pid k rest=()
+    # 同じ local 文の中では ${key} がまだ展開されないので、lockfile は別の文で組み立てる
+    lockfile="${LOCK_DIR}/${key}.lock"
+    holder=$(readlink "$lockfile" 2>/dev/null) || holder=""
+    [ -n "$holder" ] || return 0
+    pid="${holder%% *}"
+    [ "$pid" = "$$" ] || return 0
+    rm -f "$lockfile" 2>/dev/null || true
+    # 明示解放したキーは trap 用の配列から外す（外さないと、後から別の操作が同じキーを
+    # 取り直した場合に、こちらの終了時の trap が他人のロックを消す）。
+    for k in "${_HELD_LOCK_KEYS[@]}"; do
+        [ "$k" = "$key" ] || rest+=("$k")
+    done
+    _HELD_LOCK_KEYS=("${rest[@]}")
+}
+
+# =============================================================================
+# 破壊的操作の対象の識別（CTR-cli-container）
+# =============================================================================
+# 文字列の SHA-256 を 16 進小文字で返す（Linux=sha256sum / macOS=shasum -a 256。
+# 同じ入力に対して両 OS で同じ値になる）
+sha256_hex() {
+    if command -v sha256sum >/dev/null 2>&1; then
+        printf '%s' "$1" | sha256sum | cut -d' ' -f1
+    else
+        printf '%s' "$1" | shasum -a 256 | cut -d' ' -f1
+    fi
+}
+
+# compose プロジェクト名（本要件より前の形式。別ディレクトリと衝突しうるので削除対象にしない）
+compose_project_name_legacy() {
+    printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9_-]/-/g'
+}
+
+# compose プロジェクト名の一意化名 <正規化名>-<起動ディレクトリ絶対パスの SHA-256 先頭6桁>
+#   compose 資源にはホスト CLI のラベルが届かないため、名前そのものを一意にする（DSN-env-03）。
+#   start が COMPOSE_PROJECT_NAME として渡す値と stop が再計算する値は必ずこの 1 関数を通す。
+compose_project_name() {
+    printf '%s-%s' "$(compose_project_name_legacy "$1")" "$(sha256_hex "$2" | cut -c1-6)"
+}
+
+# 遊休判定に使う集合を求める（CTR-cli-container「遊休判定」）。
+#   claude-dev-net に接続している稼働中コンテナから、固定名 claude-dev-docker-proxy と
+#   固定接頭辞 fwd- のものを除いた名前を 1 行ずつ出力する。空なら遊休。
+#   イメージ（--filter ancestor）にもラベルにも依存しない: どちらも「数え落とす」方向に
+#   外れるため（docs/issues/045 / 本変更前に起動した既存コンテナ）。
+#   Docker への問い合わせに失敗したら非 0 を返す（呼び出し元は遊休でないと判定する）。
+net_other_running_containers() {
+    local attached running name
+    attached=$(docker network inspect "$NETWORK" --format '{{range .Containers}}{{println .Name}}{{end}}' 2>/dev/null) || return 1
+    running=$(docker ps --format '{{.Names}}' 2>/dev/null) || return 1
+    while IFS= read -r name; do
+        [ -n "$name" ] || continue
+        [ "$name" = "$DOCKER_PROXY_CONTAINER" ] && continue
+        case "$name" in fwd-*) continue ;; esac
+        printf '%s\n' "$running" | grep -qxF "$name" || continue
+        printf '%s\n' "$name"
+    done <<< "$attached"
+}
+
+# 遊休なら Docker Proxy コンテナを停止する（判定は上の集合で行う）
+stop_proxy_if_idle() {
+    local others
+    if ! others=$(net_other_running_containers); then
+        echo "⚠️  遊休判定に必要な Docker への問い合わせに失敗しました。安全側に倒して Docker Socket Proxy コンテナを残します。"
+        return 0
+    fi
+    if [ -n "$others" ]; then
+        echo "🐳 稼働中の Claude コンテナが残っているため Docker Socket Proxy コンテナを残します:"
+        printf '%s\n' "$others" | sed 's/^/   - /'
+        return 0
+    fi
+    if is_running "$DOCKER_PROXY_CONTAINER"; then
+        docker rm -f "$DOCKER_PROXY_CONTAINER" >/dev/null
+        echo "🐳 Docker Socket Proxy コンテナを停止しました（Claude コンテナなし）"
+    fi
+}
+
+# =============================================================================
+# 破壊的操作の削除結果の記録（logout / reset で共有。D0-env-08 項5）
+# =============================================================================
+# 削除に失敗した資源がある状態で成功の文言を出さないため、1 件ごとに成否を記録する。
+_DESTRUCTIVE_PENDING=()      # 削除予定（未着手）
+_DESTRUCTIVE_DELETED=()      # 削除できた
+_DESTRUCTIVE_FAILED=()       # 削除できなかった
+_DESTRUCTIVE_INTERRUPTED=0
+
+destructive_plan() { _DESTRUCTIVE_PENDING+=("$1"); }
+
+_destructive_done() {
+    local k rest=()
+    for k in "${_DESTRUCTIVE_PENDING[@]}"; do
+        [ "$k" = "$1" ] || rest+=("$k")
+    done
+    _DESTRUCTIVE_PENDING=("${rest[@]}")
+}
+
+destructive_deleted() { _destructive_done "$1"; _DESTRUCTIVE_DELETED+=("$1"); }
+destructive_failed()  { _destructive_done "$1"; _DESTRUCTIVE_FAILED+=("$1"); }
+# 「削除しないと決めたもの」。失敗には数えない（意図した結果である）
+destructive_skipped() { _destructive_done "$1"; }
+
+# destructive_rm <表示名> <コマンド...>
+destructive_rm() {
+    local label="$1"
+    shift
+    if "$@" >/dev/null 2>&1; then
+        destructive_deleted "$label"
+    else
+        destructive_failed "$label"
+    fi
+}
+
+destructive_report() {
+    local x
+    echo "   削除した資源:"
+    if [ ${#_DESTRUCTIVE_DELETED[@]} -gt 0 ]; then
+        for x in "${_DESTRUCTIVE_DELETED[@]}"; do echo "     - $x"; done
+    else
+        echo "     （なし）"
+    fi
+    if [ ${#_DESTRUCTIVE_FAILED[@]} -gt 0 ] || [ ${#_DESTRUCTIVE_PENDING[@]} -gt 0 ]; then
+        echo "   削除できなかった / 未削除のまま残った資源:"
+        for x in "${_DESTRUCTIVE_FAILED[@]}"; do echo "     - $x"; done
+        for x in "${_DESTRUCTIVE_PENDING[@]}"; do echo "     - $x（未着手）"; done
+    fi
+}
+
+# INT / TERM を遅延させる（進行中の 1 件を途中で切ると、より中途半端な状態が残るため）。
+# ロックの trap を上書きするが、EXIT の trap は残るのでロックは解放される。
+destructive_arm_interrupt() {
+    _DESTRUCTIVE_INTERRUPTED=0
+    trap '_DESTRUCTIVE_INTERRUPTED=1' INT TERM
+}
+
+# 中断要求が来ていたら、そこまでの削除結果を列挙して終了コード 130 で終わる
+destructive_abort_if_interrupted() {
+    [ "$_DESTRUCTIVE_INTERRUPTED" = "1" ] || return 0
+    echo "" >&2
+    echo "⛔ 中断しました（進行中の 1 件を終えてから停止しました）。" >&2
+    destructive_report >&2
+    exit 130
 }
 
 # Docker Socket Proxy 共有コンテナを起動（未起動の場合のみ）
