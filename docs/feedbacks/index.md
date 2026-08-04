@@ -23,7 +23,9 @@
 | [015-partial-fixes-resurface-in-the-next-verification](015-partial-fixes-resurface-in-the-next-verification.md) | 2026-08-04 | 同じ層・同じ性質の乖離を「高だけ取り込む」と切ると、残りが次の検証で必ず再浮上する。切るなら層ごと切る |
 | [016-tracking-is-not-adjudication](016-tracking-is-not-adjudication.md) | 2026-08-04 | 「issue で追跡済み」は「人間が裁定済み」ではない。02⇄03 差分の PASS 条件は追跡ではなく裁定 |
 | [017-recheck-a-carried-forward-recommendation](017-recheck-a-carried-forward-recommendation.md) | 2026-08-04 | 引き継いだ推奨案は「受け皿が実在するか」を確かめてから提示する。前の実行が書いた推奨をそのまま人間に出すと、成立しない案を選ばせることになる |
+| [018-mv-atomicity-is-about-the-path-not-the-contents](018-mv-atomicity-is-about-the-path-not-the-contents.md) | 2026-08-04 | `mv` の原子性は「そのパスの rename に成功するのは1プロセスだけ」であって「引き取った中身が観測したものと同じ」ではない。観測してから操作するなら、操作した対象が観測したものかを必ず検証する |
+| [019-bash-traps-that-silently-do-nothing](019-bash-traps-that-silently-do-nothing.md) | 2026-08-04 | bash で「書いたのに効かない」3つの罠 — 同じ `local` 文の中では前の変数がまだ展開されない / `&` で起動した子は SIGINT を無視するので `trap ... INT` が無効になる / 端末の Ctrl-C は子プロセスにも直接届く |
 
-件数: 17
+件数: 19
 
 <!-- END GENERATED -->

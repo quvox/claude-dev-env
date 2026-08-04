@@ -594,3 +594,7 @@ summary: 破壊的操作(stop / logout / reset)が他プロジェクトの資源
   (合成ビュー = SSOT + 変更指示 を見ていない)。本タスクでは I1 と I3〜I9 だけを根拠にした。
   スクリプト自身の docstring も「未配線」と述べている。
 - **2026-08-10 19:52 以降に `/doc-check full`** を新しいセッションで1回(前タスクからの申し送り)。
+- **2026-08-04 フェーズ4 で新たに起票した `/kit-improve` 案件**:
+  `.claude/improvements/KIT-changeset-frontmatter-and-delta-sections.md`
+  (変更指示の反映は本文の節だけでは足りない — frontmatter・差分表記・子見出しの3点で
+  静かに壊れる。反映のスクリプト化を推奨)。

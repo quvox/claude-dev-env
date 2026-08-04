@@ -138,3 +138,16 @@ summary: relations の記述をコードへ全面追随させる(issue 038 の�
   `ctx` 省略の規約を書く(そうすれば `issue 009` (a) の17件も本タスクで閉じられる)。
 - 3本目 `task-spec-measurability` は本タスクの後。重なりは `03-impl/index.md` のみ。
 - **2026-08-10 19:52 以降に `/doc-check full`** を新しいセッションで1回(前タスクからの申し送り)。
+
+## 前タスクからの申し送り(task-fix-destructive-scope フェーズ4 で転記。2026-08-04)
+
+- **`task-fix-destructive-scope` は完了した。** SSOT が動いたので、**本タスクの変更指示を
+  新しい SSOT に対して読み直すこと**(`/doc-check` が失効を検出する)。
+  とくに次のファイルが動いた: `03-impl/contracts/cli-container.md`(1.3.0 → 1.4.0。
+  実装上の事実を全面的に取り直し、7行追加)/ `03-impl/index.md`(1.8.0 → 1.9.0。
+  本数 82 → 83、起票済み 16 → 15 件)/ `MODULE-cli-start` / `-stop` / `-reset` / `-logout`
+  (戻り値・副作用 / 異常系 / 既知の制限 / 並行性 を全面的に書き替えた)/
+  `03-impl/features.md`(`MODULE-cli-common-lock` を追加して 83 機能)。
+- **`docs/issues/038` / `032` の relations 乖離**は本タスク(2本目)の担当のまま。
+  ただし **`MODULE-cli-start` / `-stop` / `-logout` / `-reset` / `-login` / `-login-codex` の
+  6本は 1本目が実装から書き直したので、乖離の件数を数え直すこと**(1本目が閉じた分がある)。
