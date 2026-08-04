@@ -632,7 +632,7 @@ stop_proxy_if_idle() {
         return 0
     fi
     if [ -n "$others" ]; then
-        echo "🐳 稼働中の Claude コンテナが残っているため Docker Socket Proxy コンテナを残します:"
+        echo "🐳 ${NETWORK} に接続している稼働中のコンテナが残っているため Docker Socket Proxy コンテナを残します:"
         printf '%s\n' "$others" | sed 's/^/   - /'
         return 0
     fi
@@ -1385,30 +1385,89 @@ attach)
 stop)
     if [ -n "$2" ]; then
         NAME="${2}"
+        # ロックキー（= パス要素）になるので、受理する文字を限る（FR-env-01 受入基準18）。
+        # / や .. を含む名前を通すと、ロックのパスが意図したディレクトリの外を指す。
+        case "$NAME" in
+            *[!A-Za-z0-9._-]*)
+                echo "❌ 受理できない文字を含むコンテナ名です: '${NAME}'" >&2
+                echo "   受理する文字は [A-Za-z0-9._-] だけです。何も削除していません。" >&2
+                exit 1
+                ;;
+        esac
     else
-        NAME=$(container_name)
+        NAME=$(container_name)   # 既に [a-z0-9._-] へ正規化済み
+    fi
+
+    # プロジェクト単位のロック。取れなければ何も削除しない（FR-env-01 受入基準16）
+    acquire_lock "$NAME" stop || exit 1
+
+    # フォワードコンテナも停止。中継コンテナは本システムが決めた固定接頭辞 fwd- と
+    # 対象コンテナ名から名前が一意に決まるので、管理ラベルではなく名前で識別する。
+    docker ps -a --filter "name=^fwd-${NAME}-" -q | xargs -r docker rm -f 2>/dev/null || true
+
+    # 本体を削除する「前」に管理ラベルを読む（この順序は固定）。削除するとラベルが失われ、
+    # 以降 compose の一意化名（ハッシュ源＝起動ディレクトリの絶対パス）を再現できない。
+    _stop_managed=0
+    _stop_proj_dir=""
+    if container_exists "$NAME"; then
+        container_is_managed "$NAME" && _stop_managed=1
+        _stop_proj_dir=$(container_project_dir "$NAME")
     fi
 
     if container_exists "$NAME"; then
-        # フォワードコンテナも停止
-        docker ps -a --filter "name=^fwd-${NAME}-" -q | xargs -r docker rm -f 2>/dev/null || true
+        # 本体は名前で1件を指した削除なので、管理ラベルの有無を問わず削除する（規則B）
         docker rm -f "$NAME" >/dev/null
-        # このコンテナ内から起動された docker compose のコンテナ群を片付ける（cli.md 正本）。
-        # docker-proxy 経由でホスト daemon 上に作られ com.docker.compose.project ラベルを持つ。
-        # docker compose down 相当: コンテナと当該プロジェクトのデフォルトネットワークを削除し、
-        # 名前付きボリューム・共有 claude-dev-net・docker-proxy は残す。正規化は start と同一。
-        _cproj=$(printf '%s' "$NAME" | sed 's/[^a-z0-9_-]/-/g')
-        docker ps -a --filter "label=com.docker.compose.project=${_cproj}" -q | xargs -r docker rm -f 2>/dev/null || true
-        docker network rm "${_cproj}_default" >/dev/null 2>&1 || true
+        if [ "$_stop_managed" = "0" ]; then
+            echo "ℹ️  ${NAME} は本システムの管理ラベルを持ちません（本変更より前に起動した可能性があります）。名前で指定された1件なので削除しました。"
+        fi
         echo "✅ ${NAME} を停止しました"
     else
         echo "ℹ️  ${NAME} は存在しません"
     fi
 
+    # このコンテナ内から起動された docker compose のコンテナ群を片付ける。
+    # docker-proxy 経由でホスト daemon 上に作られ、com.docker.compose.project
+    # ラベル（起動時の COMPOSE_PROJECT_NAME）を持つため、ホスト側から特定できる。
+    # docker compose down 相当: コンテナと当該プロジェクトのデフォルトネットワークを
+    # 削除し、名前付きボリューム・共有 claude-dev-net・docker-proxy は残す。
+    # 一意化名は start と同じ compose_project_name() で再計算する（DSN-env-03）。
+    _cproj_legacy_hint="$(compose_project_name_legacy "$NAME")-<ハッシュ6桁>"
+    if [ -n "$_stop_proj_dir" ]; then
+        _cproj=$(compose_project_name "$NAME" "$_stop_proj_dir")
+        docker ps -a --filter "label=com.docker.compose.project=${_cproj}" -q | xargs -r docker rm -f 2>/dev/null || true
+        docker network rm "${_cproj}_default" >/dev/null 2>&1 || true
+    else
+        # ハッシュ源は claude-dev.project-dir ラベルにしか無い。推測して作った名前で
+        # 削除すると別ディレクトリを巻き込む（docs/issues/024 の欠陥そのもの）ので行わない。
+        echo "ℹ️  compose 資源の片付けは行いませんでした（管理ラベル claude-dev.project-dir を読めないため）。"
+        echo "   一意化名のハッシュ源はこのラベルにしか無く、推測して削除すると別ディレクトリを巻き込みます。"
+        echo "   compose 資源が残っている可能性があります。残っているものは次で確認できます:"
+        echo "     docker ps -a --filter label=com.docker.compose.project=${_cproj_legacy_hint}"
+        echo "   片付けるときは、そのプロジェクトのディレクトリで 'docker compose down' を実行してください。"
+    fi
+
+    # 本要件の一意化より前に起動された compose 資源は旧い名前（ハッシュ無し）を持つ。
+    # 旧名は別ディレクトリと衝突しうるため削除対象に含めず、手動の片付け方を案内する。
+    _cproj_legacy=$(compose_project_name_legacy "$NAME")
+    if [ -n "$(docker ps -aq --filter "label=com.docker.compose.project=${_cproj_legacy}" 2>/dev/null)" ]; then
+        echo "ℹ️  旧い名前の compose 資源が残っています（プロジェクト名 ${_cproj_legacy}）。"
+        echo "   別ディレクトリの同名プロジェクトと衝突しうるため、自動では削除しません。次で確認してください:"
+        echo "     docker ps -a --filter label=com.docker.compose.project=${_cproj_legacy}"
+        echo "   片付けるときは、そのプロジェクトのディレクトリで 'docker compose down' を実行してください。"
+    fi
+
     # このプロジェクトの SSH ブリッジを停止（専用 agent は鍵保持のため残す）
     stop_ssh_bridge "$NAME"
-    # Claude コンテナが残っていなければ Docker Proxy も停止
-    stop_proxy_if_idle
+
+    # 共有資源単位のロックを取り、遊休判定と docker-proxy の削除を同一区間で行う
+    # （他プロジェクトの start が docker-proxy を作った直後に消す競合を防ぐ）。
+    if acquire_lock shared stop; then
+        stop_proxy_if_idle
+        release_lock shared
+    else
+        echo "ℹ️  他の操作が共有資源を使用中のため、docker-proxy には触れていません（次回の stop が回収します）。"
+    fi
+    release_lock "$NAME"
     ;;
 
 # -----------------------------------------------------------------------------
