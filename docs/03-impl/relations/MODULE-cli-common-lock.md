@@ -1,8 +1,4 @@
 ---
-target: docs/03-impl/relations/MODULE-cli-common-lock.md
-change: add
-deletes: []
-reason: D0-env-08 項6 の排他を6コマンドで共有するため、ロックの取得・解放・残骸の引き継ぎを共有基盤の1機能として新設する(FR-env-01 受入基準 16・17 / PLAN-cli-common-lock)
 id: MODULE-cli-common-lock
 module: MOD-cli-common
 kind: function-call
@@ -16,7 +12,6 @@ requirements: FR-env-01, FR-env-03
 tests: なし(未実装。シェル実装のため自動テストランナーが無く実機確認で代替する)
 updated: 2026-08-04
 summary: 共有資源を触る6コマンドを直列化するロックを取得・解放し、残骸を引き継ぐ
-reflected: 2026-08-04
 ---
 
 # MODULE-cli-common-lock 排他ロックの取得と解放

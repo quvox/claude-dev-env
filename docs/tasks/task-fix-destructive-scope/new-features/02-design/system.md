@@ -8,6 +8,7 @@ sections:
   - "#### SCR-01 cli-commands"
 deletes: []
 reason: MOD-cli-common が排他ロック(MODULE-cli-common-lock)を担うため分割定義の責務欄と機能数を、MOD-cli-reset がそれに依存するため依存欄を更新する(D0-env-08 項6 / DSN-env-02)。E2E-01 が破壊的操作の対象限定まで覆うのでシナリオ欄を更新する。logout / reset に `--yes` を公開フラグとして追加し(FR-env-03 受入基準 15・16)、`stop <name>` が受理する文字集合を制約に加える(FR-env-01 受入基準18)。UI 設計は画面・フィールド・状態の正なので、コマンド面の追加はここへ降ろす
+reflected: 2026-08-04
 ---
 
 ## モジュール分割定義

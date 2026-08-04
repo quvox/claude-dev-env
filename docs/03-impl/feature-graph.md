@@ -1,10 +1,10 @@
 ---
 id: feature-graph
-features: 82
-edges: 123
-confirmed_edges: 116
+features: 83
+edges: 129
+confirmed_edges: 122
 candidate_edges: 7
-shared: 39
+shared: 27
 unreached: 19
 coupled_resources: 0
 unlinked_pairs: 0
@@ -48,10 +48,13 @@ unlinked_pairs: 0
 | MODULE-cli-list | MODULE-cli-common-get-novnc-url | 確定 | `claude-dev-mac::main#list` → `claude-dev-mac::get_novnc_url`, `claude-dev::main#list` → `claude-dev::get_novnc_url` |
 | MODULE-cli-list | MODULE-cli-common-is-running | 確定 | `claude-dev-mac::main#list` → `claude-dev-mac::is_running`, `claude-dev::main#list` → `claude-dev::is_running` |
 | MODULE-cli-login | MODULE-cli-common-ensure-infrastructure | 確定 | `claude-dev-mac::main#login` → `claude-dev-mac::ensure_infrastructure`, `claude-dev::main#login` → `claude-dev::ensure_infrastructure` |
+| MODULE-cli-login | MODULE-cli-common-lock | 確定 | `claude-dev-mac::main#login` → `claude-dev-mac::acquire_lock`, `claude-dev-mac::main#login` → `claude-dev-mac::release_lock`, `claude-dev::main#login` → `claude-dev::acquire_lock` ほか 1 件 |
 | MODULE-cli-login | MODULE-cli-common-require-setup | 確定 | `claude-dev-mac::main#login` → `claude-dev-mac::require_setup`, `claude-dev::main#login` → `claude-dev::require_setup` |
 | MODULE-cli-login-codex | MODULE-cli-common-ensure-infrastructure | 確定 | `claude-dev-mac::main#login-codex` → `claude-dev-mac::ensure_infrastructure`, `claude-dev::main#login-codex` → `claude-dev::ensure_infrastructure` |
+| MODULE-cli-login-codex | MODULE-cli-common-lock | 確定 | `claude-dev-mac::main#login-codex` → `claude-dev-mac::acquire_lock`, `claude-dev-mac::main#login-codex` → `claude-dev-mac::release_lock`, `claude-dev::main#login-codex` → `claude-dev::acquire_lock` ほか 1 件 |
 | MODULE-cli-login-codex | MODULE-cli-common-require-setup | 確定 | `claude-dev-mac::main#login-codex` → `claude-dev-mac::require_setup`, `claude-dev::main#login-codex` → `claude-dev::require_setup` |
 | MODULE-cli-logout | MODULE-cli-common-container-exists | 確定 | `claude-dev-mac::main#logout` → `claude-dev-mac::container_exists`, `claude-dev::main#logout` → `claude-dev::container_exists` |
+| MODULE-cli-logout | MODULE-cli-common-lock | 確定 | `claude-dev-mac::main#logout` → `claude-dev-mac::acquire_lock`, `claude-dev-mac::main#logout` → `claude-dev-mac::release_lock`, `claude-dev::main#logout` → `claude-dev::acquire_lock` ほか 1 件 |
 | MODULE-cli-logout | MODULE-cli-common-require-setup | 確定 | `claude-dev-mac::main#logout` → `claude-dev-mac::require_setup`, `claude-dev::main#logout` → `claude-dev::require_setup` |
 | MODULE-cli-orchestrate | MODULE-cli-common-container-name | 確定 | `claude-dev-mac::main#orchestrate` → `claude-dev-mac::container_name`, `claude-dev::main#orchestrate` → `claude-dev::container_name` |
 | MODULE-cli-orchestrate | MODULE-cli-common-is-running | 確定 | `claude-dev-mac::main#orchestrate` → `claude-dev-mac::is_running`, `claude-dev::main#orchestrate` → `claude-dev::is_running` |
@@ -62,6 +65,7 @@ unlinked_pairs: 0
 | MODULE-cli-ports | MODULE-cli-common-is-running | 確定 | `claude-dev-mac::main#ports` → `claude-dev-mac::is_running`, `claude-dev::main#ports` → `claude-dev::is_running` |
 | MODULE-cli-reset | MODULE-cli-common-container-exists | 確定 | `claude-dev-mac::main#reset` → `claude-dev-mac::container_exists`, `claude-dev::main#reset` → `claude-dev::container_exists` |
 | MODULE-cli-reset | MODULE-cli-common-image-exists | 確定 | `claude-dev-mac::main#reset` → `claude-dev-mac::image_exists`, `claude-dev::main#reset` → `claude-dev::image_exists` |
+| MODULE-cli-reset | MODULE-cli-common-lock | 確定 | `claude-dev-mac::main#reset` → `claude-dev-mac::acquire_lock`, `claude-dev-mac::main#reset` → `claude-dev-mac::release_lock`, `claude-dev::main#reset` → `claude-dev::acquire_lock` ほか 1 件 |
 | MODULE-cli-ssh-keys | MODULE-cli-common-container-name | 確定 | `claude-dev::main#ssh-keys` → `claude-dev::container_name` |
 | MODULE-cli-ssh-keys-reset | MODULE-cli-common-container-name | 確定 | `claude-dev-mac::main#ssh-keys.reset` → `claude-dev-mac::container_name` |
 | MODULE-cli-ssh-keys-reset | MODULE-cli-common-dev-agent-path | 確定 | `claude-dev-mac::main#ssh-keys.reset` → `claude-dev-mac::dev_agent_path` |
@@ -73,6 +77,7 @@ unlinked_pairs: 0
 | MODULE-cli-start | MODULE-cli-common-get-novnc-url | 確定 | `claude-dev-mac::main#start` → `claude-dev-mac::get_novnc_url`, `claude-dev::main#start` → `claude-dev::get_novnc_url` |
 | MODULE-cli-start | MODULE-cli-common-image-exists | 確定 | `claude-dev-mac::ensure_docker_proxy_container` → `claude-dev-mac::image_exists`, `claude-dev::ensure_docker_proxy_container` → `claude-dev::image_exists` |
 | MODULE-cli-start | MODULE-cli-common-is-running | 確定 | `claude-dev-mac::ensure_docker_proxy_container` → `claude-dev-mac::is_running`, `claude-dev-mac::main#start` → `claude-dev-mac::is_running`, `claude-dev::ensure_docker_proxy_container` → `claude-dev::is_running` ほか 1 件 |
+| MODULE-cli-start | MODULE-cli-common-lock | 確定 | `claude-dev-mac::main#start` → `claude-dev-mac::acquire_lock`, `claude-dev-mac::main#start` → `claude-dev-mac::release_lock`, `claude-dev::main#start` → `claude-dev::acquire_lock` ほか 1 件 |
 | MODULE-cli-start | MODULE-cli-common-require-setup | 確定 | `claude-dev-mac::main#start` → `claude-dev-mac::require_setup`, `claude-dev::main#start` → `claude-dev::require_setup` |
 | MODULE-cli-start | MODULE-cli-common-resolve-container-user | 確定 | `claude-dev-mac::main#start` → `claude-dev-mac::resolve_container_user`, `claude-dev::main#start` → `claude-dev::resolve_container_user` |
 | MODULE-cli-start | MODULE-cli-common-select-ssh-keys | 確定 | `claude-dev-mac::ensure_project_config` → `claude-dev-mac::select_ssh_keys_interactive`, `claude-dev::ensure_project_config` → `claude-dev::select_ssh_keys_interactive` |
@@ -81,6 +86,7 @@ unlinked_pairs: 0
 | MODULE-cli-stop | MODULE-cli-common-container-name | 確定 | `claude-dev-mac::main#stop` → `claude-dev-mac::container_name`, `claude-dev::main#stop` → `claude-dev::container_name` |
 | MODULE-cli-stop | MODULE-cli-common-dev-agent-path | 確定 | `claude-dev-mac::stop_ssh_bridge` → `claude-dev-mac::dev_agent_path` |
 | MODULE-cli-stop | MODULE-cli-common-is-running | 確定 | `claude-dev-mac::stop_proxy_if_idle` → `claude-dev-mac::is_running`, `claude-dev::stop_proxy_if_idle` → `claude-dev::is_running` |
+| MODULE-cli-stop | MODULE-cli-common-lock | 確定 | `claude-dev-mac::main#stop` → `claude-dev-mac::acquire_lock`, `claude-dev-mac::main#stop` → `claude-dev-mac::release_lock`, `claude-dev::main#stop` → `claude-dev::acquire_lock` ほか 1 件 |
 | MODULE-cli-unforward | MODULE-cli-common-container-exists | 確定 | `claude-dev-mac::main#unforward` → `claude-dev-mac::container_exists`, `claude-dev::main#unforward` → `claude-dev::container_exists` |
 | MODULE-cli-unforward | MODULE-cli-common-container-name | 確定 | `claude-dev-mac::main#unforward` → `claude-dev-mac::container_name`, `claude-dev::main#unforward` → `claude-dev::container_name` |
 | MODULE-makefile-build | MODULE-makefile-build-claude | 確定 | `Makefile::build` → `Makefile::build-claude` |
@@ -162,18 +168,6 @@ unlinked_pairs: 0
 
 | シンボル | ファンイン | 到達元の機能 |
 |---|---|---|
-| `claude-dev-mac::_lock_busy_message` | 6 | MODULE-cli-login, MODULE-cli-login-codex, MODULE-cli-logout, MODULE-cli-reset, MODULE-cli-start, MODULE-cli-stop |
-| `claude-dev-mac::_lock_link` | 6 | MODULE-cli-login, MODULE-cli-login-codex, MODULE-cli-logout, MODULE-cli-reset, MODULE-cli-start, MODULE-cli-stop |
-| `claude-dev-mac::_lock_path` | 6 | MODULE-cli-login, MODULE-cli-login-codex, MODULE-cli-logout, MODULE-cli-reset, MODULE-cli-start, MODULE-cli-stop |
-| `claude-dev-mac::_release_lock_path` | 6 | MODULE-cli-login, MODULE-cli-login-codex, MODULE-cli-logout, MODULE-cli-reset, MODULE-cli-start, MODULE-cli-stop |
-| `claude-dev-mac::acquire_lock` | 6 | MODULE-cli-login, MODULE-cli-login-codex, MODULE-cli-logout, MODULE-cli-reset, MODULE-cli-start, MODULE-cli-stop |
-| `claude-dev-mac::release_lock` | 6 | MODULE-cli-login, MODULE-cli-login-codex, MODULE-cli-logout, MODULE-cli-reset, MODULE-cli-start, MODULE-cli-stop |
-| `claude-dev::_lock_busy_message` | 6 | MODULE-cli-login, MODULE-cli-login-codex, MODULE-cli-logout, MODULE-cli-reset, MODULE-cli-start, MODULE-cli-stop |
-| `claude-dev::_lock_link` | 6 | MODULE-cli-login, MODULE-cli-login-codex, MODULE-cli-logout, MODULE-cli-reset, MODULE-cli-start, MODULE-cli-stop |
-| `claude-dev::_lock_path` | 6 | MODULE-cli-login, MODULE-cli-login-codex, MODULE-cli-logout, MODULE-cli-reset, MODULE-cli-start, MODULE-cli-stop |
-| `claude-dev::_release_lock_path` | 6 | MODULE-cli-login, MODULE-cli-login-codex, MODULE-cli-logout, MODULE-cli-reset, MODULE-cli-start, MODULE-cli-stop |
-| `claude-dev::acquire_lock` | 6 | MODULE-cli-login, MODULE-cli-login-codex, MODULE-cli-logout, MODULE-cli-reset, MODULE-cli-start, MODULE-cli-stop |
-| `claude-dev::release_lock` | 6 | MODULE-cli-login, MODULE-cli-login-codex, MODULE-cli-logout, MODULE-cli-reset, MODULE-cli-start, MODULE-cli-stop |
 | `claude-dev-mac::net_other_running_containers` | 3 | MODULE-cli-logout, MODULE-cli-reset, MODULE-cli-stop |
 | `claude-dev::net_other_running_containers` | 3 | MODULE-cli-logout, MODULE-cli-reset, MODULE-cli-stop |
 | `orchestrator/dashboard.go::oneline` | 3 | MODULE-orchestrator-controller, MODULE-orchestrator-dashboard, MODULE-orchestrator-streamlog |

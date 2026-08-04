@@ -4,13 +4,13 @@ module: MOD-cli-common
 kind: function-call
 sync: sync
 impl: claude-dev::image_exists, claude-dev-mac::image_exists
-callers: MODULE-cli-common-require-setup, MODULE-cli-start
+callers: MODULE-cli-common-require-setup, MODULE-cli-reset, MODULE-cli-start
 callees: なし
 contracts: なし
 design: DSN-mod-01, DSN-mod-02
 requirements: FR-env-01, FR-env-09
 tests: なし(未実装。シェル実装のため自動テストランナーが無く実機確認で代替する)
-updated: 2026-08-02
+updated: 2026-08-04
 summary: 指定イメージがローカルに存在するかを判定する
 ---
 

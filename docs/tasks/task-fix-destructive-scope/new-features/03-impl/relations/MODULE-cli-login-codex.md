@@ -23,6 +23,7 @@ requirements: FR-env-03, FR-env-12
 tests: なし(未実装。シェル実装のため自動テストランナーが無く実機確認で代替する)
 updated: 2026-08-04
 summary: Codex のデバイス認証を実行し認証情報を共有ボリュームの codex/ へ置く
+reflected: 2026-08-04
 ---
 
 ## 処理の流れ

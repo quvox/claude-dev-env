@@ -6,6 +6,7 @@ sections:
   - "### PLAN-cli-common-*(共有基盤)"
 deletes: []
 reason: D0-env-08 項6 の排他を担う共有基盤 PLAN-cli-common-lock を新設し(呼び出し元は共有資源を触る6コマンド)、破壊的操作3件(stop / logout / reset)が CTR-cli-container の管理ラベルに依存することを契約欄に反映する(FR-env-01 受入基準 14〜18 / FR-env-03 受入基準 17)
+reflected: 2026-08-04
 ---
 
 ## 一覧

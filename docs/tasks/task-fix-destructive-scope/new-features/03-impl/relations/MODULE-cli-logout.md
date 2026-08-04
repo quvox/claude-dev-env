@@ -24,6 +24,7 @@ requirements: FR-env-03
 tests: なし(未実装。シェル実装のため自動テストランナーが無く実機確認で代替する)
 updated: 2026-08-04
 summary: Claude と Codex の認証情報を共有ボリュームごと削除する
+reflected: 2026-08-04
 ---
 
 ## 処理の流れ

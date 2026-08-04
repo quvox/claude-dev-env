@@ -8,13 +8,14 @@
 |---|---|---|---|---|---|---|
 | [MODULE-cli-attach](MODULE-cli-attach.md) | MOD-cli-attach | tool | sync | なし | MODULE-cli-common-container-name, MODULE-cli-common-is-running, MODULE-cli-common-require-setup, MODULE-cli-common-resolve-container-user | 実行中コンテナの tmux セッションに接続する |
 | [MODULE-cli-code](MODULE-cli-code.md) | MOD-cli-code | tool | sync | なし | MODULE-cli-common-container-name, MODULE-cli-common-is-running, MODULE-cli-common-require-setup, MODULE-cli-common-resolve-container-user | 新しい tmux ウィンドウで Claude Code を起動する |
-| [MODULE-cli-common-container-exists](MODULE-cli-common-container-exists.md) | MOD-cli-common | function-call | sync | MODULE-cli-forward, MODULE-cli-logout, MODULE-cli-start, MODULE-cli-stop, MODULE-cli-unforward | なし | 指定名のコンテナが存在するか(停止中を含む)を判定する |
+| [MODULE-cli-common-container-exists](MODULE-cli-common-container-exists.md) | MOD-cli-common | function-call | sync | MODULE-cli-forward, MODULE-cli-logout, MODULE-cli-reset, MODULE-cli-start, MODULE-cli-stop, MODULE-cli-unforward | なし | 指定名のコンテナが存在するか(停止中を含む)を判定する |
 | [MODULE-cli-common-container-name](MODULE-cli-common-container-name.md) | MOD-cli-common | function-call | sync | MODULE-cli-attach, MODULE-cli-code, MODULE-cli-firewall, MODULE-cli-forward, MODULE-cli-orchestrate, MODULE-cli-ports, MODULE-cli-ssh-keys, MODULE-cli-ssh-keys-reset, MODULE-cli-start, MODULE-cli-stop, MODULE-cli-unforward | なし | プロジェクト名からコンテナ名を導出する(命名規則の実体) |
 | [MODULE-cli-common-dev-agent-path](MODULE-cli-common-dev-agent-path.md) | MOD-cli-common | function-call | sync | MODULE-cli-ssh-keys-reset, MODULE-cli-start, MODULE-cli-stop | なし | macOS の専用 ssh-agent とブリッジのファイル配置を決める |
 | [MODULE-cli-common-ensure-infrastructure](MODULE-cli-common-ensure-infrastructure.md) | MOD-cli-common | function-call | sync | MODULE-cli-login, MODULE-cli-login-codex, MODULE-cli-start | なし | docker network と共有 3 ボリュームを冪等に作成する |
 | [MODULE-cli-common-get-novnc-url](MODULE-cli-common-get-novnc-url.md) | MOD-cli-common | function-call | sync | MODULE-cli-list, MODULE-cli-ports, MODULE-cli-start | なし | 公開中の noVNC ポートから接続 URL を組み立てる |
-| [MODULE-cli-common-image-exists](MODULE-cli-common-image-exists.md) | MOD-cli-common | function-call | sync | MODULE-cli-common-require-setup, MODULE-cli-start | なし | 指定イメージがローカルに存在するかを判定する |
+| [MODULE-cli-common-image-exists](MODULE-cli-common-image-exists.md) | MOD-cli-common | function-call | sync | MODULE-cli-common-require-setup, MODULE-cli-reset, MODULE-cli-start | なし | 指定イメージがローカルに存在するかを判定する |
 | [MODULE-cli-common-is-running](MODULE-cli-common-is-running.md) | MOD-cli-common | function-call | sync | MODULE-cli-attach, MODULE-cli-code, MODULE-cli-firewall, MODULE-cli-forward, MODULE-cli-list, MODULE-cli-orchestrate, MODULE-cli-ports, MODULE-cli-start, MODULE-cli-stop | なし | 指定コンテナが running 状態かを判定する |
+| [MODULE-cli-common-lock](MODULE-cli-common-lock.md) | MOD-cli-common | function-call | sync | MODULE-cli-login, MODULE-cli-login-codex, MODULE-cli-logout, MODULE-cli-reset, MODULE-cli-start, MODULE-cli-stop | なし | 共有資源を触る6コマンドを直列化するロックを取得・解放し、残骸を引き継ぐ |
 | [MODULE-cli-common-require-setup](MODULE-cli-common-require-setup.md) | MOD-cli-common | function-call | sync | MODULE-cli-attach, MODULE-cli-code, MODULE-cli-login, MODULE-cli-login-codex, MODULE-cli-logout, MODULE-cli-orchestrate, MODULE-cli-start | MODULE-cli-common-image-exists | セットアップ未実施なら必要なイメージを自動ビルドする事前条件ゲート |
 | [MODULE-cli-common-resolve-container-user](MODULE-cli-common-resolve-container-user.md) | MOD-cli-common | function-call | sync | MODULE-cli-attach, MODULE-cli-code, MODULE-cli-orchestrate, MODULE-cli-start | なし | docker exec に渡す実行ユーザを稼働中コンテナ自身の env から決定する |
 | [MODULE-cli-common-select-ssh-keys](MODULE-cli-common-select-ssh-keys.md) | MOD-cli-common | function-call | sync | MODULE-cli-ssh-keys-select, MODULE-cli-start | MODULE-cli-common-write-project-ssh-keys | 利用可能な SSH 鍵を列挙し対話選択させて保存する |
@@ -22,19 +23,19 @@
 | [MODULE-cli-firewall](MODULE-cli-firewall.md) | MOD-cli-firewall | tool | sync | なし | MODULE-cli-common-container-name, MODULE-cli-common-is-running | コンテナ内のファイアウォールルールを表示する |
 | [MODULE-cli-forward](MODULE-cli-forward.md) | MOD-cli-forward | tool | sync | なし | MODULE-cli-common-container-exists, MODULE-cli-common-container-name, MODULE-cli-common-is-running | 指定コンテナポートのホスト側フォワードを動的に追加する |
 | [MODULE-cli-list](MODULE-cli-list.md) | MOD-cli-list | tool | sync | なし | MODULE-cli-common-get-novnc-url, MODULE-cli-common-is-running | 実行中セッションの一覧と noVNC URL を表示する |
-| [MODULE-cli-login](MODULE-cli-login.md) | MOD-cli-login | tool | sync | なし | MODULE-cli-common-ensure-infrastructure, MODULE-cli-common-require-setup | Claude の OAuth ログインをコンテナ内で実行し共有ボリュームへ保存する |
-| [MODULE-cli-login-codex](MODULE-cli-login-codex.md) | MOD-cli-login-codex | tool | sync | なし | MODULE-cli-common-ensure-infrastructure, MODULE-cli-common-require-setup | Codex のデバイス認証を実行し認証情報を共有ボリュームの codex/ へ置く |
-| [MODULE-cli-logout](MODULE-cli-logout.md) | MOD-cli-logout | tool | sync | なし | MODULE-cli-common-container-exists, MODULE-cli-common-require-setup | Claude と Codex の認証情報を共有ボリュームごと削除する |
+| [MODULE-cli-login](MODULE-cli-login.md) | MOD-cli-login | tool | sync | なし | MODULE-cli-common-ensure-infrastructure, MODULE-cli-common-lock, MODULE-cli-common-require-setup | Claude の OAuth ログインをコンテナ内で実行し共有ボリュームへ保存する |
+| [MODULE-cli-login-codex](MODULE-cli-login-codex.md) | MOD-cli-login-codex | tool | sync | なし | MODULE-cli-common-ensure-infrastructure, MODULE-cli-common-lock, MODULE-cli-common-require-setup | Codex のデバイス認証を実行し認証情報を共有ボリュームの codex/ へ置く |
+| [MODULE-cli-logout](MODULE-cli-logout.md) | MOD-cli-logout | tool | sync | なし | MODULE-cli-common-container-exists, MODULE-cli-common-lock, MODULE-cli-common-require-setup | Claude と Codex の認証情報を共有ボリュームごと削除する |
 | [MODULE-cli-orchestrate](MODULE-cli-orchestrate.md) | MOD-cli-orchestrate | tool | sync | なし | MODULE-cli-common-container-name, MODULE-cli-common-is-running, MODULE-cli-common-require-setup, MODULE-cli-common-resolve-container-user, MODULE-cli-start | コンテナ内で orchestrator を起動する(ゴール指定・--fresh 対応) |
 | [MODULE-cli-ports](MODULE-cli-ports.md) | MOD-cli-ports | tool | sync | なし | MODULE-cli-common-container-name, MODULE-cli-common-get-novnc-url, MODULE-cli-common-is-running | コンテナのポートフォワード一覧と noVNC URL を表示する |
 | [MODULE-cli-pull](MODULE-cli-pull.md) | MOD-cli-pull | tool | sync | なし | なし | GHCR からビルド済みイメージを取得して latest へ retag する |
-| [MODULE-cli-reset](MODULE-cli-reset.md) | MOD-cli-reset | tool | sync | なし | なし | コンテナ・ボリューム・イメージを全削除して初期状態へ戻す |
+| [MODULE-cli-reset](MODULE-cli-reset.md) | MOD-cli-reset | tool | sync | なし | MODULE-cli-common-container-exists, MODULE-cli-common-image-exists, MODULE-cli-common-lock | コンテナ・ボリューム・イメージを全削除して初期状態へ戻す |
 | [MODULE-cli-setup](MODULE-cli-setup.md) | MOD-cli-setup | tool | sync | なし | なし | イメージをビルドし docker network と共有ボリュームを作る初回セットアップ |
 | [MODULE-cli-ssh-keys](MODULE-cli-ssh-keys.md) | MOD-cli-ssh-keys | tool | sync | なし | MODULE-cli-common-container-name | ssh-keys の引数を reset / select へ振り分けるディスパッチャ |
 | [MODULE-cli-ssh-keys-reset](MODULE-cli-ssh-keys-reset.md) | MOD-cli-ssh-keys | tool | sync | なし | MODULE-cli-common-container-name, MODULE-cli-common-dev-agent-path | このプロジェクトの SSH 鍵選択を初期化する |
 | [MODULE-cli-ssh-keys-select](MODULE-cli-ssh-keys-select.md) | MOD-cli-ssh-keys | tool | sync | なし | MODULE-cli-common-select-ssh-keys | 使う SSH 鍵を対話選択して .claude-dev.yaml に保存する |
-| [MODULE-cli-start](MODULE-cli-start.md) | MOD-cli-start | tool | sync | MODULE-cli-orchestrate | MODULE-entrypoint-claude, MODULE-cli-common-container-exists, MODULE-cli-common-container-name, MODULE-cli-common-dev-agent-path, MODULE-cli-common-ensure-infrastructure, MODULE-cli-common-get-novnc-url, MODULE-cli-common-image-exists, MODULE-cli-common-is-running, MODULE-cli-common-require-setup, MODULE-cli-common-resolve-container-user, MODULE-cli-common-select-ssh-keys, MODULE-cli-common-write-project-ssh-keys | カレントディレクトリで開発コンテナを起動する(VNC+Chrome が既定) |
-| [MODULE-cli-stop](MODULE-cli-stop.md) | MOD-cli-stop | tool | sync | なし | MODULE-cli-common-container-exists, MODULE-cli-common-container-name, MODULE-cli-common-dev-agent-path, MODULE-cli-common-is-running | セッションを停止し、遊休なら docker-proxy と ssh ブリッジも止める |
+| [MODULE-cli-start](MODULE-cli-start.md) | MOD-cli-start | tool | sync | MODULE-cli-orchestrate | MODULE-entrypoint-claude, MODULE-cli-common-container-exists, MODULE-cli-common-container-name, MODULE-cli-common-dev-agent-path, MODULE-cli-common-ensure-infrastructure, MODULE-cli-common-get-novnc-url, MODULE-cli-common-image-exists, MODULE-cli-common-is-running, MODULE-cli-common-lock, MODULE-cli-common-require-setup, MODULE-cli-common-resolve-container-user, MODULE-cli-common-select-ssh-keys, MODULE-cli-common-write-project-ssh-keys | カレントディレクトリで開発コンテナを起動する(VNC+Chrome が既定) |
+| [MODULE-cli-stop](MODULE-cli-stop.md) | MOD-cli-stop | tool | sync | なし | MODULE-cli-common-container-exists, MODULE-cli-common-container-name, MODULE-cli-common-dev-agent-path, MODULE-cli-common-is-running, MODULE-cli-common-lock | セッションを停止し、遊休なら docker-proxy と ssh ブリッジも止める |
 | [MODULE-cli-unforward](MODULE-cli-unforward.md) | MOD-cli-unforward | tool | sync | なし | MODULE-cli-common-container-exists, MODULE-cli-common-container-name | 指定ポートのフォワードを解除する |
 | [MODULE-cli-upgrade](MODULE-cli-upgrade.md) | MOD-cli-upgrade | tool | sync | なし | なし | 全イメージを --no-cache で再ビルドして更新する |
 | [MODULE-container-tools-wait-limit-reset](MODULE-container-tools-wait-limit-reset.md) | MOD-container-tools | tool | sync | なし | なし | Claude のレート制限解除時刻まで待機し tmux 経由で作業を再開させる |
@@ -89,6 +90,6 @@
 | [MODULE-vm-mode-portsync](MODULE-vm-mode-portsync.md) | MOD-vm-mode | tool | sync | なし | なし | ゲストの公開ポートを QMP hostfwd_add で 127.0.0.1 へ転送する |
 | [MODULE-vm-mode-up](MODULE-vm-mode-up.md) | MOD-vm-mode | tool | sync | MODULE-entrypoint-claude | なし | QEMU/KVM で VM を起動し provision して常駐ヘルパーを立ち上げる |
 
-件数: 82
+件数: 83
 
 <!-- END GENERATED -->

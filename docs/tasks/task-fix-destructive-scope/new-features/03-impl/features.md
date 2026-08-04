@@ -7,6 +7,7 @@ sections:
   - "## 昇格させた共通基盤機能"
 deletes: []
 reason: D0-env-08 項6 の排他を6コマンドで共有するため、共有基盤に MODULE-cli-common-lock を1機能追加する(PLAN-cli-common-lock / FR-env-01 受入基準 16・17)
+reflected: 2026-08-04
 ---
 
 ## 機能一覧

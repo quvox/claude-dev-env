@@ -24,6 +24,7 @@ requirements: FR-env-01, FR-env-07
 tests: なし(未実装。シェル実装のため自動テストランナーが無く実機確認で代替する)
 updated: 2026-08-04
 summary: セッションを停止し、遊休なら docker-proxy と ssh ブリッジも止める
+reflected: 2026-08-04
 ---
 
 ## 目的

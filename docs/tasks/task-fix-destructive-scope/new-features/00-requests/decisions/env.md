@@ -8,6 +8,7 @@ sections:
   - "## D0-env-10 管理ラベルの名前と値の形式"
 deletes: []
 reason: 破壊的操作(stop / logout / reset)が他プロジェクトの資源を巻き込む5件(docs/issues/020・024・025・029・045)は「対象の定め方」という横断的な方針が 00 に無いことに根がある。RQ-env-01 / FR-env-01 / FR-env-03 / NFR-scale-01 の前提として起こす。あわせて D0-env-05 の項1・項2 が新しい決定と両立しないため上書きする(change-set.md §2「両方を残してはならない」)
+reflected: 2026-08-04
 ---
 
 ## D0-env-05 複数プロジェクト同時実行時の compose 分離とライフサイクル

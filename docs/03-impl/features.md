@@ -28,6 +28,7 @@ keywords: [機能表, 境界, claude-dev, Makefile, orchestrator, docker-proxy]
 | MODULE-cli-common-get-novnc-url | function-call | claude-dev::get_novnc_url, claude-dev-mac::get_novnc_url | MOD-cli-common | 公開中の noVNC ポートから接続 URL を組み立てる |
 | MODULE-cli-common-image-exists | function-call | claude-dev::image_exists, claude-dev-mac::image_exists | MOD-cli-common | 指定イメージがローカルに存在するかを判定する |
 | MODULE-cli-common-is-running | function-call | claude-dev::is_running, claude-dev-mac::is_running | MOD-cli-common | 指定コンテナが running 状態かを判定する |
+| MODULE-cli-common-lock | function-call | claude-dev::acquire_lock, claude-dev::release_lock, claude-dev-mac::acquire_lock, claude-dev-mac::release_lock | MOD-cli-common | 共有資源を触る6コマンドを直列化するロックを取得・解放し、残骸を引き継ぐ |
 | MODULE-cli-common-require-setup | function-call | claude-dev::require_setup, claude-dev-mac::require_setup | MOD-cli-common | セットアップ未実施なら理由を表示して終了する事前条件ゲート |
 | MODULE-cli-common-resolve-container-user | function-call | claude-dev::resolve_container_user, claude-dev-mac::resolve_container_user | MOD-cli-common | docker exec に渡す実行ユーザを決定する |
 | MODULE-cli-common-select-ssh-keys | function-call | claude-dev::select_ssh_keys_interactive, claude-dev-mac::select_ssh_keys_interactive | MOD-cli-common | 利用可能な SSH 鍵を列挙し対話選択させる |
@@ -111,7 +112,7 @@ keywords: [機能表, 境界, claude-dev, Makefile, orchestrator, docker-proxy]
 | 機能ID | まとめた入口 | まとめた理由 |
 |---|---|---|
 | `MODULE-cli-*`(20件すべて) | `claude-dev::main#<subcmd>` と `claude-dev-mac::main#<subcmd>` | 同一のコマンド面を Linux/macOS で別実装しているだけで、外から見える振る舞いは同じ。OS 別に割ると同一仕様のモジュールが18本増えて依存表が読めなくなる(決定シート 委任(e))。**旧 `cli-mac` モジュールはこれにより解体される** |
-| `MODULE-cli-common-*`(11件すべて) | `claude-dev::<fn>` と `claude-dev-mac::<fn>` | 同上。同名対の共通基盤関数を1機能として扱い、OS 差分は本文の「異常系・差分」に書く |
+| `MODULE-cli-common-*`(12件すべて) | `claude-dev::<fn>` と `claude-dev-mac::<fn>` | 同上。同名対の共通基盤関数を1機能として扱い、OS 差分は本文の「異常系・差分」に書く |
 | `MODULE-portsync-dood` / `MODULE-vm-mode-portsync` / `MODULE-vm-mode-healthd` | `main#--loop` と `main` | 同じスクリプトの一発実行と常駐実行。抽出器は `--loop` だけをエントリポイントとするが、一発実行も公開インターフェースなので同一機能に含める |
 | `MODULE-orchestrator-*`(main を除く) | 各ファイルの公開 API 群 | orchestrator は入口が `main` 1つしかない単一バイナリで、そのままでは219シンボルが1機能になる。責務(ファイル境界)ごとに公開 API を昇格させて機能に割る |
 | MODULE-sample-project-mathkit | mathkit の5関数 | 自己検証の実装対象となるライブラリ。関数単位に割っても仕様として意味を持たない |
@@ -127,6 +128,7 @@ keywords: [機能表, 境界, claude-dev, Makefile, orchestrator, docker-proxy]
 | `claude-dev::is_running` / `claude-dev-mac::is_running` | 9 | 昇格 | 「セッションが動いているか」の判定はこのシステムの状態モデルそのもの |
 | `claude-dev::image_exists` / `claude-dev-mac::image_exists` | 7 | 昇格 | `require_setup` を昇格させても `ensure_docker_proxy_container` から到達するのでファンイン2が残る |
 | `claude-dev::require_setup` / `claude-dev-mac::require_setup` | 7 | 昇格 | セットアップ未実施時の停止条件。7機能に共通の事前条件ゲート |
+| `claude-dev::acquire_lock` / `release_lock`(および macOS 版の同名対) | 6 | 昇格 | 共有資源(共有ボリューム・docker-proxy)を触る6機能を直列化する排他の実体。`start` / `stop` / `logout` / `reset` / `login` / `login-codex` が同じキー体系(`CTR-cli-container` の「排他(ロックキー)」)に依存する |
 | `claude-dev::container_exists` / `claude-dev-mac::container_exists` | 5 | 昇格 | 停止中コンテナを含む存在判定。`is_running` と別概念で、stop/logout の分岐条件 |
 | `claude-dev::resolve_container_user` / `claude-dev-mac::resolve_container_user` | 4 | 昇格 | docker exec の実行ユーザ決定。権限に関わる判断を含む |
 | `claude-dev::ensure_infrastructure` / `claude-dev-mac::ensure_infrastructure` | 3 | 昇格 | docker network とボリュームを作る副作用を持つ |

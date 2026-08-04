@@ -11,6 +11,7 @@ sections:
   - "## 順序性・冪等性・並行性の背景"
 deletes: []
 reason: D0-env-08(破壊的操作の対象は自分が作った資源に限る)の識別方法をこの契約が定める。D0-env-10 の委任で管理ラベルの名前と値を決め、D0-env-09 の委任で2段のロックキーを決めた(FR-env-01 受入基準 9・14〜17 / FR-env-03 受入基準 14〜19)
+reflected: 2026-08-04
 ---
 
 # CTR-cli-container ホスト CLI → コンテナ/entrypoint
