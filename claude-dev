@@ -1869,33 +1869,171 @@ firewall)
 # 全リセット
 # -----------------------------------------------------------------------------
 reset)
-    echo "⚠️  以下を全て削除します:"
-    echo "   - 全 Claude Code コンテナ"
-    echo "   - Docker Socket Proxy コンテナ"
-    echo "   - 認証情報・履歴ボリューム"
-    echo "   - Docker イメージ"
-    echo ""
-    read -p "実行しますか？ (y/N) " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        echo "キャンセルしました"
-        exit 0
+    # 引数解析（--yes のみ。それ以外は無視する）
+    _yes=0
+    for _a in "$@"; do [ "$_a" = "--yes" ] && _yes=1; done
+
+    # 共有ボリュームとイメージまで消す操作なので共有資源単位のロックを取る。
+    # 取れなければ何も削除しない（FR-env-01 受入基準16）
+    acquire_lock shared reset || exit 1
+
+    # --- 削除対象の列挙 ---
+    # Claude コンテナは管理ラベルを持つものだけ（イメージからの逆引きは使わない）。
+    _rc_containers=()
+    while IFS= read -r _c; do
+        [ -n "$_c" ] && _rc_containers+=("$_c")
+    done < <(docker ps -a --filter "label=claude-dev.managed=1" --format '{{.Names}}' 2>/dev/null || true)
+    # fwd-* 中継コンテナは固定接頭辞で識別する（ラベルを見ない）
+    _rc_fwd=()
+    while IFS= read -r _c; do
+        [ -n "$_c" ] && _rc_fwd+=("$_c")
+    done < <(docker ps -a --filter "name=^fwd-" --format '{{.Names}}' 2>/dev/null || true)
+    # ボリューム: 共有3本 + コンテナごとの Chrome プロファイル（名前で一意に決まる）
+    _rc_volumes=()
+    for _v in "$VOL_AUTH" "$VOL_HISTORY" "$VOL_CONFIG"; do
+        docker volume inspect "$_v" >/dev/null 2>&1 && _rc_volumes+=("$_v")
+    done
+    while IFS= read -r _v; do
+        [ -n "$_v" ] && _rc_volumes+=("$_v")
+    done < <(docker volume ls -q --filter "name=^${VOL_CHROME_PREFIX}-" 2>/dev/null || true)
+    # イメージ: 固定名
+    _rc_images=()
+    for _i in "$IMG_CLAUDE" "$IMG_CLAUDE_VNC" "$IMG_DOCKER_PROXY"; do
+        image_exists "$_i" && _rc_images+=("$_i")
+    done
+    # 管理ラベルを持たない Claude コンテナ（削除しない。名前を表示して残す）
+    _rc_unmanaged=()
+    if _others=$(net_other_running_containers); then
+        while IFS= read -r _c; do
+            [ -n "$_c" ] || continue
+            _known=0
+            for _t in "${_rc_containers[@]}"; do [ "$_t" = "$_c" ] && _known=1; done
+            [ "$_known" = "0" ] && _rc_unmanaged+=("$_c")
+        done <<< "$_others"
     fi
 
-    # プロジェクトコンテナ + フォワードコンテナ停止
-    docker ps -a --filter "ancestor=$IMG_CLAUDE" --filter "ancestor=$IMG_CLAUDE_VNC" -q | xargs -r docker rm -f 2>/dev/null || true
-    docker ps -a --filter "name=^fwd-" -q | xargs -r docker rm -f 2>/dev/null || true
-    # Docker Socket Proxy コンテナ停止
-    docker rm -f "$DOCKER_PROXY_CONTAINER" 2>/dev/null || true
-    # ボリューム削除（共有 3 ボリューム + コンテナごとの Chrome プロファイル `claude-dev-chrome-*`）
-    docker volume rm -f "$VOL_AUTH" "$VOL_HISTORY" "$VOL_CONFIG" 2>/dev/null || true
-    docker volume ls -q --filter "name=^${VOL_CHROME_PREFIX}-" | xargs -r docker volume rm -f 2>/dev/null || true
-    # ネットワーク削除
-    docker network rm "$NETWORK" 2>/dev/null || true
-    # イメージ削除
-    docker rmi -f "$IMG_CLAUDE" "$IMG_CLAUDE_VNC" "$IMG_DOCKER_PROXY" 2>/dev/null || true
+    echo "⚠️  以下を削除します:"
+    for _t in "${_rc_containers[@]}"; do echo "   - コンテナ: ${_t}"; done
+    for _t in "${_rc_fwd[@]}";        do echo "   - 中継コンテナ: ${_t}"; done
+    echo "   - Docker Socket Proxy コンテナ（遊休のときだけ）"
+    echo "   - 共有ネットワーク ${NETWORK}（遊休のときだけ）"
+    for _t in "${_rc_volumes[@]}"; do echo "   - ボリューム: ${_t}"; done
+    for _t in "${_rc_images[@]}";  do echo "   - イメージ: ${_t}"; done
+    if [ ${#_rc_unmanaged[@]} -gt 0 ]; then
+        echo "   （管理ラベルを持たない次のコンテナは削除しません: ${_rc_unmanaged[*]}）"
+    fi
+    echo ""
 
-    echo "✅ 全リセット完了"
+    # --- 確認 ---
+    if [ "$_yes" != "1" ]; then
+        if [ ! -t 0 ]; then
+            echo "❌ 端末が無いため確認を求められません。何も削除していません。" >&2
+            echo "   確認なしで実行するには 'claude-dev reset --yes' を指定してください。" >&2
+            exit 1
+        fi
+        read -p "実行しますか？ (y/N) " -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            echo "キャンセルしました"
+            exit 0
+        fi
+    fi
+
+    # --- 削除 ---
+    # 順序は コンテナ → docker-proxy と共有ネットワーク（遊休なら）→ ボリューム → イメージ
+    # に固定する（使用中の参照を先に外さないと後段が必ず失敗する）。
+    for _t in "${_rc_containers[@]}"; do destructive_plan "コンテナ: ${_t}"; done
+    for _t in "${_rc_fwd[@]}";        do destructive_plan "中継コンテナ: ${_t}"; done
+    destructive_plan "Docker Socket Proxy コンテナ"
+    destructive_plan "共有ネットワーク ${NETWORK}"
+    for _t in "${_rc_volumes[@]}"; do destructive_plan "ボリューム: ${_t}"; done
+    for _t in "${_rc_images[@]}";  do destructive_plan "イメージ: ${_t}"; done
+    destructive_arm_interrupt
+
+    for _t in "${_rc_containers[@]}"; do
+        destructive_abort_if_interrupted
+        if container_exists "$_t"; then
+            destructive_rm "コンテナ: ${_t}" docker rm -f "$_t"
+        else
+            destructive_skipped "コンテナ: ${_t}"
+        fi
+    done
+    for _t in "${_rc_fwd[@]}"; do
+        destructive_abort_if_interrupted
+        if container_exists "$_t"; then
+            destructive_rm "中継コンテナ: ${_t}" docker rm -f "$_t"
+        else
+            destructive_skipped "中継コンテナ: ${_t}"
+        fi
+    done
+    destructive_abort_if_interrupted
+
+    # docker-proxy と共有ネットワークは遊休判定を通ったときだけ消す。手順3 で管理ラベルを
+    # 持たない Claude コンテナを残しているため、この判定は空にならないことがある。
+    # 無条件に消すと、残したコンテナの中から Docker が使えなくなり名前解決も壊れる。
+    _reset_idle=0
+    if _others=$(net_other_running_containers); then
+        if [ -n "$_others" ]; then
+            echo "🐳 ${NETWORK} に接続している稼働中のコンテナが残っているため、Docker Socket Proxy コンテナと共有ネットワークを残します:"
+            printf '%s\n' "$_others" | sed 's/^/   - /'
+            echo "   このため完全な初期化にはなっていません。残りの削除は続行します。"
+        else
+            _reset_idle=1
+        fi
+    else
+        echo "⚠️  遊休判定に必要な Docker への問い合わせに失敗しました。安全側に倒して Docker Socket Proxy コンテナと共有ネットワークを残します。"
+        echo "   このため完全な初期化にはなっていません。残りの削除は続行します。"
+    fi
+    if [ "$_reset_idle" = "1" ]; then
+        if container_exists "$DOCKER_PROXY_CONTAINER"; then
+            destructive_rm "Docker Socket Proxy コンテナ" docker rm -f "$DOCKER_PROXY_CONTAINER"
+        else
+            destructive_skipped "Docker Socket Proxy コンテナ"
+        fi
+        destructive_abort_if_interrupted
+        if docker network inspect "$NETWORK" >/dev/null 2>&1; then
+            destructive_rm "共有ネットワーク ${NETWORK}" docker network rm "$NETWORK"
+        else
+            destructive_skipped "共有ネットワーク ${NETWORK}"
+        fi
+    else
+        # 残すと決めたものなので「失敗」には数えない
+        destructive_skipped "Docker Socket Proxy コンテナ"
+        destructive_skipped "共有ネットワーク ${NETWORK}"
+    fi
+    destructive_abort_if_interrupted
+
+    for _t in "${_rc_volumes[@]}"; do
+        destructive_abort_if_interrupted
+        destructive_rm "ボリューム: ${_t}" docker volume rm -f "$_t"
+    done
+    destructive_abort_if_interrupted
+
+    for _t in "${_rc_images[@]}"; do
+        destructive_abort_if_interrupted
+        destructive_rm "イメージ: ${_t}" docker rmi -f "$_t"
+    done
+    destructive_abort_if_interrupted
+
+    # --- 結果 ---
+    if [ ${#_DESTRUCTIVE_FAILED[@]} -gt 0 ]; then
+        echo "❌ 削除できなかった資源があります。" >&2
+        destructive_report >&2
+        exit 1
+    fi
+    if [ "$_reset_idle" = "1" ]; then
+        echo "✅ 全リセット完了"
+    else
+        echo "✅ 削除を完了しました（共有資源を残したため、完全な初期状態には戻っていません）"
+    fi
+    destructive_report
+    if [ ${#_rc_unmanaged[@]} -gt 0 ]; then
+        echo "ℹ️  管理ラベルを持たないため削除しなかったコンテナ（本変更より前に起動した可能性があります）:"
+        for _c in "${_rc_unmanaged[@]}"; do echo "     - ${_c}"; done
+        echo "   1件ずつ止めるには 'claude-dev stop <name>' を使ってください。"
+        echo "   停止中のものは列挙していません（ネットワークの接続情報からは稼働中しか分かりません）。"
+    fi
+    release_lock shared
     ;;
 
 # -----------------------------------------------------------------------------
@@ -1910,7 +2048,7 @@ claude-dev - Claude Code 安全開発環境
   claude-dev pull [TAG]          GHCR からビルド済みイメージを取得（ビルドの代わり。既定 latest）
   claude-dev login               Claude の OAuth ログイン
   claude-dev login-codex         Codex のデバイス認証ログイン（codex login --device-auth）
-  claude-dev logout              認証情報を削除（Claude / Codex 双方）
+  claude-dev logout [--yes]      認証情報を削除（Claude / Codex 双方。--yes で確認を省く）
 
 開発:
   claude-dev start               カレントディレクトリで環境を起動（VNC + Chrome 付き）
@@ -1936,7 +2074,7 @@ SSH 鍵（カレントプロジェクトの .claude-dev.yaml）:
 メンテナンス:
   claude-dev upgrade             全イメージを更新（--no-cache 再ビルド）
   claude-dev firewall            ファイアウォールルール確認
-  claude-dev reset               全削除（コンテナ・ボリューム・イメージ）
+  claude-dev reset [--yes]       全削除（コンテナ・ボリューム・イメージ。--yes で確認を省く）
 
 使い方:
   cd ~/repos/my-project && claude-dev start
