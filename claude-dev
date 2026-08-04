@@ -731,8 +731,9 @@ start)
         exit 0
     fi
 
-    # 停止中のコンテナがあれば削除
-    if container_exists "$NAME"; then
+    # 停止中のコンテナがあれば削除（稼働中は消さない。上の is_running 判定から
+    # ここまでの間に他プロセスが同名コンテナを起動していた場合に備える）
+    if container_exists "$NAME" && ! is_running "$NAME"; then
         docker rm -f "$NAME" >/dev/null
     fi
 
@@ -925,7 +926,25 @@ start)
             break
         fi
         _run_attempt=$((_run_attempt + 1))
-        docker rm -f "$NAME" >/dev/null 2>&1 || true   # 作成途中コンテナを掃除
+        # 名前衝突は「他方の start が先に作った」ことを意味するので、後片付けをしてはならない。
+        # 同名の稼働中コンテナは別プロジェクト（basename が同じ別ディレクトリ）の作業中セッションで
+        # ありうる（FR-env-01 受入基準12）。
+        if printf '%s' "$_run_err" | grep -qiE 'Conflict\.|already in use by container'; then
+            if is_running "$NAME"; then
+                echo "❌ 同名のコンテナ '$NAME' が既に稼働しているため起動を中止しました。" >&2
+                echo "   別ディレクトリの同名プロジェクト（コンテナ名はディレクトリ名から決まります）の可能性があります。" >&2
+                echo "   既存のコンテナには手を触れていません。そのプロジェクトのディレクトリで 'claude-dev start' すると再接続できます。" >&2
+                echo "   このディレクトリで起動したい場合は、先に 'claude-dev stop $NAME' を実行してください。" >&2
+            else
+                echo "❌ 同名のコンテナ '$NAME' が既に存在するため起動を中止しました（停止中）。" >&2
+                echo "   'claude-dev stop $NAME' で削除してから再実行してください。" >&2
+            fi
+            exit 1
+        fi
+        # 後片付けは対象が稼働中でないときだけ（FR-env-01 受入基準13）
+        if ! is_running "$NAME"; then
+            docker rm -f "$NAME" >/dev/null 2>&1 || true   # 作成途中コンテナを掃除
+        fi
         if [ "$USE_VNC" = "1" ] && [ "$_run_attempt" -le 20 ] \
            && printf '%s' "$_run_err" | grep -qiE "port is already allocated|address already in use|bind for .* failed"; then
             NOVNC_PORT=$(find_available_novnc_port)

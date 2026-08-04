@@ -41,7 +41,8 @@
 | [042-modify-ac-02-port-publication-conflicts-with-novnc](042-modify-ac-02-port-publication-conflicts-with-novnc.md) | modify | 中 | 2026-08-04 | AC-01, AC-02, D0-env-01, D0-env-02, FR-env-04, docs/00-requests/acceptances.md, docs/00-requests/decisions/env.md | AC-02「start しただけではホストにポートが公開されていない」が、AC-01「ブラウザ確認ありなら起動時に noVNC の URL が表示される」と D0-env-01「noVNC のポートは 6080 番台から動的に割り当てる」と両立しない(00 層の A0 不整合) |
 | [043-modify-nfr-targets-do-not-measure-whole-requirement](043-modify-nfr-targets-do-not-measure-whole-requirement.md) | modify | 中 | 2026-08-04 | NFR-perf-02, NFR-sec-03, NFR-ops-01, NFR-ops-04, NFR-scale-02, docs/01-requirements/non-functional.md | non-functional.md の5つの NFR で、「要件」列が述べている内容の一部しか「目標値」「測定方法」列が測っていない。形は整っているが受入判定できない範囲が残る(check C8) |
 | [044-modify-terminology-threshold-definition-lacks-approval-record](044-modify-terminology-threshold-definition-lacks-approval-record.md) | modify | 中 | 2026-08-04 | docs/00-requests/terminology.md, FR-env-08, NFR-ops-01, D0-scope-06, D0-scope-07, MODULE-vm-mode-healthd, docs/issues/017, docs/issues/043 | 【2026-08-04 人間が案A′(承認+微修正)で裁定。severity を高→中に是正】terminology.md 1.1.0 が「資源逼迫」に閾値付きの定義を与えたが、00 層への意味のある変更に必要な人間の合意の記録が無かった。承認は得たので残るのは下降(01 の受入基準と 02 の5箇所)と合格証の発行で、これは次タスク「仕様の測定可能性」で行う |
+| [045-bug-stop-removes-shared-proxy-when-other-container-runs-an-older-image](045-bug-stop-removes-shared-proxy-when-other-container-runs-an-older-image.md) | bug | 中 | 2026-08-04 | FR-env-01, MODULE-cli-stop, MODULE-cli-common-ensure-infrastructure, CTR-cli-container, docs/issues/024, docs/issues/025 | stop の遊休判定が `--filter ancestor=<現在のイメージ>` なので、古いイメージで稼働している Claude コンテナを数え落とし、共有 docker-proxy を削除する。FR-env-01 受入基準9 に反し、他プロジェクトのコンテナから Docker が使えなくなる |
 
-件数: 35
+件数: 36
 
 <!-- END GENERATED -->
