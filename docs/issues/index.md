@@ -46,7 +46,8 @@
 | [048-modify-design-claims-shared-base-functions-never-call-each-other](048-modify-design-claims-shared-base-functions-never-call-each-other.md) | modify | 低 | 2026-08-04 | PLAN-cli-common-require-setup, PLAN-cli-common-image-exists, PLAN-cli-common-select-ssh-keys, PLAN-cli-common-write-project-ssh-keys, DSN-mod-03 | 02-design/relations.md の「共有基盤どうしは呼び合わない(相互依存を作らない)」が、同じ文書の一覧表にある2本の共有基盤どうしの辺と矛盾する(設計の宣言と設計自身の表が食い違う) |
 | [049-modify-ac-02-forbids-the-novnc-port-that-ac-01-requires](049-modify-ac-02-forbids-the-novnc-port-that-ac-01-requires.md) | modify | 中 | 2026-08-04 | AC-01, AC-02, D0-env-02, FR-env-06, FR-env-11 | AC-02 が「`start` しただけではホストにポートが公開されていない」を例外なしで要求する一方、AC-01 と D0-env-02 は既定構成(ブラウザ確認あり)で noVNC ポートを公開すると定めており、既定構成が AC-02 の不合格条件に当たる |
 | [050-modify-unparseable-docker-request-is-relayed-against-its-own-guardrail](050-modify-unparseable-docker-request-is-relayed-against-its-own-guardrail.md) | modify | 中 | 2026-08-04 | FR-env-07, D0-sec-05, NFR-sec-01, MODULE-docker-proxy-serve, CTR-docker-api | FR-env-07 受入基準8 は解釈できない Docker API のボディを中継してよいと定めるが、その根拠である委任 D0-sec-05 のガードレールは「拒否すべき操作を通してはならない」と定めており、解釈できないボディに禁止操作が含まれる場合に両立しない |
+| [051-bug-cli-output-leaks-raw-docker-ids](051-bug-cli-output-leaks-raw-docker-ids.md) | bug | 低 | 2026-08-04 | MODULE-cli-stop, MODULE-cli-common-ensure-infrastructure, docs/02-design/logging.md | CLI の利用者向け出力に生の Docker ID が混じる(docker network create と xargs docker rm -f の標準出力を捨てていない)。本変更より前から存在する |
 
-件数: 40
+件数: 41
 
 <!-- END GENERATED -->
