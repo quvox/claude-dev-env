@@ -1,7 +1,7 @@
 ---
 id: architecture
-version: 1.0.0
-updated: 2026-08-03
+version: 1.2.0
+updated: 2026-08-04
 source:
   - docs/01-requirements/functional.md
   - docs/01-requirements/non-functional.md
@@ -9,16 +9,23 @@ source:
 summary: 全体構成・データモデル・インフラ設計と、アーキテクチャ級の設計判断(DSN-arch / auth / dist / orch)
 keywords: [アーキテクチャ, 全体構成, 設計判断, DSN]
 verified:
-  at: 2026-08-03
-  version: 1.0.0
+  at: 2026-08-04
+  version: 1.2.0
   against:
     - doc: docs/01-requirements/functional.md
-      version: 1.0.0
+      version: 1.3.1
     - doc: docs/01-requirements/non-functional.md
-      version: 1.0.1
+      version: 1.2.0
     - doc: docs/01-requirements/system.md
       version: 1.0.0
 ---
+
+<!-- 2026-08-04 /task-close: 認証の置き場所の記述を**実装に合わせた**(人間の裁定=実装が正。
+     `docs/issues/040`)。コピー先はプロジェクトディレクトリ配下(`/workspace/.claude/` `/workspace/.codex/`)で、
+     ホームからは symlink(`~/.claude` / `~/.codex` はディレクトリ、`~/.claude.json` はファイル単位)。
+     起点の `D0-auth-03` と `FR-env-03` #2・#7 も同時に直した。
+     **残るリスク**(ファイル単位 symlink がアトミック書き込みで置き換わりうる / 認証が
+     バインドマウント配下に平文で存在する)は `D0-auth-03` に明記した。 -->
 
 # システムアーキテクチャ
 
@@ -134,12 +141,13 @@ graph TD
   1. **共有ボリューム**(`claude-dev-auth` / `claude-dev-config` / `claude-dev-history`): 認証・
      シェル設定・コマンド履歴。全コンテナで共有する。
   2. **プロジェクトディレクトリ**(`/workspace`): ソースコード、`.claude-dev.yaml`、
-     コンテナローカルの認証・設定の実体。
+     **認証・設定の実体**(`/workspace/.claude/` `/workspace/.codex/`。コンテナのホームからは
+     symlink で参照する。下の表と `DSN-auth-01` を参照)。
   3. **運用状態**(`/workspace/.orchestrator/`): plan・制御・状態・追記型ログ。機械のみが読み書きする。
 
   | エンティティ | 置き場所 | 所有 | 共有範囲 |
   |---|---|---|---|
-  | 認証ファイル(Claude / Codex) | 共有ボリューム → コンテナローカルへコピー | entrypoint(共有は CLI) | 全コンテナ |
+  | 認証ファイル(Claude / Codex) | 共有ボリューム → **プロジェクトディレクトリ配下(`/workspace/.claude/` `/workspace/.codex/`)へコピー**。ホームからは symlink で参照 | entrypoint(コピーは CLI) | 全コンテナ |
   | セッション・設定(`settings.json` / `config.toml` 等) | プロジェクトディレクトリ | entrypoint | コンテナ固有 |
   | `.claude-dev.yaml`(SSH 鍵の指定) | プロジェクトディレクトリ | ホスト CLI | プロジェクト固有 |
   | plan / control / state / 追記型ログ | 運用状態 | orchestrator | プロジェクト固有 |
@@ -186,9 +194,9 @@ sequenceDiagram
 - 却下した案: 配布せず各自ビルド — 構成が揃わない。手動 push — 更新が滞る。
 - 影響する要件: FR-env-09, NFR-perf-01
 
-### DSN-auth-01 認証はコピーと定期書き戻しで共有し、symlink を使わない
+### DSN-auth-01 認証はコピーと定期書き戻しで共有する(ホームからの参照は symlink)
 
-- 判断: 認証ファイルは起動時にコンテナローカルへコピーし、30 秒ごとの同期ループで共有ボリュームへ
+- 判断: 認証ファイルは起動時に**プロジェクトディレクトリ配下へ**コピーし(ホームからは symlink で参照する)、30 秒ごとの同期ループで共有ボリュームへ
   書き戻す。Claude Code と Codex CLI で同一方式・同一の同期ループを使う。
 - 理由: Claude Code は認証ファイルをアトミックに書き込む(一時ファイル → rename)ため symlink が
   壊れる。Codex の `auth.json` はその場書き換えで symlink でも壊れないが、**方式を2つ持たない**

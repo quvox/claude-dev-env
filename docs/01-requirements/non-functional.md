@@ -1,18 +1,38 @@
 ---
 id: non-functional
-version: 1.0.1
-updated: 2026-08-03
+version: 1.2.1
+updated: 2026-08-04
 source:
   - docs/00-requests/request.md
 summary: 非機能要件 NFR-perf / avail / sec / ops / scale の各分類と目標値・測定方法
 keywords: [非機能要件, NFR]
 verified:
-  at: 2026-08-03
-  version: 1.0.1
+  at: 2026-08-04
+  version: 1.2.0
   against:
     - doc: docs/00-requests/request.md
       version: 1.2.0
 ---
+
+<!-- 2026-08-04 /doc-check ssot task-impl-depth(新しい実行): 合格証を再発行した(1.2.0)。
+     2026-08-04 に合格証を削除した理由(docs/issues/035 = NFR-perf-03 第2文が実装と食い違う)は、
+     人間が案A(実装が正)で裁定し、第2文を要件から外して設計判断 DSN-prompt-03 へ降ろすことで
+     解消した。上流の 00(request.md)は検証済みで、00 側に文脈上限の決定は存在しないため
+     カバレッジの穴は生じない(D0-orch-02 の委任が「指示の渡し方」を覆う)。
+     **未解決の重大度「高」は無い。** ただし独立監査 Codex docs(01→02)が
+     **測定可能性の「中」5件・「低」2件を検出**した(docs/issues/043 に記録。CLAUDE.md 不変則3 により
+     「中」は PASS をブロックしないが、閉じるのは別タスクの仕事である):
+     NFR-sec-02 の「ブロック対象ドメイン」の集合が未定義(docs/issues/041)/ NFR-perf-02 の
+     「追加ディスクを VNC/Chrome 分に限定」を測定方法が測っていない / NFR-sec-03 の測定が worker の
+     通知トークンだけ / NFR-ops-01 の「運用上の出来事の把握」に受入基準が無い /
+     NFR-ops-04・NFR-scale-02 の要件本文の一部が測定対象外。 -->
+
+<!-- 2026-08-04 /task-close: `NFR-perf-03` 第2文(「文脈はコンテキストウィンドウに収まる範囲に
+     絞ること」)を要件から外した。**人間の裁定=実装が正**(`docs/issues/035`):
+     目標値も測定方法も無く、実装は上限の検出も切り詰めもしない(`Worker.BuildPrompt` は無条件連結、
+     `dependencySummaries` は全件連結。コードで確認済み)。**絞り方は設計の判断**として
+     `02-design/contracts/orchestrator-prompt.md` の `DSN-prompt-03` に降ろした。
+     要件としての上限値は課さない(課すなら別タスクで実装を伴う)。 -->
 
 # 非機能要件
 
@@ -22,7 +42,7 @@ verified:
 |---|---|---|---|
 | NFR-perf-01 | 日次ビルドの更新後も、利用者の `docker pull` は増分取得に留まること。同梱エージェント CLI が更新されたときに再取得させる層は、その導入層以降のみとする | 同梱 CLI のバージョンが変わらない日は、配布 2 イメージのどの層も再取得が発生しない | 前日分のイメージを持つ環境で `docker pull` を実行し、`Already exists` 以外の層が出ないことを確認する |
 | NFR-perf-02 | ブラウザ確認ありのイメージは、なしのイメージのベースレイヤーを共有し、追加ディスクを VNC/Chrome 分に限定すること | 2 イメージのベース層が同一ダイジェストであること | `docker history` で両イメージのベース層のダイジェストを比較する |
-| NFR-perf-03 | worker は意味のあるまとまりで割り当て、小タスクの頻繁な起動・終了を避けること。worker へ渡す文脈はコンテキストウィンドウに収まる範囲に絞ること | 1タスクあたり worker プロセスの起動は原則 1 回(再開・改訂を除く) | `.orchestrator/audit.jsonl` の起動イベント数をタスク数と突き合わせる |
+| NFR-perf-03 | worker への割り当ては、**1タスクが1回の worker 起動で完結する粒度**とすること(同一 Attempt の再開と、レビュー指摘による改訂は起動回数に数えない)。**worker へ渡す文脈の絞り方は設計層が定める**(`CTR-orchestrator-prompt` の `DSN-prompt-03`。要件としては上限値を課さない) | 1タスクあたり worker プロセスの起動は 1 回(再開・改訂を除く) | `.orchestrator/audit.jsonl` の起動イベント数をタスク数と突き合わせる |
 
 ## 可用性・信頼性
 
@@ -44,7 +64,7 @@ verified:
 
 | ID | 要件 | 目標値 | 測定方法 |
 |---|---|---|---|
-| NFR-ops-01 | 運用補助と可観測性: 実行の経過(タスク委譲・実行結果・仮定・介入)を追記型ログに残し、資源逼迫・レート制限・通知といった運用上の出来事を利用者が把握できること | タスク委譲・実行結果・仮定・介入の 4 種すべてがログに残る | `.orchestrator/` の `audit.jsonl` / `assumptions.jsonl` / `interventions.jsonl` の存在と内容を確認する |
+| NFR-ops-01 | 運用補助と可観測性: 実行の経過(タスク委譲・実行結果・仮定・介入)を追記型ログに残し、資源逼迫(`terminology.md` に閾値の定義あり)・レート制限・通知といった運用上の出来事を利用者が把握できること | タスク委譲・実行結果・仮定・介入の 4 種すべてがログに残る | `.orchestrator/` の `audit.jsonl` / `assumptions.jsonl` / `interventions.jsonl` の存在と内容を確認する |
 | NFR-ops-02 | OS 依存はホスト CLI に閉じ、コンテナ内資産(イメージ・entrypoint・firewall・docker-proxy)は OS 非依存に保つこと | コンテナ内資産に OS 分岐が 0 件 | コンテナ内資産のコードに OS 判定が無いことを確認する |
 | NFR-ops-03 | 利用可能な操作を一覧できること | `make help` で全ターゲットが表示される。CLI は引数なし/未知の引数でヘルプを表示する | 実機で確認する |
 | NFR-ops-04 | モデル/effort ポリシーは 1 箇所で切り替え可能であること。運用状態は機械が読み書きし、人間が編集しない前提であること | ポリシー定義が 1 ファイルに閉じている | 定義箇所を確認する(`docs/03-impl/relations/MODULE-orchestrator-claude-exec.md` の実装参照) |

@@ -10,7 +10,7 @@ contracts: なし
 design: DSN-mod-01, DSN-ui-01
 requirements: FR-orch-08
 tests: orchestrator/term_test.go::TestResolveMenu_EnterPicksDefault, orchestrator/term_test.go::TestResolveMenu_ArrowThenEnter, orchestrator/term_test.go::TestResolveMenu_JKMovement, orchestrator/term_test.go::TestResolveMenu_NumberImmediate, orchestrator/term_test.go::TestResolveMenu_NoInputReturnsCurrent, orchestrator/term_test.go::TestSelectMenu_NonTTYReturnsDefault, orchestrator/term_test.go::TestTerminalConfirm_NonTTYContinue, orchestrator/term_test.go::TestBuildQuestion_NumbersOptions
-updated: 2026-08-02
+updated: 2026-08-04
 summary: 端末の raw モード制御・TTY 判定・メニュー選択を提供する
 ---
 
@@ -26,8 +26,11 @@ summary: 端末の raw モード制御・TTY 判定・メニュー選択を提�
 
 1. `isTTY()`(mode.go に定義)が標準入出力が端末かを判定する。
 2. `rawKeyMode()` が `stty` を使って端末を raw モードにし、1キーずつ読めるようにする。
-3. `selectMenu(options, default)` が番号付きの選択メニューを出す。↑↓ / jk で移動、Enter で確定、
-   数字キーで即決。**非 TTY のときは既定値をそのまま返す**(停止しない)。
+3. `selectMenu(title string, items []menuItem, def int)` が番号付きの選択メニューを出し、
+   選ばれた項目の **`Value`(文字列)** を返す。`menuItem` は `Value`(戻り値)/ `Label`(短い表示)/
+   `Desc`(1行説明)を持ち、`def` は**既定として選択しておく項目のインデックス**である
+   (範囲外なら 0 に丸める)。↑↓ / jk で移動、Enter で確定、数字キーで即決。
+   **項目が空なら空文字を返す。非 TTY のときは既定項目の `Value` をそのまま返す**(停止しない)。
 4. `printModeBanner(mode)` が現在のモードを端末へ表示する。
 5. `ttyRestoreSane()` が `stty sane` 相当でカノニカルモードへ戻す。
 6. すべての `stty` 呼び出しは `sttyRun` に集約する。
@@ -40,10 +43,10 @@ summary: 端末の raw モード制御・TTY 判定・メニュー選択を提�
 - 前提条件: `stty` が使えること(使えなければ端末制御は no-op に近い挙動になる)。
 - 引数:
 
-| 引数 | 型 | 必須 | 制約 |
-|---|---|---|---|
-| `options` | 文字列の並び | `selectMenu` で必須 | 表示順がそのまま番号になる |
-| `default` | 整数 | `selectMenu` で必須 | 非 TTY のときに返る値 |
+| 引数 | 型 | 必須 | 制約 | 実装が行う検証 |
+|---|---|---|---|---|
+| `options` | 文字列の並び | `selectMenu` で必須 | 表示順がそのまま番号になる | **検証しない**。項目が空なら空文字を返し、`def` が範囲外なら 0 に丸める |
+| `default` | 整数 | `selectMenu` で必須 | 非 TTY のときに返る値 | 同上 |
 
 - 認可: 端末を見ている人間。
 
@@ -55,7 +58,7 @@ summary: 端末の raw モード制御・TTY 判定・メニュー選択を提�
 
 | 種別 | 内容 |
 |---|---|
-| 戻り値 | `selectMenu` は選択されたインデックス、`isTTY` は真偽値 |
+| 戻り値 | `selectMenu` は**選択された項目の `Value`(文字列)**(インデックスではない。項目が空なら空文字、非 TTY なら既定項目の `Value`)、`resolveMenu` も同じ文字列、`isTTY` は真偽値、`rawKeyMode` / `ttyRestoreSane` / `sttyRun` はエラー |
 | 永続化 | なし(端末の状態というプロセス外の状態を変える) |
 | 発火するイベント | なし |
 | ログ | 標準出力へメニューとモードバナー |

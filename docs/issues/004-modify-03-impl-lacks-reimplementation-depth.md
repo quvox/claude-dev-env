@@ -5,7 +5,7 @@ severity: 中
 found: 2026-08-03
 found_in: task-docs-restructure の /doc-check(Claude 自身の実装ドライラン パス1。独立レンズの指摘ではない)
 related: MODULE-cli-start, MODULE-cli-forward, MODULE-orchestrator-controller, MODULE-orchestrator-state-io, CTR-cli-container, CTR-cli-orchestrator, CTR-orchestrator-prompt
-summary: 03-impl が「現状の説明」としては正しいが、ドキュメントだけから再実装・再試験できる深度に達していない領域が約20件ある
+summary: 03-impl が「現状の説明」としては正しいが、ドキュメントだけから再実装・再試験できる深度に達していない領域が当初約20件あった。2026-08-03 の task-impl-depth で観点1〜5(入力検証・永続化・並行性・外部依存の失敗・ログ)と観点7(契約の型)を解消済み。**残件は「## 経緯」の4項目**(永続データモデル / モデル・effort ポリシー / 観点6 テストデータ / 02 契約の復号レベルのエラーケース)
 ---
 
 # 004 03-impl に「ドキュメントだけから再実装・再試験できる」深度が無い領域がある
@@ -68,3 +68,30 @@ summary: 03-impl が「現状の説明」としては正しいが、ドキュメ
 - `docs/pendings.md` P-003(QA レーンの各設定が未定)
 - 検出経緯は `task-docs-restructure` の memo.md「独立レンズの実際の結果」および
   「/doc-check(task モード)2026-08-03 — 追加の未決点と裁定」
+
+## 経緯
+
+- 2026-08-03 `/task-new` でタスク `task-impl-depth` に昇格(issue 008 を同時対象、issue 009 は (b) のみ)。
+- 2026-08-03 `task-impl-depth` のフェーズ2で**観点1〜5と観点7(契約の型)を解消**した
+  (relations 19本・契約3件(02/03)・`infra/local/ghcr.md`・`tests/` 4件・01 の受入基準15行)。
+  **本 issue は閉じない**(決定シート#6=B の人間の判断)。残件は次の3つである。
+  1. **orchestrator の永続データモデルの記述**: `plan.json` / `state.json` /
+     `intervention/open.json` のフィールド表(型・必須・`Status` の列挙・`Attempts` /
+     `Irreversible` / `IrrevApproved` / `SessionID` / `ResumeSession` / `ReviewFormatErrors` の
+     意味と既定)が 03 に無い。対象は `MODULE-orchestrator-state` / `-plan`
+     (`task-impl-depth` の影響範囲外)。
+  2. **工程別のモデル / effort ポリシーの記述**: `orchestrator/models.go` の
+     「熟考 = `opus`/`high`、既定 = `sonnet`/`high`、`Task.Kind` による分岐」が 03 に無い。
+     対象は `MODULE-orchestrator-claude-exec` / `-config` と `CTR-orchestrator-prompt`。
+  3. **観点6(テストデータの準備と後始末)**: 変わらず `docs/issues/006` と
+     `docs/pendings.md` P-003(QA レーン)に依存する。
+  4. **02 の `CTR-orchestrator-prompt`「エラーケース」が復号レベルの異常を列挙していない**
+     (★2026-08-03 `/doc-check` の独立レンズ Codex `readiness` が検出して追加)。
+     型不一致・未知フィールド・必須欠落に対する受理/拒否は **03 側に実挙動を記載して閉じた**が、
+     02 側は「解釈可能な結果 JSON が無い → 失敗」までしか述べていない。設計意図として
+     デコーダの寛容さをどこまで要求するかは設計判断であり、質問キュー #8 の回答
+     「02 契約の期待する振る舞いは今回触らない」に従って本タスクでは扱わなかった。重大度は「低」。
+- 掘り下げの過程で起票した issue: `010`〜`016` / `020`〜`026` / `028` / `029`
+  (`017`〜`019` および `023` は同タスクの `/doc-check` が起票。`027` は誤検知として取り消し)。
+  ★2026-08-03 `/doc-check`: この一覧は以前 `010`〜`016` と `020`〜`022` しか挙げておらず、
+  `023`〜`026` / `028` / `029` が漏れていた(`03-impl/index.md` の件数も同じ漏れを持っていた)。

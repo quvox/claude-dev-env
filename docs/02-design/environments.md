@@ -8,14 +8,24 @@ source:
 summary: 開発環境の構成・セットアップ手順・lint/テスト/ドキュメント整合検査の厳密なコマンド文字列・Codex実行設定
 keywords: [開発環境, コマンド, lint, テスト, Codex]
 verified:
-  at: 2026-08-03
+  at: 2026-08-04
   version: 1.0.0
   against:
     - doc: docs/01-requirements/system.md
       version: 1.0.0
     - doc: docs/02-design/architecture.md
-      version: 1.0.0
+      version: 1.2.0
 ---
+
+<!-- 2026-08-04 /doc-check ssot task-impl-depth(新しい実行): **合格証を再発行した(1.0.0)。**
+     直前に削除した理由(source の docs/02-design/architecture.md が未検証 = docs/issues/040 の高)は、
+     人間が案A(実装が正)で裁定し architecture.md 1.2.0 が再認証されたことで解消した。
+     本文には問題を見つけていない。
+     残る「中」: 「Codex実行設定」のモデル・reasoning 行がプレースホルダ「未定」のままで、
+     docs/pendings.md P-003 の記述と食い違う(docs/issues/031)。**本実行でもこの行を「不在」と
+     扱い規範の既定(gpt-5.6-terra / max)を明示指定した。**
+     ★本実行の独立監査は起動できなかった(Codex がアカウントの利用上限に達し 2026-08-10 まで復旧しない)。
+     これはツールの問題で本文の欠陥ではないが、合格証は Claude 単独の検証に基づく。 -->
 
 # 開発環境・開発ツールの基本設計
 

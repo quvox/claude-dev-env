@@ -10,7 +10,7 @@ contracts: なし
 design: DSN-mod-01
 requirements: FR-orch-01
 tests: なし(未実装。Makefile のため自動テストランナーが無く実機確認で代替する)
-updated: 2026-08-02
+updated: 2026-08-04
 summary: orchestrator をローカルでビルドしテストする
 ---
 
@@ -18,7 +18,7 @@ summary: orchestrator をローカルでビルドしテストする
 
 ## 目的
 
-コンテナイメージへ同梱される orchestrator(FR-orch-01)を、ホスト側で素早くビルド・検証するための入口。イメージ用のビルドは `build-claude` に同梱される。
+コンテナイメージへ同梱される orchestrator(FR-orch-01)を、ホスト側で(イメージを作り直さずに)ビルド・検証するための入口。イメージ用のビルドは `build-claude` に同梱される。
 
 ## 処理の流れ
 

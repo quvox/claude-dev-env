@@ -8,12 +8,18 @@ kind: other
 summary: entrypoint がファイアウォール適用を1度だけ呼び、成否に関わらず起動を続ける取り決め
 keywords: [契約, CTR]
 verified:
-  at: 2026-08-03
+  at: 2026-08-04
   version: 1.0.0
   against:
     - doc: docs/02-design/system.md
       version: 2.0.0
 ---
+
+<!-- 2026-08-04 /doc-check ssot task-impl-depth(新しい実行): **合格証を再発行した(1.0.0)。**
+     直前に削除した理由(source の docs/02-design/system.md が未検証)は、本実行が 01 → 02 を
+     再認証したことで解消した。本文には問題を見つけていない。
+     残る「中」: 「ブロック対象ドメイン」の集合が 00・01 に無い(docs/issues/041)。
+     ★本実行は独立レンズが1つも走っていない(Codex がアカウントの利用上限)。 -->
 
 # CTR-entrypoint-firewall entrypoint → firewall
 

@@ -8,12 +8,18 @@ kind: other
 summary: コンテナからの Docker Engine API 要求を docker-proxy が検査・書き換え・拒否する取り決め
 keywords: [契約, CTR]
 verified:
-  at: 2026-08-03
+  at: 2026-08-04
   version: 1.0.0
   against:
     - doc: docs/02-design/system.md
       version: 2.0.0
 ---
+
+<!-- 2026-08-04 /doc-check ssot task-impl-depth(新しい実行): **合格証を再発行した(1.0.0)。**
+     直前に削除した理由(source の docs/02-design/system.md が未検証)は、本実行が 01 → 02 を
+     再認証したことで解消した。本文には問題を見つけていない。
+     残る「中」: 解釈できないボディを検査せず中継する点(docs/issues/005。D0-sec-05 の委任範囲内と
+     裁定済み)。★本実行は独立レンズが1つも走っていない(Codex がアカウントの利用上限)。 -->
 
 # CTR-docker-api コンテナ → docker-proxy
 

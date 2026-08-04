@@ -10,7 +10,7 @@ contracts: なし
 design: DSN-mod-01, DSN-orch-02, DSN-ui-02
 requirements: FR-orch-02, FR-orch-08
 tests: orchestrator/session_test.go::TestNormalizeCName, orchestrator/session_test.go::TestSessionNames, orchestrator/session_test.go::TestSplitTarget, orchestrator/session_test.go::TestExpectedWindows, orchestrator/session_test.go::TestNewSessionManager_UsesComposeProjectName
-updated: 2026-08-02
+updated: 2026-08-04
 summary: tmux セッションとウィンドウを作成・切替・破棄する
 ---
 
@@ -24,23 +24,25 @@ summary: tmux セッションとウィンドウを作成・切替・破棄する
 
 ## 処理の流れ
 
-1. `NewSessionManager(cname)` がセッション名を決める。`normalizeCName` で
-   `COMPOSE_PROJECT_NAME` 由来の名前を tmux で使える形へ正規化する。
+1. `NewSessionManager()` が**引数なし**でセッション名を決める。**環境変数 `COMPOSE_PROJECT_NAME`
+   (無ければホスト名)を読み**、`normalizeCName` で tmux で使える形へ正規化する。
 2. `MainSession()` が `orch-<CNAME>-main` を、`DashboardWindow()` / `BrainstormingWindow()` /
    `WorkerWindow(taskID)`(= `w-<taskID>`)が各ウィンドウ名を返す。
-3. `DetectSession()` は `$TMUX` があるとき `tmux display-message -p '#{session_name}'` で
+3. `DetectSession(ctx)` は `$TMUX` があるとき `tmux display-message -p '#{session_name}'` で
    実測のセッション名に束縛する(CLI 側が別名で作っていても追従する)。
-4. `SetupMainSession()` が自分のウィンドウを `dashboard` へ改名し、`mouse on` を設定する。
-5. `Ensure(window, cmd)` が `new-window -d` でウィンドウを作る(冪等)。worker と brainstorming の
+4. `SetupMainSession(ctx)` が自分のウィンドウを `dashboard` へ改名し、`mouse on` を設定する。
+5. `Ensure(ctx, target)` が `new-window -d` でウィンドウを作る(冪等)。worker と brainstorming の
    ウィンドウは `remain-on-exit on` にして `/exit` 後も残す。`dashboard` は `remain-on-exit off`。
-6. `Run(window, cmd)` は `respawn-pane -k` で既存ウィンドウの中身を差し替える。
-7. `Has(window)` は `list-windows -F '#{window_name}'` で厳密に照合する
+6. `Run(ctx, target, cmd)` は `respawn-pane -k` で既存ウィンドウの中身を差し替える。
+7. `Has(ctx, target)` は `list-windows -F '#{window_name}'` で厳密に照合する
    (`display-message -t session:window` は窓が無くても現在の窓へフォールバックして誤って成功を返す)。
-8. `SwitchTo(window)` が `select-window`、`Kill(window)` が `kill-window`、
-   `PaneDead(window)` がペインの死活を返す。
-9. `LaunchInteractive(window, script)` が対話 claude を指定ウィンドウで起動する
+8. `SwitchTo(ctx, target)` が `select-window`、`Kill(ctx, target)` が `kill-window`、
+   `PaneDead(ctx, target)` がペインの死活を返す。
+9. `LaunchInteractive(ctx, target, scriptPath)` が対話 claude を指定ウィンドウで起動する
    (`MODULE-orchestrator-mode` の `shellSingleQuote` で引数をクォートする)。
-10. `EnsureAll()` が `ExpectedWindows()` の並びと突き合わせ、消えたウィンドウを作り直す。
+10. `EnsureAll(ctx, phase string, plan *Plan)` が **`ExpectedWindows(phase, plan)` が返す並び**
+    (フェーズと plan のタスク状態から決まる期待ウィンドウ)と突き合わせ、消えたウィンドウを
+    `Ensure` で作り直す。
 11. すべての tmux 呼び出しは `tmuxRun` に集約し、`splitTarget` が `session:window` を分解する。
 
 ## 呼び出され方
@@ -50,11 +52,13 @@ summary: tmux セッションとウィンドウを作成・切替・破棄する
 - 前提条件: コンテナ内で `tmux` が使えること(使えない場合は前景フォールバックへ倒れる)。
 - 引数:
 
-| 引数 | 型 | 必須 | 制約 |
-|---|---|---|---|
-| `cname` | 文字列 | 必須 | セッション名の元。`normalizeCName` で正規化する |
-| `window` | 文字列 | 必須 | ウィンドウ名。`dashboard` / `brainstorming` / `w-<taskID>` |
-| `cmd` | 文字列 | 一部で必須 | ウィンドウで実行するコマンド |
+| 引数 | 型 | 必須 | 制約 | 実装が行う検証 |
+|---|---|---|---|---|
+| (`NewSessionManager` は引数を取らない) | — | — | セッション名の元は**引数ではなく環境変数**。`COMPOSE_PROJECT_NAME` を読み、空白のみ/未設定なら `os.Hostname()`、それも取れなければ空文字。`normalizeCName` で正規化して `Prefix = "orch-" + <正規化名>` にする(`orchestrator/session.go:50`〜`:58`) | **検証しない**。セッション名は `normalizeCName` で tmux が受ける形へ正規化する(小文字化し `[a-z0-9_-]` 以外を `-` に置換、前後の `-` を落とし、空なら既定名) |
+| `ctx` | `context.Context` | `DetectSession` / `Has` / `SwitchTo` / `Ensure` / `Run` / `SetupMainSession` で必須 | `tmux` 子プロセスの中断に使う | 同上 |
+| `target` | 文字列 | `Ensure` / `Run` で必須 | `<セッション名>:<ウィンドウ名>`。ウィンドウ名は `dashboard` / `brainstorming` / `w-<taskID>` | 同上 |
+| `taskID` | 文字列 | `WorkerWindow` で必須 | ウィンドウ名 `w-<taskID>` の元。**検証は無い**(`MODULE-orchestrator-worktree` の `taskID` と同じ値) | 同上 |
+| `cmd` | 文字列 | `Run` で必須 | ウィンドウで実行するコマンド。`shellSingleQuote` でクォートしてから渡す | 同上 |
 
 - 認可: プロセス内呼び出し。
 
@@ -63,7 +67,7 @@ summary: tmux セッションとウィンドウを作成・切替・破棄する
 ### MODULE-orchestrator-mode
 
 - 何のために呼ぶか: `LaunchInteractive` が起動コマンドを組み立てる際に、`shellSingleQuote` で
-  引数を安全にクォートするため。
+  引数を単引用符で囲み、内部の単引用符を `'\''` に置換するため(`/bin/sh` のコマンド行へそのまま埋め込める形にする)。
 - 何を渡すか: クォート対象の文字列。 / 何を受け取るか: クォート済み文字列。
 - **失敗したときどうなるか**: 想定されない(純粋な文字列変換)。クォートを誤ると tmux へ渡す
   コマンドが壊れ、ウィンドウが即座に終了する。

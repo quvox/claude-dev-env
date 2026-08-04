@@ -1,18 +1,25 @@
 ---
 id: local-docker-resources
-version: 1.0.0
-updated: 2026-08-03
+version: 1.1.0
+updated: 2026-08-04
 source:
   - docs/02-design/architecture.md
 summary: ホスト上に作られる Docker リソース(ネットワーク・ボリューム・コンテナ)の一覧と命名規則
 keywords: [インフラ, Docker, 命名規則]
 verified:
-  at: 2026-08-03
-  version: 1.0.0
+  at: 2026-08-04
+  version: 1.1.0
   against:
     - doc: docs/02-design/architecture.md
-      version: 1.0.0
+      version: 1.2.0
 ---
+
+<!-- 2026-08-04 /doc-check ssot task-impl-depth(新しい実行): **合格証を再発行した(1.1.0)。**
+     直前に削除した理由(source の docs/02-design/architecture.md が未検証 = docs/issues/040 の高)は
+     解消した。あわせて本実行が自動修正した箇所: 「シークレットの置き場所」表の認証行が
+     「起動時にコンテナローカルへコピー」のままで、**コードと、裁定後の 00/01/02 の記述の双方に
+     反していた**(check B4)。プロジェクトディレクトリ配下へのコピーとホームからの symlink へ改めた。
+     ★本実行は独立レンズが1つも走っていない(Codex がアカウントの利用上限)。 -->
 
 # ローカルのインフラ構成 — Docker リソース
 
@@ -73,7 +80,7 @@ graph TB
 
 | シークレット | 保管場所 | 参照方法 |
 |---|---|---|
-| Claude / Codex の認証 | ボリューム `claude-dev-auth` | 起動時にコンテナローカルへコピーし、30 秒ごとに書き戻す(`CTR-cli-container`) |
+| Claude / Codex の認証 | ボリューム `claude-dev-auth` | 起動時に**プロジェクトディレクトリ配下**(`/workspace/.claude/` `/workspace/.codex/`)へコピーし、30 秒ごとに書き戻す。コンテナのホーム(`~/.claude` / `~/.codex` / `~/.claude.json`)はそのコピー先への symlink である(`CTR-cli-container` / `D0-auth-03`) |
 | SSH 秘密鍵 | **ホスト側に置いたまま**。コンテナへは渡さない | プロジェクト専用 ssh-agent のソケットのみ転送する |
 
 値そのものはどのドキュメントにも書かない。

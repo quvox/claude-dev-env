@@ -100,3 +100,17 @@ severity を「中」とした根拠: 機械検査が見ている面(frontmatter
   `MODULE-orchestrator-plan` / `-state` / `-mode` / `-worker` の 4 件を指摘し、Claude がコードで
   裏取りして修正した。その際に**同種の食い違いが他にも無いかを機械的に横展開**して本件を発見した。
   レンズが指摘した 4 件はこの実行で修正済みで、本 issue が扱うのは**残る約 27 件と規約の欠落**である。
+- 2026-08-03 `task-impl-depth` の `/doc-check`(task モード)が、(b) と同種の食い違いが
+  **「本文の散文」ではなく「`## 呼び出され方` の引数表」にも残っている**ことを発見した
+  (独立レンズ Codex `readiness` の指摘を Claude がコードで裏取り)。同タスクの closure 内で
+  訂正したものと、closure 外として残すものを分ける。
+
+  | 箇所 | 記述 | 実コード | 扱い |
+  |---|---|---|---|
+  | `MODULE-orchestrator-session`「呼び出され方」 | 引数 `cname`(文字列・必須) | `NewSessionManager()` は**引数を取らない**(`orchestrator/session.go:50`。`COMPOSE_PROJECT_NAME` → ホスト名の順に読む) | **`task-impl-depth` で訂正した**(置換後の「処理の流れ」と正面から矛盾していたため) |
+  | `MODULE-orchestrator-term`「戻り値・副作用」 | `selectMenu` は選択されたインデックス | `func selectMenu(...) string` — **項目の `Value`(文字列)**(`orchestrator/term.go:96`) | **`task-impl-depth` で訂正した**(同上) |
+  | `MODULE-orchestrator-review`「呼び出され方」 | 引数は `task` と `ctx` の2つ | `RunGate(ctx context.Context, p *Plan, t *Task)` — **`p *Plan` が抜けている**(`orchestrator/review.go:179`) | **本 issue に残す**((b) と同種の引数漏れだが、置換後の節と矛盾はしていない) |
+  | `MODULE-orchestrator-mode`「呼び出され方」 | 引数は `key` / `sys` / `prompt` | `WriteLaunchScript(key string, prof ModelProfile, sysPrompt, prompt string)` — **`prof ModelProfile` が抜けている**(`orchestrator/mode.go:116`) | **本 issue に残す**(同上) |
+  | `MODULE-cli-logout`「処理の流れ」 | 「**稼働中**の Claude コンテナ…を `MODULE-cli-common-container-exists` で存在を確認してから消す」 | `docker ps -a --filter ancestor=…` なので**停止中も含む**。`container_exists` を通すのは docker-proxy だけ(`claude-dev:638`〜`:642`) | **本 issue に残す**(シグネチャではなく手順の記述誤りだが、同じ「本文が実装とずれる」類型) |
+
+  したがって **`issue 009` は (a) の規約と、上表の「本issueに残す」3件を抱えて開いたままである**。

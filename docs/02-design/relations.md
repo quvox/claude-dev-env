@@ -9,13 +9,13 @@ source:
 summary: 設計が想定する機能連携 PLAN-* の一覧。03-impl/relations との突き合わせの当事者
 keywords: [想定機能連携, PLAN]
 verified:
-  at: 2026-08-03
+  at: 2026-08-04
   version: 1.0.0
   against:
     - doc: docs/01-requirements/functional.md
-      version: 1.0.0
+      version: 1.3.1
     - doc: docs/01-requirements/usecases.md
-      version: 1.0.0
+      version: 1.1.0
     - doc: docs/02-design/system.md
       version: 2.0.0
 ---

@@ -10,7 +10,7 @@ contracts: CTR-orchestrator-prompt
 design: DSN-mod-01, DSN-orch-01
 requirements: FR-orch-03
 tests: orchestrator/worker_stream_test.go::TestParseWorkerResultStreamJSON, orchestrator/worker_stream_test.go::TestParseWorkerResultBare, orchestrator/worker_stream_test.go::TestParseWorkerResultRealSample, orchestrator/policy_test.go::TestBuildPrompt_IncludesPolicyWhenPresent
-updated: 2026-08-02
+updated: 2026-08-04
 summary: タスクを worker へ割り当てて並列実行し結果を解釈する
 ---
 
@@ -28,26 +28,33 @@ summary: タスクを worker へ割り当てて並列実行し結果を解釈す
    (`orchestrator/worker.go:221`)が `MODULE-orchestrator-worktree` の `PrepareWorktree` を呼び、
    `worktrees/<taskID>/` を用意する。`p` は先行タスクの結果を引くための計画全体、`feedback` は
    差し戻し時にレビュー指摘を渡すための文字列(初回は空)。
-2. `Worker.BuildPrompt(task)` がプロンプトを組み立てる。`Task.Description` に、状態ストアからの
-   必要文脈(関連ドキュメント・先行タスクの結果サマリ・制約)を加え、
-   `MODULE-orchestrator-state` の `LoadProjectPolicy`(`ORCHESTRATOR.md`)と `VMModePreamble` を
-   先頭へ前置する。
+2. `Worker.BuildPrompt(p *Plan, t *Task, feedback string)` がプロンプトを組み立てる。
+   `MODULE-orchestrator-state` の `VMModePreamble` と `LoadProjectPolicy`(`ORCHESTRATOR.md`)を
+   先頭へ前置し、`# Goal` / `# Completion criteria` / `# Task:` とタスクの説明、
+   (非空なら)タスク固有の完了条件、(あれば)`dependencySummaries` が作る先行タスクの結果要約、
+   (あれば)フィードバックを順に連ね、最後に結果スキーマの指示(`workerResultGuide`)を付す。
+   **構成と省略規則の正は契約 `CTR-orchestrator-prompt`。**
 3. `claude -p "<prompt>" --output-format stream-json --verbose [--model][--effort]
-   --permission-mode <mode> [--session-id|--resume]` を worktree を CWD にして起動する。
+   [--permission-mode <mode>] [--session-id|--resume]` を worktree を CWD にして起動する。
    model / effort は `workerTaskProfile(t)` が `Task.Kind` から選ぶ。`--permission-mode` の既定は
-   `bypassPermissions`(ヘッドレスで権限プロンプトに答える人間がいないため明示が必須)。
+   `bypassPermissions`(ヘッドレスで権限プロンプトに答える人間がいないため明示が必須。
+   **空文字ならフラグを付けない**)。
 4. 出力は `io.MultiWriter` で二手に流す: (a) 生の stream-json バッファ(解析用)、
    (b) `MODULE-orchestrator-claude-exec` 経由の整形ライタ(`workers/<taskID>.log` へ)。
-5. `ParseWorkerResult` が結果を解釈する。stream-json の最終 `result` → single envelope
-   (`extractFromClaudeEnvelope`)→ bare JSON の順に内側の JSON をデコードする
-   (`resultFromStream`)。
-6. `Usage` を含む監査レコードを `audit.jsonl` へ追記する(`orchestrator/worker.go:240` の
-   `AppendAudit`)。**`Assumptions` をこの機能は書かない** — 戻り値として controller へ返し、
-   `assumptions.jsonl` への追記は controller が行う(`orchestrator/controller.go:637` の
-   `AppendAssumption`)。`NeedsHuman` も同様に controller が `MODULE-orchestrator-trigger` に渡す。
-7. **セッション継続**: 最初の `system` / `init` イベントから `session_id` を捕まえ `Task.SessionID`
-   に保存する。同じ Attempt の再開は `--resume`、別アプローチ(新しい Attempt)は `SessionID` を
-   空へ戻す。`--resume` に失敗したら新規セッションへフォールバックし、その旨を audit に残す。
+5. `ParseWorkerResult` が結果を解釈する。stream-json の最終 `result`(`resultFromStream`)→
+   single envelope(`extractFromClaudeEnvelope`)→ 生の出力全体 の順に試し、いずれも
+   `findWorkerResultJSON` で**末尾から**「`{` で始まり `}` で終わり `"done"` を含む1行」を探す。
+6. **`Usage` が非 `null` のときだけ**監査レコードを `audit.jsonl` へ追記する
+   (`orchestrator/worker.go:240` の `AppendAudit`)。**`Assumptions` をこの機能は書かない** —
+   戻り値として controller へ返し、`assumptions.jsonl` への追記は controller が行う
+   (`orchestrator/controller.go:637` の `AppendAssumption`)。`NeedsHuman` も同様に controller が
+   `MODULE-orchestrator-trigger` に渡す。
+7. **セッション継続**: セッション ID は**この機能ではなく controller が dispatch の直前に
+   `newSessionID()`(RFC 4122 v4)で採番**し、`Task.SessionID` に保存して渡す。
+   新しい Attempt では新しい ID を発行して `--session-id` で渡し、中断からの再開
+   (`ResumeSession` が真)では**同じ ID を `--resume` で渡し Attempts を増やさない**。
+   再開印は dispatch の直前に消費されるため、**その試行が失敗した場合の再試行は新しい
+   Attempt・新しいセッション ID で始まる**。
 
 ## 呼び出され方
 
@@ -56,10 +63,10 @@ summary: タスクを worker へ割り当てて並列実行し結果を解釈す
 - 前提条件: worktree が用意でき、`claude` が PATH 上にあること。
 - 引数:
 
-| 引数 | 型 | 必須 | 制約 |
-|---|---|---|---|
-| `task` | `*Task` | 必須 | `Description` / `Completion` / `Kind` / `SessionID` を参照する |
-| `ctx` | `context.Context` | 必須 | 中断時にキャンセルされる |
+| 引数 | 型 | 必須 | 制約 | 実装が行う検証 |
+|---|---|---|---|---|
+| `task` | `*Task` | 必須 | `Description` / `Completion` / `Kind` / `SessionID` を参照する | **検証しない**(プロセス内呼び出し)。`feedback` が空なら該当見出しを出さない |
+| `ctx` | `context.Context` | 必須 | 中断時にキャンセルされる | 同上 |
 
 - 認可: プロセス内呼び出し。worker には後戻り不可の操作(push / deploy / 削除)と
   `SLACK_BOT_TOKEN` を渡さない。
@@ -98,11 +105,13 @@ summary: タスクを worker へ割り当てて並列実行し結果を解釈す
 
 | 条件 | 実際の振る舞い | 呼び出し元への影響 |
 |---|---|---|
-| `claude` プロセスがクラッシュ / タイムアウト | エラーを返す。controller が `Attempts++` して再試行する | 上限超過で条件3のトリガーが発火する |
-| 結果 JSON が解析できない | stream-json の最終 result → envelope → bare の順に試し、いずれも失敗ならエラーを返す | controller が再試行する |
-| `--resume` が失敗する | 新規セッションへフォールバックし、その旨を audit に残す | 文脈は失われるが実行は続く |
-| worker が `NeedsHuman` を返す | 結果に載せて controller へ返す | controller が trigger 経由で `waiting_human` にする |
-| 中断(ctx キャンセル) | `worker_grace_seconds` の猶予後に停止する | 中間コミットは残る |
+| `claude` プロセスがクラッシュ / 非0終了 | エラーを返す。controller が `dispatch_error` を記録し `Attempts++` して再試行する | 上限超過で条件3のトリガーが発火する |
+| 結果 JSON が解析できない | stream-json の最終 result → envelope → 生出力 の順に試し、いずれも失敗ならエラーを返す(**推測で補完しない**) | controller が再試行する |
+| 結果 JSON に `"done"` を含む行が無い | 上と同じ扱い(`"done"` の有無が結果行の判定条件) | 同上 |
+| **`--resume` が失敗する** | **専用のフォールバックは無い。** 通常の dispatch 失敗として扱われ、次の Attempt が新しいセッション ID で始まる(文脈は失われる) | Attempt を1つ消費する |
+| worker が `NeedsHuman` を返す | 結果に載せて controller へ返す(**`reason` の値は検証しない**) | controller が trigger 経由で `waiting_human` にする |
+| worktree を用意できない | `worktree: <原因>` を包んだエラーを返し、`claude` を起動しない | controller が再試行する |
+| 中断(ctx キャンセル) | `worker_grace_seconds` の猶予後に停止する。controller は `resetToPending` でタスクを `pending` に戻し、**セッション ID を保って再開印を立てる** | 中間コミットは残り、再開は同じ Attempt の続きになる |
 
 ## 実装上の判断
 

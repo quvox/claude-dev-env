@@ -10,7 +10,7 @@ contracts: CTR-orchestrator-prompt
 design: DSN-mod-01, DSN-orch-01
 requirements: FR-orch-01, FR-orch-04
 tests: orchestrator/mode_test.go::TestWriteLaunchScript, orchestrator/mode_test.go::TestWriteLaunchScript_NoPromptOmitsPositional, orchestrator/mode_test.go::TestShellSingleQuote, orchestrator/policy_test.go::TestModeArgs_IncludePolicyWhenPresent
-updated: 2026-08-02
+updated: 2026-08-04
 summary: 対話モードの起動引数・指示テンプレート・起動スクリプトを決める
 ---
 
@@ -32,11 +32,14 @@ summary: 対話モードの起動引数・指示テンプレート・起動ス�
    返すのは **`--append-system-prompt <指示テンプレート>` だけ**(指示が空なら空スライス)。
    **model / effort はここでは付けない** — `brainstormingProfile`(opus / high)は呼び出し元が
    `ModelProfile` として `WriteLaunchScript` に渡し、そこで `--model` / `--effort` になる。
-3. `ResolveArgs()` / `ResolveArgsOne()` が介入解決用の引数を組み立てる。
-   `MODULE-orchestrator-state-intervention` の `ReadQuestion` で質問文を読み、
-   `MODULE-orchestrator-state` の `LoadProjectPolicy`(`ORCHESTRATOR.md`)と `VMModePreamble` を
-   プロンプト先頭へ前置する。
-4. `IntervenePrompt()` が介入1件のプロンプト本文を返す。
+3. `ResolveArgs(ids []string)` が**未解決の介入をまとめて**解決するための引数を組み立てる。
+   `MODULE-orchestrator-state-intervention` の `ReadQuestion` で各 `id` の質問文を読み、
+   2件以上なら件数の前置を付けて `===== 介入 <id> =====` の区切りで連結する。
+   `ResolveArgsOne(id string)` は**1件だけ**を対象にする版で、その質問文だけを初回プロンプトにする
+   (独立ウィンドウ方式ではこちらを使う)。いずれも `MODULE-orchestrator-state` の
+   `LoadProjectPolicy`(`ORCHESTRATOR.md`)と `VMModePreamble` を指示の先頭へ前置する。
+4. `IntervenePrompt(id string)` が介入1件について **(システムプロンプト, 初回プロンプト)** の
+   組を返す(初回プロンプトはその介入の `question.md`)。
 5. `WriteLaunchScript(key string, prof ModelProfile, sysPrompt, prompt string)`
    (`orchestrator/mode.go:116`)が `.orchestrator/sessions/<key>.sh` に launcher を生成する。
    `prof` から `--model` / `--effort` を組み立てる。中身は VM env の source、`claude` の PATH 解決
@@ -46,7 +49,8 @@ summary: 対話モードの起動引数・指示テンプレート・起動ス�
    `writeAtomic`。`:124` / `:127`)で、**`<key>.sh` 本体は `os.WriteFile`(0o755)で直接書く**(`:153`)。
 6. `RunInteractive(ctx)` は tmux が無いときの前景フォールバック。子プロセスの終了までブロックし、
    戻ったら `MODULE-orchestrator-term` の `ttyRestoreSane` で端末を戻す。
-7. `shellSingleQuote(s)` がシェル引数を安全にクォートする(`MODULE-orchestrator-session` も使う)。
+7. `shellSingleQuote(s)` が文字列を `'` で囲み、**中の `'` を `'\''` に置換**して `/bin/sh` の
+   コマンド行へ埋め込める形にする(`MODULE-orchestrator-session` も使う)。
 
 ## 呼び出され方
 
@@ -55,11 +59,11 @@ summary: 対話モードの起動引数・指示テンプレート・起動ス�
 - 前提条件: 指示テンプレートがイメージに同梱されていること(`--instructions` で上書き可能)。
 - 引数:
 
-| 引数 | 型 | 必須 | 制約 |
-|---|---|---|---|
-| `key` | 文字列 | `WriteLaunchScript` で必須 | スクリプト名。`sessions/<key>.sh` |
-| `sys` | 文字列 | 任意 | `--append-system-prompt` へ渡す内容 |
-| `prompt` | 文字列 | 任意 | 位置引数のプロンプト。空なら位置引数を省く |
+| 引数 | 型 | 必須 | 制約 | 実装が行う検証 |
+|---|---|---|---|---|
+| `key` | 文字列 | `WriteLaunchScript` で必須 | スクリプト名。`sessions/<key>.sh` | **検証しない**(プロセス内呼び出し)。読めないテンプレートは空文字として扱う |
+| `sys` | 文字列 | 任意 | `--append-system-prompt` へ渡す内容 | 同上 |
+| `prompt` | 文字列 | 任意 | 位置引数のプロンプト。空なら位置引数を省く | 同上 |
 
 - 認可: プロセス内呼び出し。
 

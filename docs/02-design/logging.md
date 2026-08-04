@@ -8,13 +8,13 @@ source:
 summary: 端末出力・常駐プロセスログ・機械が読む追記型ログの3系統について、レベル・出力先・保持を定める
 keywords: [ログ, 可観測性]
 verified:
-  at: 2026-08-03
+  at: 2026-08-04
   version: 1.0.0
   against:
     - doc: docs/01-requirements/non-functional.md
-      version: 1.0.1
+      version: 1.2.0
     - doc: docs/02-design/architecture.md
-      version: 1.0.0
+      version: 1.2.0
 ---
 
 # ログ戦略・ログ仕様

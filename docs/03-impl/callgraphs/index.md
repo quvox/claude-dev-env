@@ -30,14 +30,25 @@ languages: 6
 
 **Tier 3 の結果を「網羅した」と報告してはならない。**
 
-## 解析対象から外した第三者ライブラリ
+## 解析対象から外したもの
 
-<!-- ベンダリングされた第三者ライブラリは全言語共通で解析対象にしない
-     (.claude/directions/callgraphs.md §5.3)。**黙って外さない**ためにここに出す。 -->
+<!-- ベンダリングされた第三者ライブラリ・テスト・開発ツールは解析対象にしない
+     (.claude/directions/callgraphs.md §5.3 / features.md §0.1)。
+     **黙って外すと「網羅した」という誤読を生む**のでここに出す。 -->
 
-| 言語 | ディレクトリ |
+| 言語 | ディレクトリ(第三者ライブラリ) |
 |---|---|
 | (なし) | - |
+
+<!-- 開発ツール = Makefile / CI 定義 / compose 等。判定は tooling_markers。
+     本番実行系から到達しないものは機能ではない(features.md §0.1)。
+     **照合は部分文字列なので誤除外が起きる。** 本番コードが並んでいたら
+     callgraph-config.local.json の *_markers を絞ること。 -->
+
+| 言語 | 種別 | 件数 | ファイル |
+|---|---|---|---|
+| go | テスト | 19 | `docker-proxy/binds_test.go`, `docker-proxy/main_test.go`, `orchestrator/accept_test.go`, `orchestrator/archive_test.go`, `orchestrator/controller_test.go`, `orchestrator/dashboard_test.go`, `orchestrator/dashtui_test.go`, `orchestrator/handoff_test.go`, `orchestrator/mode_test.go`, `orchestrator/models_test.go` ほか 9 件 |
+| python | テスト | 3 | `examples/orch-sample/tests/test_geometry.py`, `examples/orch-sample/tests/test_stats.py`, `examples/orch-sample/tests/test_strings.py` |
 
 ## シンボルが集中しているディレクトリ
 

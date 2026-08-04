@@ -10,7 +10,7 @@ contracts: なし
 design: DSN-mod-01, DSN-orch-01
 requirements: FR-orch-04, FR-orch-05
 tests: orchestrator/state_test.go::TestControlRoundTripAndDelete, orchestrator/state_test.go::TestAuditAppend, orchestrator/state_test.go::TestSidecarRoundTrip
-updated: 2026-08-02
+updated: 2026-08-04
 summary: 介入・質問・監査ログの永続化と、制御ファイルの読取と破棄を担う
 ---
 
@@ -45,11 +45,11 @@ summary: 介入・質問・監査ログの永続化と、制御ファイルの�
 - 前提条件: `.orchestrator/` が書き込み可能であること。
 - 引数:
 
-| 引数 | 型 | 必須 | 制約 |
-|---|---|---|---|
-| `id` | 文字列 | 一部の関数で必須 | 介入 ID。`intervention/<id>/` のディレクトリ名になる |
-| `taskID` | 文字列 | 一部の関数で必須 | 対象タスク |
-| record | 構造体 | 追記系で必須 | JSON へエンコードできること |
+| 引数 | 型 | 必須 | 制約 | 実装が行う検証 |
+|---|---|---|---|---|
+| `id` | 文字列 | 一部の関数で必須 | 介入 ID。`intervention/<id>/` のディレクトリ名になる | **検証しない**(プロセス内呼び出し)。ID は呼び出し元が採番する |
+| `taskID` | 文字列 | 一部の関数で必須 | 対象タスク | 同上 |
+| record | 構造体 | 追記系で必須 | JSON へエンコードできること | 同上 |
 
 - 認可: プロセス内呼び出し。
 
@@ -82,9 +82,12 @@ summary: 介入・質問・監査ログの永続化と、制御ファイルの�
 | 条件 | 実際の振る舞い | 呼び出し元への影響 |
 |---|---|---|
 | `open.json` が存在しない | 空のキューを返す | 判断待ち0件として扱われる |
+| **`open.json` が壊れている / 読めない** | `LoadOpenInterventions` は **`readJSON` のすべてのエラー**で空のキューを返し、**エラーを返さない**(`orchestrator/state.go:396`〜`:402`)。判断待ちキュー全体が**黙って失われ**、その後の追加が空のキューを上書きする | 判断待ちのタスクが `waiting_human` のままダッシュボードから消える。**`FR-orch-05` 受入基準7(読めない状態ファイルの既存内容を破壊しない)と食い違う**(`docs/issues/038`) |
 | `answer.md` が未作成 | 空文字を返す | controller は「未回答」とみなして open を維持する |
 | 追記に失敗する | エラーを返すが、監査ログは実行を止める理由にしない | ログが欠落する |
-| `control.json` が壊れている | デコードエラーになる | handoff は未消費として扱い、次のポーリングで再試行する |
+| `control.json` が壊れている / 読めない | `LoadControl` がデコードエラーを返す。**呼び出し元の `MODULE-orchestrator-handoff` はそれを「無い」と同じ扱いにし、`DeleteControl` でファイルを削除する**(壊れた指示で以後の実行が詰まらないようにするため)。**未消費として残すのではない** | 対話が終われば停止条件で打ち切られ、`selectMenu` で人間に選ばせる経路へ倒れる |
+| `control.json` の `request` が未知の値 | 同じく**削除して「無い」と同じ扱い**にする | 同上 |
+| `DeleteControl` が失敗した | `Consume` がエラーを返し、**control を返さない**(同じ指示が二重に消費されることはない) | エラーが `MODULE-orchestrator-controller` へ伝播する |
 
 ## 実装上の判断
 

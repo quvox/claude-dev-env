@@ -10,7 +10,7 @@ contracts: なし
 design: DSN-mod-01, DSN-ui-01
 requirements: FR-orch-08
 tests: orchestrator/streamlog_test.go::TestFormatStreamLine, orchestrator/streamlog_test.go::TestStreamPrettyWriter_SplitsAndBuffersPartialLines
-updated: 2026-08-02
+updated: 2026-08-04
 summary: Claude の stream-json 出力を人が読める形へ整形する
 ---
 
@@ -39,10 +39,10 @@ worker のログを人間が追えるようにする(FR-orch-08)。`--output-for
 - 前提条件: 出力先が書き込み可能であること。
 - 引数:
 
-| 引数 | 型 | 必須 | 制約 |
-|---|---|---|---|
-| `out` | `io.Writer` | 必須 | 通常は `workers/<taskID>.log` のファイルハンドル |
-| `p` | `[]byte` | 必須 | 部分行を含んでよい(内部でバッファする) |
+| 引数 | 型 | 必須 | 制約 | 実装が行う検証 |
+|---|---|---|---|---|
+| `out` | `io.Writer` | 必須 | 通常は `workers/<taskID>.log` のファイルハンドル | **検証しない**(`io.Writer` の契約どおり任意のバイト列を受ける) |
+| `p` | `[]byte` | 必須 | 部分行を含んでよい(内部でバッファする) | 同上 |
 
 - 認可: プロセス内呼び出し。
 
@@ -50,10 +50,10 @@ worker のログを人間が追えるようにする(FR-orch-08)。`--output-for
 
 | 種別 | 内容 |
 |---|---|
-| 戻り値 | `io.Writer` の契約どおり書き込みバイト数とエラー |
-| 永続化 | ラップした writer 越しに `workers/<taskID>.log` へ追記される。**この書式を `MODULE-orchestrator-dashboard` の tail 表示が読む** |
+| 戻り値 | **常に `(len(p), nil)`**。`io.Writer` の契約は満たすが、**内側の writer の書き込みエラーは捨てる**(整形ログが落ちても worker の実行を止めないため) |
+| 永続化 | ラップした writer 越しに `workers/<taskID>.log` へ書く。**ファイルは呼び出し元(`MODULE-orchestrator-claude-exec`)が `os.Create` で開くので、試行のたびに切り詰めて作り直される**(追記ではない)。**この書式を `MODULE-orchestrator-dashboard` の tail 表示が読む** |
 | 発火するイベント | なし |
-| ログ | 自身がログの書き手 |
+| ログ | 自身がログの書き手。**行が揃うまでバッファに溜め、改行が来た行だけを整形して書く**(部分行は次の `Write` まで保持する) |
 
 ## 連携先と連携内容
 
@@ -64,8 +64,9 @@ worker のログを人間が追えるようにする(FR-orch-08)。`--output-for
 | 条件 | 実際の振る舞い | 呼び出し元への影響 |
 |---|---|---|
 | 行が途中で切れて届く | 内部バッファに溜め、次の `Write` で結合して処理する | 整形が壊れない |
-| JSON として解釈できない行 | そのまま出力する | ログに生の行が混じる |
-| 出力先への書き込みが失敗 | エラーを返す | `io.MultiWriter` 経由なので解析用バッファへの書き込みも中断しうる |
+| JSON として解釈できない行 | **そのまま素通しする**(コード側のコメントも「何も黙って失われないように verbatim で出す」と明示) | ログに生の行が混じる |
+| **出力先への書き込みが失敗した** | **エラーを捨てる**(`_, _ = io.WriteString(...)`)。`Write` は常に `(len(p), nil)` を返すため、`io.MultiWriter` は中断せず**解析用バッファへの書き込みは続く** | **失敗はどこにも現れない**(整形ログの一部または全部が欠けるだけで、結果の解析には影響しない)。閾値の外: **この機能は表示専用**であり(「目的」に明記)、解析は生 stream-json 側で行うため、被害はダッシュボードの tail 表示の欠落に限られる |
+| 出力先を開けなかった(ファイル作成に失敗) | この機能は呼ばれない。呼び出し元(`MODULE-orchestrator-claude-exec`)が整形ライタを挟まず解析用バッファだけへ流す | 同上(`MODULE-orchestrator-claude-exec` の異常系「ログファイルを作れない」に従う) |
 
 ## 実装上の判断
 

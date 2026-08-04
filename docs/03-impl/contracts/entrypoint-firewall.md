@@ -9,12 +9,16 @@ impl: scripts/entrypoint-claude.sh::main
 summary: entrypoint がファイアウォール適用を1度だけ呼び、成否に関わらず起動を続ける取り決め(実装側)
 keywords: [契約, CTR, 実装]
 verified:
-  at: 2026-08-03
+  at: 2026-08-04
   version: 1.0.0
   against:
     - doc: docs/02-design/contracts/entrypoint-firewall.md
       version: 1.0.0
 ---
+
+<!-- 2026-08-04 /doc-check ssot task-impl-depth(新しい実行): **合格証を再発行した(1.0.0)。**
+     直前に削除した理由(source の docs/02-design/contracts/entrypoint-firewall.md が未検証)は
+     解消した。本文には問題を見つけていない。★本実行は独立レンズが1つも走っていない。 -->
 
 # CTR-entrypoint-firewall entrypoint → firewall(実装)
 

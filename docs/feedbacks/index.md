@@ -18,7 +18,12 @@
 | [010-isolation-inside-isolation-is-not-required](010-isolation-inside-isolation-is-not-required.md) | 2026-07-31 | 実行環境そのものが隔離境界の内側であれば、その内側でさらにサンドボックスを張る必要はない。ただし逸脱として理由付きで明記する |
 | [011-do-not-nest-shell-quoting-three-levels-deep](011-do-not-nest-shell-quoting-three-levels-deep.md) | 2026-07-18 | シェルのクォートを3段ネストすると文字列が裸で露出しブレース展開でスクリプトが分裂する。生成は最外で行い、ネスト段数そのものを減らす |
 | [012-do-not-work-in-parallel-with-a-background-subagent](012-do-not-work-in-parallel-with-a-background-subagent.md) | 2026-08-03 | バックグラウンドのサブエージェントと同じ作業ツリーで並行作業すると、相手が「自分が起動していない変更」を異常と判断して取り消す |
+| [013-apply-an-adjudication-from-its-originating-layer](013-apply-an-adjudication-from-its-originating-layer.md) | 2026-08-04 | 裁定を反映するときは「その裁定が最初にどの層で決まったか」を先に確認する。下流だけ直すと次の検証が必ず見つける |
+| [014-apply-facts-you-already-recorded](014-apply-facts-you-already-recorded.md) | 2026-08-04 | 調査メモに自分で書いた事実(set -e 等)を、後の裁定で適用し忘れる。裁定の直前に調査メモを読み返す |
+| [015-partial-fixes-resurface-in-the-next-verification](015-partial-fixes-resurface-in-the-next-verification.md) | 2026-08-04 | 同じ層・同じ性質の乖離を「高だけ取り込む」と切ると、残りが次の検証で必ず再浮上する。切るなら層ごと切る |
+| [016-tracking-is-not-adjudication](016-tracking-is-not-adjudication.md) | 2026-08-04 | 「issue で追跡済み」は「人間が裁定済み」ではない。02⇄03 差分の PASS 条件は追跡ではなく裁定 |
+| [017-recheck-a-carried-forward-recommendation](017-recheck-a-carried-forward-recommendation.md) | 2026-08-04 | 引き継いだ推奨案は「受け皿が実在するか」を確かめてから提示する。前の実行が書いた推奨をそのまま人間に出すと、成立しない案を選ばせることになる |
 
-件数: 12
+件数: 17
 
 <!-- END GENERATED -->

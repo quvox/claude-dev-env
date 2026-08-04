@@ -1,23 +1,37 @@
 ---
 id: terminology
-version: 1.0.0
-updated: 2026-08-03
+version: 1.1.0
+updated: 2026-08-04
 source:
   - docs/00-requests/request.md
 summary: 本システムで使う語の定義・英語表記(識別子)・使ってはいけない言い方
 keywords: [用語集, 識別子, 表記ゆれ]
-verified:
-  at: 2026-08-03
-  version: 1.0.0
-  against:
-    - doc: docs/00-requests/request.md
-      version: 1.2.0
+# verified: /doc-check だけが書く
 ---
+
+<!-- 2026-08-04 /doc-check ssot task-impl-depth: **合格証を発行しない(失効した 1.0.0 の verified
+     ブロックを削除した)。** 理由は内容の誤りではなく**承認の記録が無いこと**である。
+     1.0.0 → 1.1.0 の変更(「資源逼迫」の行の追加)は、
+     (a) `.claude/directions/00-requests.md`「この層は人間のもの。00 への意味のある変更は
+         すべて人間の合意が要る」に対し、histories にも `docs/tasks/task-impl-depth/memo.md` の
+         進捗メモにも合意の記録が無い、
+     (b) `docs/issues/017`(測定不能語)/ `docs/issues/043`(NFR の測定可能性)の一部を
+         先取りして解決しており、これは task-impl-depth の決定シート論点6(**未回答**)が
+         人間に問うている論点そのものである、
+     (c) `D0-scope-06` の委任は「軽微な曖昧さ」に限られ受入基準に関わる食い違いを除外し、
+         `D0-scope-07` の委任範囲は `03-impl/relations/` と `contracts/` だけである
+     の3点で、`/doc-check` の委任範囲を超える。
+     **内容そのものは正しい**: 閾値 15 / 60 / 12 は `scripts/vm-healthd.sh:28`〜`:30` の既定値と
+     一致し、認証済みの `docs/03-impl/relations/MODULE-vm-mode-healthd.md`(処理の流れ 2〜4、
+     引数表)の記述とも一致する。よって差し戻しではなく**人間の承認待ち**として扱う
+     (`docs/issues/044`)。この1件は task-impl-depth の影響範囲(closure)に入っていないため、
+     `close-task.py` のゲート (b) はブロックしない。 -->
 
 # 用語集
 
 | 用語 | 定義 | 英語表記(識別子) | 使ってはいけない言い方 |
 |---|---|---|---|
+| 資源逼迫 | **ゲスト VM の QEMU プロセスの CPU 使用率が、割り当て上限(`-smp` の値)に対して 60% 以上(既定 `VM_HEALTH_CPU_PCT`)である状態が、15 秒周期(既定 `VM_HEALTH_INTERVAL`)で 12 回連続(既定 `VM_HEALTH_SUSTAIN`。合計約3分)観測された状態**。この状態で監視デーモンがヘルスファイルに `STATE=WARN` を書き、tmux とダッシュボードが警告を表示する。閾値はいずれも環境変数で上書きできる | resource pressure | 「重い」「逼迫している」(閾値を伴わない表現) |
 | claude-dev | ホスト側 CLI。コンテナのライフサイクル・認証・ポート・SSH 鍵を操作する。Linux は `claude-dev`、macOS は `claude-dev-mac`(`make install` が OS を判定して symlink を統一する) | `claude-dev` / `claude-dev-mac` | 「CLIツール」単独表記 |
 | Claude コンテナ | プロジェクトごとに起動する開発用コンテナ。ブラウザ確認あり(`claude-dev-claude-vnc`)/なし(`claude-dev-claude`) | `claude-dev-<project>` | — (「プロジェクトコンテナ」は同義。文脈で使い分ける) |
 | Codex CLI | OpenAI 製のコーディングエージェント CLI(npm パッケージ `@openai/codex`、コマンド名 `codex`)。Claude コンテナに同梱し、`codex login --device-auth` で認証する。認証ファイルは `~/.codex/auth.json` | `codex` | 本文で `codex` と書く(コマンド名を指すときのみ可) |

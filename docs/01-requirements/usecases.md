@@ -1,20 +1,20 @@
 ---
 id: usecases
-version: 1.0.0
-updated: 2026-08-03
+version: 1.1.0
+updated: 2026-08-04
 source:
   - docs/00-requests/acceptances.md
   - docs/01-requirements/functional.md
 summary: ユースケース UC-01〜UC-06。受け入れ基準を基本フロー・代替フロー・例外フローへ形式化したもの
 keywords: [ユースケース, UC, E2Eの上流]
 verified:
-  at: 2026-08-03
-  version: 1.0.0
+  at: 2026-08-04
+  version: 1.1.0
   against:
     - doc: docs/00-requests/acceptances.md
       version: 1.0.0
     - doc: docs/01-requirements/functional.md
-      version: 1.0.0
+      version: 1.3.1
 ---
 
 # ユースケース
@@ -145,7 +145,7 @@ verified:
 
 | # | 分岐条件 | 振る舞い |
 |---|---|---|
-| A1 | 判断が軽微 | 最も妥当な仮定を置いて自律継続し、仮定を記録する |
+| A1 | `D0-orch-18` の発火条件のいずれにも該当しない(不可逆でない / 試行回数が `stuck_limit` 未満 / その試行で行き詰まっていない / worker が「人間が必要」を**`D0-orch-18` が列挙する4理由(曖昧さ・方針分岐・前提崩れ・重大判断)のいずれかで**申告していない) | 仮定を置いて自律継続し、仮定を記録する |
 | A2 | レビューで重大指摘が出た | 改訂ループへ入る(終了条件は重大指摘の解消または最大回数) |
 | A3 | 通知先が未設定 | 通知せずに実行を継続する |
 

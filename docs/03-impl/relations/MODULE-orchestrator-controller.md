@@ -10,7 +10,7 @@ contracts: CTR-orchestrator-prompt
 design: DSN-mod-01, DSN-orch-01, DSN-orch-02, DSN-ui-02
 requirements: FR-orch-01, FR-orch-02, FR-orch-03, FR-orch-04, FR-orch-05, FR-orch-06, FR-orch-07
 tests: orchestrator/controller_test.go::TestExecuting_RespectsMaxWorkers, orchestrator/controller_test.go::TestExecuting_DependencyOrder, orchestrator/controller_test.go::TestExecuting_TriggerParksTaskPeersContinue, orchestrator/controller_test.go::TestExecuting_Trigger1Irreversible, orchestrator/controller_test.go::TestIntervene_ResolveApprovesIrreversible, orchestrator/controller_test.go::TestResume_UsesResumeFlagAfterCrash, orchestrator/controller_test.go::TestRunGate_ReviseDispatchErrorPreservesStuck, orchestrator/controller_test.go::TestExecuting_RecordsAssumptions, orchestrator/controller_test.go::TestReportNotExecutable_MissingCompletion, orchestrator/controller_test.go::TestReportNotExecutable_NotReady, orchestrator/controller_test.go::TestFreshDispatch_NewSession, orchestrator/controller_test.go::TestResolveOne, orchestrator/accept_test.go::TestReconcileAndAccept_MarksDoneAndMerges, orchestrator/accept_test.go::TestReconcileAndAccept_NoAnswerLeavesOpen, orchestrator/worker_stream_test.go::TestParseCompletionVerdict
-updated: 2026-08-02
+updated: 2026-08-04
 summary: ブレインストーミング→実行→統合の状態機械を統括する
 ---
 
@@ -26,9 +26,11 @@ summary: ブレインストーミング→実行→統合の状態機械を統�
 ## 処理の流れ
 
 1. `newRunID()` で run ID を採番する。
-2. `Controller.Run(ctx)` が状態機械を回す。起動時に
-   `MODULE-orchestrator-state` の `LoadState` / `SaveState` で現在のフェーズを確定し、
-   `MODULE-orchestrator-handoff` の `DiscardStale` で残存 `control.json` を破棄する。
+2. `Controller.Run(ctx)` が状態機械を回す。`LoadState` で現在のフェーズを確定し(未作成なら
+   `brainstorming` を `SaveState` する。**ここは失敗すると `return err` で止まる**)。
+   **残存 `control.json` の破棄は「起動時」ではなく2箇所に限られる**:
+   フェーズが `executing` の再開時(`controller.go:76`)と、tmux でブレインストーミングを起こす直前
+   (`:215`)である。
 3. **brainstorming**: `MODULE-orchestrator-session` の `Run`(`new-window -d`)で
    `brainstorming` ウィンドウを起こし、`MODULE-orchestrator-mode` の `BrainstormingArgs` で
    対話 claude を起動する。着地先は初回が `dashboard`、続行/差し戻しが `brainstorming`。
@@ -70,10 +72,10 @@ summary: ブレインストーミング→実行→統合の状態機械を統�
 - 前提条件: 状態ストア・セッション管理・通知が注入済みであること。
 - 引数:
 
-| 引数 | 型 | 必須 | 制約 |
-|---|---|---|---|
-| `ctx` | `context.Context` | 必須 | シグナルでキャンセルされる |
-| `plan` | `*Plan` | 必須 | 実行の中核状態。executing 中は**この共有メモリの plan が正本** |
+| 引数 | 型 | 必須 | 制約 | 実装が行う検証 |
+|---|---|---|---|---|
+| `ctx` | `context.Context` | 必須 | シグナルでキャンセルされる | **検証しない**(プロセス内呼び出し)。plan は Store から読み、フェーズごとに `runExecuting` へ渡す |
+| (`plan` は引数ではない) | — | — | **`Run` の引数は `ctx` だけ**(`orchestrator/controller.go:52`)。plan はフェーズごとに Store から読み、executing 中は**その共有メモリの plan が正本**として `runExecuting` に渡される | 同上 |
 
 - 認可: プロセス内呼び出し。
 
@@ -141,7 +143,9 @@ summary: ブレインストーミング→実行→統合の状態機械を統�
 - 何のために呼ぶか: `state.json` / `plan.json` の読み書き、worktree とログのパス解決、
   `ORCHESTRATOR.md` / VM 前置の取得。
 - 何を渡すか: 状態構造体とパス要素。 / 何を受け取るか: 状態とパス、エラー。
-- **失敗したときどうなるか**: 保存に失敗すると次回の再開が古い地点からになる。ログに残して続行する。
+- **失敗したときどうなるか**: **エラーを握りつぶして続行する**(`_ =` で捨てるため、端末にも
+  `audit.jsonl` にも何も残らない)。保存できていないと次回の再開が古い地点からになる
+  (`docs/issues/026-modify-controller-swallows-state-save-failures.md`)。
 
 ### MODULE-orchestrator-state-intervention
 
@@ -167,10 +171,48 @@ summary: ブレインストーミング→実行→統合の状態機械を統�
 
 | 種別 | 内容 |
 |---|---|
-| 戻り値 | run の終了理由。中断は `errSuspended` |
+| 戻り値 | run の終了理由。**中断(`errSuspended`)は `Run` が吸収して `nil` を返す**(`controller.go:90`〜`:96`)ので、呼び出し元は戻り値では中断と正常終了を区別できない。区別が要る場合は状態(`state.json` の `phase`)を見る |
 | 永続化 | `state.json`(フェーズ)、`plan.json`(タスクの状態遷移)、`intervention/open.json`、`audit.jsonl` / `assumptions.jsonl` / `interventions.jsonl`、`history/<run_id>/`。作業ブランチへの git マージ |
 | 発火するイベント | Slack 通知(サマリ更新・判断待ちキュー投入・完了) |
 | ログ | 端末の stderr(実行不可の理由など)と audit ログ |
+
+### 一貫性境界(トランザクション境界)
+
+**複数ファイルをまたぐトランザクションは存在しない。** 一貫性の単位は **1ファイル1書き込み**で、
+書き込み順は下表のとおり固定である。途中で落ちると**先に書いたものだけが残る**。
+
+| 書き込む対象 | 単位 | 原子性 | 落ちたときに残るもの |
+|---|---|---|---|
+| `plan.json` | 全体を置換 | 原子的(`MODULE-orchestrator-state-io`) | 直前に保存した plan |
+| `state.json` | 全体を置換 | 原子的 | 直前のフェーズ |
+| `intervention/open.json` | 全体を置換 | 原子的 | 直前のキュー |
+| `audit.jsonl` / `assumptions.jsonl` / `interventions.jsonl` | 1行追記 | **原子的でない**(部分行が残りうる) | 途中まで書かれた行 |
+| git マージ(作業ブランチ) | git の操作 | git に委ねる | マージ済みの成果 |
+
+**復旧の規約は「plan.json が正」**である。再開時に `NormalizeForResume` が
+`running` / `review` / `revise` のタスクを `pending` に戻し、セッション ID があるものには
+再開印(`ResumeSession`)を付ける(Attempts は増やさない)。空文字の状態も `pending` にする。
+`state.json` の `phase` は plan の完了状況より弱い情報として扱い、**残存する `control.json` は
+起動時に破棄する**。
+
+**とくに危険な順序は「git マージ成功 → `plan.json` 保存の前に停止」**である。統合済みなのに
+タスクが `done` にならないため、再開後に同じタスクをもう一度実行する(マージ自体は git が
+冪等に扱うが、worker の再実行は起きる)。
+
+### 並行性と排他
+
+| 対象 | 排他の単位 | 実装 |
+|---|---|---|
+| 共有 plan の読み書きと Store への書き込み | **1本のミューテックス**(`planMu`)で直列化する。worker goroutine・TUI 操作・tick・完了処理がすべてこれを取る | `controller.go:47` |
+| 作業ブランチへの統合(`integrate`) | **別のミューテックス**(`mergeMu`)で直列化する。並行 worker のマージが競合しない | `controller.go:48`, `:705`〜`:707`, `:988`〜`:990` |
+| 並行 worker 数 | `inflight` マップの要素数が `max_workers` に達したらディスパッチしない | `controller.go:395`〜`:398` |
+| Slack 通知 | **`planMu` を解放してから**送る(ネットワーク I/O をロック下で行わない) | `controller.go:780`〜(`openInterventionLocked` は文字列を返すだけ) |
+| TUI からの操作 | 非ブロッキングに1件ずつ取り出す(`select` の `default` 節)。取りこぼしはチャネルのバッファに残る | `controller.go:473`〜`:516` |
+| ループの刻み | **タイマーではなくポーリング**。1周ごとに 20ms、一時停止中と待機中は 50ms スリープする。セッション復旧の点検は 5 秒に1回に間引く | `controller.go:518`〜`:563` |
+
+**冪等性**: 介入の投入は「既に `waiting_human` で介入 ID を持つタスク」には何もしない
+(`openInterventionLocked`)。同一 Attempt の再開は完了済みタスクを再実行しない。
+**同じイベントが二重に届いた場合の重複排除はこの2つだけ**で、監査ログの行は重複しうる。
 
 ## 異常系
 
@@ -181,7 +223,13 @@ summary: ブレインストーミング→実行→統合の状態機械を統�
 | 未解決の `waiting_human` が残っている | 判断待ちが0になるまで run を終了しない | 人間の回答を待つ |
 | 完了基準を満たしていない | ブロックせず、不足点を Slack で人間へ促す(自動タスク化はしない) | run は done になる |
 | `[q]` / SIGINT / SIGTERM | in-flight worker に中間コミット猶予を与えて停止し、`executing` のまま状態を保存して終了コード 0 で終わる | `claude-dev orchestrate` の再実行で resume できる |
-| worker ウィンドウが誤って kill された | 数秒ごとの点検で `openWorkerSession` により作り直す | 表示上の復旧のみ。worker プロセスは再ディスパッチで復帰する |
+| **中断とタスク完了が同時に起きた** | `suspend` は worker をキャンセルしてから `wg.Wait()` で全 goroutine の終了を待ち、その後で plan を保存する。**完了処理の途中結果が失われることはない** | 再開時に整合した plan から続く |
+| **統合が失敗した** | `merge_error` を監査ログへ記録し、タスクを `pending` に戻して**新しい Attempt として再試行**する(`accept` 経路でも同じ) | 統合できていない成果を done にしない |
+| **統合成功後・`plan.json` 保存前に落ちた** | マージは残るがタスクは `done` にならない | 再開後に同じタスクをもう一度実行する |
+| 状態の保存に失敗した | **経路によって違う**: 初回の状態作成(`controller.go:70`)とフェーズ遷移(`:1080`)は **`return err` で run を止める**。executing 中の `SavePlan` / `AppendAudit` などは `_ =` で**握りつぶして続行**する(`docs/issues/026`) | 前者は起動・遷移が失敗する。後者は次回の再開が古い地点からになる |
+| worker ウィンドウが誤って kill された | 5 秒ごとの点検で `openWorkerSession` により作り直す | 表示上の復旧のみ。worker プロセスは再ディスパッチで復帰する |
+| 依存が循環している plan | ready タスクが空のまま、in-flight も無いので `AllSettled` の判定へ落ちる。`blocked` 化されない循環は**待機のまま進まない** | 人間が `[q]` で止める |
+| 同じ workspace で2つ目のコントローラが起動した | **ファイルロックが無いため検出しない**。両者が `plan.json` を後勝ちで上書きする | 状態が壊れる(Linux 版 CLI は生存判定で二重起動を防いでいる) |
 
 ## 実装上の判断
 
@@ -191,11 +239,15 @@ summary: ブレインストーミング→実行→統合の状態機械を統�
 | 2 | 介入の突合は必ず**共有メモリの plan** に対して行う(ディスクから別コピーを load / save すると共有 plan と乖離して run が恒久停止する) | D0-orch-04 |
 | 3 | 完了検証は助言に留めブロックしない(誤判定で run が終われなくなるのを避ける) | D0-orch-02 |
 | 4 | レビューのフォーマット違反と内容不合格を分離し、フォーマット違反では実作業を再ディスパッチしない | D0-orch-05 |
+| 5 | plan の保護と統合の直列化を**別のミューテックス**に分ける(git マージの数秒を `planMu` で抱えるとダッシュボード更新まで止まるため) | D0-orch-04 |
 
 ## 既知の制限
 
 | 制限 | 影響 | 関連 issue |
 |---|---|---|
 | `Controller.resolveInterventions` / `resolveOne` / `openInterventionCount` は製品コードから呼ばれず、テストからのみ参照される | 到達不能コードの疑い | `docs/issues/001-modify-orchestrator-test-only-symbols.md` |
-| 条件4(方針分岐)/ 条件5(前提崩れ)の事前検出はフェーズ2以降(v1 は worker の `NeedsHuman` 報告のみ) | 事前に止められない | なし |
-| 完了基準未充足時の不足分の自動タスク化は範囲外 | 人間が判断する | なし |
+| 条件4(方針分岐)/ 条件5(前提崩れ)の事前検出はフェーズ2以降(v1 は worker の `NeedsHuman` 報告のみ) | 事前に止められない | なし(閾値の外: **フェーズ2以降として 00 が範囲外と決めている**) |
+| 完了基準未充足時の不足分の自動タスク化は範囲外 | 人間が判断する | なし(閾値の外: **`FR-orch-06` が範囲外と定めている**) |
+| **store にロックが無い** | 同一 workspace で2つのコントローラが動くと `plan.json` が壊れる。二重起動の防止は CLI 側の生存判定に依存する(macOS 版はそれも無い) | `docs/issues/021-modify-orchestrator-store-has-no-lock.md` / `docs/issues/003-future-macos-orchestrator-scope.md` |
+| 状態保存の失敗を握りつぶす | ディスク不足や権限喪失に気づかないまま run が進む | `docs/issues/026-modify-controller-swallows-state-save-failures.md` |
+| メインループがポーリング(20ms / 50ms) | アイドル時も CPU を使い続ける | なし(閾値の外: 観測可能な被害はアイドル時の CPU 使用のみで、要件の性能基準に反していない) |
