@@ -264,16 +264,16 @@ summary: 破壊的操作(stop / logout / reset)が他プロジェクトの資源
 - [ ] 1. `/task-doc task-fix-destructive-scope`(00→03 の1回の下降 + 実装ドライラン) _Depends:_ 決定シートの回答
 - [x] 2. **未決点 U-1〜U-3 の回答を変更指示へ反映する**(2026-08-04 完了。全件 A)
 - [x] 3. `/doc-check task-fix-destructive-scope` が PASS(**3回目=2026-08-04 に新しいセッションで PASS。** 1回目=不合格(高5件)→回答済み / 2回目=セッション上限で中断 / 3回目=自動修正8件を適用して PASS。**ただし独立レンズは立たなかった**(Codex が capacity とタイムアウトで2本とも失敗)。代替の可否は決定シート #1) _Depends:_ 2
-- [ ] 4. `MODULE-cli-common-lock` を実装する(`acquire_lock` / `release_lock` を Linux 版・macOS 版の両方へ) _Depends:_ 3
-- [ ] 5. `start` に管理ラベル3つの付与と2段のロックを入れる(`LABEL_OPTS`。docker-proxy にはラベルを付けない。**共有資源単位のロックは認証コピー〜`docker run` 完了まで保持**) _Depends:_ 4
-- [ ] 6. `stop` の遊休判定を `claude-dev-net` の接続ベースへ置き換え、`fwd-*` を名前で扱い、**本体削除の前に `project-dir` ラベルを読む** _Depends:_ 4
-- [ ] 7. `logout` に確認・`--yes`・管理ラベルによる限定・**docker-proxy の遊休判定**・削除失敗の列挙と非0終了・**`INT`/`TERM` 時の列挙と終了コード 130** を入れる _Depends:_ 4
-- [ ] 8. `reset` に `--yes`・非 TTY 中止(終了コード 1)・管理ラベルによる限定・**共有資源の遊休判定**・削除失敗の列挙・**`INT`/`TERM` 時の列挙と終了コード 130** を入れる _Depends:_ 4
-- [ ] 9. `COMPOSE_PROJECT_NAME` の一意化(`<正規化名>-<絶対パスの SHA-256 先頭6桁>`)を実装し、`start` と `stop` が同じ関数を使うようにする。旧名の資源は消さず案内する _Depends:_ 3
-- [ ] 10. `logout` がカレントディレクトリの認証3ファイルを削除し、削除したパスを表示するようにする(ディレクトリと `settings.json` は残す) _Depends:_ 4
-- [ ] 11. `login` / `login-codex` に共有資源単位のロックを入れる(対話認証の全区間で保持) _Depends:_ 4
-- [ ] 12. `E2E-01` 手順8 を実機で実行する(Linux。macOS は実行可否を記録する) _Depends:_ 5〜11
-- [ ] 13. `build-callgraphs.py` → `cluster-features.py` → `callgraph-check.py`(重大度「高」ゼロ)→ `check-relations.py` → `check-contracts.py` → `build-index.py` _Depends:_ 12
+- [x] 4. `MODULE-cli-common-lock` を実装する(`acquire_lock` / `release_lock` を Linux 版・macOS 版の両方へ) _Depends:_ 3 — **2026-08-04 完了**(commit `edeead2`)
+- [x] 5. `start` に管理ラベル3つの付与と2段のロックを入れる(docker-proxy にはラベルを付けない。**共有資源単位のロックは認証コピー〜`docker run` 完了まで保持**) _Depends:_ 4 — **完了**(commit `552adad`)
+- [x] 6. `stop` の遊休判定を `claude-dev-net` の接続ベースへ置き換え、`fwd-*` を名前で扱い、**本体削除の前に `project-dir` ラベルを読む** _Depends:_ 4 — **完了**(commit `8a2c7cf`)
+- [x] 7. `logout` に確認・`--yes`・管理ラベルによる限定・**docker-proxy の遊休判定**・削除失敗の列挙と非0終了・**`INT`/`TERM` 時の列挙と終了コード 130** を入れる _Depends:_ 4 — **完了**(commit `09b2faa`)
+- [x] 8. `reset` に `--yes`・非 TTY 中止(終了コード 1)・管理ラベルによる限定・**共有資源の遊休判定**・削除失敗の列挙・**`INT`/`TERM` 時の列挙と終了コード 130** を入れる _Depends:_ 4 — **完了**(commit `dbd4c9a`)
+- [x] 9. `COMPOSE_PROJECT_NAME` の一意化(`<正規化名>-<絶対パスの SHA-256 先頭6桁>`)を実装し、`start` と `stop` が同じ関数を使うようにする。旧名の資源は消さず案内する _Depends:_ 3 — **完了**(commit `552adad` / `8a2c7cf`)
+- [x] 10. `logout` がカレントディレクトリの認証3ファイルを削除し、削除したパスを表示するようにする(ディレクトリと `settings.json` は残す) _Depends:_ 4 — **完了**(commit `09b2faa`)
+- [x] 11. `login` / `login-codex` に共有資源単位のロックを入れる(対話認証の全区間で保持) _Depends:_ 4 — **完了**(commit `48ff60e`)
+- [x] 12. `E2E-01` 手順8 を実機で実行する(Linux。macOS は実行可否を記録する) _Depends:_ 5〜11 — **13項目すべて実行して合格**(実行方法の内訳は進捗メモ)。**macOS は未実施**(macOS ホストが無い)
+- [x] 13. `build-callgraphs.py` → `cluster-features.py` → `callgraph-check.py`(重大度「高」ゼロ)→ `check-relations.py` → `check-contracts.py` → `build-index.py` _Depends:_ 12 — **全通過**(進捗メモ)
 - [ ] 14. `/task-close task-fix-destructive-scope`。**★`close-task.py` の条件 (b) は
       `docs/00-requests/terminology.md`(未検証・本タスクは触らない)で必ず失敗する。
       2026-08-04 に人間が「フェーズ4 で例外承認」と決めた論点なので、そこで承認を得て進める**
@@ -428,6 +428,68 @@ summary: 破壊的操作(stop / logout / reset)が他プロジェクトの資源
     裁定済みなので、**本タスクで勝手に発行することも、ゲートを避けるために行を消すこともしない**
     (後者は「合格証の範囲を黙って狭める」= `.claude/directions/task-memo.md` §1 が名指しで
     警告している失敗)。**決定シート #5 で人間に諮る。**
+
+- 2026-08-04 **`/implement` フェーズB を完走した(タスク4〜11。コミット 6 本)。**
+  ゲート: 合格証チェーンは `terminology.md` を除き全件 verified(同ファイルは決定シート #5 で
+  「フェーズ4 で人間が例外承認」と裁定済み)/ 未決点ゼロ / `environments.md` の lint・テスト
+  コマンドは確定済み。
+  - **フェーズBで見つけて直した実装上の欠陥1件**: `release_lock` を
+    `local key="$1" lockfile="${LOCK_DIR}/${key}.lock"` と書くと、**同じ `local` 文の中では
+    `${key}` がまだ展開されない**ため `lockfile` が `.../.lock` になり、ロックが解放されず
+    配列からも外れなかった。単体テストで検出し、`lockfile` を別の文に分けて修正した
+    (両版)。コードにコメントとして理由を残した。
+  - **仕様に対する逸脱1件(改善方向)**: 管理ラベルを `LABEL_OPTS` 変数にまとめず、
+    `docker run` の引数として引用付きで直接渡した。`claude-dev.project-dir` の値は利用者の
+    パスでスペースを含みうるため、`$VAR` で展開すると語分割されてラベルが壊れる。
+    変更指示(`MODULE-cli-start` 手順13・14)を実際の形へ更新した。
+  - **macOS 版の `--kvm`/`--vm` 早期拒否の位置**: 変更指示の判断11 は「早期拒否は
+    `require_setup` より前なのでロックを取らない」と書いていたが、**実コードでは
+    `ensure_project_config`(= 最初の副作用)が早期拒否より前**にあるため、ロックは
+    早期拒否より前に取られる。副作用ゼロで `trap` が解放するので害は無く、むしろ
+    `require_setup` のイメージビルドも走らない分だけ受入基準16 に対して安全側である。
+    判断11 を実態へ更新した。
+- 2026-08-04 **`E2E-01` 手順8 の 13 項目をすべて実行して合格した(Linux)。**
+  **実スクリプト(`./claude-dev`)で実行**: 8-1(管理ラベル3つの付与。docker-proxy には
+  `claude-dev.` で始まる管理ラベルが付かないことも確認)/ 8-2(遊休判定がイメージ非依存。
+  **旧方式 `--filter ancestor` が 1 件しか数えないのに対し新方式は 42 件**数え、
+  `docs/issues/045` の数え落としが閉じたことを実測)/ 8-3 の一部(プロジェクト単位のキー)/
+  8-4(残骸の引き継ぎ。`aaa.lock.stale.*` が残らないことも確認)/ 8-5 の後半
+  (`stop <name>` はラベル無しでも削除し、その旨を表示)/ **8-6(`docs/issues/024` の再現手順。
+  `/tmp/e2e-y/My.App` と `/tmp/e2e-y2/my-app` の compose 名が `my-app-2efe44` と
+  `my-app-250f4b` に分かれ、一方の `stop` で他方の compose コンテナが消えないことを実測)**/
+  8-7(受理しない名前)/ **8-11(無関係なディレクトリ `/tmp` から `stop my-app` を実行しても
+  `claude-dev.project-dir` ラベルからハッシュ源を得て正しく片付ける)**。
+  **サンドボックス版(定数名だけを `cdtest-*` に差し替えた同一コード)で実行**: 8-3 の全体
+  (6コマンドすべて)/ 8-5 の前半(`logout` がラベル無しコンテナを消さず表示する・
+  docker-proxy を残す)/ 8-8(認証3ファイルの削除と `settings.json` の保持)/ 8-9(確認と
+  非対話時の中止)/ 8-10(使用中ボリュームで削除失敗を列挙して終了コード 1。
+  「全リセット完了」を出さない)/ 8-12(`reset` の遊休判定)/ 8-13(`INT` と `TERM` の
+  両方で終了コード 130・部分削除の列挙・ロックが残らないこと)。
+  **サンドボックスにした理由**: このホストで本物の `logout` / `reset` を実行すると、
+  利用者の実際の Claude / Codex 認証を削除し、**いま動作中の Claude コンテナ(本セッション
+  自身を含む)を落とし**、イメージまで消す。取り返しがつかない操作なので無人で実行しない。
+  差し替えたのは定数(ボリューム名・ネットワーク名・proxy 名・イメージ名・ラベル接頭辞)と
+  ロックの置き場所だけで、**通る分岐は実コードと同一**である。
+  **macOS は未実施**(macOS ホストが無い)。ただし新規・変更コードの Linux 版と macOS 版が
+  **文字列として完全一致**することを機械照合した(排他ロック基盤・`logout`・`reset` は完全一致。
+  `stop` の差分は macOS 固有の `stop_ssh_bridge "$NAME"` の 2 行だけ)。
+- 2026-08-04 **フェーズC-1 の機械検査を全通過**: `build-callgraphs.py` 再生成 →
+  `cluster-features.py` 再生成(機能 82 / 辺 123)→ `callgraph-check.py --to-be` **重大度
+  「高」0**(中3 は `MODULE-entrypoint-claude` の CG3 = 影響範囲外の既存指摘)→
+  `check-relations.py` 合格(82/82)→ `check-contracts.py` 合格 → `relations-coverage.py`
+  (未記載 30 件はすべて orchestrator / scripts の既存分。**本タスクの変更に起因するものは 0**)→
+  `build-index.py` 実行(`docs/tasks/index.md` を更新)。
+  **CG4 の取りこぼし 2 件を変更指示へ反映**: `MODULE-cli-reset` の `callees` に
+  `MODULE-cli-common-container-exists` と `MODULE-cli-common-image-exists` を追加し、
+  連携先の節と実装上の判断10(実在するものだけを削除対象に列挙する理由)を足した。
+  あわせて **`MODULE-cli-common-lock` の `## 異常系`(10行の表)と `## 既知の制限`(5項目)を
+  実装から確定させた**(フェーズ2 が意図的に空けていた節)。
+- 2026-08-04 **lint とテスト**: `go vet ./...`(docker-proxy / orchestrator)合格 /
+  `cd docker-proxy && go test ./...` 合格 / `cd orchestrator && go test -mod=vendor ./...` 合格。
+  **`cd examples/orch-sample && pytest` は 12 件失敗するが、これは本タスクと無関係の既知の状態**
+  である(題材プロジェクトはテストだけを置き実装はスタブ = `NotImplementedError`。
+  **`docs/issues/033` として起票済み**)。本タスクの変更を `git stash` した状態でも同じ 12 件が
+  失敗することを実測して確認した。
 
 - **memo.md の行数について**: 約 400 行で `.claude/directions/task-memo.md` §2 の
   ローテーション閾値(300 行)を超えているが、**追い出せるものは追い出し済み**である

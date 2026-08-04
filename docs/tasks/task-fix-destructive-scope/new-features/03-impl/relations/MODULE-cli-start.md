@@ -72,9 +72,11 @@ summary: カレントディレクトリで開発コンテナを起動する(VNC+
     `MODULE-cli-common-container-exists` / `MODULE-cli-common-image-exists` /
     `MODULE-cli-common-is-running` を使う)、`COMPOSE_OPTS`(**`COMPOSE_PROJECT_NAME` を
     「`NAME` を compose 互換名へ正規化した値」+ `-` + 「`PROJECT_DIR` の SHA-256 先頭6桁」** にして
-    `-e` で付与。契約 `CTR-cli-container` の「compose 資源の識別」。`stop` が同じ関数で再計算する)、**`LABEL_OPTS`**(契約 `CTR-cli-container` が定める
-    管理ラベル3つ: `--label claude-dev.managed=1 --label claude-dev.role=claude --label
-    claude-dev.project-dir="${PROJECT_DIR}"`)、`SSH_OPTS`(Linux: `ensure_ssh_agent` の専用 agent
+    `-e` で付与。契約 `CTR-cli-container` の「compose 資源の識別」。`stop` が同じ関数で再計算する)、**管理ラベル3つ**(契約 `CTR-cli-container` が定める
+    `claude-dev.managed=1` / `claude-dev.role=claude` / `claude-dev.project-dir=${PROJECT_DIR}`。
+    **他のオプションと違い変数にまとめず、`docker run` の引数として引用付きで直接渡す** —
+    `project-dir` の値は利用者のパスでありスペースを含みうるので、`$VAR` で展開すると
+    語分割されてラベルが壊れるため)、`SSH_OPTS`(Linux: `ensure_ssh_agent` の専用 agent
     ソケットを `/tmp/ssh-agent.sock` へ RO 転送し `SSH_AUTH_SOCK` を設定 / macOS:
     `ensure_dedicated_agent` と `ensure_ssh_bridge` で socat TCP ブリッジを立て
     `-e CLAUDE_DEV_SSH_BRIDGE_PORT=<port>` を付与。いずれも `known_hosts` RO、`~/.ssh/config` は
@@ -83,7 +85,7 @@ summary: カレントディレクトリで開発コンテナを起動する(VNC+
     `KVM_OPTS` / `VM_OPTS`(Linux の `--kvm` / `--vm` 時のみ)。
 14. **起動**: イメージ名とバージョンを表示し、`docker run -d --cap-add NET_ADMIN,NET_RAW
     --restart unless-stopped` に `/workspace`・各ボリューム・`tmux.conf` / `CLAUDE.md` の RO マウント・
-    **`LABEL_OPTS`**・上記オプション・`NODE_OPTIONS=--max-old-space-size=4096`・`-t` を付けて実行する。
+    **管理ラベル3つ**・上記オプション・`NODE_OPTIONS=--max-old-space-size=4096`・`-t` を付けて実行する。
     **`--security-opt` は付けない**(Docker 既定の seccomp と `docker-default` AppArmor を有効なまま使う)。
     **`ensure_docker_proxy_container` が docker-proxy を作るときはラベルを付けない**
     (固定名 `claude-dev-docker-proxy` で識別できるため。契約の「識別の手段は資源ごとに違う」)。
@@ -213,7 +215,7 @@ summary: カレントディレクトリで開発コンテナを起動する(VNC+
 |---|---|---|
 | 1 | `--security-opt` を付けない(Docker 既定の confinement を維持する)。この下では codex の bubblewrap サンドボックスが動かないが、対処はコンテナ側を緩めるのではなく codex 側の無効化で行う | D0-sec-01 |
 | 2 | 認証は symlink ではなくコピーで渡し、書き戻しは entrypoint のバックグラウンド同期に任せる | D0-auth-02 |
-| 3 | `COMPOSE_PROJECT_NAME` を `-e` で渡す(全プロジェクトが `/workspace` にマウントされ compose 既定名 `workspace` が衝突するのを防ぐ。`-e` なら対話・非対話シェルと `docker exec` の全てで有効)。**値に起動ディレクトリの絶対パスのハッシュ短縮値を足して一意化する**(`DSN-env-03`)。ハッシュの計算は Linux が `sha256sum`、macOS が `shasum -a 256` で同じ値になることを確かめる。**一意化名を作る関数を1つに集約し、`stop` と共有する** | D0-scope-02 / `DSN-env-03` / D0-scope-03 |
+| 3 | `COMPOSE_PROJECT_NAME` を `-e` で渡す(全プロジェクトが `/workspace` にマウントされ compose 既定名 `workspace` が衝突するのを防ぐ。`-e` なら対話・非対話シェルと `docker exec` の全てで有効)。**値に起動ディレクトリの絶対パスのハッシュ短縮値を足して一意化する**(`DSN-env-03`)。ハッシュの計算は Linux が `sha256sum`、macOS が `shasum -a 256` で同じ値になることを確かめる。**一意化名を作る関数を1つに集約し、`stop` と共有する**(その関数は正規化の前に小文字化も行う。`MODULE-cli-stop` 判断13) | D0-scope-02 / `DSN-env-03` / D0-scope-03 |
 | 4 | ホストの `~/.ssh/config` はそのまま渡さず、`IdentityFile` / `IdentitiesOnly` / `IdentityAgent` を除去した一時コピーを RO マウントする | D0-sec-02 |
 | 5 | **後片付けの対象を絞る手段として管理ラベルを導入する**(`D0-env-08` の決定に従う)。付けるのは **Claude コンテナだけ**で、docker-proxy と `fwd-*` には付けない(固定名・固定接頭辞で識別できるため)。**この判断は 2026-08-04 より前の「ラベルを導入しない」という判断を撤回したものである**(当時は `FR-env-01` 受入基準12・13 を満たすのにラベルが要らなかったが、`docs/issues/024` / `029` / `045` を閉じるには所有権の印が要る) | D0-env-10 |
 | 6 | 手順8(停止中の残骸の削除)の稼働中判定は、ロックを入れても**残す**。ロックはホスト CLI のプロセス間だけで有効で、利用者が直接 `docker run` / `docker start` する経路は防げないため、二重の防護として維持する | D0-scope-02 |
@@ -221,4 +223,4 @@ summary: カレントディレクトリで開発コンテナを起動する(VNC+
 | 8 | 名前衝突時のメッセージを**対象が稼働中か停止中かで分ける**。稼働中の場合は、管理ラベル `claude-dev.project-dir` があれば**推測ではなく事実**(どのディレクトリで起動されたか)を示す。ラベルが無い既存コンテナには従来どおり可能性として示す | D0-scope-02 / D0-env-10(表示内容の要件は `FR-env-01` 受入基準12 と `02-design/logging.md` が定める) |
 | 9 | **共有資源単位のロックを「認証コピーの開始からコンテナ作成の確定まで」保持する**(手順9〜15。**手順15 の再試行ループを含む** — 途中で離すと次の試行で作られるコンテナが保護の外に出る)。認証コピーの直後に離すと、(a) `logout` の完走直後に作られたコンテナの同期ループが認証を書き戻して **`logout` が静かに巻き戻る**、(b) 手順13 の `ensure_docker_proxy_container` が `stop` の遊休判定と競合する。守るべきものは「共有ボリュームの内容」だけでなく**「それを読んで作られたコンテナ」**まで含む。**`start` の全区間で保持はしない**(手順1〜8 と手順16 以降を含めると別プロジェクトの `start` が互いに待ち `NFR-scale-01` を損なう) | D0-env-09 / 契約「排他(ロックキー)」 |
 | 10 | **プロジェクト単位のロックは `tmux attach` の前に解放する**(手順17)。アタッチ中は利用者が端末を占有しており、その間 `stop` が「ロックが取れない」で失敗すると、利用者は自分のセッションを止められなくなる | D0-env-09(制約「ロック待ちで固まらない」の趣旨) |
-| 11 | ロックの取得を**コンテナ名が確定した直後・最初の副作用より前**(手順4)に置く。キーがコンテナ名なので名前の確定より前には取れず、`.claude-dev.yaml` の生成(手順5)が最初の副作用であるため、その間が唯一の位置である。**Linux で `--vm` 指定かつ `/dev/kvm` 不在の失敗経路(手順6)はロックを取った直後に終わるが、`trap` が即座に解放する**(macOS の `--kvm` / `--vm` 早期拒否は `require_setup` より前=手順2 の前に起きるため、ロックを取らない) | D0-env-09 |
+| 11 | ロックの取得を**コンテナ名が確定した直後・最初の副作用より前**(手順4)に置く。キーがコンテナ名なので名前の確定より前には取れず、`.claude-dev.yaml` の生成(手順5)が最初の副作用であるため、その間が唯一の位置である。**`--vm` 指定かつ `/dev/kvm` 不在の失敗経路(手順6)はロックを取った直後に終わるが、`trap` が即座に解放する**。**macOS 版の `--kvm` / `--vm` 早期拒否も同じ扱いになる**: macOS 版はフラグ解析が `ensure_project_config` より後にあるため、ロックは早期拒否より前に取られる。副作用は何も起きておらず `trap` が解放するので害は無く、むしろロックが取れないときに `require_setup` のイメージビルドも走らない分だけ受入基準16 に対して安全側である | D0-env-09 |

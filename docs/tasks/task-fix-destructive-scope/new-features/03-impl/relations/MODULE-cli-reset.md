@@ -14,7 +14,7 @@ kind: tool
 sync: sync
 impl: claude-dev::main#reset, claude-dev-mac::main#reset
 callers: なし
-callees: MODULE-cli-common-lock
+callees: MODULE-cli-common-container-exists, MODULE-cli-common-image-exists, MODULE-cli-common-lock
 contracts: CTR-cli-container
 design: DSN-mod-01, DSN-mod-02, DSN-env-01, DSN-env-02
 requirements: FR-env-01, FR-env-03
@@ -106,6 +106,22 @@ summary: コンテナ・ボリューム・イメージを全削除して初期�
 - 何を受け取るか: 終了ステータス。
 - **失敗したときどうなるか**: **何も削除せず**、保持している操作名と再実行の方法を表示して非0で終わる。
 
+### MODULE-cli-common-container-exists
+
+- 何のために呼ぶか: 列挙した各コンテナが削除の直前に実在するかを確かめ、既に消えているものを
+  「削除できなかった」と誤って数えないため(手順5)。
+- 何を渡すか: コンテナ名。 / 何を受け取るか: 終了ステータス。
+- **失敗したときどうなるか**: 「存在しない」と判定され、その1件は削除をスキップする
+  (**失敗としては数えない**)。
+
+### MODULE-cli-common-image-exists
+
+- 何のために呼ぶか: 削除対象のイメージを列挙するとき、存在しないイメージを対象に入れないため
+  (手順3)。`docker rmi` は存在しないイメージに対して非0を返すので、入れると常に失敗扱いになる。
+- 何を渡すか: イメージ名(`claude-dev-claude` / `claude-dev-claude-vnc` / `claude-dev-docker-proxy`)。
+  / 何を受け取るか: 終了ステータス。
+- **失敗したときどうなるか**: 「存在しない」と判定され、そのイメージは削除対象から外れる。
+
 ## 実装上の判断
 
 | # | 判断内容 | 根拠(委任ID) |
@@ -119,3 +135,4 @@ summary: コンテナ・ボリューム・イメージを全削除して初期�
 | 7 | **docker-proxy と `claude-dev-net` に遊休判定を通す**(手順6)。`reset` は「全消し」コマンドだが、手順3 で**ラベルを持たない Claude コンテナを残す**ため、共有資源を無条件に消すと残したコンテナの中から Docker が使えなくなり名前解決も壊れる(`FR-env-01` 受入基準9 違反)。`D0-env-08` 項2 は例外を書いておらず、`logout` に同じ理由で既に広げてある。**代償として `reset` が完全な初期状態に戻らないことがある**ので、その旨を表示する | `D0-env-08` 項2 / `FR-env-01` 受入基準9 / D0-env-10 |
 | 8 | **`INT` / `TERM` は進行中の1件を終えてから受ける**(手順9)。1件の削除を途中で切ると、より中途半端な状態が残る。終了コード 130 は SIGINT の慣行値 | `D0-env-08` 項5 / 契約の「エラーケース」 |
 | 9 | Linux 版・macOS 版の**両方に同じ形で**入れる(同じサブコマンドの成否・出力を OS で変えないため) | D0-scope-03 |
+| 10 | **削除対象の列挙を「実在するものだけ」に絞る**(ボリュームは `docker volume inspect`、イメージは `MODULE-cli-common-image-exists`、コンテナは削除直前に `MODULE-cli-common-container-exists`)。`docker volume rm` / `docker rmi` / `docker rm` は存在しない対象に対して非0を返すため、実在確認を挟まないと**毎回「削除できなかった資源」が列挙されて終了コード 1 になり**、受入基準18 の判定が常に真になって成功の判定が成立しない | D0-env-08 項5 が定める形の実装。判定手段は D0-scope-02 |

@@ -73,3 +73,30 @@
 - 関連: `docs/00-requests/decisions/auth.md`(`D0-auth-02` / `D0-auth-03`)/
   `docs/01-requirements/functional.md`(`FR-env-03` 受入基準2・7)/
   `docs/01-requirements/non-functional.md`(`NFR-sec-01`)/ issues: なし(`040` は解消済みで削除)
+
+## P-005 compose 一意化名のハッシュ衝突を検出せず受け入れる
+
+- 決めた日: 2026-08-04
+- 決めた人: 人間(`task-fix-destructive-scope` の `/doc-check`(3回目)決定シート #4。推奨案で回答)
+- 何が不完全か: `COMPOSE_PROJECT_NAME` を `<正規化名>-<起動ディレクトリの絶対パスの SHA-256 先頭6桁>`
+  にして compose 資源をプロジェクト間で一意にする(`DSN-env-03` / `D0-env-08` 項7)が、
+  **先頭6桁 = 24 ビットしか使わないため、異なる絶対パスが同じ値になる可能性が残る**。
+  **衝突を検出する手段も、衝突したときの振る舞いも定義していない。**
+  衝突した2ディレクトリでは、一方の `claude-dev stop` が**他方の compose コンテナと
+  compose 既定ネットワークを削除しうる** — これは `docs/issues/024` と同じ事象である。
+- なぜ今は OK か: 同時に扱うプロジェクト数は数十のオーダーで、その範囲では衝突確率が実用上
+  無視できる(誕生日問題で 100 プロジェクトでも約 0.03%)。一方 `024` の現行の欠陥は
+  **正規化(`[a-z0-9_-]` 以外を `-` に置換)が非可逆であるため、`~/work/My.App` と
+  `~/other/my-app` のような「ありふれた組み合わせ」で確実に衝突する**。
+  本変更は「高い確率で起きる衝突」を「実用上無視できる確率の衝突」に変えるものであり、
+  衝突検出を入れないことは残る差分の受容である。
+  桁数を増やすと `docker ps` の出力から人がプロジェクトを見分けにくくなる
+  (`DSN-env-03` の却下案「ハッシュだけにする」と同じ理由)。
+- どうなったら解消が必要か: **同時に扱うプロジェクト数が数百規模になったとき**、または
+  衝突が実際に観測されたとき。そのときの選択肢は (a) 桁数を増やす
+  (**既存の compose 資源が `stop` の対象から外れるので移行期の扱いを併記する**。
+  `CTR-cli-container`「compose 資源の識別」が明記している)、(b) `start` 時に
+  `docker ps --filter label=com.docker.compose.project=<一意化名>` で既存を引き、
+  `claude-dev.project-dir` ラベルが自分と違えば衝突として中止する。
+- 関連: `docs/02-design/contracts/cli-container.md`「compose 資源の識別」/ `DSN-env-03` /
+  `D0-env-08` 項7 / `FR-env-01` 受入基準19 / issues: `docs/issues/024`(本変更が閉じる元の欠陥)
