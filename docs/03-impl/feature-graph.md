@@ -4,7 +4,7 @@ features: 82
 edges: 123
 confirmed_edges: 116
 candidate_edges: 7
-shared: 35
+shared: 39
 unreached: 19
 coupled_resources: 0
 unlinked_pairs: 0
@@ -164,10 +164,14 @@ unlinked_pairs: 0
 |---|---|---|
 | `claude-dev-mac::_lock_busy_message` | 6 | MODULE-cli-login, MODULE-cli-login-codex, MODULE-cli-logout, MODULE-cli-reset, MODULE-cli-start, MODULE-cli-stop |
 | `claude-dev-mac::_lock_link` | 6 | MODULE-cli-login, MODULE-cli-login-codex, MODULE-cli-logout, MODULE-cli-reset, MODULE-cli-start, MODULE-cli-stop |
+| `claude-dev-mac::_lock_path` | 6 | MODULE-cli-login, MODULE-cli-login-codex, MODULE-cli-logout, MODULE-cli-reset, MODULE-cli-start, MODULE-cli-stop |
+| `claude-dev-mac::_release_lock_path` | 6 | MODULE-cli-login, MODULE-cli-login-codex, MODULE-cli-logout, MODULE-cli-reset, MODULE-cli-start, MODULE-cli-stop |
 | `claude-dev-mac::acquire_lock` | 6 | MODULE-cli-login, MODULE-cli-login-codex, MODULE-cli-logout, MODULE-cli-reset, MODULE-cli-start, MODULE-cli-stop |
 | `claude-dev-mac::release_lock` | 6 | MODULE-cli-login, MODULE-cli-login-codex, MODULE-cli-logout, MODULE-cli-reset, MODULE-cli-start, MODULE-cli-stop |
 | `claude-dev::_lock_busy_message` | 6 | MODULE-cli-login, MODULE-cli-login-codex, MODULE-cli-logout, MODULE-cli-reset, MODULE-cli-start, MODULE-cli-stop |
 | `claude-dev::_lock_link` | 6 | MODULE-cli-login, MODULE-cli-login-codex, MODULE-cli-logout, MODULE-cli-reset, MODULE-cli-start, MODULE-cli-stop |
+| `claude-dev::_lock_path` | 6 | MODULE-cli-login, MODULE-cli-login-codex, MODULE-cli-logout, MODULE-cli-reset, MODULE-cli-start, MODULE-cli-stop |
+| `claude-dev::_release_lock_path` | 6 | MODULE-cli-login, MODULE-cli-login-codex, MODULE-cli-logout, MODULE-cli-reset, MODULE-cli-start, MODULE-cli-stop |
 | `claude-dev::acquire_lock` | 6 | MODULE-cli-login, MODULE-cli-login-codex, MODULE-cli-logout, MODULE-cli-reset, MODULE-cli-start, MODULE-cli-stop |
 | `claude-dev::release_lock` | 6 | MODULE-cli-login, MODULE-cli-login-codex, MODULE-cli-logout, MODULE-cli-reset, MODULE-cli-start, MODULE-cli-stop |
 | `claude-dev-mac::net_other_running_containers` | 3 | MODULE-cli-logout, MODULE-cli-reset, MODULE-cli-stop |

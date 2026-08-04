@@ -2,8 +2,8 @@
 id: shell
 language: shell
 tier: 3
-symbols: 170
-edges: 258
+symbols: 174
+edges: 264
 endpoints: 51
 unresolved: 4
 ---
@@ -77,9 +77,11 @@ unresolved: 4
 | `claude-dev-mac::_destructive_done` | function | private | - | - |
 | `claude-dev-mac::_lock_busy_message` | function | private | - | `claude-dev-mac::acquire_lock` |
 | `claude-dev-mac::_lock_link` | function | private | - | `claude-dev-mac::acquire_lock` |
+| `claude-dev-mac::_lock_path` | function | private | - | `claude-dev-mac::acquire_lock`, `claude-dev-mac::release_lock` |
 | `claude-dev-mac::_parse_ssh_keys_yaml` | function | private | - | `claude-dev-mac::resolve_ssh_keys_for_start` |
-| `claude-dev-mac::_release_all_locks` | function | private | `claude-dev-mac::release_lock` | - |
-| `claude-dev-mac::acquire_lock` | function | private | `claude-dev-mac::_lock_busy_message`, `claude-dev-mac::_lock_link` | `claude-dev-mac::main#login`, `claude-dev-mac::main#login-codex`, `claude-dev-mac::main#logout`, `claude-dev-mac::main#reset`, `claude-dev-mac::main#start`, `claude-dev-mac::main#stop` |
+| `claude-dev-mac::_release_all_locks` | function | private | `claude-dev-mac::_release_lock_path` | - |
+| `claude-dev-mac::_release_lock_path` | function | private | - | `claude-dev-mac::_release_all_locks`, `claude-dev-mac::release_lock` |
+| `claude-dev-mac::acquire_lock` | function | private | `claude-dev-mac::_lock_busy_message`, `claude-dev-mac::_lock_link`, `claude-dev-mac::_lock_path` | `claude-dev-mac::main#login`, `claude-dev-mac::main#login-codex`, `claude-dev-mac::main#logout`, `claude-dev-mac::main#reset`, `claude-dev-mac::main#start`, `claude-dev-mac::main#stop` |
 | `claude-dev-mac::check_host_deps` | function | private | - | `claude-dev-mac::main#start` |
 | `claude-dev-mac::compose_project_name` | function | private | `claude-dev-mac::compose_project_name_legacy`, `claude-dev-mac::sha256_hex` | `claude-dev-mac::main#start`, `claude-dev-mac::main#stop` |
 | `claude-dev-mac::compose_project_name_legacy` | function | private | - | `claude-dev-mac::compose_project_name`, `claude-dev-mac::main#stop` |
@@ -133,7 +135,7 @@ unresolved: 4
 | `claude-dev-mac::main#upgrade` | handler | private | - | (エントリポイント) |
 | `claude-dev-mac::net_other_running_containers` | function | private | - | `claude-dev-mac::main#logout`, `claude-dev-mac::main#reset`, `claude-dev-mac::stop_proxy_if_idle` |
 | `claude-dev-mac::project_name` | function | private | - | `claude-dev-mac::container_name` |
-| `claude-dev-mac::release_lock` | function | private | - | `claude-dev-mac::_release_all_locks`, `claude-dev-mac::main#login`, `claude-dev-mac::main#login-codex`, `claude-dev-mac::main#logout`, `claude-dev-mac::main#reset`, `claude-dev-mac::main#start`, `claude-dev-mac::main#stop` |
+| `claude-dev-mac::release_lock` | function | private | `claude-dev-mac::_lock_path`, `claude-dev-mac::_release_lock_path` | `claude-dev-mac::main#login`, `claude-dev-mac::main#login-codex`, `claude-dev-mac::main#logout`, `claude-dev-mac::main#reset`, `claude-dev-mac::main#start`, `claude-dev-mac::main#stop` |
 | `claude-dev-mac::require_setup` | function | private | `claude-dev-mac::image_exists` | `claude-dev-mac::main#attach`, `claude-dev-mac::main#code`, `claude-dev-mac::main#login`, `claude-dev-mac::main#login-codex`, `claude-dev-mac::main#logout`, `claude-dev-mac::main#orchestrate`, `claude-dev-mac::main#start` |
 | `claude-dev-mac::resolve_container_user` | function | private | - | `claude-dev-mac::main#attach`, `claude-dev-mac::main#code`, `claude-dev-mac::main#orchestrate`, `claude-dev-mac::main#start` |
 | `claude-dev-mac::resolve_ssh_keys_for_start` | function | private | `claude-dev-mac::_parse_ssh_keys_yaml` | `claude-dev-mac::main#start` |
@@ -145,10 +147,12 @@ unresolved: 4
 | `claude-dev::_destructive_done` | function | private | - | - |
 | `claude-dev::_lock_busy_message` | function | private | - | `claude-dev::acquire_lock` |
 | `claude-dev::_lock_link` | function | private | - | `claude-dev::acquire_lock` |
+| `claude-dev::_lock_path` | function | private | - | `claude-dev::acquire_lock`, `claude-dev::release_lock` |
 | `claude-dev::_orch_alive` | function | private | - | `claude-dev::main#orchestrate` |
 | `claude-dev::_parse_ssh_keys_yaml` | function | private | - | `claude-dev::load_ssh_keys_from_config` |
-| `claude-dev::_release_all_locks` | function | private | `claude-dev::release_lock` | - |
-| `claude-dev::acquire_lock` | function | private | `claude-dev::_lock_busy_message`, `claude-dev::_lock_link` | `claude-dev::main#login`, `claude-dev::main#login-codex`, `claude-dev::main#logout`, `claude-dev::main#reset`, `claude-dev::main#start`, `claude-dev::main#stop` |
+| `claude-dev::_release_all_locks` | function | private | `claude-dev::_release_lock_path` | - |
+| `claude-dev::_release_lock_path` | function | private | - | `claude-dev::_release_all_locks`, `claude-dev::release_lock` |
+| `claude-dev::acquire_lock` | function | private | `claude-dev::_lock_busy_message`, `claude-dev::_lock_link`, `claude-dev::_lock_path` | `claude-dev::main#login`, `claude-dev::main#login-codex`, `claude-dev::main#logout`, `claude-dev::main#reset`, `claude-dev::main#start`, `claude-dev::main#stop` |
 | `claude-dev::check_host_deps` | function | private | - | `claude-dev::main#start` |
 | `claude-dev::compose_project_name` | function | private | `claude-dev::compose_project_name_legacy`, `claude-dev::sha256_hex` | `claude-dev::main#start`, `claude-dev::main#stop` |
 | `claude-dev::compose_project_name_legacy` | function | private | - | `claude-dev::compose_project_name`, `claude-dev::main#stop` |
@@ -199,7 +203,7 @@ unresolved: 4
 | `claude-dev::main#upgrade` | handler | private | - | (エントリポイント) |
 | `claude-dev::net_other_running_containers` | function | private | - | `claude-dev::main#logout`, `claude-dev::main#reset`, `claude-dev::stop_proxy_if_idle` |
 | `claude-dev::project_name` | function | private | - | `claude-dev::container_name` |
-| `claude-dev::release_lock` | function | private | - | `claude-dev::_release_all_locks`, `claude-dev::main#login`, `claude-dev::main#login-codex`, `claude-dev::main#logout`, `claude-dev::main#reset`, `claude-dev::main#start`, `claude-dev::main#stop` |
+| `claude-dev::release_lock` | function | private | `claude-dev::_lock_path`, `claude-dev::_release_lock_path` | `claude-dev::main#login`, `claude-dev::main#login-codex`, `claude-dev::main#logout`, `claude-dev::main#reset`, `claude-dev::main#start`, `claude-dev::main#stop` |
 | `claude-dev::require_setup` | function | private | `claude-dev::image_exists` | `claude-dev::main#attach`, `claude-dev::main#code`, `claude-dev::main#login`, `claude-dev::main#login-codex`, `claude-dev::main#logout`, `claude-dev::main#orchestrate`, `claude-dev::main#start` |
 | `claude-dev::resolve_container_user` | function | private | - | `claude-dev::main#attach`, `claude-dev::main#code`, `claude-dev::main#orchestrate`, `claude-dev::main#start` |
 | `claude-dev::select_ssh_keys_interactive` | function | private | `claude-dev::discover_ssh_keys`, `claude-dev::write_project_ssh_keys` | `claude-dev::ensure_project_config`, `claude-dev::main#ssh-keys.select` |

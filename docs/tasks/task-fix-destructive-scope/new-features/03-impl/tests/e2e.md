@@ -92,13 +92,15 @@ reason: FR-env-01 受入基準 9・14〜21 と FR-env-03 受入基準 14〜23 �
    3. **排他**(受入基準16。**6コマンドすべてについて確認する**):
       `sleep 600 &` で生きているプロセスを作り、その PID を控える(`$LIVE`)。
       **ロックは「向き先に `<PID> <操作名>` を入れたシンボリックリンク」である**ので、
-      `ln -s "$LIVE stop" ~/.claude-dev/locks/aaa.lock` で保持中の状態を作れる
-      (`readlink ~/.claude-dev/locks/aaa.lock` で確認できる)。
+      `ln -s "$LIVE stop" ~/.claude-dev/locks/proj-aaa.lock` で保持中の状態を作れる
+      (`readlink ~/.claude-dev/locks/proj-aaa.lock` で確認できる)。
+      **ファイル名はプロジェクト単位が `proj-<キー>.lock`、共有資源単位が `shared.lock`** である
+      (種別で名前空間を分けている。理由は `MODULE-cli-common-lock` 判断13)。
       - **プロジェクト単位のキー**: 上の状態で `aaa` のディレクトリで `claude-dev start` を
         実行する。**期待する結果**: 待たずに終了コード 1、出力に保持している操作名(`stop`)と
         PID と再実行の方法が出る、生成物が増えない。同じ状態で `claude-dev stop aaa` も
         同じ結果になることを確認する(プロジェクト単位のキーを取るのは `start` と `stop` の2つ)。
-      - **共有資源単位のキー**: `rm -f ~/.claude-dev/locks/aaa.lock` してから
+      - **共有資源単位のキー**: `rm -f ~/.claude-dev/locks/proj-aaa.lock` してから
         `ln -s "$LIVE logout" ~/.claude-dev/locks/shared.lock` を作る。この状態で
         **`start` / `logout` / `reset` / `login` / `login-codex` の5つをそれぞれ実行**し、
         **いずれも待たずに終了コード 1 で終わり、保持者(`logout` と PID)と再実行の方法が
@@ -106,13 +108,18 @@ reason: FR-env-01 受入基準 9・14〜21 と FR-env-03 受入基準 14〜23 �
         (**認証が空のコンテナが起動したら不合格**)、`logout` / `reset` については
         **何も削除されていない**こと、`login` / `login-codex` については
         **共有ボリュームに何も書かれていない**ことをあわせて確認する。
+      - **プロジェクト名が `shared` のとき**: `/tmp/e2e-y/shared` を作って
+        `CLAUDE_DEV_NO_ATTACH=1 claude-dev start --no-vnc` を実行する。**期待する結果**:
+        通常どおり起動する(`proj-shared.lock` と `shared.lock` は別のファイルなので衝突しない)。
+        **不合格の条件**: 「排他ロックを取得できませんでした(キー: shared)」で終了コード 1 になる
+        (プロジェクト単位のキーと共有資源単位の固定キーが同じファイルを指している)。
       - 後片付け: `rm -f ~/.claude-dev/locks/shared.lock` と `kill $LIVE`。
       **不合格の条件**: どれかが待つ(固まる)/ 終了コードが 0 になる /
       ロックを取れないまま削除・作成が行われる。
-   4. **ロック残骸の引き継ぎ**(受入基準17): `ln -s "999999 stop" ~/.claude-dev/locks/aaa.lock`
+   4. **ロック残骸の引き継ぎ**(受入基準17): `ln -s "999999 stop" ~/.claude-dev/locks/proj-aaa.lock`
       で**存在しない PID** を保持者とするロックを作ってから `claude-dev stop aaa` を
       実行する。**期待する結果**: 残骸を引き継いだ旨が表示され、処理が完了する(終了コード 0)。
-      **`~/.claude-dev/locks/` に `aaa.lock.stale.*` が残っていない**ことも確認する
+      **`~/.claude-dev/locks/` に `proj-aaa.lock.stale.*` が残っていない**ことも確認する
       (引き取った側が消す)。
    5. **ラベルを持たない既存コンテナを巻き込まないこと**(`FR-env-03` 受入基準17):
       `docker run -d --name legacy-claude --network claude-dev-net busybox sleep 600` で
@@ -140,7 +147,7 @@ reason: FR-env-01 受入基準 9・14〜21 と FR-env-03 受入基準 14〜23 �
       **それを削除せず**、残っている可能性と手動削除の方法を表示することを確認する(受入基準20)。
    7. **`stop` が受理しない名前**(`FR-env-01` 受入基準18):
       `claude-dev stop '../../etc'` を実行し、**何も削除されず**、受理できない文字を含む旨が
-      表示されて終了コード 1 になることを確認する。`~/.claude-dev/locks/` に新しいディレクトリが
+      表示されて終了コード 1 になることを確認する。`~/.claude-dev/locks/` に新しいロックが
       作られていないことも確認する。
    8. **`logout` がプロジェクト配下の認証コピーを消すこと**(`FR-env-03` 受入基準 20・21):
       `claude-dev login` 後に `aaa` で `start` し、`/tmp/e2e-y/aaa/.claude/.credentials.json` が

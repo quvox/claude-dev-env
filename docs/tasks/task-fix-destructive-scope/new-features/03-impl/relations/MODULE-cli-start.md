@@ -29,15 +29,21 @@ summary: カレントディレクトリで開発コンテナを起動する(VNC+
 
 1. `check_host_deps`(本機能に畳み込み)で `docker` / `jq`(macOS はさらに `socat`)を確認し、
    不足があれば導入案内を出して `exit 1`。
-2. `MODULE-cli-common-require-setup` でイメージをそろえる。
+2. (欠番。旧「`require_setup` でイメージをそろえる」は**ロック取得の後**へ移した = 手順4。
+   取得の前に置くと、同一プロジェクトの2つ目の `start` が数分のイメージビルドを終えてから
+   「ロックが取れない」と言うことになり、**もともとロックの後で呼ぶ macOS 版と成否の
+   タイミングと出力が食い違う**(`D0-scope-03`)。)
 3. `MODULE-cli-common-container-name` で `NAME` を、`pwd` で `PROJECT_DIR` を確定する。
-4. `MODULE-cli-common-lock` で**プロジェクト単位**のロック(キー = `NAME`、操作名 `start`)を取る。
+4. `MODULE-cli-common-lock` で**プロジェクト単位**のロック(キー = `NAME`、操作名 `start`)を取り、
+   取れたら `MODULE-cli-common-require-setup` でイメージをそろえる。
    取得できなければ、**手順5 以降の生成物(`.claude-dev.yaml`・`${PROJECT_DIR}/.claude`・
    `.codex`・`.gitignore` の追記)と Docker コンテナを一切作らずに**非0で終わる
    (`FR-env-01` 受入基準16)。以降のすべての手順はこのロックの中で行う。
-   **手順2 の `require_setup` によるイメージのビルドはロックの保護対象外**であり、ロックが取れなくても
-   既にイメージが作られていることがある(契約の「排他(ロックキー)」。イメージは冪等に作られる
-   共有資源で、どの操作から作っても結果が同じであるため)。
+   **`require_setup` によるイメージのビルドはロックの保護対象外**である(契約の「排他(ロックキー)」。
+   イメージは冪等に作られる共有資源で、どの操作から作っても結果が同じであるため)。
+   **ただし実装ではロック取得の後に置く**: 保護対象外であることと「取得の前に呼ばなければ
+   ならない」ことは別であり、後ろに置くほうが受入基準16 に対して安全側で、かつ両 OS で
+   同じタイミングになる。
 5. `ensure_project_config`(畳み込み)で `.claude-dev.yaml` が無ければ用意する。TTY なら
    `MODULE-cli-common-select-ssh-keys` を呼び、非 TTY なら
    `MODULE-cli-common-write-project-ssh-keys` で空の `ssh_keys:` を書く。
