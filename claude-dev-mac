@@ -588,6 +588,23 @@ compose_project_name() {
     printf '%s-%s' "$(compose_project_name_legacy "$1")" "$(sha256_hex "$2" | cut -c1-6)"
 }
 
+# 管理ラベル claude-dev.project-dir の値（起動時のホスト側の絶対パス）を返す。
+# ラベルが無い、またはコンテナが存在しない場合は空を返す。
+# stop はこの値を compose 一意化名のハッシュ源に使うため、本体を削除する「前」に読む。
+container_project_dir() {
+    local v
+    v=$(docker inspect "$1" --format '{{index .Config.Labels "claude-dev.project-dir"}}' 2>/dev/null) || return 0
+    case "$v" in "<no value>") v="" ;; esac
+    printf '%s' "$v"
+}
+
+# 管理ラベル claude-dev.managed=1 を持つか（本システムが作った Claude コンテナか）
+container_is_managed() {
+    local v
+    v=$(docker inspect "$1" --format '{{index .Config.Labels "claude-dev.managed"}}' 2>/dev/null) || return 1
+    [ "$v" = "1" ]
+}
+
 # 遊休判定に使う集合を求める（CTR-cli-container「遊休判定」）。
 #   claude-dev-net に接続している稼働中コンテナから、固定名 claude-dev-docker-proxy と
 #   固定接頭辞 fwd- のものを除いた名前を 1 行ずつ出力する。空なら遊休。
@@ -991,6 +1008,11 @@ start)
     check_host_deps
     NAME=$(container_name)
     PROJECT_DIR="$(pwd)"
+    # プロジェクト単位のロック（キー = コンテナ名）。名前が確定した直後・最初の副作用
+    # （ensure_project_config による .claude-dev.yaml 生成）より前に取る。取れなければ
+    # 以降の生成物と Docker コンテナを一切作らずに終わる（FR-env-01 受入基準16）。
+    # macOS の --kvm / --vm 早期拒否はこの後に来るが、そこで exit しても trap が解放する。
+    acquire_lock "$NAME" start || exit 1
     ensure_project_config "$PROJECT_DIR"
     shift || true
 
@@ -1024,6 +1046,8 @@ start)
             docker exec -u "$CUSER" "$NAME" tmux new-session -d -s main 2>/dev/null || true
             sleep 0.5
         fi
+        # アタッチは利用者の対話であり長時間続くので、その前にロックを解放する（手順17 と同じ理由）
+        release_lock "$NAME"
         docker exec -it -u "$CUSER" "$NAME" tmux attach -t main
         exit 0
     fi
@@ -1042,6 +1066,16 @@ start)
         RUN_IMAGE="$IMG_CLAUDE_VNC"
     else
         RUN_IMAGE="$IMG_CLAUDE"
+    fi
+
+    # 共有資源単位のロック。認証コピーの開始からコンテナ作成の確定（ポート競合の再試行
+    # ループを抜けたところ）まで保持する。認証コピーの直後に離すと、logout が完走した
+    # 直後に作られたコンテナの同期ループが認証を書き戻して logout が静かに巻き戻る。
+    # あわせて ensure_docker_proxy_container もこの区間に入るので、stop の遊休判定との
+    # 競合も同じロックで防げる（CTR-cli-container「排他（ロックキー）」）。
+    if ! acquire_lock shared start; then
+        echo "   logout / reset / login が同時に走っています。認証が空のままコンテナを起動しないため中止しました。" >&2
+        exit 1
     fi
 
     # 認証ファイルを共有ボリュームから /workspace/.claude/・/workspace/.codex/ にコピー
@@ -1115,8 +1149,10 @@ start)
     # docker compose プロジェクト名を一意化（全プロジェクトが /workspace にマウントされ
     # 既定名が "workspace" に衝突するのを防ぐ）。DOCKER_HOST と同様に -e で渡し、対話・非対話
     # を問わず全シェル（Claude Code の bash -c 実行含む）と docker exec で有効にする。
-    # NAME を compose 互換名（小文字・[a-z0-9_-] のみ）へ正規化する。
-    COMPOSE_PROJECT="$(printf '%s' "$NAME" | sed 's/[^a-z0-9_-]/-/g')"
+    # 値は <正規化名>-<起動ディレクトリ絶対パスの SHA-256 先頭6桁>。正規化だけでは
+    # ~/work/My.App と ~/other/my-app が同じ my-app に落ち、一方の stop が他方の compose
+    # 資源を消しうる（docs/issues/024）。stop は同じ関数でこの値を再計算する（DSN-env-03）。
+    COMPOSE_PROJECT="$(compose_project_name "$NAME" "$PROJECT_DIR")"
     COMPOSE_OPTS="-e COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT}"
 
     # SSH agent（方式D: claude-dev 専用 agent＋socat TCP ブリッジ。秘密鍵はコンテナに渡さない）
@@ -1179,6 +1215,9 @@ start)
             --cap-add NET_ADMIN \
             --cap-add NET_RAW \
             --restart unless-stopped \
+            --label claude-dev.managed=1 \
+            --label claude-dev.role=claude \
+            --label "claude-dev.project-dir=${PROJECT_DIR}" \
             -v "${PROJECT_DIR}:/workspace" \
             -v "${VOL_HISTORY}:${CHOME}/.command_history" \
             -v "${VOL_AUTH}:${CHOME}/.claude-shared" \
@@ -1203,7 +1242,13 @@ start)
         if printf '%s' "$_run_err" | grep -qiE 'Conflict\.|already in use by container'; then
             if is_running "$NAME"; then
                 echo "❌ 同名のコンテナ '$NAME' が既に稼働しているため起動を中止しました。" >&2
-                echo "   別ディレクトリの同名プロジェクト（コンテナ名はディレクトリ名から決まります）の可能性があります。" >&2
+                # 管理ラベルがあれば「どのディレクトリで起動されたか」を推測ではなく事実として示す
+                _other_dir=$(container_project_dir "$NAME")
+                if [ -n "$_other_dir" ]; then
+                    echo "   そのコンテナは ${_other_dir} で起動されたものです。" >&2
+                else
+                    echo "   別ディレクトリの同名プロジェクト（コンテナ名はディレクトリ名から決まります）の可能性があります。" >&2
+                fi
                 echo "   既存のコンテナには手を触れていません。そのプロジェクトのディレクトリで 'claude-dev start' すると再接続できます。" >&2
                 echo "   このディレクトリで起動したい場合は、先に 'claude-dev stop $NAME' を実行してください。" >&2
             else
@@ -1228,6 +1273,10 @@ start)
         exit 1
     done
 
+    # 共有資源単位のロックはここで解放する（コンテナ作成が確定した＝再試行ループを抜けた）。
+    # 再試行の途中で離すと、次の試行で作られるコンテナが保護の外に出る。
+    release_lock shared
+
     # tmux 起動を待つ
     for i in $(seq 1 30); do
         if docker exec -u "$CUSER" "$NAME" tmux has-session -t main 2>/dev/null; then
@@ -1245,6 +1294,9 @@ start)
     echo "✅ 起動完了（Ctrl-_ D で切断、claude-dev start で再接続）"
     _url=$(get_novnc_url "$NAME")
     [ -n "$_url" ] && echo "🖥️  noVNC: $_url"
+    # プロジェクト単位のロックは tmux attach の前に解放する。アタッチ中は利用者が端末を
+    # 占有しており、その間ロックを保持すると 'claude-dev stop' が実行できなくなる。
+    release_lock "$NAME"
     docker exec -it -u "$CUSER" "$NAME" tmux attach -t main
     ;;
 
