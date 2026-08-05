@@ -126,3 +126,27 @@ severity は全体として「低」を維持するが、この1件は「中」�
 
 **`RAM 逼迫`(`MODULE-vm-mode-healthd.md:21`,`:89`)は別件として残る。** `terminology.md` が
 定義したのは `資源逼迫`(CPU 使用率の閾値)であり、`RAM 逼迫` は定義の無い別概念のままである。
+
+## 追加(2026-08-05 `task-relations-code-sync` フェーズ1)— relations の3箇所は**すでに解消済み**
+
+**`03-impl/relations/` の3箇所(表の上3行)は、現行の SSOT に該当文が存在しない。**
+`task-relations-code-sync` の決定シート論点5(「本タスクが書き替える2本の測定不能語を含めるか」)は
+人間が案A で回答したが、**着手時にコードと本文を突き合わせたところ受け皿が無かった**ので、
+本タスクでの作業は発生しない(推奨を出す前に本文を確認しなかった AI 側の誤りである。
+`docs/feedbacks/017-recheck-a-carried-forward-recommendation.md` と同じ失敗)。
+
+| 箇所 | 現行の本文 | 判定 |
+|---|---|---|
+| `MODULE-orchestrator-claude-exec.md` 目的 | 「`claude` をヘッドレスで起動する経路を1か所に閉じ、**通知トークンを子プロセスへ渡さない**ことを保証する(FR-orch-03)」 | **解消済み**(「安全に」が無い) |
+| `MODULE-orchestrator-session.md` 連携先と連携内容 | `docs/03-impl/relations/` 全体で「安全に」の出現が **0 件** | **解消済み** |
+| `MODULE-makefile-build-orchestrator.md` 目的 | 「(イメージを作り直さずに)ビルド・検証するための入口」 | **解消済み**(「素早く」が無い) |
+
+いずれも `task-impl-depth` の反映(2026-08-04)で書き替わったと見られる。
+
+**残るのは 00・01・02 の6箇所**(`D0-scope-06` の「軽微な」2箇所 / `decisions/env.md` の「安全に」/
+`02-design/relations.md:91` の「高速更新」/ `02-design/logging.md:69` の「必要な範囲を超えて」/
+`01-requirements/functional.md` の `FR-env-08` 受入基準4 と `FR-orch-02` 受入基準3)であり、
+**すべて3本目 `task-spec-measurability` の担当**である。`MODULE-makefile-update-claude.md:14` と
+`03-impl/relations/index.md:63` の「高速更新」は `02-design/relations.md:91` の言い換えに追随するので、
+3本目の影響範囲に **`03-impl/relations/MODULE-makefile-update-claude.md` を含めること**。
+**本 issue は閉じない。**

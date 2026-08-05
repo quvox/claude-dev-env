@@ -95,3 +95,31 @@ summary: 03-impl が「現状の説明」としては正しいが、ドキュメ
   (`017`〜`019` および `023` は同タスクの `/doc-check` が起票。`027` は誤検知として取り消し)。
   ★2026-08-03 `/doc-check`: この一覧は以前 `010`〜`016` と `020`〜`022` しか挙げておらず、
   `023`〜`026` / `028` / `029` が漏れていた(`03-impl/index.md` の件数も同じ漏れを持っていた)。
+
+## 追加(2026-08-05 `task-relations-code-sync` フェーズ2の実装ドライラン)— 独立レンズが残件を機能単位で列挙した
+
+`/task-doc task-relations-code-sync` の実装ドライラン(パス1)で、独立レンズ(Codex `readiness`。
+`gpt-5.6-terra` / reasoning `max`。スコープを3分割して実行)が **42 件**を返した。
+うち **13 件は変更指示と未置換の節の自己矛盾**で、その場で全件修正した(同タスクの担当)。
+**残る「深度が足りない」系の指摘は本 issue の残件そのもの**であり、機能単位に整理して記録する。
+**コードを読まずにドキュメントだけで再実装できるかを試した結果**なので、
+「経緯」の3項目より細かい粒度の作業リストとして使える。
+
+| 対象 | ドキュメントだけからは決められない事柄(レンズの指摘) | 経緯のどの項目 |
+|---|---|---|
+| `MODULE-orchestrator-state` / `-plan` | `Store` 各 API の完全なシグネチャと戻り値型 / `State`・`Plan` の JSON 型・任意性・時刻形式 / `ReadyTasks` の返却順序・`nil`・空・重複 ID・自己依存・未知 `Status` の扱い / `blocked` 伝播が1回の呼び出しで閉じるか | **項目1** |
+| `MODULE-orchestrator-config` | 許可キーの全列挙 / 空白・コメント・引用符・重複キー・オーバーフローの扱い / `orchestrator:` 節の文法 / 文字列キーの全列挙 | **項目2 に隣接**(設定の記述) |
+| `MODULE-orchestrator-claude-exec` / `CTR-orchestrator-prompt` | `Task.Kind` から profile を選ぶ対応表と既定値 | **項目2** |
+| `MODULE-orchestrator-worker` / `CTR-orchestrator-prompt`(02) | 結果 JSON の候補選択の優先順位(複数 JSON 行・末尾ログ・`done` 無し)/ 型違い・配列要素の型違い・`null`・壊れた入れ子・未知 `severity`・制御ファイルの型違いの扱い | **新規**(02 契約側。03 側には実値がある) |
+| `MODULE-orchestrator-controller` | ready が `max_workers` を超えたときの選択順と同順位規則 / 状態遷移・介入投入・完了・統合ごとの**書き込み順**と途中停止時の復旧規約 | **新規**(一貫性境界の粒度) |
+| `MODULE-orchestrator-session` | `ExpectedWindows(phase, plan)` の入力状態 → 期待ウィンドウ列の対応表 / `EnsureAll` の復旧順序 | **新規** |
+| `MODULE-orchestrator-mode` | `ModelProfile` の構造 / 生成する launcher スクリプトの正確な内容 / `.sys`・`.prompt`・`.sh` の途中失敗時の順序と掃除 | **項目2 に隣接** |
+| `MODULE-orchestrator-dashboard` | `dashAction` と行モデルの型 / 更新メッセージと描画順 / VM health の「鮮度内」の数値 | **新規** |
+| `MODULE-orchestrator-streamlog` | イベント / content の JSON スキーマ / CRLF・未終端行・空行・短い書き込み・同時 `Write` の扱い | **新規** |
+| `MODULE-orchestrator-trigger` | 不正・欠損の `TriggerContext`(未知 `Phase`・`nil Result`)を渡したときの戻り値 | **新規** |
+| `MODULE-orchestrator-main` | `defaultWorkspace()` の規則 / 未知・欠損フラグの扱い / 各失敗経路の終了コードと後始末 / 標準出力へ出す7種の具体的文面 | **新規** |
+| `MODULE-cli-start` / `-stop` / `-reset` と Slack / claude-exec | **再試験の手順が作れない**: シェル系と外部依存(Slack API・`claude` 実行ファイル)に対する fake・入力ベクトル・期待観測が無く、参照先が `E2E-01` の手順番号だけである | **項目3(観点6)** |
+
+**本 issue は閉じない。** 上の表は「経緯」の3項目を機能単位へ展開したものであり、
+次に 03 の深度を扱うタスクの closure の候補である。**`task-relations-code-sync` の範囲外**
+(同タスクは「既にある記述をコードへ合わせる」ことだけを行い、深度の追加はしない)。

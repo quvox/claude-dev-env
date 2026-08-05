@@ -46,7 +46,10 @@
 | [053-bug-logout-treats-unlistable-auth-volume-as-empty](053-bug-logout-treats-unlistable-auth-volume-as-empty.md) | bug | 中 | 2026-08-05 | FR-env-03, MODULE-cli-logout, CTR-cli-container, D0-env-08, docs/issues/052 | logout の「共有ボリュームが空か」の判定が列挙の成否を見ないため、一時コンテナを起動できない状態では認証が残っていても「削除対象がありません」と表示して終了コード 0 で終わる |
 | [054-modify-ssot-references-deleted-issue-paths](054-modify-ssot-references-deleted-issue-paths.md) | modify | 低 | 2026-08-05 | docs/00-requests/decisions/env.md, docs/02-design/contracts/cli-container.md, docs/03-impl/relations/MODULE-cli-stop.md, docs/03-impl/relations/MODULE-cli-reset.md, docs/03-impl/index.md, docs/issues/030 | 解消して削除された issue のファイルパス(docs/issues/NNN)が仕様ドキュメントの根拠として残り続けるため、10 個の ID・20 以上のファイルで参照先が実在しない |
 | [055-modify-ac17-demands-listing-stopped-unlabeled-containers](055-modify-ac17-demands-listing-stopped-unlabeled-containers.md) | modify | 中 | 2026-08-05 | FR-env-03, D0-env-08, CTR-cli-container, MODULE-cli-logout, MODULE-cli-reset, docs/02-design/contracts/cli-container.md | FR-env-03 受入基準17 は管理ラベルを持たない Claude コンテナの名前を「表示して残す」ことを稼働中に限定せずに要求するが、02 の契約は停止中のものを列挙できないことを意図した限界として明記しており、01 と 02 が食い違う |
+| [056-modify-ssot-retains-change-relative-wording](056-modify-ssot-retains-change-relative-wording.md) | modify | 中 | 2026-08-05 | docs/03-impl/relations/MODULE-cli-reset.md, docs/03-impl/relations/MODULE-cli-stop.md, docs/03-impl/contracts/cli-container.md, docs/02-design/system.md, docs/02-design/contracts/cli-container.md, docs/issues/038 | 反映後の SSOT に「〜へ改める」「本変更で」という変更相対の言い回しが 8 箇所残っており、うち 1 箇所は現行実装について事実と異なることを書いている |
+| [057-bug-broken-open-json-silently-drops-the-intervention-queue](057-bug-broken-open-json-silently-drops-the-intervention-queue.md) | bug | 中 | 2026-08-04 | FR-orch-05, MODULE-orchestrator-state-intervention, MODULE-orchestrator-controller, docs/03-impl/index.md, docs/issues/021, docs/issues/026 | 壊れた intervention/open.json をすべて空キューとして扱うため、判断待ちキュー全体が黙って失われ、その後の Add が内容を上書きする |
+| [058-bug-unknown-severity-passes-the-review-gate](058-bug-unknown-severity-passes-the-review-gate.md) | bug | 中 | 2026-08-04 | FR-orch-06, D0-orch-15, CTR-orchestrator-prompt, MODULE-orchestrator-review, docs/issues/034, docs/issues/015 | レビュー結果の severity の値域を検証しないため、綴り違いや別語彙の重大な指摘が「重大でない」扱いでゲートを通過する |
 
-件数: 40
+件数: 43
 
 <!-- END GENERATED -->

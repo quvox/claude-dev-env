@@ -57,3 +57,23 @@ per-worker session path (resolveOne / selector, Phase③ 3d)」と説明され�
 - 02-design の orchestrator 状態遷移に「介入の一括解決」が存在するかを確認する。
 - 存在するなら呼び出し経路の欠落(bug へ格上げ)。存在しないなら死んだコードの削除(modify のまま)。
 - `DashboardState.SelectableWorker*` は TUI の選択実装と重複していないかを併せて確認する。
+
+## 追加(2026-08-05 `task-relations-code-sync` フェーズ2)— 未到達シンボル2件を追加
+
+`issue 038` / `032` の relations 全面突き合わせの過程で、**製品コードからの呼び出しが無いシンボルを
+さらに2件**見つけた。いずれも `cluster-features.py` の未到達判定には出ていない
+(**推測**: `Git` インターフェース経由の宣言があるため到達しているように見える / 同一パッケージ内の
+メソッドとして候補辺が立つため)。
+
+| シンボル | 定義位置 | 製品コード側の参照 | 何が言えなくなるか |
+|---|---|---|---|
+| `orchestrator/worker.go::ExecGit.HasCommits` | `worker.go:465`(インターフェース宣言は `:69`〜`:70`) | **なし**(`grep` で製品コード側の呼び出し 0 件) | 「worker が1つもコミットせずに統合へ進む」ことを検出する手段が実装に無い。統合の可否はレビューゲートの結果だけで決まる |
+| `orchestrator/mode.go::Mode.ResolveArgsOne` | `mode.go:191` | **なし**(独立ウィンドウ方式は `IntervenePrompt` + `WriteLaunchScript`、前景フォールバックは `ResolveArgs` を使う) | 介入1件だけを前景で解決する経路が実装に無い |
+
+**この2件は `task-relations-code-sync` で「記述を実装に合わせる」形で処理した**
+(`MODULE-orchestrator-worktree` と `MODULE-orchestrator-mode` の `## 既知の制限` に
+「製品コードから呼ばれていない」事実として明記し、本 issue を参照する)。
+**コードは変更していない**(同タスクの決定シート論点4 = 案A「実装が誤っていても issue 起票のみ」)。
+
+したがって本 issue の対象は **9 シンボル**になった(元の7件 + 上の2件)。`summary` の「7シンボル」は
+`/task-close` が本 issue を更新するときに直す。**本 issue は閉じない。**

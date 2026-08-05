@@ -74,3 +74,21 @@ summary: 解消して削除された issue のファイルパス(docs/issues/NNN
 - 2026-08-05 `/doc-check ssot task-fix-destructive-scope` が参照の実在検査で検出した。
   本タスクの影響範囲の外にも同じ形の参照が広がっているため、
   **本タスクでは直さず起票のみ**とした(CLAUDE.md 原則8。範囲外の修正を混ぜない)。
+- 2026-08-05 `/doc-check task-relations-code-sync`(task モード)が、**同じ形の参照が
+  4 ID ぶん増えることを事前に検出した**。`task-relations-code-sync` は完了時に
+  `019` / `032` / `038` / `056` を削除する予定であり(同タスクの DoD)、削除後に残る参照は次のとおり:
+
+| 削除予定の ID | 参照が残る箇所 | 参照の性質 |
+|---|---|---|
+| `038` | `docs/03-impl/index.md:84`(「01(要件)との差異」の表) | **経緯ではなく現役のトラッカー**。`FR-orch-05` 受入基準7「読めない状態ファイルの既存内容を破壊しない」⇄ 壊れた `open.json` が空キューとして扱われる、という**未修正のコード欠陥**の追跡先として `docs/issues/038` #3 を挙げている |
+| `038` | `docs/03-impl/relations/MODULE-orchestrator-state-intervention.md:85`(異常系) | 同じコード欠陥の根拠として参照 |
+| `038` | `docs/03-impl/relations/MODULE-orchestrator-review.md`(処理の流れ3。本タスクの変更指示にも残る) | **未修正のコード欠陥**の追跡先。`severity` の値域を検証しないため未知の値の指摘がゲートを通過する |
+| `032` | `MODULE-orchestrator-dashboard` の変更指示本文(「仮定件数は常に 0」の根拠) | 裁定の経緯 |
+| `019` / `032` / `038` | `docs/03-impl/index.md` 冒頭コメント(過去の `/doc-check` の検証履歴)複数箇所 | 経緯 |
+
+  **`038` の3件は本 issue の「低」の範囲を超える**: 経緯が辿れなくなるだけでなく、
+  **人間が「実装の修正は別タスク」と裁定した未修正のコード欠陥2件が、追跡先を失う**。
+  `03-impl/index.md` の「実装の欠陥として起票済み」の集計(本タスク後 16 件)にも
+  これらは入っていない(`038` は記述の issue として数えられていたため)。
+  どう扱うか(`038` を閉じない / コード欠陥だけを新しい issue へ切り出す / 参照を histories へ
+  付け替える)は `docs/tasks/task-relations-code-sync/memo.md` の決定シートに載せた。
