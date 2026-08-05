@@ -1,7 +1,7 @@
 ---
 id: orch
-version: 1.2.0
-updated: 2026-08-04
+version: 1.2.1
+updated: 2026-08-05
 source:
   - docs/00-requests/request.md
 summary: AIオーケストレーターの制御・介入・状態に関する決定事項(D0-orch-*)
@@ -196,7 +196,11 @@ verified:
   行わない** — プロンプトで JSON の形を明示して要求し、崩れたら1回だけ再整形を試み、
   2回続けば介入へ回す(`FR-orch-06` 受入基準3・6・7 / `CTR-orchestrator-prompt`)。
   この撤回の理由: 同じ決定の後半(フォーマットエラーが続く前提)と前半(強制)が両立しない。
-  **形式の検証が一箇所も無い**という事実は `docs/issues/034` / `038` が追跡する。
+  **形式の検証が一箇所も無い**という事実は、
+  `docs/issues/058-bug-unknown-severity-passes-the-review-gate.md`(未知の `severity` が
+  「重大でない」扱いで品質ゲートを通過する)と
+  `docs/issues/059-modify-review-gate-scoring-criterion-has-no-covering-test.md`
+  (採点基準を覆うテストが実在しない)が追跡する。
 - 理由: 自己レビューでは見落としが残る。プランのゴールで採点すると差し戻しが恣意的になる。
   自由記述で受け取るとパースに失敗して試行を浪費する。
 - 却下した案: 実装した worker 自身にレビューさせる — 独立性が無い。人間が全件レビューする —

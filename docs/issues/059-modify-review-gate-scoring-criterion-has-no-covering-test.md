@@ -73,3 +73,27 @@ summary: tests/orchestrator.md が FR-orch-06 受入基準2 を「実装済み�
   その検証中に本件が判明した。同レンズが挙げた3件のうち2件は機械的に解消済み。
 - 同じ性質の「実在しないテスト識別子」を追跡していた `docs/issues/019` は
   `task-relations-code-sync` の完了時に削除されるため、本件を独立の issue として残す。
+
+## 裁定の記録(2026-08-05)
+
+**人間が案B(テストを書く)を選んだ**(`/task-close task-relations-code-sync` の §6 決定シート #1)。
+
+したがって本 issue の解消条件は「`buildReviewPrompt` が `Task.Completion` を渡し
+`Plan.Completion` へフォールバックしないことを固定する単体テストが存在すること」である。
+
+**本タスクでは実施しない**(2つの理由が重なる):
+
+1. `task-relations-code-sync` の「やらないこと」がコード変更を除外している(CLAUDE.md 原則8:
+   範囲外の修正を混ぜない)。
+2. `/task-close` はコードを書けない(スキルの明示的な禁止。修正が要るなら `/implement` へ戻す)。
+
+**SSOT には「いまの姿」を書いた**(CLAUDE.md §1): `03-impl/tests/orchestrator.md` の
+`FR-orch-06` 受入基準2 の状態を **`実装済み` → `未検証(テスト未実装)`** に改め、
+テスト識別子欄を `-` にした(従来挙げていた `orchestrator/review_parse_test.go` は
+JSON の抽出と解釈を検証するもので、この基準には触れていない)。あわせて
+`## 未検証(テスト未実装)の全件` に **#49** を追加し、閉じる条件として上のテストを明記した
+(数え方の 47 → 48 行 / 表の行数 48 → 49 も更新)。
+
+**次の一手**: テストを書くタスクを `/task-new` で立てる。対象は
+`orchestrator/review.go::buildReviewPrompt` と、そこを覆う新しい単体テスト1本。
+閉じるときに `tests/orchestrator.md` の当該行を実テスト名 + `実装済み` へ戻し、#49 を消す。

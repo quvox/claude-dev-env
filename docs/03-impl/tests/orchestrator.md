@@ -1,7 +1,7 @@
 ---
 id: orchestrator
 scope: MOD-orchestrator
-version: 1.3.0
+version: 1.4.0
 updated: 2026-08-05
 source:
   - docs/01-requirements/functional.md
@@ -64,7 +64,7 @@ verified:
 | FR-orch-05 | 9 | 境界値 | 単体 | - | 未検証(テスト未実装) |
 | FR-orch-05 | 10 | 異常系 | 単体 | `orchestrator/state_test.go::TestLoadStateMissing` | 実装済み |
 | FR-orch-06 | 1 | 正常系 | E2E | E2E-04(実機確認手順) | 未検証(テスト未実装) |
-| FR-orch-06 | 2 | 正常系 | 単体 | `orchestrator/review_parse_test.go` | 実装済み |
+| FR-orch-06 | 2 | 正常系 | 単体 | - | 未検証(テスト未実装) |
 | FR-orch-06 | 3 | 正常系 | E2E | E2E-04(実機確認手順) | 未検証(テスト未実装) |
 | FR-orch-06 | 4 | 正常系 | E2E | E2E-04(実機確認手順) | 未検証(テスト未実装) |
 | FR-orch-06 | 5 | 境界値 | E2E | E2E-04(実機確認手順) | 未検証(テスト未実装) |
@@ -123,9 +123,9 @@ verified:
 ## 未検証(テスト未実装)の全件
 
 **この表が数える範囲**: 上の3表(受入基準 ⇄ テスト対応表 / 契約の結合テスト /
-機能間連携仕様書 ⇄ テスト)で**状態セルが「未検証(テスト未実装)」である 47 行**を列挙する。
+機能間連携仕様書 ⇄ テスト)で**状態セルが「未検証(テスト未実装)」である 48 行**を列挙する。
 **#38 だけは例外**で、状態セルは「実装済み」だが対象の一部しか覆っていないため、覆っていない範囲を
-明示する目的で併記している(47 行には数えない)。したがって表の行数は 48 である。
+明示する目的で併記している(48 行には数えない)。したがって表の行数は 49 である。
 
 | # | 対象 | なぜ未実装か | 閉じる予定 |
 |---|---|---|---|
@@ -177,3 +177,4 @@ verified:
 | 46 | FR-orch-05 — 受入基準 9(境界値) | プロセスの異常終了を再現する自動テストが無く、実機確認でも再現手順が未整備(`docs/issues/006` / `docs/pendings.md` P-003) | 実機確認手順の整備(`docs/issues/006` と P-003 の QA レーン)で閉じる |
 | 47 | FR-orch-05 — 受入基準 2(正常系) | **「未完了 plan が残る状態で `orchestrate` したらその run を継続する」という分岐そのものが `orchestrator/main.go` の再開判定にあり、`main.go` に単体テストが無い**(`MODULE-orchestrator-main` の `tests` は `terminalConfirm` の1件だけ)。近いテスト(`archive_test.go::TestCountUndone` は未完了数の計算、`controller_test.go::TestResume_UsesResumeFlagAfterCrash` は同一 Attempt の `--resume` 継続)はこの基準の主張を覆っていない | `main.go` の再開判定に単体テストを足すタスクで閉じる(`docs/issues/004` の残件のうち「永続データモデルの記述」と同じ対象) |
 | 48 | CTR-cli-orchestrator — 契約の結合テスト | `claude-dev orchestrate` とコントローラの境界はシェルと Go にまたがるため、どちらのモジュールにも自動の結合テストが無く、手順(`tests/e2e.md` E2E-04 / E2E-05)の実機確認だけで代替している | 実機確認手順の整備(`docs/issues/006` と `docs/pendings.md` P-003 の QA レーン)で閉じる |
+| 49 | FR-orch-06 — 受入基準 2(正常系) | **採点基準が当該タスクの完了条件のみであること**(`D0-orch-05` のガードレール = プラン全体のゴールへフォールバックしない)を覆うテストが無い。従来この行が挙げていた `orchestrator/review_parse_test.go` は JSON の抽出と解釈を検証するもので、`buildReviewPrompt` が `Task.Completion` を渡すかどうかには触れていない(`docs/issues/059`) | **`buildReviewPrompt` が `Task.Completion` を渡し `Plan.Completion` へフォールバックしないことを固定する単体テストを書く時点で閉じる**(2026-08-05 に人間が案B で裁定。`docs/issues/059` が追跡し、コードを触るタスクで実施する) |
