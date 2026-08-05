@@ -25,7 +25,8 @@
 | [017-recheck-a-carried-forward-recommendation](017-recheck-a-carried-forward-recommendation.md) | 2026-08-04 | 引き継いだ推奨案は「受け皿が実在するか」を確かめてから提示する。前の実行が書いた推奨をそのまま人間に出すと、成立しない案を選ばせることになる |
 | [018-mv-atomicity-is-about-the-path-not-the-contents](018-mv-atomicity-is-about-the-path-not-the-contents.md) | 2026-08-04 | `mv` の原子性は「そのパスの rename に成功するのは1プロセスだけ」であって「引き取った中身が観測したものと同じ」ではない。観測してから操作するなら、操作した対象が観測したものかを必ず検証する |
 | [019-bash-traps-that-silently-do-nothing](019-bash-traps-that-silently-do-nothing.md) | 2026-08-04 | bash で「書いたのに効かない」3つの罠 — 同じ `local` 文の中では前の変数がまだ展開されない / `&` で起動した子は SIGINT を無視するので `trap ... INT` が無効になる / 端末の Ctrl-C は子プロセスにも直接届く |
+| [020-static-callgraph-is-blind-to-interface-dispatch](020-static-callgraph-is-blind-to-interface-dispatch.md) | 2026-08-05 | 静的コールグラフはインターフェース越しの呼び出しを見られない — 実装済みの機能に出る CG3「低(実装前)」は実装漏れではなく、CG4 の確度「候補」は `exec.Cmd.Run()` のような同名衝突である。どちらもツールの限界であって仕様の欠陥ではない |
 
-件数: 19
+件数: 20
 
 <!-- END GENERATED -->
