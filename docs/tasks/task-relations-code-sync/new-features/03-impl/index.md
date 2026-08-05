@@ -6,6 +6,7 @@ sections:
   - "## 01(要件)との差異(未解消のもの)"
 deletes: []
 reason: issue 019 / 032 / 038 を解消したので「コードとの乖離として未解決のもの」から外す。あわせて MODULE-docker-proxy-serve の既知の制限が issue 005 を参照するようになるため起票済みの件数を 15 → 16 に直す
+reflected: 2026-08-05
 ---
 
 <!-- 変更指示。反映後の最終形を書く。version / verified は持たない。

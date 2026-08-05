@@ -6,6 +6,7 @@ sections:
   - "## 既知の制限"
 deletes: []
 reason: 「独立ウィンドウ方式では ResolveArgsOne を使う」と書くが製品コードからの呼び出しが無く、コントローラは IntervenePrompt と WriteLaunchScript を使う(docs/issues/038 #22)
+reflected: 2026-08-05
 id: MODULE-orchestrator-mode
 module: MOD-orchestrator
 kind: function-call

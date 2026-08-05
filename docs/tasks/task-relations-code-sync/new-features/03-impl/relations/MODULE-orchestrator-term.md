@@ -7,6 +7,7 @@ sections:
   - "## 異常系"
 deletes: []
 reason: 引数表と戻り値が実シグネチャと違う(docs/issues/038 #16)。存在しない `until` の異常系がある(同 #17)。モードバナーの出力先が違う(同 #28)。tests に他機能を検証するテストが混じる(同 #29)
+reflected: 2026-08-05
 id: MODULE-orchestrator-term
 module: MOD-orchestrator
 kind: function-call

@@ -5,6 +5,7 @@ sections:
   - "## FR-env-01 コンテナのライフサイクル管理"
 deletes: []
 reason: 変更相対・タスク相対の言い回し(「本変更」「本タスク」「現行も」)が残っており、参照先が SSOT に存在しない(docs/issues/056。CLAUDE.md §1「SSOT はいまの姿だけを記述する」)
+reflected: 2026-08-05
 ---
 
 <!-- 変更指示。反映後の最終形を書く。version / verified は持たない。

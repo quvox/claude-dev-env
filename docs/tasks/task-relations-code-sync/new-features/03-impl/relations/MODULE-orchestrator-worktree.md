@@ -8,6 +8,7 @@ sections:
   - "## 戻り値・副作用"
 deletes: []
 reason: HasCommits を「統合前の状態確認に使う」と書くが製品コードに呼び出しが無い(docs/issues/038 #19)。「git の stderr はエラーに含めて返す」と書くが公開メソッドが結合出力を捨てている(同 #20)
+reflected: 2026-08-05
 id: MODULE-orchestrator-worktree
 module: MOD-orchestrator
 kind: function-call

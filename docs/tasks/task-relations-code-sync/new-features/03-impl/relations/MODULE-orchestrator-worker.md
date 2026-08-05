@@ -5,6 +5,7 @@ sections:
   - "## 呼び出され方"
 deletes: []
 reason: 引数表が `task` と `ctx` の2項目だけで、実シグネチャの `p *Plan` と `feedback` が呼び出し契約から落ちている(docs/issues/038 #13)。callees に claude-exec が無い(同 #12 の対称)
+reflected: 2026-08-05
 id: MODULE-orchestrator-worker
 module: MOD-orchestrator
 kind: function-call

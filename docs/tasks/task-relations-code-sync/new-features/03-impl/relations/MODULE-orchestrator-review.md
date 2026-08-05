@@ -8,6 +8,7 @@ sections:
   - "### MODULE-orchestrator-worker"
 deletes: []
 reason: 戻り値を「findings[] とゲート通過可否」と書くが実体は (GateOutcome, error)(docs/issues/038 #14)。ReviewFormatErrors の加算主体が違う(同 #15)。レビュアログのパスが実体と違う(同 #27)。callees に claude-exec が無い(同 #12 の対称)
+reflected: 2026-08-05
 id: MODULE-orchestrator-review
 module: MOD-orchestrator
 kind: function-call

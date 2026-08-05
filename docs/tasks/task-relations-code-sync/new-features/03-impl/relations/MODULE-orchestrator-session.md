@@ -6,6 +6,7 @@ sections:
   - "## 呼び出され方"
 deletes: []
 reason: 処理の流れの3点(dashboard の remain-on-exit・tmux 呼び出しの集約・Run のクォート)がコードと食い違う(docs/issues/038 #18)
+reflected: 2026-08-05
 id: MODULE-orchestrator-session
 module: MOD-orchestrator
 kind: function-call

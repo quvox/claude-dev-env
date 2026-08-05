@@ -7,6 +7,7 @@ sections:
   - "### 一貫性境界(トランザクション境界)"
 deletes: []
 reason: 並行性の3点(Store 書き込みの排他範囲・Slack 通知とロックの関係・TUI 操作の取りこぼし)がコードと食い違う(docs/issues/038 #10)。frontmatter の callees に通知経路が無い(同 #11)
+reflected: 2026-08-05
 id: MODULE-orchestrator-controller
 module: MOD-orchestrator
 kind: function-call

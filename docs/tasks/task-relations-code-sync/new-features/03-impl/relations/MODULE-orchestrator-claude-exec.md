@@ -4,6 +4,7 @@ change: replace
 sections: []
 deletes: []
 reason: callers に MODULE-orchestrator-worker / -review が無い(docs/issues/038 #12)。worker.go:231 と review.go:81・:126 が Claude.RunPrompt を呼ぶ
+reflected: 2026-08-05
 id: MODULE-orchestrator-claude-exec
 module: MOD-orchestrator
 kind: function-call

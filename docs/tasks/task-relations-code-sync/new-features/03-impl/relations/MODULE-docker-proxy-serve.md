@@ -5,6 +5,7 @@ sections:
   - "## 既知の制限"
 deletes: []
 reason: D0-sec-05 のガードレールが「残存リスクは既知の制限に書く」ことを求めているのに該当行が無い(docs/issues/005 の対処案1。同 issue が「issue 038 と同じタスクで行う」と指定)
+reflected: 2026-08-05
 id: MODULE-docker-proxy-serve
 module: MOD-docker-proxy
 kind: tool

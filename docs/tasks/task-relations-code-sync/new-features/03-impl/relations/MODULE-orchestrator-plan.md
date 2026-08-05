@@ -6,6 +6,7 @@ sections:
   - "## 異常系"
 deletes: []
 reason: 不存在の依存 ID を「ready にならず永久に着手されない」と書くが実際は blocked へ遷移する(docs/issues/032 #9)。NormalizeForResume が空文字の Status も正規化することが書かれていない(同 #19)
+reflected: 2026-08-05
 id: MODULE-orchestrator-plan
 module: MOD-orchestrator
 kind: function-call

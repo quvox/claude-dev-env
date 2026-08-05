@@ -7,6 +7,7 @@ sections:
   - "## 未検証(テスト未実装)の全件"
 deletes: []
 reason: 実在しないテスト識別子 TestReadyTasks_Basic を 2 箇所で「実装済み」の根拠にしている(docs/issues/019 の残 1 件)。あわせて所属機能が誤っていたテスト2件を実際に検証している機能へ付け替える(docs/issues/038 #29 と同種)
+reflected: 2026-08-05
 ---
 
 <!-- 変更指示。反映後の最終形を書く。version / verified は持たない。

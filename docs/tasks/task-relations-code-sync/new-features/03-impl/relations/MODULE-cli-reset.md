@@ -9,6 +9,7 @@ sections:
   - "## 既知の制限"
 deletes: []
 reason: 4箇所に変更相対の言い回し(「1 に改める」「から改める」「から改めた」「0 から 1 へ改める」)が残り、うち2箇所は「現行実装は 0 を返す」と事実に反する(docs/issues/056 #1〜#4。CLAUDE.md §1・原則2)
+reflected: 2026-08-05
 id: MODULE-cli-reset
 module: MOD-cli-reset
 kind: tool

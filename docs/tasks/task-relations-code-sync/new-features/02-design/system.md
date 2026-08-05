@@ -6,6 +6,7 @@ sections:
   - "### DSN-mod-05 コールグラフに入口を持たない資産はモジュールにしない"
 deletes: []
 reason: SSOT に変更相対の言い回し「本変更で制約を変えない」が残っており、参照先の「本変更」が SSOT に存在しない(docs/issues/056 #7。CLAUDE.md §1「SSOT はいまの姿だけを記述する」)
+reflected: 2026-08-05
 ---
 
 <!-- 変更指示。反映後の最終形を書く。version / verified は持たない。

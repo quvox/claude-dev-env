@@ -4,13 +4,13 @@ module: MOD-orchestrator
 kind: function-call
 sync: sync
 impl: orchestrator/worker.go::ExecClaude.RunPrompt, orchestrator/claudebin.go::claudeChildEnv, orchestrator/claudebin.go::claudePath, orchestrator/claudebin.go::localBinDir
-callers: MODULE-orchestrator-controller, MODULE-orchestrator-mode
+callers: MODULE-orchestrator-controller, MODULE-orchestrator-mode, MODULE-orchestrator-review, MODULE-orchestrator-worker
 callees: MODULE-orchestrator-streamlog
 contracts: CTR-orchestrator-prompt
 design: DSN-mod-01, DSN-orch-01
 requirements: FR-orch-03, FR-orch-07
 tests: なし(未実装。claudebin.go に対応する単体テストが無く、E2E-04 の実機確認で代替する)
-updated: 2026-08-04
+updated: 2026-08-05
 summary: Claude CLI を子プロセスとして起動し環境と PATH を整える
 ---
 

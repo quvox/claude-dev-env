@@ -8,6 +8,7 @@ sections:
   - "## 戻り値・副作用"
 deletes: []
 reason: 引数・戻り値(docs/issues/032 #4)、起動フェーズと VM health の読み位置(同 #5)、未代入の表示フィールド(同 #6。人間が「記述を直す」と裁定済み)、操作種別とキー(同 #16)、SwitchTo へ渡す値と捨てている error(同 #17)がコードと食い違う
+reflected: 2026-08-05
 id: MODULE-orchestrator-dashboard
 module: MOD-orchestrator
 kind: function-call

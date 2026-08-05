@@ -7,6 +7,7 @@ sections:
   - "## 戻り値・副作用"
 deletes: []
 reason: --workspace を必須かつ git ルートと書くが既定値があり検証も無い(docs/issues/032 #7)。手順の順序と --fresh 限定の掃除・最小 plan の保存が実態と違う(同 #8)。判定結果の出力先が標準出力である(同 #18)
+reflected: 2026-08-05
 id: MODULE-orchestrator-main
 module: MOD-orchestrator
 kind: tool

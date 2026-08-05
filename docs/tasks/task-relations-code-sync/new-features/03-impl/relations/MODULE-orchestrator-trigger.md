@@ -6,6 +6,7 @@ sections:
   - "## 異常系"
 deletes: []
 reason: 引数表に Phase / Result / StuckThisAttempt が無く、値域が書かれていないため呼び出し元が判定を誤りうる(docs/issues/038 #31)
+reflected: 2026-08-05
 id: MODULE-orchestrator-trigger
 module: MOD-orchestrator
 kind: function-call

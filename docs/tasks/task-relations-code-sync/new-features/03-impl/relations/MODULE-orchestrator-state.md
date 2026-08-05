@@ -6,6 +6,7 @@ sections:
   - "## 異常系"
 deletes: []
 reason: ArchiveRun の退避先が既存でも失敗しない(docs/issues/032 #10)。NewStore が絶対パス制約を保証すると読めるが filepath.Join するだけである(同 #20)
+reflected: 2026-08-05
 id: MODULE-orchestrator-state
 module: MOD-orchestrator
 kind: function-call

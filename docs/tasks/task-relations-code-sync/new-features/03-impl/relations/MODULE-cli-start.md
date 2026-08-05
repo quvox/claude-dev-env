@@ -7,6 +7,7 @@ sections:
   - "## 既知の制限"
 deletes: []
 reason: entrypoint の副作用(codex config.toml 補完・CLAUDE.md 自動更新・VNC 時の MCP 設定更新)が連携内容にも永続化にも無い(docs/issues/038 #9)。entrypoint 起動箇所として挙げる行番号が別の処理を指している(同 #26)
+reflected: 2026-08-05
 id: MODULE-cli-start
 module: MOD-cli-start
 kind: tool

@@ -8,6 +8,7 @@ sections:
   - "## 既知の制限"
 deletes: []
 reason: 判断4 に変更相対の言い回し「本変更前に起動した」が残っており、参照先の「本変更」が SSOT に存在しない(docs/issues/056 #5。CLAUDE.md §1)
+reflected: 2026-08-05
 id: MODULE-cli-stop
 module: MOD-cli-stop
 kind: tool

@@ -6,6 +6,7 @@ sections:
   - "## 既知の制限"
 deletes: []
 reason: 処理の流れ4 が「NopNotifier はテストでのみ使う」と書くが、テストにも参照が無く意図の記述になっている(docs/issues/038 #30)。frontmatter の callers に controller が無い(同 #11。対称性)
+reflected: 2026-08-05
 id: MODULE-orchestrator-slack
 module: MOD-orchestrator
 kind: function-call

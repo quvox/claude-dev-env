@@ -7,6 +7,7 @@ sections:
   - "## 実装上の判断"
 deletes: []
 reason: 「未知の種別はそのまま出す」と書くが有効な JSON の未知イベントは破棄される(docs/issues/038 #23 = 032 #13)。あわせて 032 #3(callees に oneline が無い)が誤検知である理由を本文に明記する
+reflected: 2026-08-05
 id: MODULE-orchestrator-streamlog
 module: MOD-orchestrator
 kind: function-call

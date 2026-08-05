@@ -155,4 +155,4 @@ keywords: [機能表, 境界, claude-dev, Makefile, orchestrator, docker-proxy]
 | `orchestrator/main.go::terminalConfirm` | `Confirm: terminalConfirm`(`orchestrator/main.go:166`)の関数値経由。同上 |
 | `orchestrator/term.go::resolveMenu` | `selectMenu` の鍵操作を単体テスト可能にした純粋関数(`orchestrator/term.go:184` のコメント)。テスト専用であることが明示されている |
 | `orchestrator/state.go::Store.SaveControl` / `Store.RemoveSidecar` | 「used in tests / by tooling」と明示(`orchestrator/state.go:472`)。外部ツール向けの公開 API |
-| `orchestrator/controller.go::Controller.resolveInterventions` / `resolveOne` / `openInterventionCount`、`orchestrator/dashboard.go::DashboardState.SelectableWorker` / `SelectableWorkerStatus`(と私有ヘルパ2件) | **製品コードからの呼び出しが見つからない**(テストからのみ参照)。到達不能コードの疑い → `docs/issues/001-modify-orchestrator-test-only-symbols.md` で報告し、本タスクでは直さない |
+| `orchestrator/controller.go::Controller.resolveInterventions` / `resolveOne` / `openInterventionCount`、`orchestrator/dashboard.go::DashboardState.SelectableWorker` / `SelectableWorkerStatus`(と私有ヘルパ2件) | **製品コードからの呼び出しが見つからない**(テストからのみ参照)。到達不能コードの疑い → `docs/issues/001-modify-orchestrator-test-only-symbols.md` で報告しており、機能表の側では扱わない |

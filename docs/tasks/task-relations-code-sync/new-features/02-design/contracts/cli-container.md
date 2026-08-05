@@ -8,6 +8,7 @@ sections:
   - "### 遊休判定(docker-proxy と `claude-dev-net` を削除してよい条件)"
 deletes: []
 reason: SSOT に変更相対の言い回し「本変更の値打ちは」が残っており、参照先の「本変更」が SSOT に存在しない(docs/issues/056 #8。CLAUDE.md §1)
+reflected: 2026-08-05
 ---
 
 <!-- 変更指示。反映後の最終形を書く。version / verified は持たない。

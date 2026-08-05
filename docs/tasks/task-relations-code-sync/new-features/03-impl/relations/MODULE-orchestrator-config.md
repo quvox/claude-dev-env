@@ -5,6 +5,7 @@ sections:
   - "## 処理の流れ"
 deletes: []
 reason: 組込既定の列挙が 8 項目で worker_model と SlackChannel が落ちている(docs/issues/032 #14)。「0 以下など」の一般化が worker_grace_seconds に当てはまらない(同 #15)
+reflected: 2026-08-05
 id: MODULE-orchestrator-config
 module: MOD-orchestrator
 kind: function-call

@@ -6,6 +6,7 @@ sections:
   - "## エラーケース"
 deletes: []
 reason: 「必須」が検証失敗を意味するのか既定値補完を意味するのかが契約から読めない(docs/issues/038 追加#6)。D0-orch-15(★2026-08-04 改め「スキーマ強制はツールでは行わない」)を 02 の契約へ書き下す
+reflected: 2026-08-05
 ---
 
 <!-- 変更指示。記法の正は .claude/directions/change-set.md

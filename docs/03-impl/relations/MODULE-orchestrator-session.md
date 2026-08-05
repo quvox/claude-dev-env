@@ -10,7 +10,7 @@ contracts: なし
 design: DSN-mod-01, DSN-orch-02, DSN-ui-02
 requirements: FR-orch-02, FR-orch-08
 tests: orchestrator/session_test.go::TestNormalizeCName, orchestrator/session_test.go::TestSessionNames, orchestrator/session_test.go::TestSplitTarget, orchestrator/session_test.go::TestExpectedWindows, orchestrator/session_test.go::TestNewSessionManager_UsesComposeProjectName
-updated: 2026-08-04
+updated: 2026-08-05
 summary: tmux セッションとウィンドウを作成・切替・破棄する
 ---
 
@@ -31,19 +31,31 @@ summary: tmux セッションとウィンドウを作成・切替・破棄する
 3. `DetectSession(ctx)` は `$TMUX` があるとき `tmux display-message -p '#{session_name}'` で
    実測のセッション名に束縛する(CLI 側が別名で作っていても追従する)。
 4. `SetupMainSession(ctx)` が自分のウィンドウを `dashboard` へ改名し、`mouse on` を設定する。
-5. `Ensure(ctx, target)` が `new-window -d` でウィンドウを作る(冪等)。worker と brainstorming の
-   ウィンドウは `remain-on-exit on` にして `/exit` 後も残す。`dashboard` は `remain-on-exit off`。
-6. `Run(ctx, target, cmd)` は `respawn-pane -k` で既存ウィンドウの中身を差し替える。
+5. `Ensure(ctx, target)` が `new-window -d` でウィンドウを作る(冪等)。**対象を問わず
+   `remain-on-exit on` を設定する**(既存のときも設定し直す。`session.go:167`〜`:178`)。
+   `/exit` 後もウィンドウを残して次のコマンドを流し込めるようにするためである。
+   **`dashboard` ウィンドウをこの関数が作ることはない**(コントローラ自身のウィンドウであり、
+   `claude-dev orchestrate` が作る)。**「`dashboard` だけ `remain-on-exit off`」という分岐は無い。**
+6. `Run(ctx, target, cmd)` は `Ensure` を通したうえで `respawn-pane -k` で既存ウィンドウの中身を
+   差し替える。**`cmd` はクォートせずそのまま tmux へ渡す**(`session.go:215`)。
+   したがって**空白やメタ文字を含むコマンドの引用は呼び出し元の責任**である。
 7. `Has(ctx, target)` は `list-windows -F '#{window_name}'` で厳密に照合する
    (`display-message -t session:window` は窓が無くても現在の窓へフォールバックして誤って成功を返す)。
 8. `SwitchTo(ctx, target)` が `select-window`、`Kill(ctx, target)` が `kill-window`、
-   `PaneDead(ctx, target)` がペインの死活を返す。
-9. `LaunchInteractive(ctx, target, scriptPath)` が対話 claude を指定ウィンドウで起動する
-   (`MODULE-orchestrator-mode` の `shellSingleQuote` で引数をクォートする)。
+   `PaneDead(ctx, target)` が `list-panes -F '#{pane_dead}'` の出力に `1` を含むかで
+   ペインの死活を返す(**問い合わせが失敗したら「死んでいない」と読む**。`session.go:186`〜`:190`)。
+9. `LaunchInteractive(ctx, target, scriptPath)` が対話 claude を指定ウィンドウで起動する。
+   渡すコマンドは `sh <スクリプトパス>` の形で、**パスだけを `MODULE-orchestrator-mode` の
+   `shellSingleQuote` で単引用符で囲む**(`session.go:201`。シェルの語分割・展開が起きない形にする)。
+   起動後に `SwitchTo` でそのウィンドウを選択する。
 10. `EnsureAll(ctx, phase string, plan *Plan)` が **`ExpectedWindows(phase, plan)` が返す並び**
     (フェーズと plan のタスク状態から決まる期待ウィンドウ)と突き合わせ、消えたウィンドウを
     `Ensure` で作り直す。
-11. すべての tmux 呼び出しは `tmuxRun` に集約し、`splitTarget` が `session:window` を分解する。
+11. **tmux 呼び出しは `tmuxRun` に集約していない。** 終了ステータスだけを見る操作
+    (`new-window` / `set-option` / `respawn-pane` / `select-window` / `kill-window`)は
+    `tmuxRun`(`session.go:118`〜`:120`)を通すが、**出力を読む必要がある3つは
+    `exec.CommandContext` を直接呼ぶ**: `DetectSession`(`:89`)/ `Has`(`:150`)/
+    `PaneDead`(`:186`)である。`splitTarget` が `session:window` を分解する。
 
 ## 呼び出され方
 
@@ -58,7 +70,7 @@ summary: tmux セッションとウィンドウを作成・切替・破棄する
 | `ctx` | `context.Context` | `DetectSession` / `Has` / `SwitchTo` / `Ensure` / `Run` / `SetupMainSession` で必須 | `tmux` 子プロセスの中断に使う | 同上 |
 | `target` | 文字列 | `Ensure` / `Run` で必須 | `<セッション名>:<ウィンドウ名>`。ウィンドウ名は `dashboard` / `brainstorming` / `w-<taskID>` | 同上 |
 | `taskID` | 文字列 | `WorkerWindow` で必須 | ウィンドウ名 `w-<taskID>` の元。**検証は無い**(`MODULE-orchestrator-worktree` の `taskID` と同じ値) | 同上 |
-| `cmd` | 文字列 | `Run` で必須 | ウィンドウで実行するコマンド。`shellSingleQuote` でクォートしてから渡す | 同上 |
+| `cmd` | 文字列 | `Run` で必須 | ウィンドウで実行するコマンド。**`Run` はこれをクォートせず `respawn-pane -k` の引数へそのまま渡す**(`session.go:215`)ので、**引用は呼び出し元の責任**である。実際の呼び出し元は2つで、`controller.go:224` は `sh ` + `shellSingleQuote(script)` と囲み、`controller.go:280` は `tail -n +1 -F ` + ログパスを**囲まずに**渡す(ログパスは `.orchestrator/workers/<taskID>.log` 形式) | 同上 |
 
 - 認可: プロセス内呼び出し。
 

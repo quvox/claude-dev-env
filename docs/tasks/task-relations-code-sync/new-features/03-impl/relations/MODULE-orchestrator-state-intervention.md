@@ -7,6 +7,7 @@ sections:
   - "## 異常系"
 deletes: []
 reason: open.json の項目が実際の型と違う(docs/issues/032 #11)。サイドカー API の用途が実態と違う(docs/issues/038 #21 = 032 #12)
+reflected: 2026-08-05
 id: MODULE-orchestrator-state-intervention
 module: MOD-orchestrator
 kind: function-call
