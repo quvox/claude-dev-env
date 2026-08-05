@@ -61,12 +61,12 @@ summary: 破壊的操作(stop / logout / reset)が他プロジェクトの資源
 
 | ドキュメント | version 遷移 | 何を変えたか |
 |---|---|---|
-| docs/00-requests/decisions/env.md | 1.0.0 → 1.1.0 | `D0-env-08`(対象の限定)/ `D0-env-09`(排他の手段は委任)/ `D0-env-10`(ラベルの名前と値は委任)を新設し、`D0-env-05` 項1・項2 を上書き |
+| docs/00-requests/decisions/env.md | 1.0.0 → **1.1.1** | `D0-env-08`(対象の限定)/ `D0-env-09`(排他の手段は委任)/ `D0-env-10`(ラベルの名前と値は委任)を新設し、`D0-env-05` 項1・項2 を上書き |
 | docs/01-requirements/functional.md | 1.4.0 → 1.5.0 | `FR-env-01` 受入基準9 を `stop`/`logout`/`reset` の3コマンドへ広げ(判定はラベルにもイメージにも依存しない)、14〜21 を追加。`FR-env-03` に 14〜23 を追加(確認・非TTY中止・ラベル限定・削除失敗の非0終了・認証コピーの削除・中断時の 130) |
-| docs/02-design/contracts/cli-container.md | 1.3.0 → 1.4.0 | `## 破壊的操作の対象の識別` を新設(識別手段・管理ラベル・削除の3規則・残したものの列挙・ロックキーの文字集合・遊休判定・compose 名の一意化・排他のキー表)。`DSN-env-01`/`-02`/`-03` を追加。エラーケースを 13 → 25 行 |
-| docs/02-design/logging.md | 1.1.0 → 1.2.0 | `## 主要イベントのログ仕様` に破壊的操作の出力を12行追加し、起動ディレクトリの絶対パスを出す根拠と「削除に失敗した資源がある状態で成功の文言を出してはならない」共通制約を明記 |
-| docs/02-design/relations.md | 1.0.0 → 1.1.0 | `PLAN-cli-common-lock` を新設(呼び出し元=6コマンド)。`## 一覧` が 64 行・全83機能に |
-| docs/02-design/system.md | 2.0.0 → 2.1.0 | `#### SCR-01 cli-commands` に `--yes` と受理文字集合。`## モジュール分割定義` の `MOD-cli-common` の責務に排他ロック、`MOD-cli-reset` の依存を `MOD-cli-common` へ、機能数 82 → 83。`### 結合テスト対象` の `CTR-cli-container` を起動側と破壊的操作側の2行に分割。`### E2Eシナリオ一覧` に破壊的操作の検証 |
+| docs/02-design/contracts/cli-container.md | 1.3.0 → **1.4.1** | `## 破壊的操作の対象の識別` を新設(識別手段・管理ラベル・削除の3規則・残したものの列挙・ロックキーの文字集合・遊休判定・compose 名の一意化・排他のキー表)。`DSN-env-01`/`-02`/`-03` を追加。エラーケースを 13 → 25 行 |
+| docs/02-design/logging.md | 1.1.0 → **1.2.1** | `## 主要イベントのログ仕様` に破壊的操作の出力を12行追加し、起動ディレクトリの絶対パスを出す根拠と「削除に失敗した資源がある状態で成功の文言を出してはならない」共通制約を明記 |
+| docs/02-design/relations.md | 1.0.0 → **1.3.0** | `PLAN-cli-common-lock` を新設(呼び出し元=6コマンド)。`## 一覧` が 64 行・全83機能に |
+| docs/02-design/system.md | 2.0.0 → **2.2.0** | `#### SCR-01 cli-commands` に `--yes` と受理文字集合。`## モジュール分割定義` の `MOD-cli-common` の責務に排他ロック、`MOD-cli-reset` の依存を `MOD-cli-common` へ、機能数 82 → 83。`### 結合テスト対象` の `CTR-cli-container` を起動側と破壊的操作側の2行に分割。`### E2Eシナリオ一覧` に破壊的操作の検証 |
 | docs/03-impl/features.md | (版なし) | `MODULE-cli-common-lock` を1行追加(83機能)。統合の件数 11 → 12、昇格の判断表に1行 |
 | docs/03-impl/relations/MODULE-cli-common-lock.md | **新規 1.0.0** | 排他ロックの取得・解放・残骸の引き継ぎ。ファンイン6の共有基盤 |
 | docs/03-impl/relations/MODULE-cli-start.md | (層で認証) | 管理ラベルの付与・2段ロック・compose 名の一意化。戻り値・異常系・既知の制限・副作用の順序・並行性を実装から確定 |
@@ -75,13 +75,16 @@ summary: 破壊的操作(stop / logout / reset)が他プロジェクトの資源
 | docs/03-impl/relations/MODULE-cli-reset.md | (層で認証) | 同上 + 共有資源の遊休判定。`callees` に `container-exists` / `image-exists` を追加 |
 | docs/03-impl/relations/MODULE-cli-login.md / -login-codex.md | (層で認証) | 対話認証の全区間で共有資源単位のロックを保持する |
 | docs/03-impl/relations/MODULE-cli-common-container-exists.md / -image-exists.md | (層で認証) | `callers` に `MODULE-cli-reset` を追加(コードに合わせた対称性の回復) |
-| docs/03-impl/contracts/cli-container.md | 1.3.0 → 1.4.0 | 実装上の事実を `path:line` ごと取り直し、管理ラベル・ロックの実体と区間・残骸回収・解放・遊休判定・削除結果の記録・共有ボリュームの消去判定の7行を追加 |
+| docs/03-impl/contracts/cli-container.md | 1.3.0 → **1.5.0** | 実装上の事実を `path:line` ごと取り直し、管理ラベル・ロックの実体と区間・残骸回収・解放・遊休判定・削除結果の記録・共有ボリュームの消去判定の7行を追加 |
 | docs/03-impl/tests/cli-common.md | 1.0.0 → 1.1.0 | `FR-env-01` 受入基準16・17 と `MODULE-cli-common-lock` の行 |
-| docs/03-impl/tests/cli-logout.md | 1.0.0 → 1.1.0 | `FR-env-03` 受入基準14〜23 の行 |
+| docs/03-impl/tests/cli-logout.md | 1.0.0 → **1.2.0** | `FR-env-03` 受入基準14〜23 の行 |
 | docs/03-impl/tests/cli-start.md | 1.1.0 → 1.2.0 | `FR-env-01` 受入基準14 の行 |
-| docs/03-impl/tests/cli-stop.md | 1.0.0 → 1.1.0 | `FR-env-01` 受入基準15・18・19・20 の行 |
+| docs/03-impl/tests/cli-stop.md | 1.0.0 → **1.2.0** | `FR-env-01` 受入基準15・18・19・20 の行 |
 | docs/03-impl/tests/e2e.md | 1.1.0 → 1.2.0 | `E2E-01` に手順8(13項目)を追加。手順7-7 の `issue 045` 応急処置を修正後の期待値へ |
-| docs/03-impl/index.md | 1.8.0 → 1.9.0 | 機能間連携仕様書の本数 82 → 83、`check-relations.py` の結果 83/83、起票済みの実装欠陥 16 → 15 件(解消5件を外し `046`/`047`/`051` を追加) |
+| docs/03-impl/index.md | 1.8.0 → **1.11.0** | 機能間連携仕様書の本数 82 → 83、`check-relations.py` の結果 83/83、起票済みの実装欠陥 16 → 15 件(解消5件を外し `046`/`047`/`051` を追加。認証時に `053` を含めて機械照合) |
+<!-- 版は「反映(§3)で上げた値 → /doc-check ssot の2回の実行が指摘の修正で
+     さらに上げた最終値」である。太字が最終値。 -->
+
 
 ## 実装したもの
 
