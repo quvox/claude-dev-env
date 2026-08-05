@@ -1,7 +1,7 @@
 ---
 id: orchestrator
 scope: MOD-orchestrator
-version: 1.4.0
+version: 1.4.1
 updated: 2026-08-05
 source:
   - docs/01-requirements/functional.md
@@ -10,7 +10,7 @@ summary: MOD-orchestrator(AIオーケストレーター)の受入基準⇄テス
 keywords: [テスト]
 verified:
   at: 2026-08-05
-  version: 1.3.0
+  version: 1.4.1
   against:
     - doc: docs/01-requirements/functional.md
       version: 1.5.1
@@ -54,7 +54,7 @@ verified:
 | FR-orch-04 | 8 | 境界値 | 単体 | `orchestrator/trigger_test.go::TestEvaluate_PreDispatchApprovedIrreversibleDoesNotFire`, `orchestrator/controller_test.go::TestIntervene_ResolveApprovesIrreversible` | 実装済み |
 | FR-orch-04 | 9 | 境界値 | 単体 | - | 未検証(テスト未実装) |
 | FR-orch-05 | 1 | 正常系 | 単体 | `orchestrator/archive_test.go::TestArchiveRun_MovesNotDeletes`, `::TestArchiveRun_NoState` | 実装済み |
-| FR-orch-05 | 2 | 正常系 | 単体 | - | **未検証(テスト未実装)** |
+| FR-orch-05 | 2 | 正常系 | 単体 | - | 未検証(テスト未実装) |
 | FR-orch-05 | 3 | 正常系 | 単体 | `orchestrator/plan_test.go::TestStatusTransition_HappyPath`, `::TestReviseDoesNotIncrementAttempts`, `::TestAllDoneAndSettled` | 実装済み |
 | FR-orch-05 | 4 | 正常系 | E2E | E2E-04(実機確認手順) | 未検証(テスト未実装) |
 | FR-orch-05 | 5 | 正常系 | E2E | E2E-04(実機確認手順) | 未検証(テスト未実装) |

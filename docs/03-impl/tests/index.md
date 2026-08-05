@@ -33,7 +33,7 @@
 | [hooks](hooks.md) | MOD-hooks | 0 / **4** / 1 | 1.0.0 | 2026-08-03 | MOD-hooks(Claude Code フック)の受入基準⇄テスト対応 |
 | [images](images.md) | (モジュール外)イメージのビルドと GHCR 配布 | 0 / **15** / 3 | 1.0.0 | 2026-08-03 | どのモジュールにも属さないイメージのビルドと GHCR 配布の受入基準⇄テスト対応 |
 | [makefile](makefile.md) | MOD-makefile | 0 / **21** / 1 | 1.0.0 | 2026-08-03 | MOD-makefile(ビルド・導入・運用ターゲット)の受入基準⇄テスト対応 |
-| [orchestrator](orchestrator.md) | MOD-orchestrator | 37 / **47** / 0 | 1.4.0 | 2026-08-05 | MOD-orchestrator(AIオーケストレーター)の受入基準⇄テスト対応 |
+| [orchestrator](orchestrator.md) | MOD-orchestrator | 37 / **48** / 0 | 1.4.1 | 2026-08-05 | MOD-orchestrator(AIオーケストレーター)の受入基準⇄テスト対応 |
 | [portsync](portsync.md) | MOD-portsync | 0 / **1** / 2 | 1.0.0 | 2026-08-03 | MOD-portsync(DooD 経路のポート同期)の受入基準⇄テスト対応 |
 | [sample-project](sample-project.md) | MOD-sample-project | 2 / **5** / 1 | 1.0.0 | 2026-08-03 | MOD-sample-project(自己検証用サンプル)の受入基準⇄テスト対応 |
 | [strategy](strategy.md) | 全体 | - | 1.1.1 | 2026-08-04 | テストのレベル別実行方法・状態列の語彙・受入基準の配分規約 |
