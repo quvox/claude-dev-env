@@ -58,7 +58,7 @@ summary: worker の成果をレビューし重大指摘があれば差し戻す�
 6. 重大な severity が残る間は revise を繰り返す(`max_review_rounds` まで。`Attempts` は増やさない)。
    **ただし revise の結果が `NeedsHuman` を持っていたら、往復の残りがあってもそこで打ち切る**:
    `t.Result` にその結果を代入して `(GateOutcome{LastSevere}, nil)` を返し、
-   判断は呼び出し元へ委ねる(`orchestrator/review.go:232`〜`:235`)。
+   判断は呼び出し元へ委ねる(`orchestrator/review.go:231`〜`:235`)。
 7. **フォーマット違反と内容不合格を分離する**: パース不能なら**ローカル変数 `formatErrs` を増やし**
    (`orchestrator/review.go:181`・`:197`)、`review_format_error` を監査ログへ追記して、
    **実作業を再ディスパッチせずレビューだけ再試行**する(**この再試行はレビュー往復数を消費しない**)。
@@ -148,7 +148,7 @@ summary: worker の成果をレビューし重大指摘があれば差し戻す�
 
 | 種別 | 内容 |
 |---|---|
-| 戻り値 | **`(GateOutcome, error)`**(`orchestrator/review.go:161`〜`:167` / `:179`)。`GateOutcome` は `Passed`(重大指摘が残っていない)/ `LastSevere`(重大指摘の要約。差し戻しと行き詰まりの材料)/ `FormatError`(フォーマットエラーが上限に達した)/ `FormatErrorCount` の4つで、**`findings[]` は返さない**(指摘の生データは `Reviewer.Review` の内部で消費される)。**`error` が非 `nil` になるのは context がキャンセルされたときだけ**である(`:191` のレビュー中断と `:221` の revise 中断の2箇所。どちらも `ctx.Err() != nil` が条件)。**中断でない revise のディスパッチ失敗は `error` にならない**: `revise_error` を監査へ追記して `lastSevere` を保ったままループを抜け、`(GateOutcome{LastSevere}, nil)` を返す(`:222`〜`:229` で `break` し `:237` で返る。エラーを上げると controller が一過性の失敗として再ディスパッチし、行き詰まりの信号が消えるため) |
+| 戻り値 | **`(GateOutcome, error)`**(`orchestrator/review.go:161`〜`:167` / `:179`)。`GateOutcome` は `Passed`(重大指摘が残っていない)/ `LastSevere`(重大指摘の要約。差し戻しと行き詰まりの材料)/ `FormatError`(フォーマットエラーが上限に達した)/ `FormatErrorCount` の4つで、**`findings[]` は返さない**(指摘の生データは `Reviewer.Review` の内部で消費される)。**`error` が非 `nil` になるのは context がキャンセルされたときだけ**である(`:191` のレビュー中断と `:221` の revise 中断の2箇所。どちらも `ctx.Err() != nil` が条件)。**中断でない revise のディスパッチ失敗は `error` にならない**: `revise_error` を監査へ追記して `lastSevere` を保ったままループを抜け、`(GateOutcome{LastSevere}, nil)` を返す(`:228`〜`:229` で記録して `break` し、`:237` で返る。エラーを上げると controller が一過性の失敗として再ディスパッチし、行き詰まりの信号が消えるため) |
 | 永続化 | `audit.jsonl` への追記(`review_reformat_ok`(`:94`)/ `review_result`(`:101`。`usage` が非 `null` のときだけ)/ `review_format_error`(`:198`)/ `revise_error`(`:242`))。**`plan.json` のファイルはこの機能が書かない**が、**共有 plan 上の `Task` は書き替える**: `t.Status` を `review` / `revise` へ、revise が結果を返したら `t.Result` へ代入する(`orchestrator/review.go:188`・`:217`・`:231`)。`Task.ReviewFormatErrors` の更新は戻り値を受けた `MODULE-orchestrator-controller`(`controller.go:685`・`:699`)が行う |
 | 発火するイベント | なし |
 | ログ | **`workers/<taskID>.review.log`**(`review.go:79` が `WorkerLogPath(t.ID + ".review")` を渡す)。worker 本体の `workers/<taskID>.log` とは**別ファイル**で、整形ライタ(`MODULE-orchestrator-streamlog`)は同じものを通る。再整形の呼び出し(`:126`)は `logPath` に空文字を渡すので**ログを残さない** |

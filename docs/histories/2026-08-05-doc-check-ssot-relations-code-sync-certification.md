@@ -53,7 +53,7 @@ summary: /doc-check ssot の指摘を修正して合格証4件を発行した(�
 | docs/02-design/contracts/orchestrator-prompt.md | 1.3.0(据え置き) | 本文は変えず**合格証を再発行**した(`against` を `system.md` 2.2.1 へ) |
 | docs/03-impl/contracts/orchestrator-prompt.md | 1.1.0(据え置き) | 本文は変えず**合格証を再発行**した(`against` を 02 契約 1.2.0 → **1.3.0**)。忘れると `close-task.py` 条件b が落ちる箇所 |
 | docs/03-impl/tests/orchestrator.md | 1.2.0 → **1.3.0** | 「全件」表の数える範囲を明記し `CTR-cli-orchestrator` の行を追加(47 行 + #38 の例外 = 48 行)。ファイル名だけだったテスト識別子2件を実在する関数名へ |
-| docs/03-impl/index.md | 1.12.0 → **1.13.0** | 本文は変えず、**relations 層の代表として層の内容変更(下記3本)を版に反映**した |
+| docs/03-impl/index.md | 1.12.0 → **1.13.1** | 本文は変えず、**relations 層の代表として層の内容変更(下記3本)を版に反映**した(1.13.0 で認証したのち、最終監査の後に入れた行番号引用2件の訂正を PATCH として 1.13.1 に載せ替え、合格証も同版で出し直した) |
 | docs/03-impl/relations/MODULE-orchestrator-review.md | (層として index.md が認証) | `error` が非 `nil` になるのは context キャンセルのときだけである事実、`formatErrs` がローカル変数であること、介入キューへ積むのは controller であること、再整形の不変性が保証されないこと、`{"findings":null}` がゲートを通過すること、レビュア起動引数の実際、行番号引用4件を訂正。`### MODULE-orchestrator-claude-exec` を追加 |
 | docs/03-impl/relations/MODULE-orchestrator-worker.md | (同上) | `### MODULE-orchestrator-claude-exec` を追加。`PrepareWorktree` の戻り値が `error` だけで worktree のパスは `t.Worktree` への副作用で渡ることを明記 |
 | docs/03-impl/relations/MODULE-orchestrator-dashboard.md | (同上) | 呼び出され方の直下に二重挿入されていた `### MODULE-orchestrator-session` を削除 |
