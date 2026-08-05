@@ -1,7 +1,7 @@
 ---
 id: orchestrator
 scope: MOD-orchestrator
-version: 1.2.0
+version: 1.3.0
 updated: 2026-08-05
 source:
   - docs/01-requirements/functional.md
@@ -10,12 +10,12 @@ summary: MOD-orchestrator(AIオーケストレーター)の受入基準⇄テス
 keywords: [テスト]
 verified:
   at: 2026-08-05
-  version: 1.1.1
+  version: 1.3.0
   against:
     - doc: docs/01-requirements/functional.md
-      version: 1.5.0
+      version: 1.5.1
     - doc: docs/02-design/system.md
-      version: 2.2.0
+      version: 2.2.1
 ---
 
 # MOD-orchestrator のテスト対応
@@ -69,8 +69,8 @@ verified:
 | FR-orch-06 | 4 | 正常系 | E2E | E2E-04(実機確認手順) | 未検証(テスト未実装) |
 | FR-orch-06 | 5 | 境界値 | E2E | E2E-04(実機確認手順) | 未検証(テスト未実装) |
 | FR-orch-06 | 6 | 境界値 | E2E | E2E-04(実機確認手順) | 未検証(テスト未実装) |
-| FR-orch-06 | 7 | 異常系 | 単体 | `orchestrator/review_parse_test.go` | 実装済み |
-| FR-orch-07 | 1 | 正常系 | 単体 | `orchestrator/models_test.go` | 実装済み |
+| FR-orch-06 | 7 | 異常系 | 単体 | `orchestrator/accept_test.go::TestReview_ReformatsProseToJSON`, `orchestrator/review_parse_test.go::TestFindReviewResultJSON_StrictAndTolerant` | 実装済み |
+| FR-orch-07 | 1 | 正常系 | 単体 | `orchestrator/models_test.go::TestTaskKindProfile`, `::TestWorkerTaskProfile`, `::TestRoleProfiles` | 実装済み |
 | FR-orch-07 | 2 | 正常系 | E2E | E2E-04(実機確認手順) | 未検証(テスト未実装) |
 | FR-orch-07 | 3 | 正常系 | E2E | E2E-04(実機確認手順) | 未検証(テスト未実装) |
 | FR-orch-07 | 4 | 境界値 | E2E | E2E-04(実機確認手順) | 未検証(テスト未実装) |
@@ -122,6 +122,11 @@ verified:
 
 ## 未検証(テスト未実装)の全件
 
+**この表が数える範囲**: 上の3表(受入基準 ⇄ テスト対応表 / 契約の結合テスト /
+機能間連携仕様書 ⇄ テスト)で**状態セルが「未検証(テスト未実装)」である 47 行**を列挙する。
+**#38 だけは例外**で、状態セルは「実装済み」だが対象の一部しか覆っていないため、覆っていない範囲を
+明示する目的で併記している(47 行には数えない)。したがって表の行数は 48 である。
+
 | # | 対象 | なぜ未実装か | 閉じる予定 |
 |---|---|---|---|
 | 1 | FR-orch-01 — 受入基準 2(正常系) | Go の自動テストは書ける領域だが未実装。実 tmux・実エージェント・実 git を要する振る舞いのため、現状は E2E-04 / E2E-05 の実機確認で代替している | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |
@@ -171,3 +176,4 @@ verified:
 | 45 | FR-orch-05 — 受入基準 8(境界値) | プロセスの異常終了を再現する自動テストが無く、実機確認でも再現手順が未整備(`docs/issues/006` / `docs/pendings.md` P-003) | 実機確認手順の整備(`docs/issues/006` と P-003 の QA レーン)で閉じる |
 | 46 | FR-orch-05 — 受入基準 9(境界値) | プロセスの異常終了を再現する自動テストが無く、実機確認でも再現手順が未整備(`docs/issues/006` / `docs/pendings.md` P-003) | 実機確認手順の整備(`docs/issues/006` と P-003 の QA レーン)で閉じる |
 | 47 | FR-orch-05 — 受入基準 2(正常系) | **「未完了 plan が残る状態で `orchestrate` したらその run を継続する」という分岐そのものが `orchestrator/main.go` の再開判定にあり、`main.go` に単体テストが無い**(`MODULE-orchestrator-main` の `tests` は `terminalConfirm` の1件だけ)。近いテスト(`archive_test.go::TestCountUndone` は未完了数の計算、`controller_test.go::TestResume_UsesResumeFlagAfterCrash` は同一 Attempt の `--resume` 継続)はこの基準の主張を覆っていない | `main.go` の再開判定に単体テストを足すタスクで閉じる(`docs/issues/004` の残件のうち「永続データモデルの記述」と同じ対象) |
+| 48 | CTR-cli-orchestrator — 契約の結合テスト | `claude-dev orchestrate` とコントローラの境界はシェルと Go にまたがるため、どちらのモジュールにも自動の結合テストが無く、手順(`tests/e2e.md` E2E-04 / E2E-05)の実機確認だけで代替している | 実機確認手順の整備(`docs/issues/006` と `docs/pendings.md` P-003 の QA レーン)で閉じる |

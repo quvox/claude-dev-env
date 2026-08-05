@@ -9,10 +9,10 @@ summary: オーケストレーターが worker / 対話 Claude へ渡すプロ�
 keywords: [契約, CTR]
 verified:
   at: 2026-08-05
-  version: 1.2.0
+  version: 1.3.0
   against:
     - doc: docs/02-design/system.md
-      version: 2.2.0
+      version: 2.2.1
 ---
 
 # CTR-orchestrator-prompt orchestrator → worker / 対話 Claude

@@ -49,7 +49,8 @@
 | [056-modify-ssot-retains-change-relative-wording](056-modify-ssot-retains-change-relative-wording.md) | modify | 中 | 2026-08-05 | docs/03-impl/relations/MODULE-cli-reset.md, docs/03-impl/relations/MODULE-cli-stop.md, docs/03-impl/contracts/cli-container.md, docs/02-design/system.md, docs/02-design/contracts/cli-container.md, docs/issues/038 | 反映後の SSOT に「〜へ改める」「本変更で」という変更相対の言い回しが 8 箇所残っており、うち 1 箇所は現行実装について事実と異なることを書いている |
 | [057-bug-broken-open-json-silently-drops-the-intervention-queue](057-bug-broken-open-json-silently-drops-the-intervention-queue.md) | bug | 中 | 2026-08-04 | FR-orch-05, MODULE-orchestrator-state-intervention, MODULE-orchestrator-controller, docs/03-impl/index.md, docs/issues/021, docs/issues/026 | 壊れた intervention/open.json をすべて空キューとして扱うため、判断待ちキュー全体が黙って失われ、その後の Add が内容を上書きする |
 | [058-bug-unknown-severity-passes-the-review-gate](058-bug-unknown-severity-passes-the-review-gate.md) | bug | 中 | 2026-08-04 | FR-orch-06, D0-orch-15, CTR-orchestrator-prompt, MODULE-orchestrator-review, docs/issues/034, docs/issues/015 | レビュー結果の severity の値域を検証しないため、綴り違いや別語彙の重大な指摘が「重大でない」扱いでゲートを通過する |
+| [059-modify-review-gate-scoring-criterion-has-no-covering-test](059-modify-review-gate-scoring-criterion-has-no-covering-test.md) | modify | 中 | 2026-08-05 | FR-orch-06, MODULE-orchestrator-review, docs/03-impl/tests/orchestrator.md, docs/issues/019 | tests/orchestrator.md が FR-orch-06 受入基準2 を「実装済み」としているが、挙げているテストは採点基準を検証しておらず、覆うテストが実在しない |
 
-件数: 43
+件数: 44
 
 <!-- END GENERATED -->

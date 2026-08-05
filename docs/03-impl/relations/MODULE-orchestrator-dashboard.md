@@ -72,17 +72,6 @@ UI 設計の `orch-dashboard` 画面の実体である。
 - 戻り値: `*tea.Program`(呼び出し元が `Run` する)。
 - 認可: 端末を見ている人間。
 
-### MODULE-orchestrator-session
-
-- 何のために呼ぶか: 選択行で Enter を押したときに、そのウィンドウへ移動するため。
-- 何を渡すか: **`SwitchTo` には組み立て済みの tmux ターゲット文字列**を渡す
-  (`BrainstormingWindow()` の戻り値、または `WorkerWindow(r.id)` の戻り値。
-  `dashtui.go:113` / `:115`)。**タスク ID をそのまま渡すのではない。**
-- 何を受け取るか: `error`。**ただし `_ =` で捨てている**(`dashtui.go:113` / `:115`)。
-- **失敗したときどうなるか**: **移動できなかったことは画面にも表示されない**(TUI に留まる)。
-  controller 側の 5 秒ごとのウィンドウ再構築で次の tick に復旧しうる。
-  `sessions` が `nil`(tmux 無し)のときは呼び出し自体を行わない。
-
 ## 連携先と連携内容
 
 ### MODULE-orchestrator-session

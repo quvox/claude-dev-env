@@ -9,11 +9,11 @@ impl: orchestrator/mode.go::Mode.ResolveArgs
 summary: オーケストレーターが worker / 対話 Claude へ渡すプロンプトと受け取る結果の取り決め(実装側)
 keywords: [契約, CTR, 実装]
 verified:
-  at: 2026-08-04
+  at: 2026-08-05
   version: 1.1.0
   against:
     - doc: docs/02-design/contracts/orchestrator-prompt.md
-      version: 1.2.0
+      version: 1.3.0
 ---
 
 # CTR-orchestrator-prompt orchestrator → worker / 対話 Claude(実装)

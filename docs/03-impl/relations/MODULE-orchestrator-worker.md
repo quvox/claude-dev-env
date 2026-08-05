@@ -79,17 +79,45 @@ summary: タスクを worker へ割り当てて並列実行し結果を解釈す
 
 ## 連携先と連携内容
 
+### MODULE-orchestrator-claude-exec
+
+- 何のために呼ぶか: worker 本体である `claude -p` の子プロセスを起動するため
+  (`orchestrator/worker.go:231`)。**インターフェース `ClaudeRunner`
+  (`orchestrator/worker.go:47`〜`:52`)越しの呼び出し**なので、静的コールグラフには呼び出し辺が
+  出ない(実体は `orchestrator/worker.go:350` の `ExecClaude.RunPrompt`)。
+- 何を渡すか: worktree の絶対パス(CWD になる)・`workerTaskProfile(t)` が選んだモデル・
+  `BuildPrompt` が組んだプロンプト・ログのパス(`workers/<taskID>.log`)・
+  `RunOpts{SessionID, Resume, GraceSeconds, Effort}`。**セッション ID の採番は controller の責務**
+  であり、この機能は `Task.SessionID` をそのまま渡す。 / 何を受け取るか: **生の stream-json
+  バイト列**(`[]byte`)とエラー。ログのパスが非空のときは、同じ出力が
+  `orchestrator/streamlog.go` の整形ライタ経由でそのファイルにも書かれる
+  (`io.MultiWriter`。`orchestrator/worker.go:396`〜`:398`)。この整形は
+  `MODULE-orchestrator-claude-exec` の内部で行われ、この機能は関与しない。
+- **失敗したときどうなるか**: `Dispatch` は `(nil, err)` を返して即座に戻る(結果の解析は行わない)。
+  呼び出し元の `MODULE-orchestrator-controller` が `Attempts++` して再試行し、`stuck_limit` を
+  超えると条件3のトリガーが発火して `waiting_human` になる。中断時は `GraceSeconds` の猶予つきで
+  SIGINT が子プロセスへ伝わる。
+
 ### MODULE-orchestrator-worktree
 
-- 何のために呼ぶか: タスク専用の作業コピーを用意するため。 / 何を渡すか: タスク ID。
-- 何を受け取るか: worktree のパス。
+- 何のために呼ぶか: タスク専用の作業コピーを用意するため(`Worker.PrepareWorktree`。
+  `orchestrator/worker.go:222` から呼ぶ)。 / 何を渡すか: `ctx` と `*Task`。
+- 何を受け取るか: **`error` だけである**(`func (w *Worker) PrepareWorktree(ctx, t) error`。
+  `orchestrator/worker.go:114`)。**作った worktree の相対パスは戻り値ではなく `t.Worktree` への
+  代入という副作用で渡る**ので、`Dispatch` は CWD を得るために別途
+  `MODULE-orchestrator-state` の `Store.WorktreeAbs(t.ID)` を呼ぶ(`:226`)。
 - **失敗したときどうなるか**: エラーを返し、タスクは実行されずに再試行対象になる。
 
 ### MODULE-orchestrator-state
 
-- 何のために呼ぶか: `ORCHESTRATOR.md` と VM 前置文の取得、`WorkerLogPath` によるログ出力先の解決。
-- 何を渡すか: タスク ID。 / 何を受け取るか: 前置文とログのパス。
-- **失敗したときどうなるか**: 前置なしで続行する。ログ先が作れない場合は整形出力が失われる。
+- 何のために呼ぶか: `ORCHESTRATOR.md` と VM 前置文の取得、worktree の絶対パスと
+  ログ出力先の解決。
+- 何を渡すか: `Store.WorktreeAbs` / `Store.WorkerLogPath` にはタスク ID(`:226`・`:227`)、
+  `LoadProjectPolicy` には**ワークスペースのパス `w.Workspace`**(`:173`)。
+  **`VMModePreamble` は引数を取らず、環境変数 `CLAUDE_DEV_VM` を自分で読む**(`:172`)。
+   / 何を受け取るか: 前置文と、worktree の絶対パス・ログのパス。
+- **失敗したときどうなるか**: 前置なしで続行する。ログ先が作れない場合は整形出力が失われる
+  (`os.Create` の失敗は握りつぶされ、生の出力だけがバッファに残る)。
 
 ### MODULE-orchestrator-state-intervention
 
