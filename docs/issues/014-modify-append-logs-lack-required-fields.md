@@ -4,7 +4,7 @@ type: modify
 severity: 中
 found: 2026-08-03
 found_in: task-impl-depth のドライラン パス2(コード精読。issue 004 の観点5「ログ・可観測性」)
-related: MODULE-orchestrator-state-intervention, MODULE-orchestrator-controller, docs/02-design/logging.md, NFR-ops-01
+related: MODULE-orchestrator-state-intervention, MODULE-orchestrator-controller, docs/02-design/logging.md
 summary: 追記型ログ3本が 02-design/logging.md の必須フィールド(event / task_id / attempt)を満たしておらず、行の形式もファイルごとに違う
 ---
 

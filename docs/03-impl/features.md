@@ -73,7 +73,7 @@ keywords: [機能表, 境界, claude-dev, Makefile, orchestrator, docker-proxy]
 | MODULE-makefile-setup | tool | dispatch setup @ Makefile::setup | MOD-makefile | env→network→volumes→build→install を順に実行する初回セットアップ |
 | MODULE-makefile-status | tool | dispatch status @ Makefile::status | MOD-makefile | イメージ・コンテナ・ボリュームの状態を表示する |
 | MODULE-makefile-uninstall | tool | dispatch uninstall @ Makefile::uninstall | MOD-makefile | CLI のシンボリックリンクを削除する |
-| MODULE-makefile-update-claude | tool | dispatch update-claude @ Makefile::update-claude | MOD-makefile | Claude Code だけをキャッシュ利用で高速更新する |
+| MODULE-makefile-update-claude | tool | dispatch update-claude @ Makefile::update-claude | MOD-makefile | コンテナイメージを作り直さずに Claude Code だけを更新する(ビルドキャッシュを使う) |
 | MODULE-makefile-upgrade | tool | dispatch upgrade @ Makefile::upgrade | MOD-makefile | 全イメージを --no-cache で完全再ビルドする |
 | MODULE-makefile-volumes | tool | dispatch volumes @ Makefile::volumes | MOD-makefile | 認証情報などの共有ボリュームを作成する |
 | MODULE-orchestrator-claude-exec | function-call | orchestrator/worker.go::ExecClaude.RunPrompt, orchestrator/claudebin.go::claudeChildEnv, orchestrator/claudebin.go::claudePath, orchestrator/claudebin.go::localBinDir | MOD-orchestrator | Claude CLI を子プロセスとして起動し環境と PATH を整える |

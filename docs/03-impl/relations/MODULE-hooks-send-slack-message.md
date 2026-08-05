@@ -8,9 +8,9 @@ callers: なし
 callees: なし
 contracts: なし
 design: DSN-mod-01, DSN-mod-03
-requirements: FR-orch-07, NFR-ops-01
+requirements: FR-orch-07
 tests: なし(未実装。シェル実装のため自動テストランナーが無く実機確認で代替する)
-updated: 2026-08-02
+updated: 2026-08-05
 summary: Claude Code フックの通知をプロンプト文脈つきで Slack へ送る
 ---
 

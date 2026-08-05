@@ -3,9 +3,9 @@ id: 062-modify-residual-fast-loop-wording-in-makefile-build-orchestrator
 type: modify
 severity: 中
 found: 2026-08-05
-found_in: /doc-check task-spec-measurability(合成ビューの C7 走査。`docs/issues/017` を閉じる直前に取りこぼしを実測)
-related: MODULE-makefile-build-orchestrator, docs/03-impl/relations/MODULE-makefile-build-orchestrator.md, D0-scope-06, FR-orch-09, docs/issues/017
-summary: docs/issues/017(relations に残る測定不能語)を閉じるタスクの走査から漏れた測定不能語が1件ある。MODULE-makefile-build-orchestrator.md:27 の「自己検証の高速ループが直接起動する」で、017 が同ファイルを「解消済み」と記録しているため 017 を削除すると追跡先が消える
+found_in: /doc-check task-spec-measurability(合成ビューの C7 走査。測定不能語の issue を閉じる直前に取りこぼしを実測)
+related: MODULE-makefile-build-orchestrator, docs/03-impl/relations/MODULE-makefile-build-orchestrator.md, D0-scope-06, FR-orch-09, docs/histories/2026-08-05-spec-measurability.md
+summary: relations に残る測定不能語を閉じたタスクの走査から漏れた測定不能語が1件ある。MODULE-makefile-build-orchestrator.md:27 の「自己検証の高速ループが直接起動する」で、解消済みの親 issue が同ファイルを「解消済み」と記録していたため、その削除で追跡先が消えた
 ---
 
 # 062 `MODULE-makefile-build-orchestrator` に測定不能語「高速ループ」が残る
@@ -26,7 +26,8 @@ summary: docs/issues/017(relations に残る測定不能語)を閉じるタス�
 
 ## なぜ取りこぼされたか(重要)
 
-`docs/issues/017`(仕様ドキュメントに残る測定不能語)は **`related` にこのファイルを挙げており**、
+解消済みの「仕様ドキュメントに残る測定不能語」の issue(2026-08-05 に削除)は
+**`related` にこのファイルを挙げており**、
 その表の該当行は次のように書いている。
 
 | 箇所 | 判定 |
@@ -58,5 +59,6 @@ summary: docs/issues/017(relations に残る測定不能語)を閉じるタス�
 
 ## 関連
 
-- `docs/issues/017`(本 issue の親。`task-spec-measurability` が削除する)
+- `docs/histories/2026-08-05-spec-measurability.md`(本 issue の親だった「測定不能語」の issue は
+  `task-spec-measurability` が 2026-08-05 に解消して削除した。経緯はこのエントリが持つ)
 - `D0-scope-06`(03 の散文をコードを正として直す委任。案A はこの範囲内)

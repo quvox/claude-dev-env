@@ -1,8 +1,8 @@
 ---
 id: cli-login-codex
 scope: MOD-cli-login-codex
-version: 1.0.0
-updated: 2026-08-03
+version: 1.1.0
+updated: 2026-08-05
 source:
   - docs/01-requirements/functional.md
   - docs/02-design/system.md
@@ -10,12 +10,12 @@ summary: MOD-cli-login-codex(Codex CLI のデバイス認証)の受入基準⇄�
 keywords: [テスト]
 verified:
   at: 2026-08-05
-  version: 1.0.0
+  version: 1.1.0
   against:
     - doc: docs/01-requirements/functional.md
-      version: 1.5.0
+      version: 1.6.0
     - doc: docs/02-design/system.md
-      version: 2.2.0
+      version: 2.3.0
 ---
 
 # MOD-cli-login-codex のテスト対応
@@ -46,5 +46,5 @@ verified:
 |---|---|---|---|
 | 1 | FR-env-03 — 受入基準 6(正常系) | 自動テストランナーを設けない方針(`DSN-test-01` / `SR-32`)。実機確認で代替する | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |
 | 2 | FR-env-03 — 受入基準 13(異常系) | 自動テストランナーを設けない方針(`DSN-test-01` / `SR-32`)。実機確認で代替する | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |
-| 3 | NFR-scale-02 — 認証経路を増やさない | 自動テストランナーを設けない方針(`DSN-test-01` / `SR-32`)。実機確認で代替する | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |
+| 3 | NFR-scale-02 — 認証共有ボリュームが 1 つであること(第1文のみ) | 自動テストランナーを設けない方針(`DSN-test-01` / `SR-32`)。実機確認(`docker volume ls`)で代替する。**第2文(`logout` / `reset` の分岐が増えない)は 01 が「測らない」と明記したため、そもそもテストの対象ではない** | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |
 | 4 | MODULE-cli-login-codex — 機能全体 | シェル実装のため自動テストランナーが無く実機確認で代替する | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |

@@ -1,7 +1,7 @@
 ---
 id: entrypoint-firewall
-version: 1.0.0
-updated: 2026-08-03
+version: 1.0.1
+updated: 2026-08-05
 source:
   - docs/02-design/system.md
 kind: other
@@ -9,22 +9,21 @@ summary: entrypoint がファイアウォール適用を1度だけ呼び、成�
 keywords: [契約, CTR]
 verified:
   at: 2026-08-05
-  version: 1.0.0
+  version: 1.0.1
   against:
     - doc: docs/02-design/system.md
-      version: 2.2.0
+      version: 2.3.0
 ---
 
 <!-- 2026-08-04 /doc-check ssot task-impl-depth(新しい実行): **合格証を再発行した(1.0.0)。**
      直前に削除した理由(source の docs/02-design/system.md が未検証)は、本実行が 01 → 02 を
      再認証したことで解消した。本文には問題を見つけていない。
-     残る「中」: 「ブロック対象ドメイン」の集合が 00・01 に無い(docs/issues/041)。
      ★本実行は独立レンズが1つも走っていない(Codex がアカウントの利用上限)。 -->
 
 # CTR-entrypoint-firewall entrypoint → firewall
 
 - 当事者: MOD-entrypoint → MOD-firewall
-- 対応要件: FR-env-05, NFR-sec-02
+- 対応要件: FR-env-05
 - 責任モジュール(結合テスト): MOD-entrypoint
 
 ## 呼び出しの形

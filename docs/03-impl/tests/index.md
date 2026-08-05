@@ -13,7 +13,7 @@
 | [cli-forward](cli-forward.md) | MOD-cli-forward | 0 / **10** / 1 | 1.1.0 | 2026-08-04 | MOD-cli-forward(ポートフォワードの追加)の受入基準⇄テスト対応 |
 | [cli-list](cli-list.md) | MOD-cli-list | 0 / **2** / 1 | 1.0.0 | 2026-08-03 | MOD-cli-list(セッション一覧の表示)の受入基準⇄テスト対応 |
 | [cli-login](cli-login.md) | MOD-cli-login | 0 / **3** / 1 | 1.0.0 | 2026-08-03 | MOD-cli-login(Claude の認証)の受入基準⇄テスト対応 |
-| [cli-login-codex](cli-login-codex.md) | MOD-cli-login-codex | 0 / **4** / 1 | 1.0.0 | 2026-08-03 | MOD-cli-login-codex(Codex CLI のデバイス認証)の受入基準⇄テスト対応 |
+| [cli-login-codex](cli-login-codex.md) | MOD-cli-login-codex | 0 / **4** / 1 | 1.1.0 | 2026-08-05 | MOD-cli-login-codex(Codex CLI のデバイス認証)の受入基準⇄テスト対応 |
 | [cli-logout](cli-logout.md) | MOD-cli-logout | 0 / **15** / 0 | 1.2.0 | 2026-08-04 | MOD-cli-logout(認証情報の破棄)の受入基準⇄テスト対応 |
 | [cli-orchestrate](cli-orchestrate.md) | MOD-cli-orchestrate | 0 / **4** / 1 | 1.0.0 | 2026-08-03 | MOD-cli-orchestrate(オーケストレーターの起動と合流)の受入基準⇄テスト対応 |
 | [cli-ports](cli-ports.md) | MOD-cli-ports | 0 / **2** / 1 | 1.0.0 | 2026-08-03 | MOD-cli-ports(公開ポートの一覧)の受入基準⇄テスト対応 |
@@ -29,11 +29,11 @@
 | [docker-proxy](docker-proxy.md) | MOD-docker-proxy | 8 / **2** / 0 | 1.0.0 | 2026-08-03 | MOD-docker-proxy(Docker API の検査と中継)の受入基準⇄テスト対応 |
 | [e2e](e2e.md) | E2E | 0 / **6** / 1 | 1.2.0 | 2026-08-04 | E2Eシナリオ E2E-01〜E2E-06 ⇄ テスト対応 |
 | [entrypoint](entrypoint.md) | MOD-entrypoint | 0 / **23** / 0 | 1.0.0 | 2026-08-03 | MOD-entrypoint(コンテナ起動シーケンス)の受入基準⇄テスト対応 |
-| [firewall](firewall.md) | MOD-firewall | 0 / **5** / 1 | 1.0.0 | 2026-08-03 | MOD-firewall(外向き通信のブラックリスト適用)の受入基準⇄テスト対応 |
+| [firewall](firewall.md) | MOD-firewall | 0 / **5** / 1 | 1.1.0 | 2026-08-05 | MOD-firewall(外向き通信のブラックリスト適用)の受入基準⇄テスト対応 |
 | [hooks](hooks.md) | MOD-hooks | 0 / **4** / 1 | 1.0.0 | 2026-08-03 | MOD-hooks(Claude Code フック)の受入基準⇄テスト対応 |
-| [images](images.md) | (モジュール外)イメージのビルドと GHCR 配布 | 0 / **15** / 3 | 1.0.0 | 2026-08-03 | どのモジュールにも属さないイメージのビルドと GHCR 配布の受入基準⇄テスト対応 |
+| [images](images.md) | (モジュール外)イメージのビルドと GHCR 配布 | 0 / **15** / 3 | 1.1.0 | 2026-08-05 | どのモジュールにも属さないイメージのビルドと GHCR 配布の受入基準⇄テスト対応 |
 | [makefile](makefile.md) | MOD-makefile | 0 / **21** / 1 | 1.0.0 | 2026-08-03 | MOD-makefile(ビルド・導入・運用ターゲット)の受入基準⇄テスト対応 |
-| [orchestrator](orchestrator.md) | MOD-orchestrator | 37 / **48** / 0 | 1.4.1 | 2026-08-05 | MOD-orchestrator(AIオーケストレーター)の受入基準⇄テスト対応 |
+| [orchestrator](orchestrator.md) | MOD-orchestrator | 37 / **47** / 0 | 1.5.0 | 2026-08-05 | MOD-orchestrator(AIオーケストレーター)の受入基準⇄テスト対応 |
 | [portsync](portsync.md) | MOD-portsync | 0 / **1** / 2 | 1.0.0 | 2026-08-03 | MOD-portsync(DooD 経路のポート同期)の受入基準⇄テスト対応 |
 | [sample-project](sample-project.md) | MOD-sample-project | 2 / **5** / 1 | 1.0.0 | 2026-08-03 | MOD-sample-project(自己検証用サンプル)の受入基準⇄テスト対応 |
 | [strategy](strategy.md) | 全体 | - | 1.1.1 | 2026-08-04 | テストのレベル別実行方法・状態列の語彙・受入基準の配分規約 |

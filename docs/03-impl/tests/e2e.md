@@ -13,9 +13,9 @@ verified:
   version: 1.2.0
   against:
     - doc: docs/02-design/system.md
-      version: 2.2.0
+      version: 2.3.0
     - doc: docs/01-requirements/usecases.md
-      version: 1.1.0
+      version: 1.2.1
 ---
 # E2E テスト対応
 

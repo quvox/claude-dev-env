@@ -4,7 +4,7 @@ type: modify
 severity: 中
 found: 2026-08-03
 found_in: task-impl-depth のフェーズ2(D0-scope-07 の起票の閾値を 03-impl 全体へ掃引した際に確定)
-related: MODULE-orchestrator-controller, MODULE-orchestrator-state-io, FR-orch-05, NFR-ops-01, docs/02-design/logging.md
+related: MODULE-orchestrator-controller, MODULE-orchestrator-state-io, FR-orch-05, docs/02-design/logging.md
 summary: コントローラは plan.json / state.json / 追記型ログの書き込み失敗をすべて破棄し、ログにも残さないため、状態が保存できていないまま run が進む
 ---
 

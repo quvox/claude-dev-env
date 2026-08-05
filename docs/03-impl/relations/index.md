@@ -60,7 +60,7 @@
 | [MODULE-makefile-setup](MODULE-makefile-setup.md) | MOD-makefile | tool | sync | なし | MODULE-makefile-build, MODULE-makefile-env, MODULE-makefile-install, MODULE-makefile-network, MODULE-makefile-volumes | env→network→volumes→build→install を順に実行する初回セットアップ |
 | [MODULE-makefile-status](MODULE-makefile-status.md) | MOD-makefile | tool | sync | なし | なし | イメージ・コンテナ・ボリュームの状態を表示する |
 | [MODULE-makefile-uninstall](MODULE-makefile-uninstall.md) | MOD-makefile | tool | sync | なし | なし | CLI のシンボリックリンクを削除する |
-| [MODULE-makefile-update-claude](MODULE-makefile-update-claude.md) | MOD-makefile | tool | sync | なし | なし | Claude Code だけをキャッシュ利用で高速更新する |
+| [MODULE-makefile-update-claude](MODULE-makefile-update-claude.md) | MOD-makefile | tool | sync | なし | なし | コンテナイメージを作り直さずに Claude Code だけを更新する(ビルドキャッシュを使う) |
 | [MODULE-makefile-upgrade](MODULE-makefile-upgrade.md) | MOD-makefile | tool | sync | なし | なし | 全イメージを --no-cache で完全再ビルドする |
 | [MODULE-makefile-volumes](MODULE-makefile-volumes.md) | MOD-makefile | tool | sync | MODULE-makefile-setup | なし | 認証情報などの共有ボリュームを作成する |
 | [MODULE-orchestrator-claude-exec](MODULE-orchestrator-claude-exec.md) | MOD-orchestrator | function-call | sync | MODULE-orchestrator-controller, MODULE-orchestrator-mode, MODULE-orchestrator-review, MODULE-orchestrator-worker | MODULE-orchestrator-streamlog | Claude CLI を子プロセスとして起動し環境と PATH を整える |

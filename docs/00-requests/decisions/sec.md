@@ -1,17 +1,17 @@
 ---
 id: sec
-version: 1.1.0
-updated: 2026-08-04
+version: 1.1.1
+updated: 2026-08-05
 source:
   - docs/00-requests/request.md
 summary: 隔離境界と権限制限に関する決定事項(D0-sec-*)
 keywords: [セキュリティ, 隔離, 決定事項]
 verified:
-  at: 2026-08-04
-  version: 1.1.0
+  at: 2026-08-05
+  version: 1.1.1
   against:
     - doc: docs/00-requests/request.md
-      version: 1.2.0
+      version: 1.3.0
 ---
 
 <!-- 2026-08-04 /doc-check ssot task-impl-depth(新しい実行): 合格証を 1.0.1 → 1.1.0 で再発行した。
@@ -24,9 +24,7 @@ verified:
      残る「中」: D0-sec-05 のガードレールは「判定に必要な情報が手元に無い場合はその事実を
      『既知の制限』に書く」と定めるが、パース不能ボディの中継は
      MODULE-docker-proxy-serve の「実装上の判断」に書かれていて「既知の制限」に無い
-     (docs/issues/005)/ D0-sec-04 は「ブロック対象の表現方法」だけを委任しており、
-     ブロック対象ドメインの集合そのものは 00/01 のどこにも定義されていない
-     (docs/issues/041)。いずれも「高」ではないため認証を妨げない。 -->
+     (docs/issues/005)。これは「高」ではないため認証を妨げない。 -->
 
 # セキュリティ・隔離の決定事項
 

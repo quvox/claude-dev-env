@@ -1,17 +1,17 @@
 ---
 id: orch
-version: 1.2.1
+version: 1.3.0
 updated: 2026-08-05
 source:
   - docs/00-requests/request.md
 summary: AIオーケストレーターの制御・介入・状態に関する決定事項(D0-orch-*)
 keywords: [オーケストレーター, 決定事項]
 verified:
-  at: 2026-08-04
-  version: 1.2.0
+  at: 2026-08-05
+  version: 1.3.0
   against:
     - doc: docs/00-requests/request.md
-      version: 1.2.0
+      version: 1.3.0
 ---
 
 <!-- 2026-08-04 /doc-check ssot task-impl-depth(新しい実行): 合格証を再発行した(1.2.0)。
@@ -105,7 +105,7 @@ verified:
 - 制約(ガードレール): **通知の失敗で実行を止めないこと**(通知は補助であり、実行の可否を左右させない)。
   失敗を握りつぶす場合でも、利用者が状況を追える手段(ログ)を残すこと。
 - 報告義務: 決めた内容を該当機能の「実装上の判断」表に `D0-orch-07` と共に記録する
-- 関連: FR-orch-07 / NFR-ops-01
+- 関連: FR-orch-07
 
 ## D0-orch-08 自己検証題材の作り込み範囲
 

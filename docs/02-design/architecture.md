@@ -1,7 +1,7 @@
 ---
 id: architecture
-version: 1.2.0
-updated: 2026-08-04
+version: 1.3.0
+updated: 2026-08-05
 source:
   - docs/01-requirements/functional.md
   - docs/01-requirements/non-functional.md
@@ -9,13 +9,13 @@ source:
 summary: 全体構成・データモデル・インフラ設計と、アーキテクチャ級の設計判断(DSN-arch / auth / dist / orch)
 keywords: [アーキテクチャ, 全体構成, 設計判断, DSN]
 verified:
-  at: 2026-08-04
-  version: 1.2.0
+  at: 2026-08-05
+  version: 1.3.0
   against:
     - doc: docs/01-requirements/functional.md
-      version: 1.5.0
+      version: 1.6.0
     - doc: docs/01-requirements/non-functional.md
-      version: 1.2.1
+      version: 1.3.0
     - doc: docs/01-requirements/system.md
       version: 1.0.0
 ---
@@ -78,12 +78,12 @@ graph TD
 | Makefile | ビルド・セットアップ・CLI の導入/除去・自己検証題材の配置 | FR-env-09, FR-env-10, FR-orch-09 |
 | コンテナイメージ | 開発ツール・エージェント CLI・ブラウザ確認資産を同梱した実行基盤 | FR-env-09, FR-env-11, FR-env-12 |
 | entrypoint | コンテナ起動時の初期化(UID/GID・認証・既定設定・ファイアウォール・VNC・tmux・同期ループ) | FR-env-02, FR-env-03, FR-env-05, FR-env-11, FR-env-12 |
-| firewall | コンテナ内の外向き通信制御 | FR-env-05, NFR-sec-02 |
+| firewall | コンテナ内の外向き通信制御 | FR-env-05 |
 | docker-proxy | Docker API の検査・書き換え・拒否。全コンテナで共有 | FR-env-07, NFR-sec-01 |
 | portsync | 公開ポートの検出と転送(DooD / VM の両経路) | FR-env-06 |
 | orchestrator | 2モードの制御ループ・worker 並列・介入・レビュー・TUI・通知・状態保全 | FR-orch-01〜FR-orch-08 |
-| hooks | エージェントのイベントを受けてプロンプト保存と通知を行う | FR-orch-07, NFR-ops-01 |
-| container-tools | コンテナ内で利用者が使う補助資産(レート制限の待機など) | NFR-ops-01 |
+| hooks | エージェントのイベントを受けてプロンプト保存と通知を行う | FR-orch-07 |
+| container-tools | コンテナ内で利用者が使う補助資産(レート制限の待機など) | FR-env-01 |
 | VM モード | ゲスト VM の起動・provision・ポート同期・資源逼迫の監視 | FR-env-08 |
 | 自己検証題材 | オーケストレーターを実走させて振る舞いを確認するための題材 | FR-orch-09 |
 

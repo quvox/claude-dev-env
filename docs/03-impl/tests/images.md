@@ -1,8 +1,8 @@
 ---
 id: images
 scope: (モジュール外)イメージのビルドと GHCR 配布
-version: 1.0.0
-updated: 2026-08-03
+version: 1.1.0
+updated: 2026-08-05
 source:
   - docs/01-requirements/functional.md
   - docs/02-design/system.md
@@ -10,12 +10,12 @@ summary: どのモジュールにも属さないイメージのビルドと GHCR
 keywords: [テスト, イメージ, GHCR]
 verified:
   at: 2026-08-05
-  version: 1.0.0
+  version: 1.1.0
   against:
     - doc: docs/01-requirements/functional.md
-      version: 1.5.0
+      version: 1.6.0
     - doc: docs/02-design/system.md
-      version: 2.2.0
+      version: 2.3.0
 ---
 
 # イメージのビルドと GHCR 配布 のテスト対応
@@ -58,17 +58,17 @@ verified:
 | # | 対象 | なぜ未実装か | 閉じる予定 |
 |---|---|---|---|
 | 1 | FR-env-09 — 受入基準 1(正常系) | CI 成果物の検証(マニフェストのアーキテクチャ・タグ・同梱バージョン)を自動化していない。日次ビルド後に人が `docker manifest inspect` と、コンテナ内での `claude --version` / `codex --version` で確認する | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |
-| 2 | FR-env-09 — 受入基準 2(正常系) | CI 成果物の検証(マニフェストのアーキテクチャ・タグ・同梱バージョン)を自動化していない。日次ビルド後に人が `docker manifest inspect` と、コンテナ内での `claude --version` / `codex --version` で確認する | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |
-| 3 | FR-env-09 — 受入基準 3(正常系) | CI 成果物の検証(マニフェストのアーキテクチャ・タグ・同梱バージョン)を自動化していない。日次ビルド後に人が `docker manifest inspect` と、コンテナ内での `claude --version` / `codex --version` で確認する | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |
-| 4 | FR-env-09 — 受入基準 4(正常系) | CI 成果物の検証(マニフェストのアーキテクチャ・タグ・同梱バージョン)を自動化していない。日次ビルド後に人が `docker manifest inspect` と、コンテナ内での `claude --version` / `codex --version` で確認する | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |
-| 5 | FR-env-09 — 受入基準 5(正常系) | CI 成果物の検証(マニフェストのアーキテクチャ・タグ・同梱バージョン)を自動化していない。日次ビルド後に人が `docker manifest inspect` と、コンテナ内での `claude --version` / `codex --version` で確認する | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |
-| 6 | FR-env-09 — 受入基準 7(境界値) | CI 成果物の検証(マニフェストのアーキテクチャ・タグ・同梱バージョン)を自動化していない。日次ビルド後に人が `docker manifest inspect` と、コンテナ内での `claude --version` / `codex --version` で確認する | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |
-| 7 | FR-env-09 — 受入基準 8(境界値) | CI 成果物の検証(マニフェストのアーキテクチャ・タグ・同梱バージョン)を自動化していない。日次ビルド後に人が `docker manifest inspect` と、コンテナ内での `claude --version` / `codex --version` で確認する | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |
-| 8 | FR-env-10 — 受入基準 3(正常系) | CI 成果物の検証(マニフェストのアーキテクチャ・タグ・同梱バージョン)を自動化していない。日次ビルド後に人が `docker manifest inspect` と、コンテナ内での `claude --version` / `codex --version` で確認する | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |
-| 9 | FR-env-11 — 受入基準 3(正常系) | CI 成果物の検証(マニフェストのアーキテクチャ・タグ・同梱バージョン)を自動化していない。日次ビルド後に人が `docker manifest inspect` と、コンテナ内での `claude --version` / `codex --version` で確認する | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |
-| 10 | FR-env-12 — 受入基準 1(正常系) | CI 成果物の検証(マニフェストのアーキテクチャ・タグ・同梱バージョン)を自動化していない。日次ビルド後に人が `docker manifest inspect` と、コンテナ内での `claude --version` / `codex --version` で確認する | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |
-| 11 | FR-env-12 — 受入基準 2(正常系) | CI 成果物の検証(マニフェストのアーキテクチャ・タグ・同梱バージョン)を自動化していない。日次ビルド後に人が `docker manifest inspect` と、コンテナ内での `claude --version` / `codex --version` で確認する | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |
-| 12 | FR-env-12 — 受入基準 3(正常系) | CI 成果物の検証(マニフェストのアーキテクチャ・タグ・同梱バージョン)を自動化していない。日次ビルド後に人が `docker manifest inspect` と、コンテナ内での `claude --version` / `codex --version` で確認する | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |
-| 13 | FR-env-12 — 受入基準 9(境界値) | CI 成果物の検証(マニフェストのアーキテクチャ・タグ・同梱バージョン)を自動化していない。日次ビルド後に人が `docker manifest inspect` と、コンテナ内での `claude --version` / `codex --version` で確認する | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |
-| 14 | NFR-perf-01 — 取得の増分性 | CI 成果物の検証(マニフェストのアーキテクチャ・タグ・同梱バージョン)を自動化していない。日次ビルド後に人が `docker manifest inspect` と、コンテナ内での `claude --version` / `codex --version` で確認する | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |
-| 15 | NFR-perf-02 — ベース層の共有 | CI 成果物の検証(マニフェストのアーキテクチャ・タグ・同梱バージョン)を自動化していない。日次ビルド後に人が `docker manifest inspect` と、コンテナ内での `claude --version` / `codex --version` で確認する | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |
+| 2 | FR-env-09 — 受入基準 2(正常系) | 同上 | 同上 |
+| 3 | FR-env-09 — 受入基準 3(正常系) | 同上 | 同上 |
+| 4 | FR-env-09 — 受入基準 4(正常系) | 同上 | 同上 |
+| 5 | FR-env-09 — 受入基準 5(正常系) | 同上 | 同上 |
+| 6 | FR-env-09 — 受入基準 7(境界値) | 同上 | 同上 |
+| 7 | FR-env-09 — 受入基準 8(境界値) | 同上 | 同上 |
+| 8 | FR-env-10 — 受入基準 3(正常系) | 同上 | 同上 |
+| 9 | FR-env-11 — 受入基準 3(正常系) | 同上 | 同上 |
+| 10 | FR-env-12 — 受入基準 1(正常系) | 同上 | 同上 |
+| 11 | FR-env-12 — 受入基準 2(正常系) | 同上 | 同上 |
+| 12 | FR-env-12 — 受入基準 3(正常系) | 同上 | 同上 |
+| 13 | FR-env-12 — 受入基準 9(境界値) | 同上 | 同上 |
+| 14 | NFR-perf-01 — 取得の増分性 | CI 成果物の検証を自動化していない。日次ビルド後に人が、前日分のイメージを持つ環境で `docker pull` を実行し `Already exists` 以外の層が出ないことを確認する | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |
+| 15 | NFR-perf-02 — ベース層の共有と追加層の限定 | CI 成果物の検証を自動化していない。日次ビルド後に人が `docker history --no-trunc` で 2 イメージの層を並べ、**(1) 共通部分の最終層のダイジェストが一致すること、(2) ブラウザ確認ありイメージだけが持つ追加層の `CREATED BY` に現れる導入物が、`NFR-perf-02` の挙げる6カテゴリ(VNC・GUI ブラウザ・日本語入力とロケール・端末/キー操作と gsettings/dconf バックエンド・フォント・computer-use MCP)のいずれかに割り当てられること**を確認する。同梱エージェント CLI の層は両イメージが等しく持つので対象外である | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |

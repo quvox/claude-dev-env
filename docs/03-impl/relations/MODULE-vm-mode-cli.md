@@ -8,9 +8,9 @@ callers: なし
 callees: なし
 contracts: なし
 design: DSN-mod-01, DSN-mod-03, DSN-arch-01
-requirements: FR-env-08, NFR-ops-01
+requirements: FR-env-08
 tests: なし(未実装。シェル実装のため自動テストランナーが無く実機確認で代替する。静的検証として `bash -n` は緑)
-updated: 2026-08-02
+updated: 2026-08-05
 summary: VM の起動状態・health・ポート同期を操作するヘルパー
 ---
 
@@ -18,7 +18,7 @@ summary: VM の起動状態・health・ポート同期を操作するヘルパ�
 
 ## 目的
 
-コンテナ内から VM を操作・観測する入口(FR-env-08・NFR-ops-01)。ゲストの状態を見る、入る、
+コンテナ内から VM を操作・観測する入口(FR-env-08)。ゲストの状態を見る、入る、
 作り直す、といった日常操作を1コマンドに束ねる。
 
 ## 処理の流れ

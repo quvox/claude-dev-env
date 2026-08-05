@@ -1,20 +1,20 @@
 ---
 id: usecases
-version: 1.1.0
-updated: 2026-08-04
+version: 1.2.1
+updated: 2026-08-05
 source:
   - docs/00-requests/acceptances.md
   - docs/01-requirements/functional.md
 summary: ユースケース UC-01〜UC-06。受け入れ基準を基本フロー・代替フロー・例外フローへ形式化したもの
 keywords: [ユースケース, UC, E2Eの上流]
 verified:
-  at: 2026-08-04
-  version: 1.1.0
+  at: 2026-08-05
+  version: 1.2.1
   against:
     - doc: docs/00-requests/acceptances.md
-      version: 1.0.0
+      version: 1.1.0
     - doc: docs/01-requirements/functional.md
-      version: 1.5.0
+      version: 1.6.0
 ---
 
 # ユースケース
@@ -26,7 +26,7 @@ verified:
 - 目的: 自分のリポジトリを隔離環境で Claude Code 開発する
 - 事前条件: 初回セットアップと Claude のログインが済んでいる
 - 事後条件: プロジェクト専用コンテナで Claude Code が動作している
-- 関連要件: FR-env-01, FR-env-02, FR-env-03, FR-env-04, FR-env-05, FR-env-11, FR-env-12, NFR-sec-01
+- 関連要件: FR-env-01, FR-env-02, FR-env-03, FR-env-04, FR-env-05, FR-env-08, FR-env-11, FR-env-12, NFR-sec-01
 
 基本フロー:
 
@@ -95,7 +95,9 @@ verified:
 - アクター: 開発者(コンテナ内から Docker を使う)
 - 目的: ホストを危険に晒さずにコンテナ内から Docker を使う
 - 事前条件: 既定の DooD 構成(`DOCKER_HOST` が docker-proxy を指す)で起動している
-- 事後条件: 危険操作が遮断され、安全な操作のみが Docker Engine に届いている
+- 事後条件: **`FR-env-07` が拒否対象と定める操作**(ホストのファイルシステムを bind mount する
+  要求・特権付与を伴う要求・ホストの名前空間を共有する要求)が遮断され、それ以外の操作だけが
+  Docker Engine に届いている
 - 関連要件: FR-env-07, NFR-sec-01
 
 基本フロー:
@@ -128,7 +130,7 @@ verified:
 - 目的: 案件を自律・並列で実装させ、人間は検討と例外対応だけに関与する
 - 事前条件: コンテナが起動している
 - 事後条件: 要判断のタスクだけが待機し他の worker は継続、回答後に実行復帰、完了で成果が統合される
-- 関連要件: FR-orch-01, FR-orch-02, FR-orch-03, FR-orch-04, FR-orch-06, FR-orch-07, FR-orch-08, NFR-ops-01
+- 関連要件: FR-orch-01, FR-orch-02, FR-orch-03, FR-orch-04, FR-orch-06, FR-orch-07, FR-orch-08
 
 基本フロー:
 
@@ -231,7 +233,7 @@ verified:
 |---|---|
 | FR-env-09(イメージ配布) | CI がイメージをビルドして GHCR へ公開する処理であり、利用者の操作フローの中に現れない(利用者側の取得操作 `claude-dev pull` は任意で、UC-01 の事前条件「初回セットアップ」を満たす手段の1つに過ぎない)。確認は CI 側の成果物検証で行う |
 | FR-orch-09(自己検証) | **保守者がこの仕組み自体を検証するための機能**であり、UC-01〜06 が対象とする「開発者がシステムを使って開発する」旅程の外にある。保守者の旅程は E2E シナリオ(`E2E-04` / `E2E-05`)が直接担うため、UC を別に設けていない |
-| NFR-perf-01〜03 / NFR-avail-02〜03 / NFR-sec-02〜03 / NFR-ops-02〜04 / NFR-scale-01〜02 | 非機能要件であり、特定のユーザ旅程を持たない |
+| NFR-perf-01〜03 / NFR-avail-02〜03 / NFR-sec-03 / NFR-ops-02〜04 / NFR-scale-01〜02 | 非機能要件であり、特定のユーザ旅程を持たない |
 
 ## AC ⇄ UC カバレッジ
 

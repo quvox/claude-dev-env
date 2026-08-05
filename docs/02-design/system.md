@@ -1,6 +1,6 @@
 ---
 id: system
-version: 2.2.1
+version: 2.3.0
 updated: 2026-08-05
 source:
   - docs/01-requirements/functional.md
@@ -13,16 +13,16 @@ summary: >
 keywords: [モジュール分割, DSN-mod, テスト戦略, E2E, UI設計, 要件カバレッジ]
 verified:
   at: 2026-08-05
-  version: 2.2.0
+  version: 2.3.0
   against:
     - doc: docs/01-requirements/functional.md
-      version: 1.5.0
+      version: 1.6.0
     - doc: docs/01-requirements/non-functional.md
-      version: 1.2.1
+      version: 1.3.0
     - doc: docs/01-requirements/usecases.md
-      version: 1.1.0
+      version: 1.2.1
     - doc: docs/02-design/architecture.md
-      version: 1.2.0
+      version: 1.3.0
 ---
 
 # モジュール分割・テスト戦略・UI設計
@@ -55,13 +55,13 @@ verified:
 | MOD-cli-reset | **管理ラベルを持つ Claude コンテナ**と、**本システムの固定名・固定接頭辞を持つ資源**(`fwd-*` 中継コンテナ / 共有ボリューム / イメージ / docker-proxy / `claude-dev-net`)を削除して初期状態へ戻す。**どちらで識別するかは資源の種類ごとに `CTR-cli-container` の規則A が定める**(管理ラベルを付けるのは Claude コンテナだけである)。**削除対象の列挙は、コンテナ・`fwd-*`・ボリューム・イメージについては実在するものだけを挙げ、共有 docker-proxy と `claude-dev-net` は遊休判定の結果に依存するため候補として常に挙げる**。**共有資源(docker-proxy / `claude-dev-net`)は遊休のときだけ削除し、他が稼働中なら残して「完全な初期化になっていない」ことを表示する**(`D0-env-08` 項2 / `FR-env-01` 受入基準9) | FR-env-01, FR-env-03, NFR-ops-02, SR-20 | MOD-cli-common | なし | `MODULE-cli-reset` |
 | MOD-makefile | ビルド・セットアップ・CLI の導入/除去・ログイン・更新・自己検証題材の配置といった入口 | FR-env-01, FR-env-03, FR-env-07, FR-env-09, FR-env-10, FR-env-11, FR-env-12, FR-orch-01, FR-orch-09, NFR-ops-03, SR-10, SR-20, SR-30 | — | なし | `MODULE-makefile-*` |
 | MOD-entrypoint | コンテナ起動時の初期化(UID/GID 追従・認証コピー・既定設定の生成/補完・ファイアウォール起動・MCP/VNC/Chrome・tmux・同期ループ・ポート同期の起動) | FR-env-02, FR-env-03, FR-env-05〜08, FR-env-11, FR-env-12, NFR-avail-02, NFR-avail-03, NFR-ops-02, NFR-scale-02, SR-02, SR-20 | MOD-firewall, MOD-portsync, MOD-vm-mode | なし | `MODULE-entrypoint-claude` |
-| MOD-firewall | コンテナ内のブラックリスト型ファイアウォールの構成 | FR-env-05, NFR-sec-01, NFR-sec-02, NFR-avail-03, SR-02, SR-20 | — | なし | `MODULE-firewall-init` |
+| MOD-firewall | コンテナ内のブラックリスト型ファイアウォールの構成 | FR-env-05, NFR-sec-01, NFR-avail-03, SR-02, SR-20 | — | なし | `MODULE-firewall-init` |
 | MOD-docker-proxy | Docker API を検査・書き換えして透過中継する常駐プロキシ | FR-env-07, NFR-sec-01, SR-02, SR-04, SR-21, SR-31 | — | なし | `MODULE-docker-proxy-serve` |
 | MOD-portsync | DooD 環境で公開ポートを検出し転送する | FR-env-06, FR-env-07, SR-20 | — | なし | `MODULE-portsync-dood` |
-| MOD-vm-mode | ゲスト VM の起動・provision・ポート同期・資源逼迫の監視と操作ヘルパー | FR-env-06, FR-env-08, NFR-ops-01, NFR-avail-03, SR-14, SR-20 | — | なし | `MODULE-vm-mode-*` |
+| MOD-vm-mode | ゲスト VM の起動・provision・ポート同期・資源逼迫の監視と操作ヘルパー | FR-env-06, FR-env-08, NFR-avail-03, SR-14, SR-20 | — | なし | `MODULE-vm-mode-*` |
 | MOD-orchestrator | 2モードの制御ループ、worker の並列実行と分離、タスク単位の介入、相互レビュー、TUI、通知、状態保全 | FR-orch-01〜FR-orch-08, NFR-perf-03, NFR-avail-01, NFR-avail-03, NFR-sec-03, NFR-ops-04, SR-21, SR-22, SR-31 | — | なし | `MODULE-orchestrator-*` |
-| MOD-hooks | エージェントのフックからプロンプトを保存し、通知を送る | FR-orch-07, NFR-ops-01, NFR-sec-03, NFR-avail-03 | — | なし | `MODULE-hooks-*` |
-| MOD-container-tools | コンテナ内で利用者が使う補助資産(レート制限の解除待ちなど) | FR-env-01, NFR-ops-01, SR-20 | — | なし | `MODULE-container-tools-*` |
+| MOD-hooks | エージェントのフックからプロンプトを保存し、通知を送る | FR-orch-07, NFR-sec-03, NFR-avail-03 | — | なし | `MODULE-hooks-*` |
+| MOD-container-tools | コンテナ内で利用者が使う補助資産(レート制限の解除待ちなど) | FR-env-01, SR-20 | — | なし | `MODULE-container-tools-*` |
 | MOD-sample-project | 自己検証題材の配置と、題材そのもの | FR-orch-09, SR-23 | — | なし | `MODULE-sample-project-*` |
 
 **分割定義に含めないもの**: コンテナイメージの定義(`Dockerfile.*`)と GHCR 配布ワークフローは
@@ -174,9 +174,7 @@ verified:
 | NFR-avail-02 | MOD-cli-start, MOD-entrypoint | |
 | NFR-avail-03 | MOD-entrypoint, MOD-firewall, MOD-orchestrator, MOD-hooks, MOD-vm-mode | 補助機能の失敗を主機能へ波及させない |
 | NFR-sec-01 | MOD-docker-proxy, MOD-firewall, MOD-cli-start, MOD-cli-common | |
-| NFR-sec-02 | MOD-firewall | |
 | NFR-sec-03 | MOD-orchestrator, MOD-hooks | |
-| NFR-ops-01 | MOD-orchestrator, MOD-hooks, MOD-container-tools, MOD-vm-mode | |
 | NFR-ops-02 | MOD-cli-common, 各 MOD-cli-*, MOD-entrypoint | OS 依存をホスト CLI に閉じる |
 | NFR-ops-03 | MOD-makefile, MOD-cli-common | `make help` と CLI のヘルプ |
 | NFR-ops-04 | MOD-orchestrator | |
@@ -212,7 +210,7 @@ verified:
 | SR-34 | (担い手)`02-design/environments.md`「Codex実行設定」 | legacy landlock で confinement を緩めずに実行する |
 
 **要件を持たないモジュールは無い**(全 29 モジュールが上表のいずれかに現れる)。
-**割り当て先の無い要件も無い**(FR 21 件・NFR 15 件・SR 21 件がすべて上の3表に現れる)。
+**割り当て先の無い要件も無い**(FR 21 件・NFR 13 件・SR 21 件がすべて上の3表に現れる)。
 
 ## テスト戦略
 

@@ -1,15 +1,15 @@
 ---
 id: request
-version: 1.2.0
-updated: 2026-08-03
+version: 1.3.0
+updated: 2026-08-05
 source: []
 summary: >
-  Claude Code を安全な Docker コンテナで動かす開発環境と、その上で複数エージェントを連携させる
+  Claude Code を Docker コンテナで動かす開発環境と、その上で複数エージェントを連携させる
   AIオーケストレーターを、チームの並列開発力を上げるために提供する。信頼できる社内開発用途に限定。
 keywords: [claude-dev, Docker開発環境, 並列開発, AIオーケストレーター, 隔離, 配布, CodexCLI]
 verified:
-  at: 2026-08-03
-  version: 1.2.0
+  at: 2026-08-05
+  version: 1.3.0
   against: []
 ---
 

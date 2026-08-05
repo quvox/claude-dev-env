@@ -9,10 +9,10 @@ summary: ホスト CLI がコンテナへ渡す環境変数・マウント・起
 keywords: [契約, CTR]
 verified:
   at: 2026-08-05
-  version: 1.4.1
+  version: 1.4.2
   against:
     - doc: docs/02-design/system.md
-      version: 2.2.0
+      version: 2.3.0
 ---
 # CTR-cli-container ホスト CLI → コンテナ/entrypoint
 

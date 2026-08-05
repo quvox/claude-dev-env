@@ -1,17 +1,17 @@
 ---
 id: env
-version: 1.1.1
-updated: 2026-08-04
+version: 1.2.0
+updated: 2026-08-05
 source:
   - docs/00-requests/request.md
 summary: 開発環境・実行環境の構成に関する決定事項(D0-env-*)
 keywords: [開発環境, 決定事項]
 verified:
-  at: 2026-08-04
-  version: 1.1.1
+  at: 2026-08-05
+  version: 1.2.0
   against:
     - doc: docs/00-requests/request.md
-      version: 1.2.0
+      version: 1.3.0
 ---
 
 # 開発環境の決定事項
@@ -103,9 +103,10 @@ verified:
   「自分がコンテナ内か」を判定できるようにする。名前と値は systemd/podman の標準慣習
   (`container=<runtime>`)に合わせる。イメージのベースステージの `ENV` で付与し、
   ブラウザ確認あり版も継承で同じ値を持つ。
-- 理由: 内部プロセス(entrypoint・各スクリプト・オーケストレーター)が環境依存の分岐を安全に
-  行えるようにする恒久マーカーが要る。起動時の `-e` 付与は起動経路に依存して漏れうるため、
-  イメージ側で常時保証する。
+- 理由: 内部プロセス(entrypoint・各スクリプト・オーケストレーター)が環境依存の分岐を
+  **起動経路によらず同じ判定で**行える恒久マーカーが要る。起動時の `-e` 付与は
+  `docker run` 以外の経路(一時コンテナ・`docker exec` で作られたプロセス)で欠落しうるため、
+  イメージ側の `ENV` で常時保証する。
 - 却下した案: 起動時に `-e container=docker` を付ける — `docker run` 以外の経路(一時コンテナ等)で
   漏れる。独自の変数名を使う — 外部ツールとの互換を失う。
 - 関連: FR-env-01

@@ -8,13 +8,13 @@ source:
 summary: 開発環境の構成・セットアップ手順・lint/テスト/ドキュメント整合検査の厳密なコマンド文字列・Codex実行設定
 keywords: [開発環境, コマンド, lint, テスト, Codex]
 verified:
-  at: 2026-08-04
+  at: 2026-08-05
   version: 1.0.0
   against:
     - doc: docs/01-requirements/system.md
       version: 1.0.0
     - doc: docs/02-design/architecture.md
-      version: 1.2.0
+      version: 1.3.0
 ---
 
 <!-- 2026-08-04 /doc-check ssot task-impl-depth(新しい実行): **合格証を再発行した(1.0.0)。**

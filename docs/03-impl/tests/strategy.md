@@ -13,7 +13,7 @@ verified:
   version: 1.1.1
   against:
     - doc: docs/02-design/system.md
-      version: 2.2.0
+      version: 2.3.0
     - doc: docs/02-design/environments.md
       version: 1.0.0
 ---

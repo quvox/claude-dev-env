@@ -13,9 +13,9 @@ verified:
   version: 1.0.0
   against:
     - doc: docs/01-requirements/functional.md
-      version: 1.5.0
+      version: 1.6.0
     - doc: docs/02-design/system.md
-      version: 2.2.0
+      version: 2.3.0
 ---
 
 # MOD-cli-orchestrate のテスト対応

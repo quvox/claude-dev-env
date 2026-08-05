@@ -7,11 +7,11 @@ source:
 summary: 認証情報の保管・共有・破棄に関する決定事項(D0-auth-*)
 keywords: [認証, 決定事項]
 verified:
-  at: 2026-08-04
+  at: 2026-08-05
   version: 1.2.0
   against:
     - doc: docs/00-requests/request.md
-      version: 1.2.0
+      version: 1.3.0
 ---
 
 <!-- 2026-08-04 /doc-check ssot task-impl-depth(新しい実行): **合格証を再発行した(1.2.0)。**

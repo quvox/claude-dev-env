@@ -1,6 +1,6 @@
 ---
 id: index
-version: 1.13.2
+version: 1.14.0
 updated: 2026-08-05
 source:
   - docs/02-design/system.md
@@ -9,12 +9,12 @@ summary: 03-impl 層の目次。機能間連携仕様書群の代表として層
 keywords: [目次]
 verified:
   at: 2026-08-05
-  version: 1.13.1
+  version: 1.14.0
   against:
     - doc: docs/02-design/system.md
-      version: 2.2.1
+      version: 2.3.0
     - doc: docs/02-design/relations.md
-      version: 1.3.0
+      version: 1.4.0
 ---
 
 <!-- 2026-08-04 /doc-check ssot task-impl-depth(新しい実行): **合格証を再発行した(1.5.0)。**
@@ -82,8 +82,8 @@ verified:
 | `NFR-scale-01`「コンテナ名・compose プロジェクト名がプロジェクト間で衝突しない(衝突 0 件)」 | コンテナ名・compose プロジェクト名・中継コンテナ名をディレクトリ名だけから導くため、別パスの同名ディレクトリが同一セッション扱いになる | **設計が正**(2026-08-04)。コード修正は別タスク。`docs/issues/028` |
 | `AC-03` / `FR-env-07` 受入基準8「危険な操作は拒否される」 | docker-proxy は解釈できないボディを検査せず中継する | `D0-sec-05`(Docker API 検査の厳密さの委任)の範囲内で「中」と裁定。`docs/issues/005` |
 | `FR-orch-05` 受入基準7「読めない状態ファイルの既存内容を破壊しない」 | 壊れた `intervention/open.json` は空キューとして扱われ、判断待ちキュー全体が黙って失われる | 事実を `MODULE-orchestrator-state-intervention` の異常系に明記済み。コード修正は別タスク。`docs/issues/057-bug-broken-open-json-silently-drops-the-intervention-queue.md` |
-| `NFR-ops-01`(運用の可観測性) | 追記型ログ3本が `02-design/logging.md` の必須フィールドを満たさない(上の「02 との差分」と同一事象) | 正がどちらかは**要確認**。`docs/issues/014` |
 | `FR-orch-06` 受入基準3(品質ゲートは重大な指摘があれば差し戻す) | レビュー結果の `severity` の値域を検証しないため、綴り違い・別語彙の重大な指摘が「重大でない」扱いでゲートを通過する | 事実を `MODULE-orchestrator-review` の処理の流れに明記済み。**正がどちらかは要確認**(実装の誤りか、契約の不足か)。`docs/issues/058-bug-unknown-severity-passes-the-review-gate.md` |
+| **要件が存在しない**(運用補助・可観測性の非機能要件を 2026-08-05 に廃止した。経緯は histories) | 追記型ログの `dispatch`(タスクの委譲)と `result`(実行結果)を実装は出力し続ける | **人間の裁定=その品質特性自体を追わない**(2026-08-05)。実装は変えないので、`02-design/logging.md` の当該2行を「対応要件: **なし**」と明記して差分を可視化した。`docs/issues/061-modify-dispatch-and-result-logs-lose-their-requirement-basis.md` |
 
 ## 目次
 

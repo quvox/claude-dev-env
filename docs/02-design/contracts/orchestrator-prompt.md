@@ -12,7 +12,7 @@ verified:
   version: 1.3.0
   against:
     - doc: docs/02-design/system.md
-      version: 2.2.1
+      version: 2.3.0
 ---
 
 # CTR-orchestrator-prompt orchestrator → worker / 対話 Claude
