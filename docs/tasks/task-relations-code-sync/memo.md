@@ -51,7 +51,7 @@ summary: relations の記述をコードへ全面追随させる(2026-08-05 に�
 
 **3本連続タスクの2本目。1本目 `task-fix-destructive-scope` は 2026-08-04 に完了・削除済み。**
 **フェーズ1〜3 は 2026-08-05 に完了した**(フェーズ3 = `/implement` はドライランの6ステップを
-実行しただけで、コードは1行も変えていない)。**次は `/task-close task-relations-code-sync`。**
+実行しただけで、コードは1行も変えていない)。**フェーズ4 も完了した。**
 フェーズ3末尾の決定シート #9(QA レーンを対象外としたこと)は **2026-08-05 に人間が A で回答済み**。
 
 3本目 `task-spec-measurability` は本タスクの後。**重なりが増えている**ので下の申し送りを見る。
@@ -194,7 +194,9 @@ QA レーンは対象外のまま `/task-close` へ進む。
 - [x] 3. `/implement task-relations-code-sync`(**コードは変えない**。記述のみ)(2026-08-05 完了。
       ドライランの6ステップをすべて実行し全項目グリーン。**コード差分ゼロ**を確認。
       変更指示の更新は**不要**と判定 = C-1。詳細は進捗メモ) _Depends:_ 2
-- [ ] 4. `/task-close task-relations-code-sync` _Depends:_ 3, 決定シート #9(2026-08-05 に A で回答済み)
+- [x] 4. `/task-close task-relations-code-sync`(2026-08-05 完了。変更指示30件を SSOT へ反映 →
+      `/doc-check ssot` が2回とも PASS → histories 記録 → `019`/`032`/`038` を削除)
+      _Depends:_ 3, 決定シート #9(A)・§6 の #1(B)/ #2(A)
 
 ### フェーズ3 の作業内容(ドライランで確定。実装コードは書かない)
 
@@ -215,30 +217,52 @@ QA レーンは対象外のまま `/task-close` へ進む。
 
 ## Definition of Done
 
-<!-- 2026-08-05 フェーズ3(C-4)で1項目ずつ実際に実行して検証した。
-     [x] = 本フェーズで検証済み / 「/task-close で実施」= SSOT 反映が前提の項目。 -->
+<!-- 2026-08-05 フェーズ3(C-4)とフェーズ4(§7-3)で1項目ずつ実際に実行して検証した。
+     根拠は各行に書く。チェックだけ付けるのは完了の偽装なので行わない。 -->
 
-| # | 項目 | 判定 | 根拠(実行したこと) |
-|---|---|---|---|
-| 1 | `019` / `032` / `038` / `056` を削除できる状態 | **`/task-close` で実施** | 変更指示側は全行が揃っている(下の #9・#10 と C-1 の照合)。SSOT へ反映されて初めて成立する |
-| 2 | `005` の文書側1行 | **[x]** | `new-features/…/MODULE-docker-proxy-serve.md:34` に「解釈できないリクエストボディは検査せず中継する」が既知の制限として入っている(issue 005 自体は開いたまま) |
-| 3 | `001` / `017` は開いたまま | **[x]** | 両 issue とも `docs/issues/` に存在し閉じていない(001 は2シンボル追記済み・017 は空振りの経緯を記録済み) |
-| 4 | **コード差分が空** | **[x]** | `git status --porcelain` の変更が `docs/` と `.claude/` の下だけ。`build-callgraphs.py` も「書き換え: なし(既に最新)」 |
-| 5 | lint 2本と `go test` 2本がグリーン | **[x]** | `go vet` 両モジュール exit=0 / `go test` 両モジュール ok(`environments.md` の厳密な文字列で実行) |
-| 6 | `callgraph-check.py` の重大度「高」が 0 件 | **[x]** | `--to-be task-relations-code-sync` で指摘 47 件・**高 0 件**。中3件は closure 外の既存 |
-| 7 | `check-relations.py` / `check-contracts.py` 合格 | **[x]** | 前者 83 ファイル/83 ID 合格、後者 不整合なし |
-| 8 | **合成ビューで `callers` / `callees` の対称性** | **[x]** | `check-changeset.py` の **I2 が OK**(合成ビュー 83 件)。追加した3組はインターフェース越しの実装をコードで裏取り済み(C-1) |
-| 9 | `tests/orchestrator.md` に実在しないテスト識別子が 0 件 | **[x]** | 変更指示が参照する **92 種**を実ファイルの `func Test*` と機械照合し不一致 0 件。`TestReadyTasks_Basic` は変更指示の `:69`・`:115` が両方を消している |
-| 10 | 質問キュー #1(`FR-orch-05` 受入基準2 の覆う範囲)の回答が反映 | **[x]** | 未回答のため既定 B(「未検証(テスト未実装)」)を適用済み。`:69` が該当行、`:178` が全件表 #47 |
-| 11 | 決定シート #7 / #8 の回答が反映 | **[x]** | 既定(#7=A / #8=A)を適用済み。`docs/issues/057` / `058` を起票し、`03-impl/index.md` の集計を 18 件へ |
-| 12 | `03-impl/contracts/orchestrator-prompt.md` の合格証が有効 | **`/task-close` で実施** | 上流 `02-design/contracts/orchestrator-prompt.md` が MINOR で上がるため失効する。認証で `against` を 1.2.0 → 1.3.0 へ再発行すること(close-task.py 条件b) |
-| 13 | SSOT 反映 / `/doc-check` PASS / histories | **`/task-close` で実施** | フェーズ4 の仕事 |
-| 14 | QA レーン(E2E) | **対象外(理由あり)** | 決定シート #9。コード差分ゼロで、`e2e.md` の E2E-01〜06 は全件が自動ランナーの無い実機確認 |
-
-**補足(#8)**: 追加した3組は `controller ⇄ slack` / `claude-exec ⇄ worker` / `claude-exec ⇄ review`。
-`streamlog ⇄ dashboard` は**追加しない**: `dashboard.go::oneline` は
-`03-impl/features.md:145` が「畳み込む薄いユーティリティ」と判定した共有関数で MODULE-ID を
-持たないため、`callees` に載る対象ではない(`docs/issues/032` #3 は誤検知として棄却)。
+- [x] 1. **`019` / `032` / `038` を削除できる状態**(全行がコードと一致し、変更相対の言い回しが
+      SSOT に残っていない)→ **3件とも削除した**(§7-2)。削除で宙に浮くライブな参照2件は
+      `docs/histories/2026-08-05-relations-code-sync.md` へ付け替え、層00 の1件は人間の合意
+      (決定シート #2 = A)を得て `058` / `059` へ改めた。**残る参照は `03-impl/index.md` 冒頭の
+      履歴コメントだけ**で、過去の `/doc-check` の実行記録なので書き換えない(`docs/issues/054` が追跡)
+- [x] 2. **`056` は開いたまま**(フェーズ1 決定シート #7 = A の裁定どおり)。SSOT 側は全件解消したが、
+      **コードが出力する文言そのものが変更相対**という残件がありコード修正が要る。issue の
+      `summary` と本文をこの状態へ更新した
+- [x] 3. **`005` の文書側1行**が `MODULE-docker-proxy-serve` の既知の制限に入っている
+      (`docs/03-impl/relations/MODULE-docker-proxy-serve.md`。**issue 005 自体は閉じない**:
+      実装と `AC-03` の例外明記が残る)
+- [x] 4. **`001` / `017` は開いたまま**(001 は9シンボルへ、017 は空振りの経緯を記録済み)
+- [x] 5. **コード差分が空**(`orchestrator/` `docker-proxy/` `scripts/` `claude-dev` `claude-dev-mac`
+      に変更なし)。`build-callgraphs.py` が「書き換え: なし(既に最新)」を返したことが機械的な裏付け
+- [x] 6. **lint 2本と `go test` 2本がグリーン**(`environments.md` の厳密な文字列で、
+      フェーズ3 と フェーズ4 §1 の**2回**実行して確認)
+- [x] 7. **`callgraph-check.py` の重大度「高」が 0 件**(反映後の SSOT で再実行。FT1〜FT4 /
+      CG1 / CG5〜CG7 も 0 件)
+- [x] 8. **`check-relations.py` 合格 / `check-contracts.py` 合格**(83 ファイル / 83 ID)
+- [x] 9. **`callers` / `callees` の対称性が成立**している。追加した3組
+      (`controller ⇄ slack` / `claude-exec ⇄ worker` / `claude-exec ⇄ review`)は
+      **インターフェース越し**の呼び出しで静的解析に辺が出ないため、各 relations 本文に
+      呼び出し位置を `path:line` で書いた。`streamlog ⇄ dashboard` は**追加しない**
+      (`dashboard.go::oneline` は `03-impl/features.md` が「畳み込む薄いユーティリティ」と
+      判定した共有関数で MODULE-ID を持たない)
+- [x] 10. **`03-impl/tests/orchestrator.md` に実在しないテスト識別子が 0 件**
+      (変更指示が参照する 92 種を実ファイルの `func Test*` と機械照合し不一致 0 件。
+      `TestReadyTasks_Basic` は消えた)
+- [x] 11. **質問キュー #1**(`FR-orch-05` 受入基準2 の覆う範囲)の回答が反映されている
+      (未回答のため既定 B =「未検証(テスト未実装)」を適用。全件表 #47)
+- [x] 12. **決定シート #7 / #8 の回答が反映されている**(既定 #7=A / #8=A を適用。
+      `docs/issues/057` / `058` を起票し、`03-impl/index.md` の集計を 18 件へ)
+- [x] 13. **フェーズ3末尾の決定シート #9 の回答が反映されている**(人間が A で回答。
+      QA レーンは対象外 = コード差分ゼロで、`e2e.md` の E2E-01〜06 は全件が自動ランナーの無い実機確認)
+- [x] 14. **フェーズ4 §6 の決定シート #1 / #2 の回答が反映されている**(人間が #1=B / #2=A で回答。
+      #1 はテスト本体を別タスクへ回し `tests/orchestrator.md` にいまの姿を書いた。
+      #2 は層00 の追跡先を付け替えた)
+- [x] 15. **`docs/03-impl/contracts/orchestrator-prompt.md` の合格証が有効**
+      (上流が MINOR で上がったため `against` を 1.2.0 → **1.3.0** で再発行済み。close-task.py 条件b)
+- [x] 16. **SSOT へ反映した**(変更指示30件すべて。`reflected:` を付与済み)
+- [x] 17. **`/doc-check ssot` が PASS**(2回実行。合格証は 02 契約 1.3.0 / 03 契約 1.1.0 /
+      `03-impl/index.md` 1.13.1 / `tests/orchestrator.md` 1.4.1)
+- [x] 18. **histories に記録した**(`docs/histories/2026-08-05-relations-code-sync.md`)
 
 ## 進捗メモ
 

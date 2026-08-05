@@ -5,7 +5,7 @@ severity: 中
 found: 2026-08-05
 found_in: task-relations-code-sync フェーズ1(着手時の残件突き合わせ。SSOT を「現状記述」として読み直す過程で検出)
 related: docs/03-impl/relations/MODULE-cli-reset.md, docs/03-impl/relations/MODULE-cli-stop.md, docs/03-impl/contracts/cli-container.md, docs/02-design/system.md, docs/02-design/contracts/cli-container.md, docs/issues/038
-summary: 反映後の SSOT に「〜へ改める」「本変更で」という変更相対の言い回しが 8 箇所残っており、うち 1 箇所は現行実装について事実と異なることを書いている
+summary: 【2026-08-05 に SSOT 側は全件解消。残るのはコードが出力する文言そのものが変更相対である点で、コード修正が要るため閉じない】反映後の SSOT に変更相対の言い回しが残る
 ---
 
 ## 事象
@@ -145,3 +145,27 @@ CLAUDE.md §1 は「SSOT は常に**いまの姿だけ**を記述する」と定
 どちらも「いつの実装か」を読み手が特定できない点で #1〜#23 と同じ性質である。
 **申し送り**(`memo.md` にも記録済み): `.claude/scripts/` に走査を足すなら、語彙は最低でも
 **「本変更 / 本タスク / 従来は / 現行も / 旧実装 / 次のタスク / 〜へ改める」**を含める必要がある。
+
+## task-relations-code-sync 完了時点の状態(2026-08-05)
+
+**SSOT 側は全件解消した。** #1〜#23 のうち**実問題 25 件を修正**し、**19 件は正当**として残した。
+反映後の SSOT を機械的に走査した結果、`本変更 / 本タスク / 現行も / 次のタスク / 旧実装 / 従来は`
+のいずれかを含む箇所は **8 件**で、**すべてコードが実際に出力する文面の逐語引用**である
+(`claude-dev:1091`・`:1669`・`:2110` ほかの
+「管理ラベルを持たないため削除しなかったコンテナ(**本変更より前に起動した可能性があります**)」)。
+
+**本 issue を閉じない理由は1つだけになった**: **コードが出力する文言そのものが変更相対である。**
+利用者は「本変更」がいつを指すか知りようがない。ドキュメントだけを直すと CLAUDE.md 原則2
+(コード ⇄ 03-impl の完全一致)を破るため、**コードを触るタスクで文言を是正する必要がある**
+(例:「本システムの管理ラベルが付く前に起動された可能性があります」)。対象は
+`claude-dev` / `claude-dev-mac` の各3箇所と、それを引用する
+`01-requirements/functional.md` 受入基準15・17 / `02-design/logging.md` /
+`02-design/contracts/cli-container.md` 規則A / `MODULE-cli-logout` / `MODULE-cli-reset` /
+`03-impl/tests/e2e.md`(引用元を直せば同時に直る)。
+
+**走査語彙の不足**(当初は「本変更」「〜へ改める」しか拾えていなかった)は
+`.claude/improvements/KIT-audit-scope-budget-and-change-relative-vocabulary.md` へ移した。
+機械検査にするなら**候補を出すまで**にとどめ、除外(コードの出力の引用・日付で固定された改訂記録・
+却下した案の記録)は人間または裁定の記録に委ねること。
+
+経緯: `docs/histories/2026-08-05-relations-code-sync.md`

@@ -28,7 +28,8 @@ UI 設計の `orch-dashboard` 画面の実体である。
    **`LastSummary` / `LastSummaryTS` / `AssumptionsN` / `InterventionsN` は構造体に定義があるだけで、
    製品コードから代入している箇所が1件も無い**(`dashboard.go:66`〜`:69` に定義、
    `dashtui.go:233`・`:239` が表示に使う)。したがって**直近サマリ欄は常に空**、
-   **仮定件数は常に 0** で描画される(`docs/issues/032` #6 で人間が「記述を直すだけ」と裁定済み)。
+   **仮定件数は常に 0** で描画される(人間が「実装ではなく記述を直す」と裁定した。経緯は
+   `docs/histories/2026-08-05-relations-code-sync.md`)。
 2. `newDashProgram(ctx, st, store, sessions, actions)`(`dashtui.go:55`)が bubbletea の
    プログラム(`*tea.Program`)を作る(`WithAltScreen` と `WithContext`)。
    controller は `isTTY()` が真のときだけ起動する。
