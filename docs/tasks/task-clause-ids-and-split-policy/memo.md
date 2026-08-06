@@ -1,6 +1,6 @@
 ---
 id: task-clause-ids-and-split-policy
-phase: ドキュメント
+phase: 反映
 origin_layer: 01
 issue: docs/issues/060-modify-01-and-02-lack-clause-ids-split-policy-and-coverage-status.md
 date: 2026-08-06
@@ -275,14 +275,46 @@ CS11 の 23 件は全件 `docs/issues/054` が追跡する削除済み issue の
 
 - [x] 論点4 の回答(A)を反映 — 変更指示は変えず、`docs/issues/074` を追跡先として確定した
 - [x] 論点5 の回答(A)を反映 — `FR-env-01` / `FR-env-07` を `段階可(理由)` にし、`D1-split-01` を5件構成へ更新した
-- [ ] コード変更: **なし**(本タスクはドキュメントのみ。`/implement` はコード差分ゼロの確認と検査群の実行だけを行う)
-- [ ] `/task-close` 時: 変更指示35ファイルの反映 → `docs/pendings.md` P-005 の `関連` を条項 ID の名指しへ書き替え(具体文言は申し送り) → `build-index.py`(tests 集計・issues・decisions index)→ 検査群の再実行
+- [x] コード変更: **なし**(確認済み)。実装タスクは0件
+- [x] フェーズ3の検査群を実行(結果は Definition of Done)
+- [ ] `/task-close` の各ステップ(Definition of Done の未チェック項目が正)
 
 ## Definition of Done
 
-(フェーズ3で埋める)
+**本タスクはコードを1行も変えない**(記述形式の移行)。したがって実装タスクは0件で、
+DoD は「コードが変わっていないこと」の確認と、ドキュメント側の検査群・反映・記録である。
+
+- [x] **コード差分ゼロ** — `git status --porcelain -- ':!docs'` が空(2026-08-07 確認)
+- [x] lint: `go vet ./...` を `docker-proxy/` と `orchestrator/` で実行 — **両方 exit 0**
+- [x] 単体・結合テスト: `cd docker-proxy && go test ./...` — **ok** /
+      `cd orchestrator && go test -mod=vendor ./...` — **ok**
+- [x] 単体テスト(自己検証題材): `cd examples/orch-sample && pytest` — **12 failed**。
+      **これは既知で意図された状態**である(題材はテストだけを置き実装をスタブにしたテンプレートで、
+      worker が完成させる。`examples/orch-sample/README.md`)。**コマンドがテンプレートを指していて
+      必ず失敗することは `docs/issues/033` が追跡済み**で、本タスクが壊したものではない
+      (本タスクの前後で結果は同じ)。
+- [x] 受入基準テスト: 本タスクは受入基準の**本文を変えない**ため、新規に走らせるテストは無い
+      (逆変換による逐語一致で証明済み。調査メモ参照)
+- [x] E2E: **対象外**。観測可能な振る舞いを1つも変えないため、02 の E2E シナリオ一覧
+      (`E2E-01`〜`E2E-06`)のいずれにも影響しない。QA レーン(`/codex-qa`)も同じ理由で対象外
+- [x] `check-changeset.py`(CS 検査) 合格 / `check-sheet.py`(SH 検査) 合格
+- [x] `check-relations.py` 合格 / `check-contracts.py` 合格 / `callgraph-check.py` 重大度「高」0件
+- [ ] **`/task-close`**: 変更指示35件を SSOT へ反映する
+- [ ] **`/task-close` §2**: コールグラフと feature-graph を SSOT へ再生成する
+      (キット更新で注記コメントが陳腐化している分もここで解消する。調査メモ参照)
+- [ ] **`/task-close`**: `build-index.py`(`01-requirements/decisions/index.md` の新規生成を含む)
+- [ ] **`/task-close`**: `/doc-check ssot task-<slug>` で検証済み記録を出し直す(下流50ファイル)
+- [ ] **`/task-close`**: `docs/histories/` に記録し、`docs/issues/060` を削除する
+- [ ] **`/task-close`**: `close-task.py` の6条件を通してタスクディレクトリを削除する
 
 ## 進捗メモ
+
+- 2026-08-07 **フェーズ3完了(`/implement`)**。入場ゲート3条件を通過(検証済み連鎖 /
+  未決点ゼロ / `environments.md` の lint・テストコマンドが実値)。**実装タスクは0件**
+  (本タスクはコードを変えない)。DoD の検査群を実行し、`go vet` と `go test` は
+  docker-proxy・orchestrator とも合格。自己検証題材の pytest は既知の初期状態で失敗する
+  (`docs/issues/033`。本タスクの前後で結果は同じ)。E2E と QA レーンは観測可能な振る舞いを
+  変えないため対象外。`phase: 反映` へ。
 
 - 2026-08-06 `/task-new 060` でタスクを作成。`docs/issues/060` からの昇格。
   直前の `/doc-check full` が 00〜02 を全文読了しており、その読了記録を転記した。
