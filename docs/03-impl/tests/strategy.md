@@ -1,21 +1,21 @@
 ---
 id: strategy
 scope: 全体
-version: 1.1.1
-updated: 2026-08-04
+version: 1.1.2
+updated: 2026-08-06
 source:
   - docs/02-design/system.md
   - docs/02-design/environments.md
 summary: テストのレベル別実行方法・状態列の語彙・受入基準の配分規約
 keywords: [テスト, 方針]
 verified:
-  at: 2026-08-05
-  version: 1.1.1
+  at: 2026-08-06
+  version: 1.1.2
   against:
     - doc: docs/02-design/system.md
-      version: 2.3.0
+      version: 2.4.0
     - doc: docs/02-design/environments.md
-      version: 1.0.0
+      version: 1.1.0
 ---
 
 # テスト実装仕様 — 実行方法と共通の流儀

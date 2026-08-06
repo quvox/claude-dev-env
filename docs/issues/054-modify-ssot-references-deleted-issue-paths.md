@@ -4,7 +4,7 @@ type: modify
 severity: 低
 found: 2026-08-05
 found_in: /doc-check ssot task-fix-destructive-scope(C10 参照の実在検査)
-related: docs/00-requests/decisions/env.md, docs/02-design/contracts/cli-container.md, docs/03-impl/relations/MODULE-cli-stop.md, docs/03-impl/relations/MODULE-cli-reset.md, docs/03-impl/index.md, docs/issues/030
+related: docs/00-requests/decisions/env.md, docs/00-requests/decisions/sec.md, docs/00-requests/decisions/auth.md, docs/00-requests/decisions/orch.md, docs/02-design/contracts/cli-container.md, docs/02-design/contracts/orchestrator-prompt.md, docs/03-impl/contracts/cli-container.md, docs/03-impl/relations/MODULE-cli-stop.md, docs/03-impl/relations/MODULE-cli-reset.md, docs/03-impl/relations/MODULE-cli-start.md, docs/03-impl/relations/MODULE-cli-login.md, docs/03-impl/relations/MODULE-cli-login-codex.md, docs/03-impl/relations/MODULE-cli-logout.md, docs/03-impl/relations/MODULE-orchestrator-review.md, docs/03-impl/tests/cli-pull.md, docs/03-impl/tests/e2e.md, docs/03-impl/feature-graph.md, docs/03-impl/index.md, docs/issues/030
 summary: 解消して削除された issue のファイルパス(docs/issues/NNN)が仕様ドキュメントの根拠として残り続けるため、10 個の ID・20 以上のファイルで参照先が実在しない
 ---
 

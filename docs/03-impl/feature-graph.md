@@ -10,7 +10,7 @@ coupled_resources: 0
 unlinked_pairs: 0
 ---
 
-<!-- 生成物。手書き禁止。`python3 .claude/scripts/cluster-features.py` で再生成する。
+<!-- 生成物。手書き禁止。`python3 .claude/scripts/cluster-features.py --out "$(python3 .claude/scripts/resolve-callgraph-out.py)"` で再生成する。
      不変則: **実装と機能表が変わらなければ1バイトも変わらない**。
      鮮度は保存せず `--check` で検査する。
      **これは機能間連携仕様書ではない。** relations の代わりに使ってはならない

@@ -7,7 +7,7 @@ source:
 summary: イメージの配布と外部 CLI の同梱に関する決定事項(D0-dist-*)
 keywords: [配布, GHCR, 決定事項]
 verified:
-  at: 2026-08-05
+  at: 2026-08-06
   version: 1.0.1
   against:
     - doc: docs/00-requests/request.md

@@ -1,18 +1,18 @@
 ---
 id: environments
-version: 1.0.0
-updated: 2026-08-03
+version: 1.1.0
+updated: 2026-08-06
 source:
   - docs/01-requirements/system.md
   - docs/02-design/architecture.md
 summary: 開発環境の構成・セットアップ手順・lint/テスト/ドキュメント整合検査の厳密なコマンド文字列・Codex実行設定
 keywords: [開発環境, コマンド, lint, テスト, Codex]
 verified:
-  at: 2026-08-05
-  version: 1.0.0
+  at: 2026-08-06
+  version: 1.1.0
   against:
     - doc: docs/01-requirements/system.md
-      version: 1.0.0
+      version: 1.0.1
     - doc: docs/02-design/architecture.md
       version: 1.3.0
 ---
@@ -92,8 +92,9 @@ verified:
 
 | # | 用途 | コマンド | 合格条件 |
 |---|---|---|---|
-| 1 | コールグラフの鮮度 | `python3 .claude/scripts/build-callgraphs.py --check` | 「最新」を返す(終了コード 0)。古い場合は引数なしで再生成してから 2 以降をやり直す |
-| 2 | 機能間関係グラフの鮮度 | `python3 .claude/scripts/cluster-features.py --check` | 「最新」を返す(終了コード 0)。古い場合は引数なしで再生成してから 3 以降をやり直す |
+| 0 | 生成先の解決(1・2 の前に1回) | `CG_OUT=$(python3 .claude/scripts/resolve-callgraph-out.py)` | 出力先のパスを返す(終了コード 0)。**出力先を自分で決めてはならない**(進行中タスクがあるときはタスク配下、無ければ `docs/03-impl/callgraphs/` を返す) |
+| 1 | コールグラフの鮮度 | `python3 .claude/scripts/build-callgraphs.py --out "$CG_OUT" --check` | 「最新」を返す(終了コード 0)。古い場合は `--out "$CG_OUT"` を付けたまま `--check` を外して再生成してから 2 以降をやり直す |
+| 2 | 機能間関係グラフの鮮度 | `python3 .claude/scripts/cluster-features.py --out "$CG_OUT" --check` | 「最新」を返す(終了コード 0)。古い場合は `--out "$CG_OUT"` を付けたまま `--check` を外して再生成してから 3 以降をやり直す |
 | 3 | コールグラフ ⇄ 機能表 ⇄ 機能間連携仕様書 | `python3 .claude/scripts/callgraph-check.py` | 重大度「高」が 0 件(終了コード 0)。低・参考は残ってよい |
 | 4 | 機能間連携仕様書の内部整合 | `python3 .claude/scripts/check-relations.py` | 「合格」と表示され終了コード 0 |
 | 5 | 契約(02 ⇄ 03 ⇄ コード) | `python3 .claude/scripts/check-contracts.py` | 重大度「高」が 0 件(終了コード 0)。REST API を持たないため CT1〜CT3 は該当なし |
@@ -120,7 +121,7 @@ verified:
 | 用意するコマンド | `python3 .claude/scripts/setup-tools.py` |
 | 除外するパス | `orchestrator/vendor/` / `workspace/` / `tmp/` / `.orchestrator/` / `scripts/e2e6-codex.sh`(E2E の実機検証スクリプトであり、機能ではなく検証手段のため。決定シート2 論点9) |
 | 出力先 | `docs/03-impl/callgraphs/` |
-| 鮮度検査 | `python3 .claude/scripts/build-callgraphs.py --check` |
+| 鮮度検査 | `python3 .claude/scripts/build-callgraphs.py --out "$(python3 .claude/scripts/resolve-callgraph-out.py)" --check` |
 | CI で検査するか | いいえ(未定。PR での自動実行を導入する際に併せて決める) |
 
 ## Codex実行設定

@@ -9,7 +9,7 @@ impl: claude-dev::main#orchestrate
 summary: ホスト CLI(orchestrate)がオーケストレーターを起動・合流させるときの取り決め(実装側)
 keywords: [契約, CTR, 実装]
 verified:
-  at: 2026-08-04
+  at: 2026-08-06
   version: 1.1.0
   against:
     - doc: docs/02-design/contracts/cli-orchestrator.md

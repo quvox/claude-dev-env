@@ -9,11 +9,11 @@ impl: claude-dev::main#start, claude-dev-mac::main#start
 summary: ホスト CLI がコンテナへ渡す環境変数・マウント・起動オプションの取り決め(実装側)
 keywords: [契約, CTR, 実装]
 verified:
-  at: 2026-08-05
-  version: 1.5.0
+  at: 2026-08-06
+  version: 1.5.1
   against:
     - doc: docs/02-design/contracts/cli-container.md
-      version: 1.4.1
+      version: 1.4.2
 ---
 
 # CTR-cli-container ホスト CLI → コンテナ/entrypoint(実装)

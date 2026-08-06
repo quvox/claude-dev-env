@@ -7,7 +7,7 @@ source:
 summary: 配布イメージの公開先 GHCR の構成(リポジトリ・タグ・マルチアーキ・認証の置き場所)
 keywords: [インフラ, GHCR, 配布]
 verified:
-  at: 2026-08-05
+  at: 2026-08-06
   version: 1.1.0
   against:
     - doc: docs/02-design/architecture.md

@@ -1,19 +1,19 @@
 ---
 id: e2e
 scope: E2E
-version: 1.2.0
-updated: 2026-08-04
+version: 1.2.1
+updated: 2026-08-06
 source:
   - docs/02-design/system.md
   - docs/01-requirements/usecases.md
 summary: E2Eシナリオ E2E-01〜E2E-06 ⇄ テスト対応
 keywords: [テスト, E2E]
 verified:
-  at: 2026-08-05
-  version: 1.2.0
+  at: 2026-08-06
+  version: 1.2.1
   against:
     - doc: docs/02-design/system.md
-      version: 2.3.0
+      version: 2.4.0
     - doc: docs/01-requirements/usecases.md
       version: 1.2.1
 ---
@@ -279,7 +279,7 @@ verified:
 
 ## 未検証(テスト未実装)の全件
 
-| # | E2E ID | なぜ未実装か | 閉じる予定 |
+| # | E2E ID | なぜ未実装か | 解消の条件 |
 |---|---|---|---|
 | 1 | E2E-01 | 対象がホスト CLI(Bash)であり、自動テストランナーを設けない方針(`DSN-test-01`)。実行に実 Docker とホスト環境を要する | 自動化の予定は無い。方針を変える場合は 02 の `DSN-test-01` から見直す |
 | 2 | E2E-02 | 同上。加えてクライアント PC のブラウザ操作を含む | 同上 |

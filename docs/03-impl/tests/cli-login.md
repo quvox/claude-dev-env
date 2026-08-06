@@ -1,21 +1,21 @@
 ---
 id: cli-login
 scope: MOD-cli-login
-version: 1.0.0
-updated: 2026-08-03
+version: 1.0.1
+updated: 2026-08-06
 source:
   - docs/01-requirements/functional.md
   - docs/02-design/system.md
 summary: MOD-cli-login(Claude の認証)の受入基準⇄テスト対応
 keywords: [テスト]
 verified:
-  at: 2026-08-05
-  version: 1.0.0
+  at: 2026-08-06
+  version: 1.0.1
   against:
     - doc: docs/01-requirements/functional.md
-      version: 1.6.0
+      version: 1.8.1
     - doc: docs/02-design/system.md
-      version: 2.3.0
+      version: 2.4.0
 ---
 
 # MOD-cli-login のテスト対応
@@ -41,7 +41,7 @@ verified:
 
 ## 未検証(テスト未実装)の全件
 
-| # | 対象 | なぜ未実装か | 閉じる予定 |
+| # | 対象 | なぜ未実装か | 解消の条件 |
 |---|---|---|---|
 | 1 | FR-env-03 — 受入基準 1(正常系) | 自動テストランナーを設けない方針(`DSN-test-01` / `SR-32`)。実機確認で代替する | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |
 | 2 | FR-env-03 — 受入基準 12(異常系) | 自動テストランナーを設けない方針(`DSN-test-01` / `SR-32`)。実機確認で代替する | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |

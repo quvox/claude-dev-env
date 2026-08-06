@@ -9,7 +9,7 @@ impl: docker-proxy/main.go::validateContainerCreate
 summary: コンテナからの Docker Engine API 要求を docker-proxy が検査・書き換え・拒否する取り決め(実装側)
 keywords: [契約, CTR, 実装]
 verified:
-  at: 2026-08-04
+  at: 2026-08-06
   version: 1.0.0
   against:
     - doc: docs/02-design/contracts/docker-api.md

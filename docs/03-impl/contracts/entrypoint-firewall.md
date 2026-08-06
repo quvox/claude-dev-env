@@ -9,11 +9,11 @@ impl: scripts/entrypoint-claude.sh::main
 summary: entrypoint がファイアウォール適用を1度だけ呼び、成否に関わらず起動を続ける取り決め(実装側)
 keywords: [契約, CTR, 実装]
 verified:
-  at: 2026-08-04
+  at: 2026-08-06
   version: 1.0.0
   against:
     - doc: docs/02-design/contracts/entrypoint-firewall.md
-      version: 1.0.0
+      version: 1.0.1
 ---
 
 <!-- 2026-08-04 /doc-check ssot task-impl-depth(新しい実行): **合格証を再発行した(1.0.0)。**

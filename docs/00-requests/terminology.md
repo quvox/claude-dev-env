@@ -7,7 +7,7 @@ source:
 summary: 本システムで使う語の定義・英語表記(識別子)・使ってはいけない言い方
 keywords: [用語集, 識別子, 表記ゆれ]
 verified:
-  at: 2026-08-05
+  at: 2026-08-06
   version: 1.2.0
   against:
     - doc: docs/00-requests/request.md

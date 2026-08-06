@@ -1,21 +1,21 @@
 ---
 id: orchestrator
 scope: MOD-orchestrator
-version: 1.5.0
-updated: 2026-08-05
+version: 1.5.1
+updated: 2026-08-06
 source:
   - docs/01-requirements/functional.md
   - docs/02-design/system.md
 summary: MOD-orchestrator(AIオーケストレーター)の受入基準⇄テスト対応
 keywords: [テスト]
 verified:
-  at: 2026-08-05
-  version: 1.5.0
+  at: 2026-08-06
+  version: 1.5.1
   against:
     - doc: docs/01-requirements/functional.md
-      version: 1.6.0
+      version: 1.8.1
     - doc: docs/02-design/system.md
-      version: 2.3.0
+      version: 2.4.0
 ---
 
 # MOD-orchestrator のテスト対応
@@ -126,7 +126,7 @@ verified:
 **#37 だけは例外**で、状態セルは「実装済み」だが対象の一部しか覆っていないため、覆っていない範囲を
 明示する目的で併記している(47 行には数えない)。したがって表の行数は 48 である。
 
-| # | 対象 | なぜ未実装か | 閉じる予定 |
+| # | 対象 | なぜ未実装か | 解消の条件 |
 |---|---|---|---|
 | 1 | FR-orch-01 — 受入基準 2(正常系) | Go の自動テストは書ける領域だが未実装。実 tmux・実エージェント・実 git を要する振る舞いのため、現状は E2E-04 / E2E-05 の実機確認で代替している | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |
 | 2 | FR-orch-01 — 受入基準 3(正常系) | Go の自動テストは書ける領域だが未実装。実 tmux・実エージェント・実 git を要する振る舞いのため、現状は E2E-04 / E2E-05 の実機確認で代替している | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |

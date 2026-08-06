@@ -1,21 +1,21 @@
 ---
 id: images
 scope: (モジュール外)イメージのビルドと GHCR 配布
-version: 1.1.0
-updated: 2026-08-05
+version: 1.1.1
+updated: 2026-08-06
 source:
   - docs/01-requirements/functional.md
   - docs/02-design/system.md
 summary: どのモジュールにも属さないイメージのビルドと GHCR 配布の受入基準⇄テスト対応
 keywords: [テスト, イメージ, GHCR]
 verified:
-  at: 2026-08-05
-  version: 1.1.0
+  at: 2026-08-06
+  version: 1.1.1
   against:
     - doc: docs/01-requirements/functional.md
-      version: 1.6.0
+      version: 1.8.1
     - doc: docs/02-design/system.md
-      version: 2.3.0
+      version: 2.4.0
 ---
 
 # イメージのビルドと GHCR 配布 のテスト対応
@@ -55,7 +55,7 @@ verified:
 
 ## 未検証(テスト未実装)の全件
 
-| # | 対象 | なぜ未実装か | 閉じる予定 |
+| # | 対象 | なぜ未実装か | 解消の条件 |
 |---|---|---|---|
 | 1 | FR-env-09 — 受入基準 1(正常系) | CI 成果物の検証(マニフェストのアーキテクチャ・タグ・同梱バージョン)を自動化していない。日次ビルド後に人が `docker manifest inspect` と、コンテナ内での `claude --version` / `codex --version` で確認する | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |
 | 2 | FR-env-09 — 受入基準 2(正常系) | 同上 | 同上 |

@@ -1,16 +1,19 @@
 ---
 id: non-functional
-version: 1.3.0
-updated: 2026-08-05
+version: 1.3.1
+updated: 2026-08-06
 source:
   - docs/00-requests/request.md
+  - docs/00-requests/decisions/orch.md
 summary: 非機能要件 NFR-perf / avail / sec / ops / scale の各分類と目標値・測定方法
 keywords: [非機能要件, NFR]
 verified:
-  at: 2026-08-05
-  version: 1.3.0
+  at: 2026-08-06
+  version: 1.3.1
   against:
     - doc: docs/00-requests/request.md
+      version: 1.3.0
+    - doc: docs/00-requests/decisions/orch.md
       version: 1.3.0
 ---
 

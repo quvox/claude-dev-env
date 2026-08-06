@@ -1,14 +1,14 @@
 ---
 id: sec
-version: 1.1.1
-updated: 2026-08-05
+version: 1.1.2
+updated: 2026-08-06
 source:
   - docs/00-requests/request.md
 summary: 隔離境界と権限制限に関する決定事項(D0-sec-*)
 keywords: [セキュリティ, 隔離, 決定事項]
 verified:
-  at: 2026-08-05
-  version: 1.1.1
+  at: 2026-08-06
+  version: 1.1.2
   against:
     - doc: docs/00-requests/request.md
       version: 1.3.0
@@ -24,7 +24,14 @@ verified:
      残る「中」: D0-sec-05 のガードレールは「判定に必要な情報が手元に無い場合はその事実を
      『既知の制限』に書く」と定めるが、パース不能ボディの中継は
      MODULE-docker-proxy-serve の「実装上の判断」に書かれていて「既知の制限」に無い
-     (docs/issues/005)。これは「高」ではないため認証を妨げない。 -->
+     (docs/issues/005)。これは「高」ではないため認証を妨げない。
+
+     2026-08-06 /doc-check full: **上の「残る『中』」は解消済みである。**
+     2026-08-05 の task-relations-code-sync が対処案1 を適用し、
+     `docs/03-impl/relations/MODULE-docker-proxy-serve.md` の `## 既知の制限` に
+     「解釈できないリクエストボディは検査せず中継する」の行が入った
+     (経緯は `docs/histories/2026-08-05-relations-code-sync.md`)。
+     issue 005 自体はコードが未修正のため残っている。 -->
 
 # セキュリティ・隔離の決定事項
 

@@ -7,7 +7,7 @@ source:
 summary: ホスト上に作られる Docker リソース(ネットワーク・ボリューム・コンテナ)の一覧と命名規則
 keywords: [インフラ, Docker, 命名規則]
 verified:
-  at: 2026-08-05
+  at: 2026-08-06
   version: 1.1.0
   against:
     - doc: docs/02-design/architecture.md

@@ -8,7 +8,7 @@ summary: >
   AIオーケストレーターを、チームの並列開発力を上げるために提供する。信頼できる社内開発用途に限定。
 keywords: [claude-dev, Docker開発環境, 並列開発, AIオーケストレーター, 隔離, 配布, CodexCLI]
 verified:
-  at: 2026-08-05
+  at: 2026-08-06
   version: 1.3.0
   against: []
 ---

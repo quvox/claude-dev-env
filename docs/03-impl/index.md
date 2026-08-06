@@ -1,18 +1,18 @@
 ---
 id: index
-version: 1.14.0
-updated: 2026-08-05
+version: 1.15.0
+updated: 2026-08-06
 source:
   - docs/02-design/system.md
   - docs/02-design/relations.md
 summary: 03-impl 層の目次。機能間連携仕様書群の代表として層全体の版と合格証を持つ
 keywords: [目次]
 verified:
-  at: 2026-08-05
-  version: 1.14.0
+  at: 2026-08-06
+  version: 1.15.0
   against:
     - doc: docs/02-design/system.md
-      version: 2.3.0
+      version: 2.4.0
     - doc: docs/02-design/relations.md
       version: 1.4.0
 ---
@@ -102,14 +102,16 @@ verified:
 
 ## 機能間連携仕様書
 
-`docs/03-impl/relations/index.md` を参照(こちらも生成物)。**82機能** の境界は
+`docs/03-impl/relations/index.md` を参照(こちらも生成物)。**83機能** の境界は
 `docs/03-impl/features.md`(人間が合意した機能表)が定義する。
 
 ## コールグラフ
 
 `docs/03-impl/callgraphs/index.md` を参照。**ツールだけが書く場所**であり、機能間連携仕様書では
 ない(`.claude/directions/callgraphs.md`)。版も合格証も持たない純粋な導出物で、鮮度は
-`python3 .claude/scripts/build-callgraphs.py --check` で検査する。
+`python3 .claude/scripts/build-callgraphs.py --out "$(python3 .claude/scripts/resolve-callgraph-out.py)" --check`
+で検査する(**生成先を自分で決めない** — 進行中タスクがあるときの置き場は
+`.claude/directions/callgraphs.md` §3.1)。
 
 | 項目 | 値 |
 |---|---|
