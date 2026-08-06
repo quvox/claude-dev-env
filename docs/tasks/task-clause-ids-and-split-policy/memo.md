@@ -1,16 +1,18 @@
 ---
 id: task-clause-ids-and-split-policy
-phase: 決定
+phase: ドキュメント
 origin_layer: 01
 issue: docs/issues/060-modify-01-and-02-lack-clause-ids-split-policy-and-coverage-status.md
 date: 2026-08-06
-updated: 2026-08-06
+updated: 2026-08-07
 source: []
 summary: 01 の受入基準に条項ID を振り、全要件に分割可否を入れ、02 の要件カバレッジ表を条項単位 + 充足列へ作り替える
 ---
 
-**回答待ち: `docs/tasks/task-clause-ids-and-split-policy/sheet.md`**
-(概念の明確化 4 件 / 論点 3 件 / 委任の確認 1 件。回答後この行を「回答済み」へ変える)
+**回答済み: sheet.md(転記済み)**
+(2026-08-07 転記。本 sheet は旧テンプレート製で「記入完了」欄が無いため、人間の
+「SSOTを修正してほしい」という 2026-08-07 の直接指示を返却とみなした。概念4件は記入済み、
+論点・委任の空欄はシート冒頭の約束どおり「既定を承認」として転記)
 
 ## 目的
 
@@ -44,14 +46,14 @@ summary: 01 の受入基準に条項ID を振り、全要件に分割可否を�
 |---|---|---|---|
 | 01 | docs/01-requirements/functional.md | new-features/01-requirements/functional.md | modify |
 | 01 | docs/01-requirements/non-functional.md | new-features/01-requirements/non-functional.md | modify |
-| 01 | docs/01-requirements/system.md | new-features/01-requirements/system.md | modify(概念3 の回答しだいで「変更なし」) |
+| 01 | docs/01-requirements/system.md | (変更なし) | 変更なし(概念3 の回答 = SR は対象に含めない) |
 | 01 | docs/01-requirements/usecases.md | new-features/01-requirements/usecases.md | modify(AC⇄UC 表の参照を条項ID へ) |
 | 01 | docs/01-requirements/decisions/index.md | new-features/01-requirements/decisions/index.md | add |
 | 01 | docs/01-requirements/decisions/split.md | new-features/01-requirements/decisions/split.md | add(`D1-split-*`) |
 | 02 | docs/02-design/system.md | new-features/02-design/system.md | modify |
-| 02 | docs/02-design/relations.md | new-features/02-design/relations.md | modify(論点2 の回答しだいで「変更なし」) |
+| 02 | docs/02-design/relations.md | (変更なし) | 変更なし(論点2 の回答 = C。CS9 の件は今回触らない) |
 | — | docs/pendings.md | (SSOT ではないので変更指示を持たない。`/task-close` が直接直す) | modify |
-| 03 | docs/03-impl/tests/*.md(30ファイル) | new-features/03-impl/tests/*.md | modify(論点1 の回答しだいで「変更なし」) |
+| 03 | docs/03-impl/tests/*.md(30ファイル) | new-features/03-impl/tests/*.md | modify(論点1 の回答 = A。今回まとめて移行) |
 
 **変更の起点: 01**。理由 = 条項ID と分割可否は**要件そのものの記述形式と性質**であり、
 02 のカバレッジ表はそれに従属する(条項ID が無ければ条項単位のキーを作れない)。
@@ -100,11 +102,23 @@ summary: 01 の受入基準に条項ID を振り、全要件に分割可否を�
   - docs/02-design/relations.md@1.4.0
   - docs/02-design/system.md@2.4.0
 - 不要: docs/00-requests/decisions/._sec.md@- — 理由: macOS の AppleDouble メタデータファイル
-  (バイナリ・git 未追跡)。仕様ドキュメントではない。**削除の可否は人間に確認中**
+  (バイナリ・git 未追跡)。仕様ドキュメントではない。**2026-08-07 解消: 人間が自ら削除済み**
+  (`.gitignore` に `._*` を追加し `._sheet.md` も削除している。`find docs -name '._*'` は 0 件)
 
 ## 決定シート(回答済み)
 
-(未回答。`sheet.md` に回答が入り次第ここへ転記する)
+転記日: 2026-08-07。原本は `sheet.md`(根拠と選択肢の全文はそちら)。
+
+| # | 論点 | 結果 | 内容 |
+|---|---|---|---|
+| 概念1 | 分割可否を 34 要件へどう入れるか | 回答=委任 | 全 34 件に `不可分` を一括で入れ、`段階可(理由)` は `NFR-perf-01` / `NFR-perf-02` / `NFR-scale-01` の3件のみ。それ以外を `段階可` にしたくなったら人間へ問う |
+| 概念2 | 条項ID の `#` の性質 | 回答=委任 | **安定ID**。現在の連番を初期値とし、欠番を埋めない・並べ替えない・再利用しない。この規則を `functional.md` の受入基準表の直前に1行で明記する(現規範は `.claude/directions/01-requirements.md` が同じ規則を自ら定め、CS16 が検査する) |
+| 概念3 | SR(システム要件)を対象に含めるか | 回答=含めない | SR は前提・制約であり部分充足の状態を持たない。`01-requirements/system.md` は変更なし。02 カバレッジ表の SR 行は `充足`=`-`、`根拠` に `SR-nn` を書く(現規範 `.claude/directions/02-design.md` の `-` の規則と一致) |
+| 概念4 | 02 の `充足` 列の意味 | 回答=a | **設計がその条項を覆っているか**。表の直前に定義を1行で明記し「実装の達成度は `03-impl/tests/` が持つ」と書き添える |
+| 論点1 | 03-impl/tests 30ファイルの移行 | 既定を承認(空欄) | **A**: 今回まとめて移行する(機械的な置換のみ) |
+| 論点2 | CS9(PLAN-* バッククォート)の件 | 既定を承認(空欄) | **C**: 今回は触らない(キット側の変更が先。`docs/issues/060` の追加節が追跡) |
+| 論点3 | pendings.md の `関連` の書き替え | 既定を承認(空欄) | **B**: `部分` の裏付けになるものだけ条項ID で名指す |
+| 委任1 | 条項ID の採番と表記の実務 | 既定を承認(空欄) | 委任を承認。ガードレール: 形式 `FR-<domain>-nn-#` を変えない / 本文と意味を変えない / 安定性の規則を破らない / 1条項1ID |
 
 ## 未決点
 
@@ -163,6 +177,11 @@ CS11 の 23 件は全件 `docs/issues/054` が追跡する削除済み issue の
   直前の `/doc-check full` が 00〜02 を全文読了しており、その読了記録を転記した。
   **`/doc-check full` の SSOT 修正はすべてタスク作成前に完了している**(タスクが存在すると
   原則1 により `/doc-check` は SSOT を直せなくなるため、順序を意図的にこうした)。
+- 2026-08-07 決定シート回答を転記しフェーズ1完了(`check-sheet.py` PASS)。`phase: ドキュメント` へ。
+  同日キットが更新されており(全ファイル 00:42 再配置)、`.claude/directions/01-requirements.md` は
+  条項ID の安定規則を規範自身が持つ形になった(検査 CS16 新設)。概念2 の回答(安定ID)と同方向で
+  矛盾なし。SSOT 一括検査は基準線と同一(違反31件 = 全件 issues/054・pendings P-002/P-003 が追跡)、
+  `check-relations.py` 合格、`callgraph-check.py` 重大度「高」0件。
 
 ## 申し送り事項
 
