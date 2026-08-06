@@ -1,8 +1,8 @@
 ---
 id: sample-project
 scope: MOD-sample-project
-version: 1.0.1
-updated: 2026-08-06
+version: 1.1.0
+updated: 2026-08-07
 source:
   - docs/01-requirements/functional.md
   - docs/02-design/system.md
@@ -22,13 +22,14 @@ verified:
 
 ## 受入基準 ⇄ テスト対応表
 
-| 要件 ID | 受入基準 # | 種別 | レベル | テスト識別子 | 状態 |
-|---|---|---|---|---|---|
-| FR-orch-09 | 1 | 正常系 | E2E | E2E-04(実機確認手順) | 未検証(テスト未実装) |
-| FR-orch-09 | 3 | 正常系 | E2E | E2E-04(実機確認手順) | 未検証(テスト未実装) |
-| FR-orch-09 | 4 | 正常系 | 単体 | `examples/orch-sample` の pytest 一式 | 実装済み |
-| FR-orch-09 | 5 | 境界値 | E2E | E2E-04(実機確認手順) | 未検証(テスト未実装) |
-| FR-orch-09 | 6 | 異常系 | E2E | E2E-04(実機確認手順) | 未検証(テスト未実装) |
+
+| 受入基準 ID | 種別 | レベル | テスト識別子 | 状態 |
+|---|---|---|---|---|
+| FR-orch-09-1 | 正常系 | E2E | E2E-04(実機確認手順) | 未検証(テスト未実装) |
+| FR-orch-09-3 | 正常系 | E2E | E2E-04(実機確認手順) | 未検証(テスト未実装) |
+| FR-orch-09-4 | 正常系 | 単体 | `examples/orch-sample` の pytest 一式 | 実装済み |
+| FR-orch-09-5 | 境界値 | E2E | E2E-04(実機確認手順) | 未検証(テスト未実装) |
+| FR-orch-09-6 | 異常系 | E2E | E2E-04(実機確認手順) | 未検証(テスト未実装) |
 
 ## 契約の結合テスト
 

@@ -1,8 +1,8 @@
 ---
 id: cli-logout
 scope: MOD-cli-logout
-version: 1.2.1
-updated: 2026-08-06
+version: 1.3.0
+updated: 2026-08-07
 source:
   - docs/01-requirements/functional.md
   - docs/02-design/system.md
@@ -21,6 +21,7 @@ verified:
 
 ## 受入基準 ⇄ テスト対応表
 
+
 <!-- 受入基準 14〜18 は `logout` と `reset` の双方に効く共通の振る舞いである。
      重複を作らないため、対応表は主担当である本ファイルだけが持つ
      (`tests/cli-reset.md` の受入基準表は「対象外」を維持する)。
@@ -28,21 +29,21 @@ verified:
      受入基準22 は `reset` 側の振る舞い(プロジェクト配下を触らない)だが、`logout` の
      受入基準20 と対になる非対称なので、重複を作らないためこの表で持つ。 -->
 
-| 要件 ID | 受入基準 # | 種別 | レベル | テスト識別子 | 状態 |
-|---|---|---|---|---|---|
-| FR-env-01 | 9 | 境界値 | — | -(実機確認手順。**`logout` 側**。`docs/03-impl/tests/e2e.md` の E2E-01 手順8-5) | 未検証(テスト未実装) |
-| FR-env-01 | 9 | 境界値 | — | -(実機確認手順。**`reset` 側**(docker-proxy と `claude-dev-net` の両方)。`docs/03-impl/tests/e2e.md` の E2E-01 手順8-12) | 未検証(テスト未実装) |
-| FR-env-03 | 5 | 正常系 | — | - | 未検証(テスト未実装) |
-| FR-env-03 | 14 | 正常系 | — | -(実機確認手順。`logout` / `reset` の両方。`docs/03-impl/tests/e2e.md` の E2E-01 手順8) | 未検証(テスト未実装) |
-| FR-env-03 | 15 | 境界値 | — | -(実機確認手順。`logout` / `reset` の両方。`docs/03-impl/tests/e2e.md` の E2E-01 手順8) | 未検証(テスト未実装) |
-| FR-env-03 | 16 | 正常系 | — | -(実機確認手順。`logout` / `reset` の両方。`docs/03-impl/tests/e2e.md` の E2E-01 手順8) | 未検証(テスト未実装) |
-| FR-env-03 | 17 | 正常系 | — | -(実機確認手順。`logout` / `reset` の両方。`docs/03-impl/tests/e2e.md` の E2E-01 手順8) | 未検証(テスト未実装) |
-| FR-env-03 | 18 | 異常系 | — | -(実機確認手順。`logout` / `reset` の両方。`docs/03-impl/tests/e2e.md` の E2E-01 手順8) | 未検証(テスト未実装) |
-| FR-env-03 | 19 | 境界値 | — | -(実機確認手順。`docs/03-impl/tests/e2e.md` の E2E-01 手順8) | 未検証(テスト未実装) |
-| FR-env-03 | 20 | 正常系 | — | -(実機確認手順。`docs/03-impl/tests/e2e.md` の E2E-01 手順8) | 未検証(テスト未実装) |
-| FR-env-03 | 21 | 境界値 | — | -(実機確認手順。`docs/03-impl/tests/e2e.md` の E2E-01 手順8) | 未検証(テスト未実装) |
-| FR-env-03 | 22 | 正常系 | — | -(実機確認手順。`docs/03-impl/tests/e2e.md` の E2E-01 手順8。`reset` について確認する) | 未検証(テスト未実装) |
-| FR-env-03 | 23 | 異常系 | — | -(実機確認手順。`logout` / `reset` の両方。`docs/03-impl/tests/e2e.md` の E2E-01 手順8-13) | 未検証(テスト未実装) |
+| 受入基準 ID | 種別 | レベル | テスト識別子 | 状態 |
+|---|---|---|---|---|
+| FR-env-01-9 | 境界値 | — | -(実機確認手順。**`logout` 側**。`docs/03-impl/tests/e2e.md` の E2E-01 手順8-5) | 未検証(テスト未実装) |
+| FR-env-01-9 | 境界値 | — | -(実機確認手順。**`reset` 側**(docker-proxy と `claude-dev-net` の両方)。`docs/03-impl/tests/e2e.md` の E2E-01 手順8-12) | 未検証(テスト未実装) |
+| FR-env-03-5 | 正常系 | — | - | 未検証(テスト未実装) |
+| FR-env-03-14 | 正常系 | — | -(実機確認手順。`logout` / `reset` の両方。`docs/03-impl/tests/e2e.md` の E2E-01 手順8) | 未検証(テスト未実装) |
+| FR-env-03-15 | 境界値 | — | -(実機確認手順。`logout` / `reset` の両方。`docs/03-impl/tests/e2e.md` の E2E-01 手順8) | 未検証(テスト未実装) |
+| FR-env-03-16 | 正常系 | — | -(実機確認手順。`logout` / `reset` の両方。`docs/03-impl/tests/e2e.md` の E2E-01 手順8) | 未検証(テスト未実装) |
+| FR-env-03-17 | 正常系 | — | -(実機確認手順。`logout` / `reset` の両方。`docs/03-impl/tests/e2e.md` の E2E-01 手順8) | 未検証(テスト未実装) |
+| FR-env-03-18 | 異常系 | — | -(実機確認手順。`logout` / `reset` の両方。`docs/03-impl/tests/e2e.md` の E2E-01 手順8) | 未検証(テスト未実装) |
+| FR-env-03-19 | 境界値 | — | -(実機確認手順。`docs/03-impl/tests/e2e.md` の E2E-01 手順8) | 未検証(テスト未実装) |
+| FR-env-03-20 | 正常系 | — | -(実機確認手順。`docs/03-impl/tests/e2e.md` の E2E-01 手順8) | 未検証(テスト未実装) |
+| FR-env-03-21 | 境界値 | — | -(実機確認手順。`docs/03-impl/tests/e2e.md` の E2E-01 手順8) | 未検証(テスト未実装) |
+| FR-env-03-22 | 正常系 | — | -(実機確認手順。`docs/03-impl/tests/e2e.md` の E2E-01 手順8。`reset` について確認する) | 未検証(テスト未実装) |
+| FR-env-03-23 | 異常系 | — | -(実機確認手順。`logout` / `reset` の両方。`docs/03-impl/tests/e2e.md` の E2E-01 手順8-13) | 未検証(テスト未実装) |
 
 ## 契約の結合テスト
 

@@ -1,8 +1,8 @@
 ---
 id: cli-unforward
 scope: MOD-cli-unforward
-version: 1.1.1
-updated: 2026-08-06
+version: 1.2.0
+updated: 2026-08-07
 source:
   - docs/01-requirements/functional.md
   - docs/02-design/system.md
@@ -22,10 +22,11 @@ verified:
 
 ## 受入基準 ⇄ テスト対応表
 
-| 要件 ID | 受入基準 # | 種別 | レベル | テスト識別子 | 状態 |
-|---|---|---|---|---|---|
-| FR-env-06 | 3 | 正常系 | E2E | E2E-02(実機確認手順) | 未検証(テスト未実装) |
-| FR-env-06 | 12 | 異常系 | E2E | E2E-02(実機確認手順) | 未検証(テスト未実装) |
+
+| 受入基準 ID | 種別 | レベル | テスト識別子 | 状態 |
+|---|---|---|---|---|
+| FR-env-06-3 | 正常系 | E2E | E2E-02(実機確認手順) | 未検証(テスト未実装) |
+| FR-env-06-12 | 異常系 | E2E | E2E-02(実機確認手順) | 未検証(テスト未実装) |
 
 ## 契約の結合テスト
 

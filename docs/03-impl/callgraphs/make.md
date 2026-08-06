@@ -8,9 +8,11 @@ endpoints: 19
 unresolved: 0
 ---
 
-<!-- 生成物。手書き禁止。`python3 .claude/scripts/build-callgraphs.py` で再生成する。
+<!-- BEGIN NOTE: build-callgraphs.py -->
+<!-- 生成物。手書き禁止。`CG_OUT=$(python3 .claude/scripts/resolve-callgraph-out.py) && python3 .claude/scripts/build-callgraphs.py --out "$CG_OUT"` で再生成する。
      辞書順に固定されており、実装が変わらなければこのファイルも変わらない。
      **これは機能間連携仕様書ではない**(.claude/directions/callgraphs.md)。 -->
+<!-- END NOTE: build-callgraphs.py -->
 
 # make コールグラフ (Tier 3)
 

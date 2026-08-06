@@ -1,7 +1,7 @@
 ---
 id: usecases
-version: 1.2.1
-updated: 2026-08-05
+version: 1.3.0
+updated: 2026-08-07
 source:
   - docs/00-requests/acceptances.md
   - docs/01-requirements/functional.md
@@ -207,7 +207,7 @@ verified:
 4. システムは認証ファイルを共有ボリュームへ保存する。
 5. 開発者がプロジェクトディレクトリで `claude-dev start` し、tmux 内で `codex` を実行する。
 6. 開発者が codex に、ファイルの読み書きとコマンド実行を伴う作業を依頼する。システムは既定設定
-   (FR-env-12 の受け入れ基準5)のもとでシェルコマンドを実行し、`/workspace` を読み書きする。
+   (条項 `FR-env-12-5`)のもとでシェルコマンドを実行し、`/workspace` を読み書きする。
 7. 開発者がサンドボックスを明示指定した読み取り専用で調査を依頼する。システムは landlock
    バックエンドで読み取りを成功させ、書き込みは拒否する。
 

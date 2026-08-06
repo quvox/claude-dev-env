@@ -9,6 +9,7 @@ sections:
   - "## 拡張性"
 deletes: []
 reason: '記述形式の移行(docs/issues/060。要件文・目標値・測定方法は一切変えない)。全13件の NFR の表に「分割可否」列を追加する。不可分を既定とし、段階可は NFR-perf-01(増分取得)・NFR-perf-02(層の共有)・NFR-scale-01(同時起動の衝突ゼロ)の3件だけで、各行に理由を併記する(決定シート概念1=委任の制約どおり。判断の記録は new-features/01-requirements/decisions/split.md の D1-split-01)。「法令・コンプライアンス」(対象外・表なし)と「未解決事項」は変更しない。'
+reflected: 2026-08-07
 ---
 
 ## 性能

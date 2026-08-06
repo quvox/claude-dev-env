@@ -1,16 +1,13 @@
 ---
-target: docs/01-requirements/decisions/split.md
-change: add
-deletes: []
 id: split
+version: 1.0.0
+updated: 2026-08-07
 source:
   - docs/00-requests/request.md
   - docs/01-requirements/functional.md
   - docs/01-requirements/non-functional.md
 summary: 要件を部分的に満たしてよいかの判断(分割可否)の決定事項 D1-split-*
 keywords: [分割可否, 決定事項, D1]
-reason: '分割可否(不可分/段階可)の判断を要件レベルの決定として新設・記録する(.claude/directions/01-requirements.md「分割可否」が「決定はフェーズ1の決定シートで下し D1-* に記録する」と定めるため)。内容は決定シート概念1(回答=委任)と論点5(回答=A)を D1-split-01 として記録する: 既定は不可分、段階可は NFR-perf-01 / NFR-perf-02 / NFR-scale-01 / FR-env-01 / FR-env-07 の5件で、FR-env-01 と FR-env-07 は段階的な条項(FR-env-01-19 / FR-env-07-5)を理由欄で名指して他の条項は不可分と明記する。あわせて、値と理由欄の条項集合を変える判断を委任範囲外とする D1-split-02(委任)を置く。'
-reflected: 2026-08-07
 ---
 
 # 分割可否の決定事項
