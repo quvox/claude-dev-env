@@ -28,7 +28,8 @@
 | [020-static-callgraph-is-blind-to-interface-dispatch](020-static-callgraph-is-blind-to-interface-dispatch.md) | 2026-08-05 | 静的コールグラフはインターフェース越しの呼び出しを見られない — 実装済みの機能に出る CG3「低(実装前)」は実装漏れではなく、CG4 の確度「候補」は `exec.Cmd.Run()` のような同名衝突である。どちらもツールの限界であって仕様の欠陥ではない |
 | [021-a-quality-attribute-can-be-declined-not-only-measured](021-a-quality-attribute-can-be-declined-not-only-measured.md) | 2026-08-05 | 「測れない非機能要件」への選択肢は《測れる形に書き直す》《測らないと明記する》の2つではなく、《その品質特性自体を追わないと決めて要件を削除する》という3つ目がある。AI は3つ目を選択肢に並べていなかった |
 | [022-lens-substitution-can-be-approved-standing-not-per-run](022-lens-substitution-can-be-approved-standing-not-per-run.md) | 2026-08-05 | 独立レンズの代替可否は「1実行ごとの承認」だけでなく「常設の承認」でも与えられる。人間が先に判断を与えれば、実行のたびに決定シートで問い直す必要はない |
+| [023-a-format-without-operating-rules-pushes-them-onto-every-project](023-a-format-without-operating-rules-pushes-them-onto-every-project.md) | 2026-08-06 | 規範が「書式」だけを定めて「運用規則」を定めないと、その空白は決定シートへ落ち、全プロジェクトが同じ問いを個別に埋め直すことになる |
 
-件数: 22
+件数: 23
 
-<!-- END GENERATED -->
+<!-- END GENERATED: build-index.py -->

@@ -98,5 +98,7 @@
   `CTR-cli-container`「compose 資源の識別」が明記している)、(b) `start` 時に
   `docker ps --filter label=com.docker.compose.project=<一意化名>` で既存を引き、
   `claude-dev.project-dir` ラベルが自分と違えば衝突として中止する。
-- 関連: `docs/02-design/contracts/cli-container.md`「compose 資源の識別」/ `DSN-env-03` /
-  `D0-env-08` 項7 / `FR-env-01` 受入基準19 / issues: `docs/issues/024`(本変更が閉じる元の欠陥)
+- 関連: **条項 `FR-env-01-19` と `FR-env-07-5`**(02 の要件カバレッジ表がこの2条項の充足を
+  `部分(P-005)` と書く裏付け。条項ID を振る前の表記では `FR-env-01` 受入基準19 と
+  `FR-env-07` 受入基準5)/ `docs/02-design/contracts/cli-container.md`「compose 資源の識別」/
+  `DSN-env-03` / `D0-env-08` 項7 / issues: `docs/issues/024`(本変更が閉じる元の欠陥)
