@@ -25,6 +25,7 @@ summary: 解消して削除された issue のファイルパス(docs/issues/NNN
 | `020` | 8 | `decisions/env.md`, `02-design/contracts/cli-container.md`, `MODULE-cli-reset`, `MODULE-cli-login` ほか |
 | `024` | 5 | `decisions/env.md`, `02/03 の contracts/cli-container.md`, `MODULE-cli-stop`, `MODULE-cli-start` |
 | `025` | 1 | `decisions/env.md` |
+| `029` | 3 | `decisions/env.md`, `03-impl/index.md`, `MODULE-cli-start` |
 | `034` | 2 | `decisions/orch.md`, `MODULE-orchestrator-review` |
 | `035` | 3 | `01-requirements/non-functional.md`, `02-design/contracts/orchestrator-prompt.md`, `03-impl/index.md` |
 | `037` | 1 | `03-impl/tests/cli-pull.md` |
@@ -33,8 +34,14 @@ summary: 解消して削除された issue のファイルパス(docs/issues/NNN
 | `045` | 3 | `02-design/contracts/cli-container.md`, `MODULE-cli-stop`, `03-impl/tests/e2e.md` |
 
 **本タスク固有の問題ではない**(`018` / `034` / `035` / `037` / `039` / `040` は
-本タスクより前のタスクが閉じた分である)。`020` / `024` / `025` / `045` が
+本タスクより前のタスクが閉じた分である)。`020` / `024` / `025` / `029` / `045` が
 2026-08-04 の `task-fix-destructive-scope` で新たに加わった。
+
+<!-- 2026-08-07 /doc-check(task-stop-session-spawned-containers): 独立レビューの指摘により
+     `029` の行を追加した。**2026-08-05 の実測が `029` を数え落としていた** —
+     同じ `task-fix-destructive-scope` で閉じた5件のうち4件しか表に無く、
+     この issue 自身が「同型を全件数える」ための母集団だったため、欠落は次の走査の取りこぼしになる。
+     `docs/00-requests/decisions/env.md` は `029` をパスと ID の両方で引いている。 -->
 
 とくに `docs/03-impl/index.md` は「`024` だけは `MODULE-cli-stop` の『既知の制限』から
 **移行期の残り**として今も参照されている」と、**現役の参照であることを明示して**書いている。

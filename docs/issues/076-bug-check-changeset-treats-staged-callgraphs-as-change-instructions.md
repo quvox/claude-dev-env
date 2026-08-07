@@ -76,3 +76,21 @@ staged を生成しないことで回避した(生成しない選択自体は正
 - 2026-08-07 起票。`task-clause-ids-and-split-policy` のフェーズ2で、
   `/doc-check` B6 の指示どおり staged を生成した直後に CS1 が 29 件出て発覚した。
   同タスクはコード無変更のため staged を削除して回避し、ゲートは緑に戻した。
+
+## 経緯
+
+- 2026-08-07 `/implement`(task-stop-session-spawned-containers のフェーズ3 C-1):
+  **予告どおり再現した**。`/implement` C-1 が指示する
+  `build-callgraphs.py --out <staged>` と `cluster-features.py --out <staged>` を実行した直後、
+  `python3 .claude/scripts/check-changeset.py docs/tasks/task-stop-session-spawned-containers/new-features`
+  が **CS1 違反 29 件**(`03-impl/callgraphs/*.md` 6件 + `feature-graph.md`、各4項目)で
+  非0終了した。**変更指示 19 ファイルそのものには違反が無い**ことを、
+  導出物2つを一時的に退避して同じコマンドを流し直して確認した(`合格: 不変条件の違反なし`)。
+- **この issue の回避策**: 検査したいときは `03-impl/callgraphs/` と `03-impl/feature-graph.md` を
+  一時退避してから `check-changeset.py` を流す。`close-task.py` は除外を持つので影響を受けない
+  (同タスクの `--check` は6条件すべてこの2つを数えなかった)。
+- **フェーズ2 とフェーズ3 で被害の出方が違う**: フェーズ2 は staged を作らないので通るが、
+  フェーズ3 は `/implement` C-1 が作れと指示するので**必ず踏む**。
+  対処案 A(`--ssot` 側と同じ除外を変更指示モードにも入れる)の優先度は、
+  当初の見積もりより高い。
+
