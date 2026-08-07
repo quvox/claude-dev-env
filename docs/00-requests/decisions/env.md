@@ -7,8 +7,8 @@ source:
 summary: 開発環境・実行環境の構成に関する決定事項(D0-env-*)
 keywords: [開発環境, 決定事項]
 verified:
-  at: 2026-08-06
-  version: 1.2.0
+  at: 2026-08-07
+  version: 1.3.0
   against:
     - doc: docs/00-requests/request.md
       version: 1.3.0

@@ -12,7 +12,7 @@ verified:
   version: 1.0.1
   against:
     - doc: docs/02-design/system.md
-      version: 2.5.0
+      version: 2.7.0
 ---
 
 <!-- 2026-08-04 /doc-check ssot task-impl-depth(新しい実行): **合格証を再発行した(1.0.0)。**

@@ -10,12 +10,12 @@ summary: 要件を部分的に満たしてよいかの判断(分割可否)の決
 keywords: [分割可否, 決定事項, D1]
 verified:
   at: 2026-08-07
-  version: 1.1.0
+  version: 1.2.0
   against:
     - doc: docs/00-requests/request.md
       version: 1.3.0
     - doc: docs/01-requirements/functional.md
-      version: 1.9.0
+      version: 1.11.0
     - doc: docs/01-requirements/non-functional.md
       version: 1.5.0
 ---

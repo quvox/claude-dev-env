@@ -14,7 +14,7 @@ verified:
     - doc: docs/00-requests/acceptances.md
       version: 1.2.0
     - doc: docs/01-requirements/functional.md
-      version: 1.9.0
+      version: 1.11.0
 ---
 
 # ユースケース

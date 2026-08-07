@@ -10,12 +10,12 @@ summary: MOD-cli-reset(環境の初期化)の受入基準⇄テスト対応
 keywords: [テスト]
 verified:
   at: 2026-08-07
-  version: 1.3.0
+  version: 1.4.0
   against:
     - doc: docs/01-requirements/functional.md
-      version: 1.9.0
+      version: 1.11.0
     - doc: docs/02-design/system.md
-      version: 2.5.0
+      version: 2.7.0
 ---
 
 # MOD-cli-reset のテスト対応

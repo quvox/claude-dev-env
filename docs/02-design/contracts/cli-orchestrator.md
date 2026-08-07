@@ -12,7 +12,7 @@ verified:
   version: 1.1.0
   against:
     - doc: docs/02-design/system.md
-      version: 2.5.0
+      version: 2.7.0
 ---
 
 # CTR-cli-orchestrator ホスト CLI(orchestrate) → orchestrator

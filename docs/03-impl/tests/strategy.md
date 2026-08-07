@@ -10,10 +10,10 @@ summary: テストのレベル別実行方法・状態列の語彙・受入基�
 keywords: [テスト, 方針]
 verified:
   at: 2026-08-07
-  version: 1.2.0
+  version: 1.3.0
   against:
     - doc: docs/02-design/system.md
-      version: 2.5.0
+      version: 2.7.0
     - doc: docs/02-design/environments.md
       version: 1.1.0
 ---

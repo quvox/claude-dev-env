@@ -6,7 +6,7 @@ found: 2026-08-07
 found_in: /doc-check(task-clause-ids-and-split-policy の check F)
 related: .claude/scripts/check-changeset.py, .claude/scripts/close-task.py, .claude/directions/change-set.md, .claude/directions/callgraphs.md
 pattern: staged-derived-artefact-treated-as-change-instruction
-pattern_survey: `new-features/` 配下を走査するキットのスクリプト3本(check-changeset.py / close-task.py / callgraph-check.py)を確認。導出物の除外を持たないのは check-changeset.py の変更指示モードのみ(1件)
+pattern_survey: "`new-features/` 配下を走査するキットのスクリプト3本(check-changeset.py / close-task.py / callgraph-check.py)を確認。**2026-08-07 に再走査して 1 件 → 2 件へ訂正した**: check-changeset.py の変更指示モードは導出物7ファイル全部に除外が無く(当初の1件)、close-task.py は `callgraphs/` だけを除外し `feature-graph.md` を除外しない(フェーズ4の実測で判明)。callgraph-check.py は正しく除外する"
 summary: 進行中タスクの staged コールグラフを check-changeset.py が変更指示とみなし、CS1 違反 29 件でフェーズ2のゲートが通らなくなる
 ---
 
@@ -43,7 +43,19 @@ summary: 進行中タスクの staged コールグラフを check-changeset.py �
 **コードを変更するタスクは、規範どおりに staged を生成した時点でフェーズ2のゲートを通せなくなる。**
 回避するには規範に反して staged を生成しないか、検査結果を無視するしかない。
 どちらも「機械検査を人間が読み飛ばす」習慣を作るため、severity は「中」とする。
-`close-task.py` は正しく除外するので、フェーズ4は影響を受けない。
+
+**フェーズ4も影響を受ける(2026-08-07 に `task-stop-session-spawned-containers` の `/task-close`
+で実測)。** `close-task.py` の除外は `callgraphs/` ディレクトリにしか掛かっておらず、
+**その隣に置かれる `new-features/03-impl/feature-graph.md` は除外されない**。結果、条件 (a) が
+
+```
+NG  …/new-features/03-impl/feature-graph.md — `target:` が無い(どの SSOT に反映するか不明)
+```
+
+を出して**削除ゲートが不合格になる**(`callgraphs/` 配下の6ファイルは正しく除外された)。
+当該タスクでは、`/task-close` §2 が SSOT へ再生成し `build-callgraphs.py --check` /
+`cluster-features.py --check` の両方が「最新」であることを確認したうえで、
+役目を終えた staged 導出物7ファイルを削除して先へ進めた。
 
 本プロジェクトの `task-clause-ids-and-split-policy` はコードを変更しないため、
 staged を生成しないことで回避した(生成しない選択自体は正常 — `/doc-check` の check B は

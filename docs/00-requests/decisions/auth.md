@@ -7,7 +7,7 @@ source:
 summary: 認証情報の保管・共有・破棄に関する決定事項(D0-auth-*)
 keywords: [認証, 決定事項]
 verified:
-  at: 2026-08-06
+  at: 2026-08-07
   version: 1.2.0
   against:
     - doc: docs/00-requests/request.md

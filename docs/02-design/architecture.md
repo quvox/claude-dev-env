@@ -10,10 +10,10 @@ summary: 全体構成・データモデル・インフラ設計と、アーキ�
 keywords: [アーキテクチャ, 全体構成, 設計判断, DSN]
 verified:
   at: 2026-08-07
-  version: 1.3.0
+  version: 1.4.0
   against:
     - doc: docs/01-requirements/functional.md
-      version: 1.9.0
+      version: 1.11.0
     - doc: docs/01-requirements/non-functional.md
       version: 1.5.0
     - doc: docs/01-requirements/system.md

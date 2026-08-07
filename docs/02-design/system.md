@@ -1,6 +1,6 @@
 ---
 id: system
-version: 2.6.0
+version: 2.7.0
 updated: 2026-08-07
 source:
   - docs/01-requirements/functional.md
@@ -13,16 +13,16 @@ summary: >
 keywords: [モジュール分割, DSN-mod, テスト戦略, E2E, UI設計, 要件カバレッジ]
 verified:
   at: 2026-08-07
-  version: 2.5.0
+  version: 2.7.0
   against:
     - doc: docs/01-requirements/functional.md
-      version: 1.9.0
+      version: 1.11.0
     - doc: docs/01-requirements/non-functional.md
       version: 1.5.0
     - doc: docs/01-requirements/usecases.md
       version: 1.3.0
     - doc: docs/02-design/architecture.md
-      version: 1.3.0
+      version: 1.4.0
 ---
 
 # モジュール分割・テスト戦略・UI設計
@@ -160,7 +160,7 @@ verified:
 | FR-env-01-3 | MOD-cli-start | 完全 | -(設計判断を要さない) |
 | FR-env-01-4 | MOD-cli-start | 完全 | -(設計判断を要さない) |
 | FR-env-01-5 | MOD-cli-list | 完全 | -(設計判断を要さない) |
-| FR-env-01-6 | MOD-cli-stop | 完全 | DSN-env-03 |
+| FR-env-01-6 | MOD-cli-stop | 完全 | DSN-env-03, DSN-env-04 |
 | FR-env-01-7 | MOD-cli-start | 完全 | -(設計判断を要さない) |
 | FR-env-01-8 | MOD-cli-stop | 完全 | -(設計判断を要さない) |
 | FR-env-01-9 | MOD-cli-stop | 完全 | DSN-env-01 |
@@ -209,7 +209,7 @@ verified:
 | FR-env-03-19 | MOD-cli-logout | 完全 | -(設計判断を要さない) |
 | FR-env-03-20 | MOD-cli-logout | 完全 | -(設計判断を要さない) |
 | FR-env-03-21 | MOD-cli-logout | 完全 | -(設計判断を要さない) |
-| FR-env-03-22 | MOD-cli-logout | 完全 | -(設計判断を要さない) |
+| FR-env-03-22 | MOD-cli-reset | 完全 | -(設計判断を要さない) |
 | FR-env-03-23 | MOD-cli-logout | 完全 | -(設計判断を要さない) |
 | FR-env-04-1 | MOD-cli-start | 完全 | -(設計判断を要さない) |
 | FR-env-04-2 | MOD-cli-start | 完全 | -(設計判断を要さない) |
@@ -526,11 +526,13 @@ stateDiagram-v2
 **エラー**=日本語の原因と次の操作の案内 / **空**=対象セッションが無い旨 /
 **完了**=接続 URL とアタッチ。
 
-**破壊的操作の状態**(`logout` / `reset`): **確認**=削除対象の名前を1行ずつ列挙して同意を求める /
+**破壊的操作の状態**(`logout` / `reset`): **確認**=削除対象の名前を1行ずつ列挙して同意を求める(`reset` はセッション由来の資源も**種別つきで**この列挙に含める。`FR-env-03` 受入基準14)/
 **中止**=同意が得られない、または端末が無く `--yes` も無い旨と `--yes` の指定方法 /
 **一部失敗**=消えなかった資源を1件ずつ列挙(成功時の文言は出さない)/
 **残した資源**=管理ラベルを持たないため削除しなかったコンテナの名前と、停止中のものは
 列挙していない旨。
+
+**`stop` / `reset` が持つ片付けの状態**(`FR-env-01` 受入基準26・27 は両方に掛かる): **片付け結果**=削除したセッション由来の資源を**種別(コンテナ / ネットワーク)つきで1行ずつ**列挙(0件のときは1行も出さない)/ **片付け未実施**=`stop` だけの状態で、対象コンテナから起動元ディレクトリを読み取れず所有者を再現できないため片付けを行わなかった旨(同23。compose 資源の同じ案内とまとめて1つ出してよい)。
 
 **排他待ちで中止の状態**(`start` / `stop` / `logout` / `reset` / `login` / `login-codex` の
 **6コマンド共通**): 保持している操作の名前とプロセス ID と再実行の方法を表示し、終了コード 1 で

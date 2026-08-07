@@ -4,10 +4,10 @@ type: modify
 severity: 低
 found: 2026-08-07
 found_in: /doc-check ssot task-clause-ids-and-split-policy(検査 C10 の frontmatter 妥当性を PyYAML で全件解析して検出)
-related: docs/feedbacks/018-mv-atomicity-is-about-the-path-not-the-contents.md, docs/issues/076-bug-check-changeset-treats-staged-callgraphs-as-change-instructions.md
+related: docs/feedbacks/018-mv-atomicity-is-about-the-path-not-the-contents.md, docs/issues/076-bug-check-changeset-treats-staged-callgraphs-as-change-instructions.md, docs/issues/080-modify-destructive-commands-appear-in-no-use-case.md, docs/issues/081-bug-check-changeset-aborts-on-a-non-utf8-file-in-the-task-directory.md, docs/issues/083-modify-requirement-clauses-name-lower-layer-ids-and-file-paths.md
 pattern: frontmatter-scalar-starts-with-backtick
-pattern_survey: docs/ 配下の全 Markdown(仕様ドキュメント4層・issues・feedbacks・histories・pendings)の frontmatter を PyYAML の safe_load で解析。失敗するのは下の2ファイルのみで、仕様ドキュメント4層には1件も無い
-summary: frontmatter の値がバッククォートで始まっているため YAML として解析できないファイルが2件ある(いずれも SSOT 外)
+pattern_survey: docs/ 配下の全 Markdown(仕様ドキュメント4層・issues・feedbacks・histories・pendings)の frontmatter を PyYAML の safe_load で解析。2026-08-07 の再走査で失敗は **5件**(`feedbacks/018` の summary / `issues/076`・`080`・`081` の pattern_survey がバッククォート始まり、`issues/083` の pattern_survey は引用符なしのスカラーにコロンを含む)。**仕様ドキュメント4層には1件も無い**
+summary: frontmatter の値が引用符なしでバッククォート始まり・コロン混じりになっているため YAML として解析できないファイルが5件ある(いずれも SSOT 外)
 ---
 
 # 078 frontmatter の値がバッククォートで始まり YAML として解析できない
@@ -47,3 +47,5 @@ pattern_survey: "`new-features/` 配下を走査するキットのスクリプ�
 `task-clause-ids-and-split-policy` の影響範囲(closure)にも、本実行で検証済みにした
 SSOT 48 ファイルにも含まれない。`docs/feedbacks/` と `docs/issues/` は版と検証済み記録を持たず、
 `/doc-check` の検証対象そのものではないため、独立した修正として残す。
+
+- 2026-08-07 `/doc-check ssot task-stop-session-spawned-containers` で再走査し、2件 → **5件**に増えていることを確認した(`pattern_survey` を持つ issue が増えたため)。**修正はしていない**(SSOT 外で、どの検査もこの解析に依存していない)。

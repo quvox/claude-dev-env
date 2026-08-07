@@ -167,7 +167,7 @@ docker-proxy 経由の Docker アクセス(FR-env-07)、VM モード(FR-env-08)�
 - 何のために呼ぶか: コンテナ内の初期化(UID/GID 追従・認証コピー・ファイアウォール適用・
   VNC/Chrome・tmux・同期ループ・ポート同期)を行わせるため。`docker run` でコンテナを作ると
   イメージの `ENTRYPOINT` として起動する(主コンテナの `docker run -d` は
-  `claude-dev:1381` / `claude-dev-mac:1414`。手順15 の再試行ループの中にある)。
+  `claude-dev:1399` / `claude-dev-mac:1432`。手順15 の再試行ループの中にある)。
 - 何を渡すか: 契約 `CTR-cli-container` が定める環境変数一式とマウント、`NET_ADMIN` / `NET_RAW`。
 - 何を受け取るか: 直接の戻り値は無い。tmux が立ち上がった状態のコンテナ。
   **プロジェクトディレクトリ配下への書き込みがこの経路で起きる**(`start` 自身の副作用ではないが、

@@ -22,11 +22,11 @@
 | [cli-setup](cli-setup.md) | MOD-cli-setup | 0 / **1** / 2 | 1.1.0 | 2026-08-07 | MOD-cli-setup(初回セットアップ)の受入基準⇄テスト対応 |
 | [cli-ssh-keys](cli-ssh-keys.md) | MOD-cli-ssh-keys | 0 / **5** / 1 | 1.1.0 | 2026-08-07 | MOD-cli-ssh-keys(転送する SSH 鍵の選択と解除)の受入基準⇄テスト対応 |
 | [cli-start](cli-start.md) | MOD-cli-start | 2 / **35** / 1 | 1.3.0 | 2026-08-07 | MOD-cli-start(開発コンテナの起動)の受入基準⇄テスト対応 |
-| [cli-stop](cli-stop.md) | MOD-cli-stop | 0 / **16** / 0 | 1.5.0 | 2026-08-07 | MOD-cli-stop(コンテナの停止)の受入基準⇄テスト対応 |
+| [cli-stop](cli-stop.md) | MOD-cli-stop | 0 / **16** / 0 | 1.6.0 | 2026-08-07 | MOD-cli-stop(コンテナの停止)の受入基準⇄テスト対応 |
 | [cli-unforward](cli-unforward.md) | MOD-cli-unforward | 0 / **3** / 1 | 1.2.0 | 2026-08-07 | MOD-cli-unforward(ポートフォワードの解除)の受入基準⇄テスト対応 |
 | [cli-upgrade](cli-upgrade.md) | MOD-cli-upgrade | 0 / **1** / 2 | 1.1.0 | 2026-08-07 | MOD-cli-upgrade(CLI とイメージの更新)の受入基準⇄テスト対応 |
 | [container-tools](container-tools.md) | MOD-container-tools | 0 / **1** / 2 | 1.1.0 | 2026-08-07 | MOD-container-tools(コンテナ内補助ツール)の受入基準⇄テスト対応 |
-| [docker-proxy](docker-proxy.md) | MOD-docker-proxy | 10 / **2** / 0 | 1.2.0 | 2026-08-07 | MOD-docker-proxy(Docker API の検査と中継)の受入基準⇄テスト対応 |
+| [docker-proxy](docker-proxy.md) | MOD-docker-proxy | 10 / **2** / 0 | 1.3.0 | 2026-08-07 | MOD-docker-proxy(Docker API の検査と中継)の受入基準⇄テスト対応 |
 | [e2e](e2e.md) | E2E | 0 / **6** / 0 | 1.3.0 | 2026-08-07 | E2Eシナリオ E2E-01〜E2E-06 ⇄ テスト対応 |
 | [entrypoint](entrypoint.md) | MOD-entrypoint | 0 / **23** / 0 | 1.2.0 | 2026-08-07 | MOD-entrypoint(コンテナ起動シーケンス)の受入基準⇄テスト対応 |
 | [firewall](firewall.md) | MOD-firewall | 0 / **5** / 1 | 1.2.0 | 2026-08-07 | MOD-firewall(外向き通信のブラックリスト適用)の受入基準⇄テスト対応 |
