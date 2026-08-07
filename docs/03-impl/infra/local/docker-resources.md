@@ -1,7 +1,7 @@
 ---
 id: local-docker-resources
-version: 1.1.0
-updated: 2026-08-04
+version: 1.2.0
+updated: 2026-08-07
 source:
   - docs/02-design/architecture.md
 summary: ホスト上に作られる Docker リソース(ネットワーク・ボリューム・コンテナ)の一覧と命名規則
@@ -56,6 +56,8 @@ graph TB
 | `claude-dev-<project>` | コンテナ | プロジェクトごとの Claude コンテナ | `MODULE-cli-start` |
 | `claude-dev-docker-proxy` | コンテナ | Docker API の検査プロキシ。**全プロジェクトで共有** | `MODULE-cli-start`(必要時に起動) |
 | `fwd-<name>-<port>` | コンテナ | ポート中継(使い捨て) | `MODULE-cli-forward` |
+| **(利用者が付けた任意の名前)** | **コンテナ / ネットワーク** | **セッション由来の資源**(定義は用語集が正)。**名前は利用者が決めるので固定名を持たず、ラベル `claude-dev.role=spawned` と `claude-dev.owner-project-dir=<起動ディレクトリの絶対パス>` で識別する**(`DSN-env-04`)。片付けの規則は `CTR-cli-container` の規則 D が定める | 利用者(コンテナ内の docker クライアント)。**ラベルを付けるのは `MODULE-docker-proxy-serve`** |
+| **(利用者が付けた任意の名前)** | **ボリューム** | セッション内から作られた名前付きボリューム。**所有者ラベルを持たない**(利用者のデータであり片付けの対象にしない。`D0-env-05` 項2) | 利用者(コンテナ内の docker クライアント) |
 | `claude-dev-claude` / `claude-dev-claude-vnc` / `claude-dev-docker-proxy` | イメージ | 配布・ビルド成果物 | `MODULE-makefile-build*` / `MODULE-cli-pull` |
 
 ## ネットワーク
@@ -66,7 +68,8 @@ graph TB
 | docker-proxy の公開 | **ホストへ公開しない**。`claude-dev-net` 内でのみ到達可能 |
 | Claude コンテナの公開ポート | 既定は無し。ブラウザ確認ありのときだけ noVNC を 6080 番台から動的に割り当てる |
 | フォワードのホスト側ポート | 8100〜8999 から動的に割り当てる |
-| compose のプロジェクト名 | コンテナ名を compose 互換へ正規化した値(`COMPOSE_PROJECT_NAME`)。共有ネットワークは分離しない |
+| compose のプロジェクト名 | コンテナ名を compose 互換へ正規化した値に**起動ディレクトリの絶対パスのハッシュ短縮値**を足した `COMPOSE_PROJECT_NAME`(`DSN-env-03`)。共有ネットワークは分離しない |
+| **セッション内から作られたネットワーク** | **名前は利用者が決める**(compose 既定ネットワーク `<一意化名>_default` と、`docker network create` で作られる単独のネットワークの両方がある)。**どちらも所有者ラベルを持つ**(`DSN-env-04`)。**サブネットは Docker の既定プールから割り当てられる**(本システムは指定しない) |
 
 ## 権限・ロール
 

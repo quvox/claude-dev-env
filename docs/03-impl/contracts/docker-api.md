@@ -1,7 +1,7 @@
 ---
 id: docker-api
-version: 1.0.0
-updated: 2026-08-03
+version: 1.1.0
+updated: 2026-08-07
 source:
   - docs/02-design/contracts/docker-api.md
 kind: other
@@ -36,6 +36,8 @@ verified:
 | 待ち受け | `http.ListenAndServe(listenAddr, handler)` の単一ハンドラ透過プロキシ(ルート登録は無い) | `docker-proxy/main.go:371` |
 | 遮断するパス | 版接頭辞を除いた `cleanPath` が `/swarm` / `/plugins` / `/configs` / `/secrets` に前方一致すれば、**メソッドを問わずボディを見ずに** `403`(本文 `blocked: <path> is not allowed`) | `docker-proxy/main.go:274`〜`279`(`blockedPathPrefixes`), `:330`〜`336` |
 | 判定の順序 | 上記のパス遮断 → (POST の create / exec create だけ)Privileged → PidMode=host → NetworkMode=host → UsernsMode=host → bind の書き換え/拒否 → 危険なケーパビリティ → デバイス割り当て | `docker-proxy/main.go:318`〜`354`, `:506`〜`551` |
+| **所有者ラベルの注入** | **拒否判定をすべて通過したあと**、トップレベル `Labels` へ `claude-dev.role=spawned` と `claude-dev.owner-project-dir=<呼び出し元コンテナの claude-dev.project-dir>` を書く。**利用者が同じキーを指定していたら上書きする**。対象は `POST /containers/create` と `POST /networks/create` の2経路(版接頭辞の有無を問わない)。**ボディの再構成は要求あたり1回**で、`r.Body` / `ContentLength` / `Content-Length` を同時に更新する | `docker-proxy/main.go:309`(注入), `:341`(書き戻し), `:350`(ネットワーク経路), `:401`(経路の正規表現), `:469`(分岐) |
+| **付与できないとき** | 呼び出し元を特定できない・`claude-dev.project-dir` が空・ボディが JSON として読めない・注入に失敗した、のいずれでも**元のボディのまま中継し、拒否しない**。ログにも残さない | `docker-proxy/main.go:309`〜`:336`(所有者が空なら no-op), `:350`〜`:367` |
 | Privileged | `true` なら拒否(`privileged containers are not allowed`) | `docker-proxy/main.go:506` |
 | PidMode | `host` なら拒否 | `docker-proxy/main.go:511` |
 | NetworkMode | `host` なら拒否 | `docker-proxy/main.go:514` |
@@ -63,4 +65,5 @@ verified:
 |---|---|---|
 | symlink の実体解決を行わない(字句的な封じ込めのみ) | ホスト側の symlink による脱出は検出できない。プロキシはホストのファイルシステムを持たないため実体解決が原理的にできない | なし |
 | 解釈できないボディを中継する | 独自解釈で正常な操作を弾かない代わりに、検査をすり抜ける要求が Docker Engine まで届く(最終判断は Docker が行う) | なし |
+| **印を付けられない要求が残る** | 呼び出し元を特定できない要求・解釈できないボディの要求で作られた資源は所有者ラベルを持たないため、`stop` / `reset` の片付け対象から外れる。**存在を列挙する手段が無いので利用者への表示も行わない**(`FR-env-07` 受入基準12 が明示する帰結) | `docs/issues/005`(解釈できないボディの中継そのもの) |
 | ログが全プロジェクト分で混ざる | 共有常駐のため、拒否の記録から呼び出し元を特定するには接続元 IP を追う必要がある | なし |

@@ -1,7 +1,7 @@
 ---
 id: architecture
-version: 1.3.0
-updated: 2026-08-05
+version: 1.4.0
+updated: 2026-08-07
 source:
   - docs/01-requirements/functional.md
   - docs/01-requirements/non-functional.md
@@ -74,12 +74,12 @@ graph TD
 
 | コンポーネント | 責務 | 対応要件 |
 |---|---|---|
-| ホスト CLI | コンテナのライフサイクル・認証・ポート・SSH 鍵・オーケストレーター起動。OS 依存をここに閉じる | FR-env-01〜FR-env-12, FR-orch-02 |
+| claude-dev(ホスト CLI) | コンテナのライフサイクル・ポート・認証・SSH 鍵の操作 | FR-env-01, FR-env-03, FR-env-04, FR-env-06 |
 | Makefile | ビルド・セットアップ・CLI の導入/除去・自己検証題材の配置 | FR-env-09, FR-env-10, FR-orch-09 |
 | コンテナイメージ | 開発ツール・エージェント CLI・ブラウザ確認資産を同梱した実行基盤 | FR-env-09, FR-env-11, FR-env-12 |
 | entrypoint | コンテナ起動時の初期化(UID/GID・認証・既定設定・ファイアウォール・VNC・tmux・同期ループ) | FR-env-02, FR-env-03, FR-env-05, FR-env-11, FR-env-12 |
 | firewall | コンテナ内の外向き通信制御 | FR-env-05 |
-| docker-proxy | Docker API の検査・書き換え・拒否。全コンテナで共有 | FR-env-07, NFR-sec-01 |
+| docker-proxy | Docker API の検査・書き換え・拒否。全コンテナで共有。**あわせてコンテナ作成要求とネットワーク作成要求へ所有者ラベルを注入し、セッション由来の資源に「誰が後で片付けてよいか」の印を付ける**(`DSN-env-04`。**印を読んで削除するのはホスト CLI 側**である) | FR-env-01, FR-env-07, NFR-sec-01 |
 | portsync | 公開ポートの検出と転送(DooD / VM の両経路) | FR-env-06 |
 | orchestrator | 2モードの制御ループ・worker 並列・介入・レビュー・TUI・通知・状態保全 | FR-orch-01〜FR-orch-08 |
 | hooks | エージェントのイベントを受けてプロンプト保存と通知を行う | FR-orch-07 |
@@ -96,7 +96,11 @@ graph TD
    VM モードでは同じパスを virtiofs でゲストにも共有する。worker は `/workspace` 内の
    git worktree で作業し、統合はコントローラが直列に行う。
 3. **Docker 操作**: コンテナ内の `docker` → `DOCKER_HOST` → docker-proxy が検査 →
-   許可/書き換え/拒否 → ホストの Docker Engine。
+   **許可(透過)/ 書き換えて許可 / 所有者ラベルを付与して許可 / 拒否** → ホストの Docker Engine。
+   検査の対象はコンテナ作成要求・**ネットワーク作成要求**・コマンド実行(exec)作成要求のボディと
+   要求パスである(判定の正は `CTR-docker-api`「通信の形」と「検査する要素と判定」)。
+   **付与された所有者ラベルは、あとで `stop` / `reset` が片付ける対象を決めるために読まれる**
+   (`CTR-cli-container` の `DSN-env-04`)。
 4. **公開**: 既定ではポートを公開しない。`forward` のときだけ中継コンテナを立ててホスト側ポートを
    割り当てる。ブラウザ確認ありの場合は noVNC ポートのみ起動時に公開する。
 5. **運用状態**: オーケストレーターの plan・制御・状態・追記型ログは `/workspace/.orchestrator/` に
@@ -152,6 +156,7 @@ graph TD
   | `.claude-dev.yaml`(SSH 鍵の指定) | プロジェクトディレクトリ | ホスト CLI | プロジェクト固有 |
   | plan / control / state / 追記型ログ | 運用状態 | orchestrator | プロジェクト固有 |
   | Docker リソース(ネットワーク・ボリューム・イメージ) | ホストの Docker | ホスト CLI / Makefile | `claude-dev-` 接頭辞で命名 |
+  | **セッション由来の Docker リソース**(コンテナ・ネットワーク) | ホストの Docker | **docker-proxy**(作成要求の中継時に所有者ラベルを付ける) | **名前ではなく所有者ラベルで識別する**(`claude-dev.role=spawned` / `claude-dev.owner-project-dir`。名前は利用者が決めるので接頭辞の規則を課せない。`DSN-env-04`) |
 - 理由: 「共有すべきもの(認証)」と「共有してはならないもの(セッション・運用状態)」を置き場所で
   分けると、同期ループも片付け操作も分岐を持たずに済む。
 - 却下した案: すべてをプロジェクトディレクトリに置く — プロジェクトごとに再ログインが必要になる。

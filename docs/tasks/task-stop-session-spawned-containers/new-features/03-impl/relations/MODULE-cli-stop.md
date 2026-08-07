@@ -23,6 +23,7 @@ requirements: FR-env-01, FR-env-07
 tests: なし(未実装。シェル実装のため自動テストランナーが無く実機確認で代替する)
 updated: 2026-08-07
 summary: セッションと、そのセッションが作った資源を停止・削除し、遊休なら docker-proxy も止める
+reflected: 2026-08-07
 ---
 
 ## 目的

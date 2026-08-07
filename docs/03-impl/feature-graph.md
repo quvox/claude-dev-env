@@ -4,7 +4,7 @@ features: 83
 edges: 129
 confirmed_edges: 122
 candidate_edges: 7
-shared: 27
+shared: 29
 unreached: 19
 coupled_resources: 0
 unlinked_pairs: 0
@@ -185,6 +185,7 @@ unlinked_pairs: 0
 | `claude-dev-mac::destructive_rm` | 2 | MODULE-cli-logout, MODULE-cli-reset |
 | `claude-dev-mac::destructive_skipped` | 2 | MODULE-cli-logout, MODULE-cli-reset |
 | `claude-dev-mac::sha256_hex` | 2 | MODULE-cli-start, MODULE-cli-stop |
+| `claude-dev-mac::spawned_resources` | 2 | MODULE-cli-reset, MODULE-cli-stop |
 | `claude-dev::compose_project_name` | 2 | MODULE-cli-start, MODULE-cli-stop |
 | `claude-dev::compose_project_name_legacy` | 2 | MODULE-cli-start, MODULE-cli-stop |
 | `claude-dev::container_project_dir` | 2 | MODULE-cli-start, MODULE-cli-stop |
@@ -197,6 +198,7 @@ unlinked_pairs: 0
 | `claude-dev::destructive_rm` | 2 | MODULE-cli-logout, MODULE-cli-reset |
 | `claude-dev::destructive_skipped` | 2 | MODULE-cli-logout, MODULE-cli-reset |
 | `claude-dev::sha256_hex` | 2 | MODULE-cli-start, MODULE-cli-stop |
+| `claude-dev::spawned_resources` | 2 | MODULE-cli-reset, MODULE-cli-stop |
 
 ## どの入口からも到達しない関数
 

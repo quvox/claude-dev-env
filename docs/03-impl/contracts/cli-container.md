@@ -1,7 +1,7 @@
 ---
 id: cli-container
-version: 1.5.1
-updated: 2026-08-05
+version: 1.6.0
+updated: 2026-08-07
 source:
   - docs/02-design/contracts/cli-container.md
 kind: other
@@ -29,7 +29,8 @@ verified:
 |---|---|---|
 | 起動コマンド | `docker run -d --name <NAME> --hostname <NAME> --network claude-dev-net --cap-add NET_ADMIN --cap-add NET_RAW --restart unless-stopped -t` | `claude-dev:1381`〜`:1409` |
 | `--security-opt` | **付けていない**(Docker 既定の seccomp と `docker-default` AppArmor が有効なまま) | `claude-dev:1381`〜(不在であることが実装) |
-| **管理ラベル** | Claude コンテナにだけ `--label claude-dev.managed=1 --label claude-dev.role=claude --label "claude-dev.project-dir=${PROJECT_DIR}"` の3つを付ける。**他のオプションと違い変数にまとめず、引用付きの引数として直接渡す**(`project-dir` の値は利用者のパスでスペースを含みうるため)。**docker-proxy と `fwd-*` には付けない** | `claude-dev:1388`〜`:1390`(付与), `claude-dev:710`〜`:717`(docker-proxy は付けない) |
+| **管理ラベル** | Claude コンテナにだけ `--label claude-dev.managed=1 --label claude-dev.role=claude --label "claude-dev.project-dir=${PROJECT_DIR}"` の3つを付ける。**他のオプションと違い変数にまとめず、引用付きの引数として直接渡す**(`project-dir` の値は利用者のパスでスペースを含みうるため)。**docker-proxy と `fwd-*` には付けない**。**セッション由来の資源には docker-proxy が `claude-dev.role=spawned` と `claude-dev.owner-project-dir` の2つを付ける**(付与側は `CTR-docker-api` が持つ) | `claude-dev:1388`〜`:1390`(付与), `claude-dev:710`〜`:717`(docker-proxy は付けない) |
+| **セッション由来の資源の削除対象を引く** | 共有関数 `spawned_resources <container|network> <ラベルフィルタ式>` で名前だけを取る。**`stop` は `claude-dev.owner-project-dir=<起動ディレクトリの絶対パス>`**(値は手順4 で読んだ `claude-dev.project-dir` と同じ)、**`reset` は `claude-dev.role=spawned`**(所有者を問わない)。削除はコンテナ → ネットワークの順。`stop` は失敗を握って続行し、`reset` は握らない | `claude-dev:586`(共有関数), `:1729`〜`:1745`(`stop`), `:2060`〜`:2078`(`reset`), `claude-dev-mac` の同一箇所 |
 | `DOCKER_HOST` | `tcp://claude-dev-docker-proxy:2375`。**ホストに Docker ソケットがあるときだけ**付与する(`[ -S ... ]`)。**探す場所は OS で違う**: Linux 版は `/var/run/docker.sock` だけを見る。macOS 版は `detect_docker_sock` が `/var/run/docker.sock` → `${HOME}/.docker/run/docker.sock`(Docker Desktop のユーザソケット)の順に見て、**どちらかがあれば付与する**。VM モードでは entrypoint がゲスト VM 側の値へ上書きする | `claude-dev:1291`〜`:1294`(Linux), `claude-dev-mac:310`〜`:316`(`detect_docker_sock`), `scripts/entrypoint-claude.sh:476`〜 |
 | `COMPOSE_PROJECT_NAME` | **`<正規化名>-<起動ディレクトリの絶対パスの SHA-256 先頭6桁>`**。正規化は `tr '[:upper:]' '[:lower:]'` → `sed 's/[^a-z0-9_-]/-/g'`、ハッシュは Linux が `sha256sum` / macOS が `shasum -a 256`(入力は `printf '%s'` で改行を付けない)。**`start` と `stop` が同じ関数 `compose_project_name` を通す**。**常に付与する** | `claude-dev:539`〜`:559`(関数), `:1300`(`start` の付与), `:1684`(`stop` の再計算) |
 | `CLAUDE_DEV_VM` | CLI は `--vm` / `--vm-fresh` のときだけ `1` を付与する。entrypoint は **`= "1"` の厳密一致**で判定する | `claude-dev:1354`〜`:1360`, `scripts/entrypoint-claude.sh:476` |

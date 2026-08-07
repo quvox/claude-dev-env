@@ -29,17 +29,17 @@
 | [MODULE-cli-orchestrate](MODULE-cli-orchestrate.md) | MOD-cli-orchestrate | tool | sync | なし | MODULE-cli-common-container-name, MODULE-cli-common-is-running, MODULE-cli-common-require-setup, MODULE-cli-common-resolve-container-user, MODULE-cli-start | コンテナ内で orchestrator を起動する(ゴール指定・--fresh 対応) |
 | [MODULE-cli-ports](MODULE-cli-ports.md) | MOD-cli-ports | tool | sync | なし | MODULE-cli-common-container-name, MODULE-cli-common-get-novnc-url, MODULE-cli-common-is-running | コンテナのポートフォワード一覧と noVNC URL を表示する |
 | [MODULE-cli-pull](MODULE-cli-pull.md) | MOD-cli-pull | tool | sync | なし | なし | GHCR からビルド済みイメージを取得して latest へ retag する |
-| [MODULE-cli-reset](MODULE-cli-reset.md) | MOD-cli-reset | tool | sync | なし | MODULE-cli-common-container-exists, MODULE-cli-common-image-exists, MODULE-cli-common-lock | 管理ラベルを持つコンテナと固定名の共有資源を削除して初期状態へ戻す(共有分は遊休時のみ) |
+| [MODULE-cli-reset](MODULE-cli-reset.md) | MOD-cli-reset | tool | sync | なし | MODULE-cli-common-container-exists, MODULE-cli-common-image-exists, MODULE-cli-common-lock | 管理ラベルを持つコンテナ・セッション由来の資源・固定名の共有資源を削除して初期状態へ戻す |
 | [MODULE-cli-setup](MODULE-cli-setup.md) | MOD-cli-setup | tool | sync | なし | なし | イメージをビルドし docker network と共有ボリュームを作る初回セットアップ |
 | [MODULE-cli-ssh-keys](MODULE-cli-ssh-keys.md) | MOD-cli-ssh-keys | tool | sync | なし | MODULE-cli-common-container-name | ssh-keys の引数を reset / select へ振り分けるディスパッチャ |
 | [MODULE-cli-ssh-keys-reset](MODULE-cli-ssh-keys-reset.md) | MOD-cli-ssh-keys | tool | sync | なし | MODULE-cli-common-container-name, MODULE-cli-common-dev-agent-path | このプロジェクトの SSH 鍵選択を初期化する |
 | [MODULE-cli-ssh-keys-select](MODULE-cli-ssh-keys-select.md) | MOD-cli-ssh-keys | tool | sync | なし | MODULE-cli-common-select-ssh-keys | 使う SSH 鍵を対話選択して .claude-dev.yaml に保存する |
 | [MODULE-cli-start](MODULE-cli-start.md) | MOD-cli-start | tool | sync | MODULE-cli-orchestrate | MODULE-entrypoint-claude, MODULE-cli-common-container-exists, MODULE-cli-common-container-name, MODULE-cli-common-dev-agent-path, MODULE-cli-common-ensure-infrastructure, MODULE-cli-common-get-novnc-url, MODULE-cli-common-image-exists, MODULE-cli-common-is-running, MODULE-cli-common-lock, MODULE-cli-common-require-setup, MODULE-cli-common-resolve-container-user, MODULE-cli-common-select-ssh-keys, MODULE-cli-common-write-project-ssh-keys | カレントディレクトリで開発コンテナを起動する(VNC+Chrome が既定) |
-| [MODULE-cli-stop](MODULE-cli-stop.md) | MOD-cli-stop | tool | sync | なし | MODULE-cli-common-container-exists, MODULE-cli-common-container-name, MODULE-cli-common-dev-agent-path, MODULE-cli-common-is-running, MODULE-cli-common-lock | セッションを停止し、遊休なら docker-proxy と ssh ブリッジも止める |
+| [MODULE-cli-stop](MODULE-cli-stop.md) | MOD-cli-stop | tool | sync | なし | MODULE-cli-common-container-exists, MODULE-cli-common-container-name, MODULE-cli-common-dev-agent-path, MODULE-cli-common-is-running, MODULE-cli-common-lock | セッションと、そのセッションが作った資源を停止・削除し、遊休なら docker-proxy も止める |
 | [MODULE-cli-unforward](MODULE-cli-unforward.md) | MOD-cli-unforward | tool | sync | なし | MODULE-cli-common-container-exists, MODULE-cli-common-container-name | 指定ポートのフォワードを解除する |
 | [MODULE-cli-upgrade](MODULE-cli-upgrade.md) | MOD-cli-upgrade | tool | sync | なし | なし | 全イメージを --no-cache で再ビルドして更新する |
 | [MODULE-container-tools-wait-limit-reset](MODULE-container-tools-wait-limit-reset.md) | MOD-container-tools | tool | sync | なし | なし | Claude のレート制限解除時刻まで待機し tmux 経由で作業を再開させる |
-| [MODULE-docker-proxy-serve](MODULE-docker-proxy-serve.md) | MOD-docker-proxy | tool | sync | なし | なし | Docker API を検査・書き換えして透過中継する常駐プロキシ |
+| [MODULE-docker-proxy-serve](MODULE-docker-proxy-serve.md) | MOD-docker-proxy | tool | sync | なし | なし | Docker API を検査・書き換えして中継し、作られた資源に所有者ラベルを付ける常駐プロキシ |
 | [MODULE-entrypoint-claude](MODULE-entrypoint-claude.md) | MOD-entrypoint | tool | sync | MODULE-cli-start | MODULE-firewall-init, MODULE-portsync-dood, MODULE-vm-mode-up | コンテナ起動時に UID/GID・認証共有・VNC・firewall・portsync を整える |
 | [MODULE-firewall-init](MODULE-firewall-init.md) | MOD-firewall | tool | sync | MODULE-entrypoint-claude | なし | iptables/ipset でブラックリスト型のファイアウォールを構成する |
 | [MODULE-hooks-save-prompt](MODULE-hooks-save-prompt.md) | MOD-hooks | tool | sync | なし | なし | Claude Code フックから渡されたプロンプトを一時ファイルへ保存する |
@@ -92,4 +92,4 @@
 
 件数: 83
 
-<!-- END GENERATED -->
+<!-- END GENERATED: build-index.py -->

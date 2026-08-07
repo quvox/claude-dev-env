@@ -15,11 +15,11 @@ languages: 6
 
 | 言語 | Tier | 抽出器 | シンボル | 辺 | エンドポイント | 未解決 | 外部呼び出し | 降格理由 |
 |---|---|---|---|---|---|---|---|---|
-| [go](go.md) | 2 | tree-sitter-go | 219 | 399 | 2 | 6 | 951 | - |
+| [go](go.md) | 2 | tree-sitter-go | 222 | 406 | 2 | 6 | 965 | - |
 | [infra](infra.md) | 2 | infra (CFN/SAM/OpenAPI/Terraform) | 0 | 0 | 0 | 0 | 0 | - |
 | [make](make.md) | 3 | make-regex | 19 | 22 | 19 | 0 | 45 | 正規表現のみ(レシピ本文は shell と同じ限界を持つ) |
 | [python](python.md) | 2 | python-ast (stdlib) | 5 | 0 | 0 | 0 | 0 | - |
-| [shell](shell.md) | 3 | shell-regex | 174 | 264 | 51 | 4 | 2331 | 正規表現のみ(shell は変数展開・eval で静的解決が原理的に不完全) |
+| [shell](shell.md) | 3 | shell-regex | 176 | 270 | 51 | 4 | 2453 | 正規表現のみ(shell は変数展開・eval で静的解決が原理的に不完全) |
 | [typescript](typescript.md) | 2 | tree-sitter-typescript | 0 | 0 | 0 | 0 | 0 | - |
 
 ## Tier の意味
@@ -50,7 +50,7 @@ languages: 6
 
 | 言語 | 種別 | 件数 | ファイル |
 |---|---|---|---|
-| go | テスト | 19 | `docker-proxy/binds_test.go`, `docker-proxy/main_test.go`, `orchestrator/accept_test.go`, `orchestrator/archive_test.go`, `orchestrator/controller_test.go`, `orchestrator/dashboard_test.go`, `orchestrator/dashtui_test.go`, `orchestrator/handoff_test.go`, `orchestrator/mode_test.go`, `orchestrator/models_test.go` ほか 9 件 |
+| go | テスト | 20 | `docker-proxy/binds_test.go`, `docker-proxy/labels_test.go`, `docker-proxy/main_test.go`, `orchestrator/accept_test.go`, `orchestrator/archive_test.go`, `orchestrator/controller_test.go`, `orchestrator/dashboard_test.go`, `orchestrator/dashtui_test.go`, `orchestrator/handoff_test.go`, `orchestrator/mode_test.go` ほか 10 件 |
 | python | テスト | 3 | `examples/orch-sample/tests/test_geometry.py`, `examples/orch-sample/tests/test_stats.py`, `examples/orch-sample/tests/test_strings.py` |
 
 ## シンボルが集中しているディレクトリ
