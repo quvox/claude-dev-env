@@ -573,6 +573,24 @@ container_is_managed() {
     [ "$v" = "1" ]
 }
 
+# セッション由来の資源（docker-proxy が所有者ラベルを付けたコンテナ・ネットワーク）を
+# 名前で列挙する（DSN-env-04 の規則D）。
+#   spawned_resources <container|network> <ラベルフィルタ式>
+#   例: spawned_resources container "claude-dev.owner-project-dir=/home/u/app"
+#       spawned_resources network   "claude-dev.role=spawned"
+#
+#   **--format で名前だけを取る**。既定の表形式はヘッダ行を含み、-q は ID を返すので、
+#   どちらもそのままでは表示にも docker rm にも使えない。
+#   **問い合わせ自体に失敗したら非 0 を返す**。0 件（消すものが無い）と
+#   引けなかったことを同一視してはならない（CTR-cli-container「エラーケース」）。
+spawned_resources() {
+    case "$1" in
+        container) docker ps -a --filter "label=$2" --format '{{.Names}}' 2>/dev/null ;;
+        network)   docker network ls --filter "label=$2" --format '{{.Name}}' 2>/dev/null ;;
+        *)         return 2 ;;
+    esac
+}
+
 # 遊休判定に使う集合を求める（CTR-cli-container「遊休判定」）。
 #   claude-dev-net に接続している稼働中コンテナから、固定名 claude-dev-docker-proxy と
 #   固定接頭辞 fwd- のものを除いた名前を 1 行ずつ出力する。空なら遊休。
@@ -1679,21 +1697,85 @@ stop)
     # docker compose down 相当: コンテナと当該プロジェクトのデフォルトネットワークを
     # 削除し、名前付きボリューム・共有 claude-dev-net・docker-proxy は残す。
     # 一意化名は start と同じ compose_project_name() で再計算する（DSN-env-03）。
+    #
+    # 削除できた名前はその場では表示せず、下の 1 つの列挙へ渡す。compose コンテナも
+    # 用語集の「セッション由来の資源」であり、経路（compose 名か所有者ラベルか）で
+    # 表示を分けると、利用者から見て同じ種類のものが 2 箇所に散る（FR-env-01 受入基準26）。
+    _spawned_deleted=()
+    _spawned_failed=()
     _cproj_legacy_hint="$(compose_project_name_legacy "$NAME")-<ハッシュ6桁>"
     if [ -n "$_stop_proj_dir" ]; then
         _cproj=$(compose_project_name "$NAME" "$_stop_proj_dir")
         while IFS= read -r _cc; do
-            [ -n "$_cc" ] && docker rm -f "$_cc" >/dev/null 2>&1 || true
+            [ -n "$_cc" ] || continue
+            if docker rm -f "$_cc" >/dev/null 2>&1; then
+                _spawned_deleted+=("コンテナ: ${_cc}")
+            else
+                _spawned_failed+=("コンテナ: ${_cc}")
+            fi
         done < <(docker ps -a --filter "label=com.docker.compose.project=${_cproj}" --format '{{.Names}}' 2>/dev/null || true)
-        docker network rm "${_cproj}_default" >/dev/null 2>&1 || true
+        if docker network rm "${_cproj}_default" >/dev/null 2>&1; then
+            _spawned_deleted+=("ネットワーク: ${_cproj}_default")
+        fi
+
+        # 手順8: 所有者ラベルでセッション由来の資源を削除する（FR-env-01 受入基準22）。
+        #   照合値は手順4 で読んだ claude-dev.project-dir そのもの。docker-proxy は
+        #   同じラベルを写して claude-dev.owner-project-dir に入れるので、一致は
+        #   構成上の帰結であり検証を要しない（DSN-env-04）。
+        #   **順序はコンテナ → ネットワークで固定**（接続中のコンテナが残っていると
+        #   docker network rm は必ず失敗する）。
+        #   **削除の失敗は握って続行する**（受入基準24。片付けの途中で止まると、
+        #   より中途半端な状態が残る）。
+        _owner_filter="claude-dev.owner-project-dir=${_stop_proj_dir}"
+        if _spawned_c=$(spawned_resources container "$_owner_filter"); then
+            while IFS= read -r _sc; do
+                [ -n "$_sc" ] || continue
+                if docker rm -f "$_sc" >/dev/null 2>&1; then
+                    _spawned_deleted+=("コンテナ: ${_sc}")
+                else
+                    _spawned_failed+=("コンテナ: ${_sc}")
+                fi
+            done <<< "$_spawned_c"
+            # ネットワークはコンテナを消したあとにだけ引く（先に引くと必ず使用中で失敗する）
+            if _spawned_n=$(spawned_resources network "$_owner_filter"); then
+                while IFS= read -r _sn; do
+                    [ -n "$_sn" ] || continue
+                    if docker network rm "$_sn" >/dev/null 2>&1; then
+                        _spawned_deleted+=("ネットワーク: ${_sn}")
+                    else
+                        _spawned_failed+=("ネットワーク: ${_sn}")
+                    fi
+                done <<< "$_spawned_n"
+            else
+                echo "⚠️  セッション由来のネットワークを引けませんでした（Docker への問い合わせに失敗）。削除を行わずに続行します。" >&2
+            fi
+        else
+            # 0 件ではなく「引けなかった」。推測で削除しない（安全側へ倒す）。
+            echo "⚠️  セッション由来の資源を引けませんでした（Docker への問い合わせに失敗）。削除を行わずに続行します。" >&2
+        fi
     else
-        # ハッシュ源は claude-dev.project-dir ラベルにしか無い。推測して作った名前で
-        # 削除すると別ディレクトリを巻き込む（docs/issues/024 の欠陥そのもの）ので行わない。
-        echo "ℹ️  compose 資源の片付けは行いませんでした（管理ラベル claude-dev.project-dir を読めないため）。"
-        echo "   一意化名のハッシュ源はこのラベルにしか無く、推測して削除すると別ディレクトリを巻き込みます。"
-        echo "   compose 資源が残っている可能性があります。残っているものは次で確認できます:"
+        # ハッシュ源も所有者の照合値も claude-dev.project-dir ラベルにしか無い。推測して
+        # 作った名前・値で削除すると別ディレクトリ・別セッションを巻き込む
+        # （docs/issues/024 の欠陥そのもの）ので、どちらも行わない。
+        echo "ℹ️  compose 資源とセッション由来の資源の片付けは行いませんでした（管理ラベル claude-dev.project-dir を読めないため）。"
+        echo "   一意化名のハッシュ源も所有者の照合値もこのラベルにしか無く、推測して削除すると別ディレクトリ・別セッションを巻き込みます。"
+        echo "   資源が残っている可能性があります。残っているものは次で確認できます:"
         echo "     docker ps -a --filter label=com.docker.compose.project=${_cproj_legacy_hint}"
-        echo "   片付けるときは、そのプロジェクトのディレクトリで 'docker compose down' を実行してください。"
+        echo "     docker ps -a --filter label=claude-dev.role=spawned"
+        echo "   片付けるときは、そのプロジェクトのディレクトリで 'docker compose down' を実行するか、'docker rm -f <名前>' してください。"
+    fi
+
+    # 手順8-3: 削除できたセッション由来の資源を種別つきで 1 行ずつ表示する
+    # （FR-env-01 受入基準26）。`stop` は削除前の確認を求めない（D0-env-08 項3）ので、
+    # この事後の列挙が「何が消えたか」を利用者が知る唯一の観測点である。
+    # **0 件なら何も表示しない**（対象が無いことを毎回表示しない。同27）。
+    if [ ${#_spawned_deleted[@]} -gt 0 ]; then
+        echo "🧹 このセッションが作った資源を削除しました:"
+        for _t in "${_spawned_deleted[@]}"; do echo "   - ${_t}"; done
+    fi
+    if [ ${#_spawned_failed[@]} -gt 0 ]; then
+        echo "⚠️  次のセッション由来の資源は削除できませんでした（処理は続行しました。次回の stop が回収します）:" >&2
+        for _t in "${_spawned_failed[@]}"; do echo "   - ${_t}" >&2; done
     fi
 
     # 本要件の一意化より前に起動された compose 資源は旧い名前（ハッシュ無し）を持つ。
@@ -1975,7 +2057,30 @@ reset)
     for _i in "$IMG_CLAUDE" "$IMG_CLAUDE_VNC" "$IMG_DOCKER_PROXY"; do
         image_exists "$_i" && _rc_images+=("$_i")
     done
-    # 管理ラベルを持たない Claude コンテナ（削除しない。名前を表示して残す）
+    # セッション由来の資源（規則D）: claude-dev.role=spawned を持つコンテナとネットワークを
+    # **所有者を問わず**すべて挙げる（FR-env-01 受入基準25）。reset は対象を絞る引数を持たない
+    # 「ホスト全体」の操作なので、所有者で絞ると stop と同じ意味になってしまう。
+    # 名前付きボリュームは対象にしない（D0-env-05 項2）。
+    # **問い合わせに失敗したら握らない**（reset は D0-env-08 項5 の対象。0 件と区別する）。
+    _rc_spawned_c=()
+    _rc_spawned_n=()
+    _rc_spawned_query_failed=()
+    if _q=$(spawned_resources container "claude-dev.role=spawned"); then
+        while IFS= read -r _c; do [ -n "$_c" ] && _rc_spawned_c+=("$_c"); done <<< "$_q"
+    else
+        _rc_spawned_query_failed+=("セッション由来のコンテナの列挙（Docker への問い合わせに失敗）")
+    fi
+    if _q=$(spawned_resources network "claude-dev.role=spawned"); then
+        while IFS= read -r _c; do [ -n "$_c" ] && _rc_spawned_n+=("$_c"); done <<< "$_q"
+    else
+        _rc_spawned_query_failed+=("セッション由来のネットワークの列挙（Docker への問い合わせに失敗）")
+    fi
+
+    # 管理ラベルを持たない Claude コンテナ（削除しない。名前を表示して残す）。
+    # **セッション由来のコンテナはここから除く**（CTR-cli-container「残したものをどう列挙するか」）。
+    # それらは管理ラベルを持つので「ラベルを持たないコンテナ」ではなく、規則D が削除する。
+    # 除かないと、claude-dev-net に手で繋いだセッション由来のコンテナが
+    # 「削除する」と「ラベルを持たないので残した」の両方に出て、利用者が読める矛盾になる。
     _rc_unmanaged=()
     _rc_idle_query_ok=1
     if _others=$(net_other_running_containers); then
@@ -1983,6 +2088,7 @@ reset)
             [ -n "$_c" ] || continue
             _known=0
             for _t in "${_rc_containers[@]}"; do [ "$_t" = "$_c" ] && _known=1; done
+            for _t in "${_rc_spawned_c[@]}"; do [ "$_t" = "$_c" ] && _known=1; done
             [ "$_known" = "0" ] && _rc_unmanaged+=("$_c")
         done <<< "$_others"
     else
@@ -1994,12 +2100,18 @@ reset)
     echo "⚠️  以下を削除します:"
     for _t in "${_rc_containers[@]}"; do echo "   - コンテナ: ${_t}"; done
     for _t in "${_rc_fwd[@]}";        do echo "   - 中継コンテナ: ${_t}"; done
+    for _t in "${_rc_spawned_c[@]}";  do echo "   - セッション由来のコンテナ: ${_t}"; done
+    for _t in "${_rc_spawned_n[@]}";  do echo "   - セッション由来のネットワーク: ${_t}"; done
     echo "   - Docker Socket Proxy コンテナ（遊休のときだけ）"
     echo "   - 共有ネットワーク ${NETWORK}（遊休のときだけ）"
     for _t in "${_rc_volumes[@]}"; do echo "   - ボリューム: ${_t}"; done
     for _t in "${_rc_images[@]}";  do echo "   - イメージ: ${_t}"; done
     if [ ${#_rc_unmanaged[@]} -gt 0 ]; then
         echo "   （管理ラベルを持たない次のコンテナは削除しません: ${_rc_unmanaged[*]}）"
+    fi
+    if [ ${#_rc_spawned_query_failed[@]} -gt 0 ]; then
+        echo "⚠️  次の列挙に失敗しました（0 件だったのではなく、引けませんでした）:"
+        for _t in "${_rc_spawned_query_failed[@]}"; do echo "   - ${_t}"; done
     fi
     echo ""
 
@@ -2023,6 +2135,11 @@ reset)
     # に固定する（使用中の参照を先に外さないと後段が必ず失敗する）。
     for _t in "${_rc_containers[@]}"; do destructive_plan "コンテナ: ${_t}"; done
     for _t in "${_rc_fwd[@]}";        do destructive_plan "中継コンテナ: ${_t}"; done
+    for _t in "${_rc_spawned_c[@]}";  do destructive_plan "セッション由来のコンテナ: ${_t}"; done
+    for _t in "${_rc_spawned_n[@]}";  do destructive_plan "セッション由来のネットワーク: ${_t}"; done
+    # 列挙に失敗したものは「消えなかった資源」として最後に列挙し、終了コード 1 で終わる
+    # （reset は D0-env-08 項5 の対象。握って「完了」と表示してはならない）。
+    for _t in "${_rc_spawned_query_failed[@]}"; do destructive_plan "$_t"; destructive_failed "$_t"; done
     destructive_plan "Docker Socket Proxy コンテナ"
     destructive_plan "共有ネットワーク ${NETWORK}"
     for _t in "${_rc_volumes[@]}"; do destructive_plan "ボリューム: ${_t}"; done
@@ -2045,6 +2162,42 @@ reset)
             destructive_skipped "中継コンテナ: ${_t}"
         fi
     done
+    destructive_abort_if_interrupted
+
+    # セッション由来の資源（規則D）。**コンテナ → ネットワークの順で固定**する
+    # （逆順だと、接続しているコンテナがまだ生きているため docker network rm が必ず失敗し、
+    # reset が毎回「削除できなかった資源」を列挙して終了コード 1 になる）。
+    # **列挙し直さない**: 上の確認で見せた集合をそのまま消す。確認と削除のあいだに
+    # 作られた資源を、列挙を経ずに消してはならない（FR-env-03 受入基準14）。
+    # **stop と違い失敗を握らない**（reset は D0-env-08 項5 の対象である）。
+    _spawned_reset_deleted=()
+    for _t in "${_rc_spawned_c[@]}"; do
+        destructive_abort_if_interrupted
+        if container_exists "$_t"; then
+            # destructive_rm は成否によらず 0 を返す（set -e で落とさないため）。
+            # 成功したかは _DESTRUCTIVE_DELETED が伸びたかで見る。
+            _n_before=${#_DESTRUCTIVE_DELETED[@]}
+            destructive_rm "セッション由来のコンテナ: ${_t}" docker rm -f "$_t"
+            [ ${#_DESTRUCTIVE_DELETED[@]} -gt "$_n_before" ] && _spawned_reset_deleted+=("コンテナ: ${_t}")
+        else
+            destructive_skipped "セッション由来のコンテナ: ${_t}"
+        fi
+    done
+    for _t in "${_rc_spawned_n[@]}"; do
+        destructive_abort_if_interrupted
+        if docker network inspect "$_t" >/dev/null 2>&1; then
+            _n_before=${#_DESTRUCTIVE_DELETED[@]}
+            destructive_rm "セッション由来のネットワーク: ${_t}" docker network rm "$_t"
+            [ ${#_DESTRUCTIVE_DELETED[@]} -gt "$_n_before" ] && _spawned_reset_deleted+=("ネットワーク: ${_t}")
+        else
+            destructive_skipped "セッション由来のネットワーク: ${_t}"
+        fi
+    done
+    # 削除できた分を種別つきで 1 行ずつ表示する（FR-env-01 受入基準26）。0 件なら出さない（同27）。
+    if [ ${#_spawned_reset_deleted[@]} -gt 0 ]; then
+        echo "🧹 セッション由来の資源を削除しました（所有者は問いません）:"
+        for _t in "${_spawned_reset_deleted[@]}"; do echo "   - ${_t}"; done
+    fi
     destructive_abort_if_interrupted
 
     # docker-proxy と共有ネットワークは遊休判定を通ったときだけ消す。手順3 で管理ラベルを
