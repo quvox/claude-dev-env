@@ -131,8 +131,12 @@ compose 資源に限っており、その集合を広げる判断だから。あ
 
 ## 決定シート(回答済み)
 
-> 回答済み: `docs/tasks/task-stop-session-spawned-containers/sheet.md`(転記済み)。
-> **論点5 は「未回答時の既定 A」で確定した** — `/doc-check` が論点5 を提示した直後に
+> **回答待ち: `docs/tasks/task-stop-session-spawned-containers/sheet.md`(論点 1 件 = 論点6)**
+> — `/implement`(2026-08-07)が **論点6(このホストで実行できない E2E の残りをどうするか)**
+> を追記した。**未回答時の既定は C**(未実施として `docs/issues/` へ起票して `/task-close` へ進む)。
+> **`/task-close` はこの回答を得てから走らせる**(C-4 の順序: 回答が文書を変えうるので、
+> 反映と検証済み記録より前に適用する)。
+> なお **論点5 は「未回答時の既定 A」で確定した** — `/doc-check` が論点5 を提示した直後に
 > 人間が「実装に移って」と指示したため、シート自身が定める既定(A = `D0-env-10` の
 > ガードレールを2ラベルへ広げる)を承認したものとして扱う。**A はコードを変えない**ので、
 > 実装は既定のまま進められる(B ならコードが変わるため、その場合は本行を差し戻す)。
@@ -154,30 +158,9 @@ compose 資源に限っており、その集合を広げる判断だから。あ
 
 ## 調査メモ
 
-| # | 調べたこと | 判明した事実 | 出どころ |
-|---|---|---|---|
-| 1 | `stop` が現在片付ける対象 | 本体コンテナ・`fwd-<NAME>-*`・`com.docker.compose.project=<一意化名>` のコンテナ・`<一意化名>_default` ネットワークだけ。`docker run` で作られたコンテナを指す印は無い | `claude-dev:1649`〜`:1707` |
-| 2 | docker-proxy が呼び出し元を特定できるか | できる。`lookupProjectDir` が `GET /containers/json` を引き、接続元 IP に一致するコンテナの `/workspace` マウント元(ホスト側絶対パス)を返す。TTL 60 秒でキャッシュする | `docker-proxy/main.go:70`〜`:126` |
-| 3 | docker-proxy が作成要求のボディを書き換える前例 | ある。`/workspace` 配下の bind を実ホストパスへ書き換え、`r.Body` / `ContentLength` / `Content-Length` を更新して中継する | `docker-proxy/main.go:158`〜`:254`, `:531`〜`:538` |
-| 4 | 解釈できないボディの扱い | 検査せず中継する(`json.Unmarshal` 失敗で `return nil`)。ラベルも注入できない | `docker-proxy/main.go:493`〜`:496` / `FR-env-07-8` / `docs/issues/005` |
-| 5 | 管理ラベルを付けている資源 | Claude コンテナだけ(`claude-dev.managed` / `claude-dev.role` / `claude-dev.project-dir`) | `claude-dev:1388`〜`:1390` / `docs/02-design/contracts/cli-container.md`「管理ラベル」 |
-| 6 | `stop` の compose 一意化名のハッシュ源 | `claude-dev.project-dir` ラベルの値(起動ディレクトリの絶対パス)。本体コンテナを消す前に読む | `claude-dev:1656`〜`:1663` / `CTR-cli-container`「compose 資源の識別」 |
-| 7 | 影響範囲の機械抽出(`relations-query.py --impact claude-dev`) | 機能31件 / 要件13件 / 契約2件(`CTR-cli-container`, `CTR-cli-orchestrator`)。**走らせるべきテストは0件**(シェル実装に自動テストが無い) | `relations-query.py --impact claude-dev` |
-| 8 | 影響範囲の機械抽出(`relations-query.py --impact docker-proxy/main.go`) | 機能1件(`MODULE-docker-proxy-serve`)/ 要件2件(`FR-env-07`, `NFR-sec-01`)/ 契約1件(`CTR-docker-api`)。**走らせるべきテスト15件**(`docker-proxy/main_test.go` と `binds_test.go`) | `relations-query.py --impact docker-proxy/main.go` |
-| 9 | 仕様ドキュメントの一括検査(母集団の凍結) | `check-changeset.py --ssot docs` は **NG 違反 31 件**(本タスク着手前の既存値)。内訳の主なものは参照先が実在しない `docs/issues/NNN`(`docs/issues/054` が追跡)と、同型の欠陥7種が各1件。**本タスクはこの件数を増やさないことを目標にする** | `check-changeset.py --ssot docs` の出力 |
-| 10 | 同型の先例 | 2026-07-19 に同じ利用者要望で compose コンテナの片付けを入れた。片付け範囲は人間確認により「`docker compose down` 相当」= コンテナ + 当該 compose 既定ネットワークを削除、名前付きボリュームは保持、共有資源は残す | `docs/histories/2026-07-19-stop-compose-teardown.md` |
-| 11 | 受入基準の条項数 | 機能要件の全 201 条項。対応表は 216 行(条項 214 件 + `FR-env-01-9` の重複2行)。条項を足すとこの数が動く | `docs/03-impl/tests/strategy.md:115` |
-| 12 | `PROJECT_DIR` の作り方 | Linux 版・macOS 版とも `PROJECT_DIR="$(pwd)"`。この値が `-v` のマウント元にも `--label claude-dev.project-dir=` にも渡る | `claude-dev:1145`, `claude-dev-mac:1213`, `claude-dev:1388`〜`:1390` |
-| 13 | `stop` がラベルを読む関数 | `container_project_dir()` が `docker inspect --format '{{index .Config.Labels "claude-dev.project-dir"}}'` を実行し、`<no value>` を空に潰す。**新しい手順8 はこの既存関数の戻り値をそのまま照合値に使える** | `claude-dev:559`〜`:566` |
-| 14 | 遊休判定の実体 | `net_other_running_containers()` が `docker network inspect claude-dev-net` の接続コンテナと `docker ps` の積を取り、`claude-dev-docker-proxy` と `fwd-*` を除く。**問い合わせ失敗で非0を返す** | `claude-dev:577`〜`:594`, `:596`〜 |
-| 15 | 新しい手順8 を挿す位置 | `stop` の compose ネットワーク削除(`claude-dev:1688`)と旧い名前の案内(`:1699`〜`:1707`)の後、共有資源単位のロック取得(`:1711`)の前 | `claude-dev:1688`〜`:1711` |
-| 16 | `reset` の削除対象の列挙位置 | `_rc_containers` / `_rc_fwd` / `_rc_volumes` / `_rc_images` を作る区間。**セッション由来の資源の配列はここに足す**(確認プロンプトの列挙 `:1994`〜 に出るため) | `claude-dev:1954`〜`:1975`, `:1994`〜`:2000` |
-| 17 | docker-proxy が呼び出し元を引く経路 | `lookupProjectDir()` が `GET http://docker/containers/json` を叩き、`NetworkSettings.Networks[*].IPAddress` の一致で1件を選び `Mounts` から `/workspace` の `Source` を取る。**同じ応答に `Labels` も含まれるので、構造体に `Labels map[string]string` を足せば問い合わせを増やさずに `claude-dev.project-dir` を取れる** | `docker-proxy/main.go:88`〜`:126` |
-| 18 | docker-proxy がボディを書き換える既存の型 | `rewriteBinds()` が `map[string]json.RawMessage` でトップレベルを扱い、`HostConfig` だけを開いて書き戻す。**`Labels` もトップレベルなので同じ関数の形で扱える**。書き戻し後の後始末は `r.Body` / `r.ContentLength` / `Content-Length` の3つ | `docker-proxy/main.go:158`〜`:254`, `:531`〜`:538` |
-| 19 | 独立レビューの実行可否 | `codex exec --sandbox read-only -c features.use_legacy_landlock=true` は起動するが **`ERROR: You've hit your usage limit ... try again at Aug 11th, 2026`** で終わる(終了コードは 0 のまま。`docs/feedbacks/003` の「成否を応答文で判定しない」に該当) | 2026-08-07 の実行ログ(スクラッチパッド) |
-| 20 | `docker network ls` / `docker ps` の `--filter label=<キー>=<値>` は完全一致で、`--filter label=<キー>` だけならキーの存在一致になる | `reset` が所有者を問わず引くには `claude-dev.role=spawned`(値一致)でも `claude-dev.owner-project-dir`(キー存在)でも書ける。本設計は前者を採る(`MODULE-cli-reset` 判断13) | Docker CLI の `--filter` の仕様 |
-| 21 | `GET /containers/json` の応答に含まれる `Labels` の値が空文字のとき、Go の `map[string]string` では「キーが無い」と区別できるが、`docker inspect --format` 側は `<no value>` を返し `container_project_dir()` が空へ潰す | 両側とも「空文字なら所有者を得られなかった」に倒せば、区別する必要そのものが消える(未決点15 の決定はこれに基づく) | `claude-dev:559`〜`:566` / `docker-proxy/main.go:88`〜`:126` |
-| 22 | E2E-03(既存)には後片付けの手順が無い | 従来の手順1〜4 は `docker run alpine true`(名前なし・即終了)だけだったので必要がなかった。本タスクが `-d ... sleep 60` の名前付きコンテナ2つとネットワーク1つを足したので、後片付けが要るようになった | `docs/03-impl/tests/e2e.md` の E2E-01(手順16 に後片付けがある)との対比 |
+(memo-2.md に移動。フェーズ3 の実装で使い切った。**実装で新たに判明した事実は
+`new-features/03-impl/relations/MODULE-*.md` の「実装上の判断」に書いてある** — 調査メモは
+導出キャッシュであり、恒久的に真な事実の置き場ではない)
 
 ## 質問キュー(未提示)
 
@@ -190,18 +173,66 @@ compose 資源に限っており、その集合を広げる判断だから。あ
 <!-- フェーズ2 が置いた下書き。確定は `/implement` が行う。
      1タスク = 1コミット、依存順(印を付ける側 → 読む側 → テスト)。 -->
 
-- [ ] 1. docker-proxy: 呼び出し元の解決を2値化する(`/workspace` のマウント元 + `claude-dev.project-dir` ラベル)。`GET /containers/json` の構造体に `Labels` を足し、キャッシュも2値で持つ _要件:_ FR-env-07-11 _Boundary:_ `docker-proxy/main.go` _Depends:_ -
-- [ ] 2. docker-proxy: `POST /containers/create` と `POST /networks/create` へ所有者ラベルを注入する(拒否判定の後・ボディ再構成は1回・利用者の同名ラベルは上書き・失敗しても拒否しない) _要件:_ FR-env-07-11, FR-env-07-12 _Boundary:_ `docker-proxy/main.go` _Depends:_ 1
-- [ ] 3. docker-proxy: 単体テストを足す(付与される / 他フィールドが変わらない / 上書きされる / 解決できないとき付与せず拒否もしない / ボディ不正で元のまま通す) _要件:_ FR-env-07-11, FR-env-07-12 _Boundary:_ `docker-proxy/main_test.go` _Depends:_ 2
-- [ ] 4. claude-dev / claude-dev-mac: `stop` に手順8(所有者ラベルでコンテナ → ネットワークを削除・種別つき表示・0件なら無表示・失敗は握る・標準出力は捨てる)を入れ、遊休判定より前に置く _要件:_ FR-env-01-22, -23, -24, -26, -27 _Boundary:_ `claude-dev` の `stop)` 分岐 / `claude-dev-mac` の同一箇所 _Depends:_ 2
-- [ ] 5. claude-dev / claude-dev-mac: `reset` に `claude-dev.role=spawned` の列挙(確認プロンプトに出す)と削除(失敗は握らない)を入れ、遊休判定より前に置く _要件:_ FR-env-01-25, -26, -27 _Boundary:_ `claude-dev` の `reset)` 分岐 / `claude-dev-mac` の同一箇所 _Depends:_ 2
-- [ ] 6. E2E-01 手順8-14・8-15 と E2E-03 手順5・6 を実機で実行し、結果を記録する _要件:_ FR-env-01-22〜27, FR-env-07-11 _Boundary:_ 実機(ドキュメントは変更しない) _Depends:_ 3, 4, 5
+- [x] 1. docker-proxy: 呼び出し元の解決を2値化する(`/workspace` のマウント元 + `claude-dev.project-dir` ラベル)。`GET /containers/json` の構造体に `Labels` を足し、キャッシュも2値で持つ _要件:_ FR-env-07-11 _Boundary:_ `docker-proxy/main.go` _Depends:_ -
+- [x] 2. docker-proxy: `POST /containers/create` と `POST /networks/create` へ所有者ラベルを注入する(拒否判定の後・ボディ再構成は1回・利用者の同名ラベルは上書き・失敗しても拒否しない) _要件:_ FR-env-07-11, FR-env-07-12 _Boundary:_ `docker-proxy/main.go` _Depends:_ 1
+- [x] 3. docker-proxy: 単体テストを足す(付与される / 他フィールドが変わらない / 上書きされる / 解決できないとき付与せず拒否もしない / ボディ不正で元のまま通す) _要件:_ FR-env-07-11, FR-env-07-12 _Boundary:_ `docker-proxy/main_test.go` _Depends:_ 2
+- [x] 4. claude-dev / claude-dev-mac: `stop` に手順8(所有者ラベルでコンテナ → ネットワークを削除・種別つき表示・0件なら無表示・失敗は握る・標準出力は捨てる)を入れ、遊休判定より前に置く _要件:_ FR-env-01-22, -23, -24, -26, -27 _Boundary:_ `claude-dev` の `stop)` 分岐 / `claude-dev-mac` の同一箇所 _Depends:_ 2
+- [x] 5. claude-dev / claude-dev-mac: `reset` に `claude-dev.role=spawned` の列挙(確認プロンプトに出す)と削除(失敗は握らない)を入れ、遊休判定より前に置く _要件:_ FR-env-01-25, -26, -27 _Boundary:_ `claude-dev` の `reset)` 分岐 / `claude-dev-mac` の同一箇所 _Depends:_ 2
+- [x] 6. E2E-01 手順8-14・8-15 と E2E-03 手順5・6 を実機で実行し、結果を記録する _要件:_ FR-env-01-22〜27, FR-env-07-11 _Boundary:_ 実機(ドキュメントは変更しない) _Depends:_ 3, 4, 5
 
 ## Definition of Done
 
-- [ ] (フェーズ3の `/implement` が埋める。コマンドは `docs/02-design/environments.md` の厳密な文字列を使う)
+`git rev-parse HEAD` = **8435b0b**(検証時点。以降のコミットは無し)。
+コマンドは `docs/02-design/environments.md`「lint・テストコマンド」の厳密な文字列を使った。
+
+| # | 項目 | コマンド | 最終出力行 | 判定 |
+|---|---|---|---|---|
+| 1 | lint | `go vet ./...`(`docker-proxy/` で実行) | (出力なし。終了コード 0) | ✅ |
+| 2 | 単体テスト | `cd docker-proxy && go test ./...` | `ok  	github.com/quvox/claude-dev-env/docker-proxy	0.018s` | ✅ 39 本(25 → +14) |
+| 3 | シェルの構文 | `bash -n claude-dev` / `bash -n claude-dev-mac` | (出力なし。終了コード 0) | ✅(Bash に自動 lint は設けない方針 `SR-32`) |
+| 4 | 受入基準テスト | `FR-env-07-11` / `-12` は上の単体テスト14本 | 同上 | ✅ |
+| 5 | コールグラフ再生成 | `build-callgraphs.py --out <staged>` / `cluster-features.py --out <staged>` | `機能 83 / 機能間の辺 129(確定 122 / 候補 7) / 共有関数 29 / 未到達 19` | ✅ |
+| 6 | `callgraph-check.py --to-be` | 同左 | `### 指摘 47 件`(**重大度「高」0 件**。中6 は CG3 で本タスクの範囲外モジュール) | ✅ |
+| 7 | `check-relations.py` | 同左 | `合格: 対称性・参照実在・impl パス・必須項目・機能表との 1:1すべて問題なし。` | ✅ |
+| 8 | `check-contracts.py` | 同左 | `合格: 契約に不整合なし。` | ✅ |
+| 9 | `check-changeset.py` | 同左 | `合格: 不変条件の違反なし`(**staged 導出物を一時退避して実行**。退避しないと `docs/issues/076` により CS1 違反 29 件で落ちる) | ✅ |
+| 10 | `03-impl/tests/` の更新 | — | `tests/docker-proxy.md` の2条項を `実装済み` にし、未検証の全件から2件を削除 | ✅ |
+| 11 | E2E(E2E-03 手順5・6) | 実機確認(隔離した proxy 経由) | コンテナ・ネットワークの双方に `claude-dev.role=spawned` と `claude-dev.owner-project-dir=/tmp/e2e-verify-owner` が付き、利用者指定の `/etc` は上書きされ `keep=me` は残った。特定できない呼び出し元では付かず、作成は成功した | ✅ |
+| 12 | E2E(E2E-01 手順8-14 の 3・4・5・6) | 実機確認(`./claude-dev stop`) | `🧹 このセッションが作った資源を削除しました:` にコンテナ2件・ネットワーク1件が種別つきで出た。0件のときは1行も出ず、ラベルを読めない対象では片付けを試みず、所有者ラベルを持たない資源と別セッションは無傷 | ✅ |
+| 13 | E2E(E2E-01 手順8-14-1・2・7 / 手順8-15 / macOS 全般) | — | **未実施**。理由は下の「E2E の未実施分」 | ⏸ |
+| 14 | SSOT 反映 / `/doc-check` PASS / histories | — | `/task-close` で実施 | — |
+
+**E2E の未実施分と、その理由**:
+
+- **手順8-14-1・2(2つのセッションを同時に立てて別セッションの資源が消えないこと)と
+  手順8-15(`reset` が所有者を問わず消すこと)、手順10・12(`reset` の削除失敗と遊休判定)**:
+  **このホストでは別プロジェクトの Claude セッション `ct_matchsupport` が稼働中**であり、
+  `claude-dev reset` は管理ラベルを持つコンテナを集合として削除するので**それを消してしまう**。
+  E2E-01 手順8 は「他に作業中のセッションが無い時間帯に行う」と自ら定めており、その条件を
+  満たしていない。**代わりに、別セッションを巻き込まないことは `stop` 側で確認した**
+  (所有者の違う資源・所有者ラベルを持たない資源・`ct_matchsupport` のいずれも無傷)。
+- **macOS(`claude-dev-mac`)**: 実行環境が無い。**Linux 版との差分が無いことは機械的に確認した**
+  (`diff <(grep spawned claude-dev) <(grep spawned claude-dev-mac)` が完全一致)。
+- どちらも**手順を省いたのではなく未実施である**。専有できる環境で実行すること。
 
 ## 進捗メモ
+
+- 2026-08-07 フェーズ3(`/implement`): **タスク1〜6 を完了し、コミット4本を積んだ**
+  (`a271d83` docker-proxy / `1d912b4` CLI / `235a89a` issues/076 / `8435b0b` 変更指示の整合)。
+  **入場ゲートは3条件とも通過**(検証済み記録 16/16・未決点0件・lint/テストは実値)。
+  **委任で決めたこと**: `D0-scope-02` で (a) 注入の本体を `injectOwnerLabels` と
+  `writeBackBody` に切り出し両経路から呼ぶ、(b) `resolveProjectDir` を2値にして `ok` を落とす
+  (2つは別々に空になりうるので1つの `ok` では表せない)、(c) 列挙を `spawned_resources` の
+  共有関数に切り出す、(d) `destructive_rm` が常に 0 を返すため成否を `_DESTRUCTIVE_DELETED` の
+  増加で判定する。いずれも該当 MODULE の「実装上の判断」に `D-ID` つきで記録した。
+  **設計と食い違った点は無い**。ただし `MODULE-docker-proxy-serve` の手順3-3 は
+  「エラーで無ければ続けて注入する」と読めたが、実装では注入を
+  `validateContainerCreate` の**中**に置いた(判断5 と判断8 を同時に満たす最短の形)ため、
+  手順の文面を実装どおりに書き直した。
+  **QA レーン(`/codex-qa`)は起動していない**: `docs/02-design/environments.md`
+  「Codex実行設定」が **QA(E2E + CDP探索)= 無効(未運用)** と定め、書き込み許可ディレクトリも
+  ブラウザ排他ロックも「未定」で `docs/pendings.md` P-003 が前提条件として追跡しているため、
+  レーン自体が構成上まだ動かせない。**代わりに E2E を自分で実行した**(DoD 11・12)。
 
 - 2026-08-07 `/doc-check`(task) 判定: **PASS**(残存: 重大度「高」0件 /「中」2件 /「低」4件。
   **中の1件は人間の裁定待ち** — `sheet.md` 論点5。もう1件は既存の `段階可 × 部分(P-005)` で、
