@@ -151,7 +151,9 @@ func TestRewriteBinds_EmptyProjectRejectsAbsolute(t *testing.T) {
 func TestValidateContainerCreate_RewritesWorkspaceBind(t *testing.T) {
 	proj := t.TempDir()
 	orig := resolveProjectDir
-	resolveProjectDir = func(_ string) (string, bool) { return proj, true }
+	// 2値になった: (/workspace のマウント元, 呼び出し元の claude-dev.project-dir)。
+	// この試験は bind の書き換えだけを見るので所有者ラベルは空にする。
+	resolveProjectDir = func(_ string) (string, string) { return proj, "" }
 	defer func() { resolveProjectDir = orig }()
 
 	req := newRequest("POST", "/containers/create", `{"HostConfig":{"Binds":["/workspace/app:/app"]}}`)

@@ -27,6 +27,19 @@ const (
 	// projectCacheTTL bounds how long a resolved source-IP → PROJECT_DIR mapping
 	// is trusted before re-querying the Docker API.
 	projectCacheTTL = 60 * time.Second
+
+	// Management labels (CTR-cli-container「管理ラベル」). projectDirLabel is put
+	// on Claude containers by the host CLI and is READ here; the other two are
+	// written by this proxy onto session-spawned containers and networks so that
+	// `claude-dev stop` / `reset` can find them later (DSN-env-04).
+	//
+	// claude-dev.managed is deliberately NOT written: logout/reset select their
+	// bulk-delete set by managed=1, so adding it would make `logout` delete
+	// session-spawned resources — the opposite of D0-env-05 項2.
+	projectDirLabel = "claude-dev.project-dir"
+	roleLabel       = "claude-dev.role"
+	ownerLabel      = "claude-dev.owner-project-dir"
+	roleSpawned     = "spawned"
 )
 
 // allowWorkspaceBinds enables rewriting/allowing bind mounts whose source is
@@ -41,9 +54,25 @@ var allowWorkspaceBinds = func() bool {
 	return true
 }()
 
-// resolveProjectDir maps a caller's source IP to its host PROJECT_DIR (the host
-// path it mounts at /workspace), or ("", false) if unknown. It is a var so tests
-// can inject a stub instead of hitting the Docker API.
+// resolveProjectDir maps a caller's source IP to TWO values, both taken from the
+// same /containers/json response so the lookup stays one request:
+//
+//	workspaceSource — the host path the caller mounts at /workspace. Used to
+//	                  rewrite binds. "" when the caller cannot be resolved.
+//	ownerProjectDir — the value of the caller's claude-dev.project-dir label.
+//	                  Copied verbatim into the owner label. "" when the caller
+//	                  cannot be resolved OR carries no such label.
+//
+// The two are independent: a Claude container started before management labels
+// existed yields a workspaceSource but no ownerProjectDir.
+//
+// The owner value deliberately comes from the LABEL, not from workspaceSource:
+// `claude-dev stop` selects resources by a string comparison between
+// claude-dev.owner-project-dir and claude-dev.project-dir, so taking both from
+// the same single label makes the match a structural consequence rather than
+// something that has to be verified (DSN-env-04).
+//
+// It is a var so tests can inject a stub instead of hitting the Docker API.
 var resolveProjectDir = cachedResolveProjectDir
 
 // dockerHTTP talks to the host Docker socket for read-only lookups (container list).
@@ -57,8 +86,9 @@ var dockerHTTP = &http.Client{
 }
 
 type projectCacheEntry struct {
-	dir string
-	exp time.Time
+	workspaceSource string
+	ownerProjectDir string
+	exp             time.Time
 }
 
 var (
@@ -67,31 +97,39 @@ var (
 )
 
 // cachedResolveProjectDir wraps lookupProjectDir with a short TTL cache.
-func cachedResolveProjectDir(remoteIP string) (string, bool) {
+// Both values are cached together because they come from one lookup.
+func cachedResolveProjectDir(remoteIP string) (string, string) {
 	projectCacheMu.Lock()
 	if e, ok := projectCache[remoteIP]; ok && time.Now().Before(e.exp) {
 		projectCacheMu.Unlock()
-		return e.dir, e.dir != ""
+		return e.workspaceSource, e.ownerProjectDir
 	}
 	projectCacheMu.Unlock()
 
-	dir := lookupProjectDir(remoteIP)
+	src, owner := lookupProjectDir(remoteIP)
 
 	projectCacheMu.Lock()
-	projectCache[remoteIP] = projectCacheEntry{dir: dir, exp: time.Now().Add(projectCacheTTL)}
+	projectCache[remoteIP] = projectCacheEntry{
+		workspaceSource: src,
+		ownerProjectDir: owner,
+		exp:             time.Now().Add(projectCacheTTL),
+	}
 	projectCacheMu.Unlock()
-	return dir, dir != ""
+	return src, owner
 }
 
 // lookupProjectDir asks the Docker daemon for the container whose network IP is
-// remoteIP and returns the host source of its /workspace mount ("" if none).
-func lookupProjectDir(remoteIP string) string {
+// remoteIP and returns (host source of its /workspace mount, value of its
+// claude-dev.project-dir label). Either is "" when unavailable. One request
+// yields both: the /containers/json response already carries Labels.
+func lookupProjectDir(remoteIP string) (string, string) {
 	resp, err := dockerHTTP.Get("http://docker/containers/json")
 	if err != nil {
-		return ""
+		return "", ""
 	}
 	defer resp.Body.Close()
 	var cs []struct {
+		Labels map[string]string `json:"Labels"`
 		Mounts []struct {
 			Destination string `json:"Destination"`
 			Source      string `json:"Source"`
@@ -103,7 +141,7 @@ func lookupProjectDir(remoteIP string) string {
 		} `json:"NetworkSettings"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&cs); err != nil {
-		return ""
+		return "", ""
 	}
 	for _, c := range cs {
 		match := false
@@ -116,13 +154,19 @@ func lookupProjectDir(remoteIP string) string {
 		if !match {
 			continue
 		}
+		src := ""
 		for _, m := range c.Mounts {
 			if m.Destination == workspaceMount {
-				return m.Source
+				src = m.Source
+				break
 			}
 		}
+		// An empty label value counts as "not identified" (DSN-env-04): copying
+		// it would produce a resource that `stop` cannot select but `reset` can
+		// delete, which is exactly the split the single-label design prevents.
+		return src, c.Labels[projectDirLabel]
 	}
-	return ""
+	return "", ""
 }
 
 // containWorkspacePath validates that containerSrc (a path as seen inside the
@@ -253,6 +297,76 @@ func rewriteBinds(body []byte, projectDir string) ([]byte, bool, error) {
 	return nbody, true, nil
 }
 
+// injectOwnerLabels writes the two owner labels into the TOP-LEVEL "Labels"
+// object of a create request body (both container create and network create put
+// Labels there). It returns (body, false) unchanged when owner is empty or the
+// body cannot be parsed — never an error, because failing to mark a resource
+// must not reject its creation (FR-env-07 受入基準12 / DSN-dp-01).
+//
+// A label the user set under the same key is overwritten: if the caller could
+// choose the owner, `stop` could be pointed at another session's resources.
+// Nothing else in the request is touched.
+func injectOwnerLabels(body []byte, owner string) ([]byte, bool) {
+	if owner == "" || len(body) == 0 {
+		return body, false
+	}
+	var top map[string]json.RawMessage
+	if err := json.Unmarshal(body, &top); err != nil {
+		return body, false // unparseable: relay as-is (existing policy)
+	}
+	labels := map[string]string{}
+	if raw, ok := top["Labels"]; ok && string(raw) != "null" {
+		if err := json.Unmarshal(raw, &labels); err != nil {
+			return body, false
+		}
+	}
+	labels[roleLabel] = roleSpawned
+	labels[ownerLabel] = owner
+
+	nl, err := json.Marshal(labels)
+	if err != nil {
+		return body, false
+	}
+	top["Labels"] = nl
+	nbody, err := json.Marshal(top)
+	if err != nil {
+		return body, false
+	}
+	return nbody, true
+}
+
+// writeBackBody replaces the request body exactly once, keeping ContentLength
+// and the Content-Length header in step. Splitting this across two rewrites is
+// what MODULE-docker-proxy-serve 判断8 forbids.
+func writeBackBody(r *http.Request, body []byte) {
+	r.Body = io.NopCloser(bytes.NewReader(body))
+	r.ContentLength = int64(len(body))
+	r.Header.Set("Content-Length", strconv.Itoa(len(body)))
+}
+
+// labelNetworkCreate marks a network create request with the caller's owner
+// labels. Network creation carries nothing that can endanger the host, so it
+// has no rejection checks — only the marking.
+func labelNetworkCreate(r *http.Request, logger *log.Logger) {
+	body, err := readAndRestoreBody(r)
+	if err != nil {
+		logger.Printf("WARN: could not read network create body: %v", err)
+		return
+	}
+	_, owner := resolveProjectDir(clientIP(r.RemoteAddr))
+	if owner == "" {
+		logger.Printf("NO-OWNER-LABEL network: caller not identified; relaying unlabelled")
+		return
+	}
+	nbody, changed := injectOwnerLabels(body, owner)
+	if !changed {
+		logger.Printf("NO-OWNER-LABEL network: body not rewritable; relaying unlabelled")
+		return
+	}
+	writeBackBody(r, nbody)
+	logger.Printf("OWNER-LABEL network: owner=%s", owner)
+}
+
 // clientIP extracts the source IP from an http.Request's RemoteAddr.
 func clientIP(remoteAddr string) string {
 	if host, _, err := net.SplitHostPort(remoteAddr); err == nil {
@@ -280,6 +394,11 @@ var blockedPathPrefixes = []string{
 
 // containerCreateRe matches POST /containers/create and POST /v{version}/containers/create.
 var containerCreateRe = regexp.MustCompile(`^(/v[\d.]+)?/containers/create`)
+
+// networkCreateRe matches POST /networks/create, with or without the API
+// version prefix — the same shape as containerCreateRe, because clients send
+// both /networks/create and /v1.45/networks/create (判断9).
+var networkCreateRe = regexp.MustCompile(`^(/v[\d.]+)?/networks/create`)
 
 // containerExecCreateRe matches POST /containers/{id}/exec (exec create).
 var containerExecCreateRe = regexp.MustCompile(`^(/v[\d.]+)?/containers/[^/]+/exec`)
@@ -342,6 +461,13 @@ func main() {
 				http.Error(w, fmt.Sprintf("blocked: %s", err), http.StatusForbidden)
 				return
 			}
+		}
+
+		// Network create requests carry nothing that can endanger the host, so
+		// they have no rejection checks — the proxy only marks them so that
+		// `stop` / `reset` can clean them up later (DSN-env-04).
+		if r.Method == http.MethodPost && networkCreateRe.MatchString(path) {
+			labelNetworkCreate(r, logger)
 		}
 
 		// Inspect exec create requests (for privileged exec).
@@ -496,57 +622,92 @@ func validateContainerCreate(r *http.Request, logger *log.Logger) error {
 		return nil
 	}
 
-	if req.HostConfig == nil {
-		return nil
-	}
+	// Resolve the caller ONCE; the bind rewrite and the owner label share it.
+	workspaceSource, owner := resolveProjectDir(clientIP(r.RemoteAddr))
 
-	hc := req.HostConfig
-
-	// Check Privileged.
-	if hc.Privileged {
-		return fmt.Errorf("privileged containers are not allowed")
-	}
-
-	// Check host namespace modes.
-	if hc.PidMode == "host" {
-		return fmt.Errorf("PidMode=host is not allowed")
-	}
-	if hc.NetworkMode == "host" {
-		return fmt.Errorf("NetworkMode=host is not allowed")
-	}
-	if hc.UsernsMode == "host" {
-		return fmt.Errorf("UsernsMode=host is not allowed")
-	}
-
-	// Bind mounts (Binds + Mounts type=bind): allow only sources under the
-	// caller's /workspace, rewriting them to the host PROJECT_DIR. When the
-	// feature is off or the caller can't be resolved, projectDir stays "" and
-	// rewriteBinds rejects every absolute host bind (pre-existing behavior).
+	newBody := body
+	bindsChanged := false
 	projectDir := ""
-	if allowWorkspaceBinds {
-		if pd, ok := resolveProjectDir(clientIP(r.RemoteAddr)); ok {
-			projectDir = pd
+
+	// A body without HostConfig has nothing to reject and no bind to rewrite,
+	// but it still gets an owner label below — `docker run alpine true` is the
+	// most ordinary way to create a session-spawned container.
+	if hc := req.HostConfig; hc != nil {
+		// Check Privileged.
+		if hc.Privileged {
+			return fmt.Errorf("privileged containers are not allowed")
+		}
+
+		// Check host namespace modes.
+		if hc.PidMode == "host" {
+			return fmt.Errorf("PidMode=host is not allowed")
+		}
+		if hc.NetworkMode == "host" {
+			return fmt.Errorf("NetworkMode=host is not allowed")
+		}
+		if hc.UsernsMode == "host" {
+			return fmt.Errorf("UsernsMode=host is not allowed")
+		}
+
+		// Bind mounts (Binds + Mounts type=bind): allow only sources under the
+		// caller's /workspace, rewriting them to the host PROJECT_DIR. When the
+		// feature is off or the caller can't be resolved, projectDir stays ""
+		// and rewriteBinds rejects every absolute host bind (pre-existing).
+		//
+		// Binds are judged BEFORE capabilities and devices on purpose: "you
+		// brought something in from outside the workspace" is the reason users
+		// hit most, so the contract returns it first (CTR-docker-api 判定の順序).
+		if allowWorkspaceBinds {
+			projectDir = workspaceSource
+		}
+		rewritten, changed, err := rewriteBinds(body, projectDir)
+		if err != nil {
+			return err
+		}
+		if changed {
+			newBody, bindsChanged = rewritten, true
+		}
+
+		// Check dangerous capabilities.
+		for _, cap := range hc.CapAdd {
+			if dangerousCapabilities[strings.ToUpper(cap)] {
+				return fmt.Errorf("capability %s is not allowed", cap)
+			}
+		}
+
+		// Check Devices.
+		if len(hc.Devices) > 0 {
+			return fmt.Errorf("device mappings are not allowed")
 		}
 	}
-	if newBody, changed, err := rewriteBinds(body, projectDir); err != nil {
-		return err
-	} else if changed {
-		r.Body = io.NopCloser(bytes.NewReader(newBody))
-		r.ContentLength = int64(len(newBody))
-		r.Header.Set("Content-Length", strconv.Itoa(len(newBody)))
+
+	// --- every rejection check has passed from here on ---
+
+	// Owner labels. Deliberately independent of allowWorkspaceBinds: turning
+	// bind rewriting off must not silently stop marking resources, or `stop`
+	// would find nothing to clean up (CTR-docker-api「検査する要素と判定」).
+	// Marking a request that is about to be rejected would be pointless, and
+	// putting the injection earlier would let its failure skip a rejection —
+	// hence its position after the checks (判断5).
+	labelled := false
+	if owner != "" {
+		if b, changed := injectOwnerLabels(newBody, owner); changed {
+			newBody, labelled = b, true
+		}
+	}
+
+	// One reconstruction per request (判断8): both rewrites are already folded
+	// into newBody, so ContentLength is written exactly once.
+	if bindsChanged || labelled {
+		writeBackBody(r, newBody)
+	}
+	if bindsChanged {
 		logger.Printf("REWRITE binds: /workspace -> %s", projectDir)
 	}
-
-	// Check dangerous capabilities.
-	for _, cap := range hc.CapAdd {
-		if dangerousCapabilities[strings.ToUpper(cap)] {
-			return fmt.Errorf("capability %s is not allowed", cap)
-		}
-	}
-
-	// Check Devices.
-	if len(hc.Devices) > 0 {
-		return fmt.Errorf("device mappings are not allowed")
+	if labelled {
+		logger.Printf("OWNER-LABEL container: owner=%s", owner)
+	} else if owner == "" {
+		logger.Printf("NO-OWNER-LABEL container: caller not identified; relaying unlabelled")
 	}
 
 	return nil
