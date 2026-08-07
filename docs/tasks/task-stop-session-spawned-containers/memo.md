@@ -131,11 +131,13 @@ compose 資源に限っており、その集合を広げる判断だから。あ
 
 ## 決定シート(回答済み)
 
-> **回答待ち: `docs/tasks/task-stop-session-spawned-containers/sheet.md`(論点 1 件 = 論点6)**
-> — `/implement`(2026-08-07)が **論点6(このホストで実行できない E2E の残りをどうするか)**
-> を追記した。**未回答時の既定は C**(未実施として `docs/issues/` へ起票して `/task-close` へ進む)。
-> **`/task-close` はこの回答を得てから走らせる**(C-4 の順序: 回答が文書を変えうるので、
-> 反映と検証済み記録より前に適用する)。
+> **回答済み(2026-08-07)。回答待ちの論点は無い。**
+> — **論点6(このホストで実行できない E2E の残りをどうするか)は B**:
+> 未実施のまま `/task-close` へ進み、残りを `docs/pendings.md` へ**受容**として記録する。
+> 人間の理由は「実行できないものは出来なくて当たり前」(AI 推奨は A(専有時間帯を作って実行)、
+> 未回答時の既定は C(issue 起票)だった。**気づきは `docs/feedbacks/025-...` に記録した**)。
+> **`/task-close` は `docs/pendings.md` の P-004 を最終化してから完了させる**
+> (下の「申し送り事項」)。
 > なお **論点5 は「未回答時の既定 A」で確定した** — `/doc-check` が論点5 を提示した直後に
 > 人間が「実装に移って」と指示したため、シート自身が定める既定(A = `D0-env-10` の
 > ガードレールを2ラベルへ広げる)を承認したものとして扱う。**A はコードを変えない**ので、
@@ -187,7 +189,10 @@ compose 資源に限っており、その集合を広げる判断だから。あ
 - [x] 受入基準テスト(`FR-env-07-11` / `-12`)が実装済みでグリーン
 - [x] シェル2本の構文検査(`bash -n`)が通る
 - [x] コールグラフを再生成し `callgraph-check.py --to-be` の重大度「高」が0件
-- [x] `check-relations.py` / `check-contracts.py` / `check-changeset.py` が合格
+- [x] `check-relations.py` / `check-contracts.py` が合格
+- [x] `check-changeset.py` が合格 — **規範更新(2026-08-07)で CS18・CS19 が増えたが、両方とも決着した**。
+      CS19 の 10 件はキットの欠陥で、同日 `/kit-improve --apply` を当てて **OK**。CS18 の 11 件は
+      **既存の SSOT 由来で本タスクの範囲外**(`docs/issues/083`)。詳細は下の表の 9 行目
 - [x] `03-impl/tests/` の変更指示を実装結果に合わせて更新した
 - [x] E2E-03 手順5・6(所有者ラベルの付与)を実機で確認した
 - [x] E2E-01 手順8-14 の 3・4・5・6(`stop` の片付け)を実機で確認した
@@ -209,7 +214,7 @@ compose 資源に限っており、その集合を広げる判断だから。あ
 | 6 | `callgraph-check.py --to-be` | 同左 | `### 指摘 47 件`(**重大度「高」0 件**。中6 は CG3 で本タスクの範囲外モジュール) | ✅ |
 | 7 | `check-relations.py` | 同左 | `合格: 対称性・参照実在・impl パス・必須項目・機能表との 1:1すべて問題なし。` | ✅ |
 | 8 | `check-contracts.py` | 同左 | `合格: 契約に不整合なし。` | ✅ |
-| 9 | `check-changeset.py` | 同左 | `合格: 不変条件の違反なし`(**staged 導出物を一時退避して実行**。退避しないと `docs/issues/076` により CS1 違反 29 件で落ちる) | ✅ |
+| 9 | `check-changeset.py` | 同左 | **規範更新前は** `合格: 不変条件の違反なし`(**staged 導出物を一時退避して実行**。退避しないと `docs/issues/076` により CS1 違反 29 件で落ちる)。**2026-08-07 の規範更新の直後は CS18 が 11 件・CS19 が 10 件を出した**。CS19 の 10 件は**キット側の欠陥**で、人間の合意を得て `/kit-improve KIT-cs19-section-name-and-test-templates --apply` を当てた結果 `CS19 理由の網羅: OK(判断の節を持つ変更指示 10 件)`。CS18 の 11 件は**既存の SSOT 由来で本タスクの範囲外**(`docs/issues/083`。本タスクが作った3件は直した)。CS1 の 29 件は従来どおり `docs/issues/076`(staged 導出物)で、退避すれば出ない | ✅(**残る 40 件はすべて他所で追跡済み** — CS1 29 = `076` / CS18 11 = `083`) |
 | 10 | `03-impl/tests/` の更新 | — | `tests/docker-proxy.md` の2条項を `実装済み` にし、未検証の全件から2件を削除 | ✅ |
 | 11 | E2E(E2E-03 手順5・6) | 実機確認(隔離した proxy 経由) | コンテナ・ネットワークの双方に `claude-dev.role=spawned` と `claude-dev.owner-project-dir=/tmp/e2e-verify-owner` が付き、利用者指定の `/etc` は上書きされ `keep=me` は残った。特定できない呼び出し元では付かず、作成は成功した | ✅ |
 | 12 | E2E(E2E-01 手順8-14 の 3・4・5・6) | 実機確認(`./claude-dev stop`) | `🧹 このセッションが作った資源を削除しました:` にコンテナ2件・ネットワーク1件が種別つきで出た。0件のときは1行も出ず、ラベルを読めない対象では片付けを試みず、所有者ラベルを持たない資源と別セッションは無傷 | ✅ |
@@ -230,6 +235,107 @@ compose 資源に限っており、その集合を広げる判断だから。あ
 - どちらも**手順を省いたのではなく未実施である**。専有できる環境で実行すること。
 
 ## 進捗メモ
+
+- 2026-08-07 **規範更新後の再検査**(人間の指示。キットが 2026-08-07 16:19 に更新され、
+  `.claude/directions/delegation.md`(標準委任 `DS-01`〜`DS-08`・問う基準・開示義務)が新設され、
+  検査 `CS17`(開示の形と開示漏れ)・`CS18`(要件に降りた機構)・`CS19`(理由の網羅)が増えた)。
+  **SSOT は1文字も触っていない**(タスク進行中のため。原則1)。直したのは変更指示・`sheet.md` と、
+  範囲外の分の起票である。
+  - **変更指示に「テスト設計の判断」を新設**(`03-impl/tests/` の5件。`anchors:` 付きの新設見出し)。
+    **委任で決めたこと**: `DS-01` で (a) テスト識別子を E2E の**部分手順まで**書く、(b) 状態列は
+    `未検証(テスト未実装)` のまま置き実機確認の結果を状態にしない、(c) 単体テスト14本を
+    `docker-proxy/labels_test.go` に分け `resolveProjectDir` の差し替えで実 Docker を使わない、
+    (d) 検証は書き戻されたボディの JSON を読み直す形にする。いずれも該当ファイルに
+    `[DS-01] … — 理由: … / 見直す条件: …` の形で書いた(`CS17` が形式を検査する)。
+  - **`02-design/architecture.md` の「設計判断」と `system.md` の「分割の根拠」を影響範囲に加えた**
+    (`CS19` は、その節を触る変更が既存の判断を全件読み直すことを要求する)。読み直した結果、
+    **設計判断8件のうち `DSN-arch-02` の1行だけが更新**で、残り7件と分割の根拠6件は継続である。
+    `DSN-arch-02` の更新は**この再検査が見つけた実質的な欠落**である: 状態の置き場の表が
+    Docker リソースの所有を「ホスト CLI / Makefile」・識別を「`claude-dev-` 接頭辞」としており、
+    **docker-proxy が印を付けるセッション由来の資源(名前は利用者が決める)を表せていなかった**。
+  - **`CS18`(要件に機構を書かない)で、本タスクが新しく書いた3箇所から `CTR-cli-container` を
+    落とした**(`FR-env-01` の内容欄 / `FR-env-01-22` / `FR-env-07-11` → 「02 の契約が定める」)。
+    **要件の意味は変えていない**。既存 27 箇所は範囲外 → `docs/issues/083`。
+  - **`sheet.md` を新書式へ**(「一括回答」の節 / 論点6 の「間違えたときの戻し方」/
+    「今回 AI が決めたこと」の開示節)。**記入済みの ★あなたの記入 は1文字も触っていない**。
+    `check-sheet.py` は合格(以前は「一括回答の節が無い」を出していた)。
+  - **範囲外として起票**: `docs/issues/083`(要件 27 箇所が下位層 ID と実装ファイル名を名指す)/
+    `docs/issues/084`(`03-impl/tests/` の全 32 件に「テスト設計の判断」が無い。うち5件は本タスクの
+    変更指示で解消するので反映後は 27 件)。
+  - **キット側の欠陥を1件見つけた** → `.claude/improvements/KIT-cs19-section-name-and-test-templates.md`
+    (`status: 検討中`)。**`CS19` は `sections:` の要素を素の見出し名と比べるが、
+    `change-set.md` と `CS1` は `## ` 込みで書くことを要求する** — どちらの書き方でも合格できず、
+    **判断の節を持つファイルを触る変更指示はこの版のキットでは合格できない**。修正は比較の
+    正規化1行で、当てた実測では `CS19` の10件がすべて OK になる(他の検査 ID は不変)。
+    **人間の合意が要る**(`/kit-improve` は `--apply` に `status: 合意済み` を要求する)。
+
+- 2026-08-07 **階層の点検・5周**(人間の指示「あなたが文書を全て読んで、階層が適切ではない項目や
+  記述がないかを確認して。確認→修正を、subagent を用いて5周して」)。**各周: 独立レビュー
+  (`lens: subagent`)が全文精読 → 私が裁定 → 修正**。SSOT は無変更で、直したのは変更指示だけ。
+  - **1周目(00・01 の変更指示)**: 指摘 86 件 → **採用6件**。退けた最大の理由は
+    **用語集の語は全層で使える**(`00-requests.md`「Every layer follows this glossary」)ことと、
+    **`D0-env-08` が識別方法を人間の決定として定めている**こと。採用の中心は
+    **私が前回入れた本文の HTML コメントが、落としたはずの機構名と 02 の行番号を復活させていた**件
+    (本文は SSOT に反映されるので、変更の説明は `reason:` に置く)と、
+    **`D0-env-08` 項8 の括弧が 02 と食い違っていた**件(所有者ラベルの値は
+    `claude-dev.project-dir` の写しであってマウント元ではない)。
+  - **2周目(02 の変更指示6件)**: 指摘 22 件 → **採用 27 箇所**。実行順序・シェル構文・
+    コマンド文字列・内部手段・**03 の手順番号への序数参照**(`MODULE-cli-reset` 手順6 /
+    E2E-01 手順8。本タスクで実際に手順が繰り上がっており 02 が嘘になる直前だった)。
+  - **3周目(03 の変更指示9件)**: 指摘 32 件 → **採用 31 箇所**。最重要は
+    **`tests/e2e.md` が「`docker-proxy.md` の未検証3・4 が追跡する」と書いていたのに、
+    その2行は同じタスクで削除済み**(現時点で虚偽)。ほかに `memo.md` への宙吊り参照2件
+    (タスク削除で必ず消える)、**03 が受容を決めていた1件**(→ `docs/pendings.md` P-007)、
+    `infra` が用語を再定義して 00 と食い違っていた1件。
+  - **4周目(SSOT 00〜02 の全文)**: 指摘 83 件。**触れる節にあった 13 件は変更指示で移動**し、
+    **残りは起票**: `docs/issues/085`(02 が実装の細部を持つ 11 件)/
+    `docs/issues/086`(00・01 が機構を持つ 59 件。**00 にコードの行番号がある5件が最重**)。
+    あわせて**規範自体の穴**を発見 — 00 は「technology は決めない」と定めるのに決定台帳は
+    人間の技術選定を記録する器でもある。判定を保留し
+    `.claude/improvements/KIT-where-technology-decisions-belong.md`(検討中)を起こした。
+  - **5周目(修正そのものの点検。2本)**: 指摘 13 件 → **採用 10 件**。
+    - **削られた記述 約80件を1件ずつ移し先で grep 照合**させた結果、**消失は1件**:
+      `MODULE-docker-proxy-serve` 判断8 から落とした「既存の単体テストを全件回帰として流す」
+      要求の移し先が空だった(`tests/docker-proxy.md` に `[DS-01]` 行として補った)。
+    - **★最重要(フェーズ2 由来の欠陥)**: `MODULE-cli-stop` と `MODULE-cli-reset` の
+      **既存の「実装上の判断」21 行から、理由が無言で削られていた**(変更指示は「3件を足す」
+      としか宣言していないのに、既存行が短縮されていた)。**反映すると SSOT からその理由が
+      消える** — `delegation.md` §3 が「これが無い状態こそ規範が解こうとしている問題」と
+      書くものである。SSOT と1行ずつ突き合わせて**全 21 行の理由を復元**した
+      (8行は SSOT の全文に戻し、13行は失われた理由節を追記。`reset` 判断5 の
+      `D0-scope-07` への唯一の参照と「標準入力へ `y` を流し込む形は受け付けない」も復元)。
+    - **自分が作った矛盾を2件直した**: `FR-env-03-3`/`-8` を「30 秒**以内**に反映」と書き替えて
+      いたが、02 の機構は「30 秒**周期**のポーリング」なので**最悪の遅延が 30 秒を超え、01 と 02 が
+      食い違う**(観測できる言い方に戻した)/ `FR-env-03-11` の書き替えが**握りつぶす実装も通す**
+      形に弱まっていた。
+    - ほかに、`MODULE-cli-stop` の「例外は名前付きボリュームとイメージ**だけ**」が
+      `FR-env-01-22`(所有者を特定できなかった資源も対象外)と食い違っていた件、
+      **存在しない issue 5件への参照**(`020` `024` `025` `029` `045` は解消して削除済み)、
+      E2E-01 手順8-16 の後片付けが**直前の `reset` の後では大半が空振り**する件を直した。
+    - **保留**: `D0-env-08` 項1 の資源列挙と項2 の `claude-dev-net` は
+      `docs/issues/086` の「00 に技術名を書いてよいか」の裁定待ち群と同じ性質なので触っていない。
+
+- 2026-08-07 **階層の点検(1回目)**(人間の指示「記述している内容が別の階層(より下位の)
+  ドキュメントに書くべきものはないか。あるなら全て移動する」)。**変更指示の中だけで完結**。
+  **移した先に事実が在ることを1件ずつ確認してから落としている** — 消したのではない。
+  - **01(`functional.md` / `decisions/split.md`)**: 下位層 ID(`CTR-cli-container` / `DSN-env-03`)、
+    実装ファイル名(`.credentials.json` / `settings.json` / `auth.json` / `config.toml` ほか)、
+    ラベル名 `claude-dev.project-dir`、`DOCKER_HOST` のエンドポイント、共有ネットワーク名、
+    前提コマンド名、同期の実現方法(「30 秒ごとに検知して書き戻す」)、
+    ハッシュ桁数を落とした。**条項 ID は1つも動かしていない**(CS16 合格)。
+    **数値は観測できる上限として残した**(「更新を 30 秒以内に反映する」)。
+    `check-changeset.py` の **CS18 が OK** になった。
+  - **00(`decisions/env.md` / `terminology.md`)**: `docker rm -f` / `COMPOSE_PROJECT_NAME` /
+    `docker ps --filter ancestor=...` / 認証ファイル3件の列挙 / 用語の対比行の識別方法を落とした。
+    **決定の意味は1つも変えていない**(落としたのは「どうやるか」だけ)。
+    **00 は人間の層なので、この4箇所は変更指示の中に理由をコメントで残してある** — 反映前に
+    差し戻せる(`new-features/00-requests/decisions/env.md` の末尾コメント)。
+  - **02 は移すものが無かった**: 実装識別子(関数名・`main.go`・行番号・`{{.Names}}` など)を
+    全文検索して 0 件。02 に出てくる `docker ps --filter …` は利用者に案内する手順で、
+    契約が持つべき観測面である。
+  - **判断の線**(報告のため明示する): **利用者が見る・打つものは残す**(CLI 名・終了コード・
+    受理する文字種・表示内容・`/workspace`)。**システムが内部でどう決めるかは落とす**
+    (ラベル名・フィルタ・正規化・ハッシュ・ポーリング周期・ファイル名)。
 
 - 2026-08-07 フェーズ3(`/implement`): **タスク1〜6 を完了し、コミット4本を積んだ**
   (`a271d83` docker-proxy / `1d912b4` CLI / `235a89a` issues/076 / `8435b0b` 変更指示の整合)。
@@ -266,26 +372,30 @@ compose 資源に限っており、その集合を広げる判断だから。あ
   **検査済みの状態**(次回の増分実行の起点。`sha1sum` を再実行して一致すれば A〜E を省略できる):
 
   ```
-  1faad889aac9c4ede7e87c7789cad00eeb91c9b1  00-requests/decisions/env.md
-  1f833fbb880b4a46f7e3e394f2be79bc950ea23f  00-requests/terminology.md
-  838967d3fae87c71a0e7f1e1c386b8a7065552db  01-requirements/decisions/split.md
-  300ab424f179a0eb22ef98ca4ab31e145c15112e  01-requirements/functional.md
-  97976c13ccc1d8d8953daccd7780d7f0680cc2ba  02-design/architecture.md
-  28f27ee75f43f85a684d271103e0f77e02c85484  02-design/contracts/cli-container.md
-  1ec8905ece6035d1b53516f8d22ffc079ba58e50  02-design/contracts/docker-api.md
-  9e56ff86d9cff339b463611770273b562120bfed  02-design/logging.md
-  36185df90e28ebbcb78a0d532c5228ca315e081f  02-design/relations.md
-  08df9bb23a72941ef82aad0a8a3535d12d777805  02-design/system.md
-  f7a9dd8d2e5f12c32557c4136b41a5777f0c4a08  03-impl/infra/local/docker-resources.md
-  fd84ff1cfa410deae999f406476e4a7693ac50df  03-impl/relations/MODULE-cli-reset.md
-  0eb0fd3ba42c3a73c54a05b9eaa7da14d01c6331  03-impl/relations/MODULE-cli-stop.md
-  84b009fc9c8c583dd4975628c293171e93ba23c7  03-impl/relations/MODULE-docker-proxy-serve.md
-  e732ed4c22cf06c1042e8de767e5d0b8cc131f47  03-impl/tests/cli-reset.md
-  80301af6f1fa105812651cff84840d5256f9751d  03-impl/tests/cli-stop.md
-  b236d2426ea2d673d908a237af7da7890d2748d8  03-impl/tests/docker-proxy.md
-  0ec46929260c11fdd975d6eb1ddf7fd4feb01641  03-impl/tests/e2e.md
-  5e6f958ebe124a5a0c097c78c151ee1496690a5c  03-impl/tests/strategy.md
+  91ac0f07394a9d540d170d58248c5ed590e00a9f  00-requests/decisions/env.md
+  b67a2ff56f5454f086065dff6f73bbe862cc53c3  00-requests/terminology.md
+  d450835de58892b0c36ba218b5125f77bcabc8e5  01-requirements/decisions/split.md
+  14dd86da549530c448e55cf9ece807fc9afdf855  01-requirements/functional.md
+  b3c2e6166cc805611c79fa544303caa98ee2e783  02-design/architecture.md
+  1647e0f7800d223cb53fe7ec68525713c4f801c2  02-design/contracts/cli-container.md
+  9e5c031051ddc027281f20f9f4e6ad05d07fdb65  02-design/contracts/docker-api.md
+  7b321d6ed6815a82500e4752b994f15ec76b4d7a  02-design/logging.md
+  b1ef479f4abe3722f4fbf2d63373db60eb17cb94  02-design/relations.md
+  be4f151d91f87821b8f9abd430d2967123d98cbf  02-design/system.md
+  5b8fd0e1d8b9ef6623ac00fe2dd1f47fdb429446  03-impl/infra/local/docker-resources.md
+  f607da7deaaf81d2d355e450c1fd23fd96a7a572  03-impl/relations/MODULE-cli-reset.md
+  9a22a1e13da44ce4a9f83da398f30da5f00e1e5c  03-impl/relations/MODULE-cli-stop.md
+  640e0d840e06c6a0abfc3941d1a130fcf916ea3c  03-impl/relations/MODULE-docker-proxy-serve.md
+  ca21bfbe7a47ab7d443651a545f82f2b328bfdfe  03-impl/tests/cli-reset.md
+  53c99cac7ce2a2a7f07a23603cb7ec953164cc0b  03-impl/tests/cli-stop.md
+  27fab8f44ba193bdd5c6b3694993eb93f9b4a822  03-impl/tests/docker-proxy.md
+  afa4023fc03fe9ecca1fbc1c91fe8dcf72410ba3  03-impl/tests/e2e.md
+  71dc47468c9c67fe847535834a074639a8d40409  03-impl/tests/strategy.md
   ```
+
+  <!-- 2026-08-07(規範更新後の再検査)で更新した。**MODULE-*.md の3件は、この再検査で
+       中身を触ったのではなく、上の記録がフェーズ3 の C-1(コミット 8435b0b)より前の値の
+       まま取り残されていたので取り直した**(git status で未変更であることを確認済み)。 -->
 
   - closure 側 SSOT の版: 「読む範囲(読了記録)」の 24 ファイルの版から**1つも動いていない**
     (他タスクは存在せず、SSOT 00〜03 は本実行で1文字も書いていない)
@@ -295,6 +405,34 @@ compose 資源に限っており、その集合を広げる判断だから。あ
 
 ## 申し送り事項
 
+- **論点6(= B)の後始末**: `docs/pendings.md` の **P-006**(`reset` 側と macOS 版の実機確認を
+  未実施のまま受容)を 2026-08-07 に起票した。**`/task-close` はこれを最終化する**
+  — 反映後に E2E の状態が変わっていないこと(`未検証(テスト未実装)` のまま)を確かめ、
+  P-006 の「何が不完全か」の手順番号が反映後の `e2e.md` と一致することを確認する。
+  **`docs/issues/` へは起票しない**(人間が受容と決めたので、issue ではなく pending が正しい置き場)。
+- **`/task-close` の前に片付ける必要があるもの**(2026-08-07 の規範更新に由来。上の進捗メモ):
+  1. ~~キットの1行修正~~ — **2026-08-07 に人間の合意を得て適用済み**
+     (`.claude/improvements/KIT-cs19-section-name-and-test-templates.md` の「適用の記録」。
+     独立レビューは `lens: subagent`、指摘9件・高0件を裁定)。`check-changeset.py` の CS19 は OK。
+     **本流のキットへは `.claude/improvements/patches/KIT-cs19-section-name-and-test-templates.patch`
+     を人間が当てる**(このプロジェクトの `.claude/` は配布キットの複製である)。
+  2. **`CTR-cli-container` の冒頭2行を反映時に書き直す**(階層の点検の5周目で判明)。
+     `docs/02-design/contracts/cli-container.md` の `# ` 見出し直下の
+     「発行側(`MOD-cli-start`)がラベルの付与をやめると読み手側の削除対象が空になる」と
+     「責任モジュール(結合テスト): MOD-entrypoint」は **`DSN-env-04` 導入後は半分しか成り立たない**
+     (`MOD-docker-proxy` が止めても空になる / 識別の責任は `MOD-cli-stop` ほかへ移った)。
+     節ではないので `sections:` で差し替えられず、変更指示は「こう読め」という注記で覆っている。
+     **反映時にこの2行を実際に書き直し、注記を削ること**(注記のまま SSOT に残すと
+     「古い記述と読み替え指示が同居する」状態になる)。
+  3. **`MODULE-docker-proxy-serve` の `tests:` を 39 本に揃える**。対応表が名指すのに frontmatter に
+     無いものが9本ある(`docs/issues/082`)。`/relations` の再生成で入るはずだが、**入っていれば
+     `082` を解消として閉じられる**ので確認する。
+  4. **反映で新設される見出しが5つある** — `03-impl/tests/` の5ファイルの
+     「## テスト設計の判断」(`anchors:` が挿入位置を持つ)。`/task-close` の反映は
+     `sections:` と `anchors:` を見て入れること。
+  3. **`02-design/architecture.md` の「設計判断」と `system.md` の「分割の根拠」は節ごと置き換える**。
+     architecture 側は `DSN-arch-02` の表に1行増えるだけで、**他の7件は文面が同一である**
+     (差分が出ないことが正しい)。system 側は6件とも同一である。
 - **`/task-close` がコードから確定させるもの**(フェーズ2 で変更指示を書かなかった3ファイル。
   理由は「影響範囲(closure)」の各行に書いた。**書き忘れると 02 の `DSN-env-04` に対応する
   実装の事実が 03 に無い状態が残る**):

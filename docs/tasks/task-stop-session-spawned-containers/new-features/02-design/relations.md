@@ -81,7 +81,7 @@ reason: '`D0-env-05` 項2 の拡張で `stop` の設計上の期待が変わる�
 | PLAN-makefile-update-claude | MOD-makefile | tool | sync | なし | なし | なし | FR-env-09, FR-env-12 | コンテナイメージを作り直さずに Claude Code だけを更新する(ビルドキャッシュを使う) |
 | PLAN-makefile-upgrade | MOD-makefile | tool | sync | なし | なし | なし | FR-env-01, FR-env-09 | 全イメージを --no-cache で完全再ビルドする |
 | PLAN-makefile-volumes | MOD-makefile | tool | sync | PLAN-makefile-setup | なし | なし | FR-env-01, FR-env-03 | 認証情報などの共有ボリュームを作成する |
-| PLAN-orchestrator-main | MOD-orchestrator | tool | sync | なし | 同一モジュール内部で完結(03 側では内部の機能 `MODULE-orchestrator-{config,controller,plan,session,slack,state,term,worktree}` へ展開される。粒度差であって連携の欠落ではない) | CTR-cli-orchestrator | FR-orch-01, FR-orch-02, FR-orch-05 | フラグを解釈し実行環境を組み立てて制御ループを起動する |
+| PLAN-orchestrator-main | MOD-orchestrator | tool | sync | なし | 同一モジュール内部で完結(03 側では複数の機能へ展開される。粒度差であって連携の欠落ではない) | CTR-cli-orchestrator | FR-orch-01, FR-orch-02, FR-orch-05 | フラグを解釈し実行環境を組み立てて制御ループを起動する |
 | PLAN-portsync-dood | MOD-portsync | tool | sync | PLAN-entrypoint-claude | なし | なし | FR-env-06, FR-env-07 | DooD 環境で公開ポートを検出し socat で 127.0.0.1 へ転送する |
 | PLAN-sample-project-scaffold | MOD-sample-project | tool | sync | なし | なし | なし | FR-orch-09 | サンプルプロジェクトと seed plan を作業領域へ配置する |
 | PLAN-vm-mode-cli | MOD-vm-mode | tool | sync | なし | なし | なし | FR-env-08 | VM の起動状態・health・ポート同期を操作するヘルパー |
@@ -89,7 +89,7 @@ reason: '`D0-env-05` 項2 の拡張で `stop` の設計上の期待が変わる�
 | PLAN-vm-mode-portsync | MOD-vm-mode | tool | sync | なし | なし | なし | FR-env-06, FR-env-08 | ゲストの公開ポートを QMP hostfwd_add で 127.0.0.1 へ転送する |
 | PLAN-vm-mode-up | MOD-vm-mode | tool | sync | PLAN-entrypoint-claude | なし | なし | FR-env-08 | QEMU/KVM で VM を起動し provision して常駐ヘルパーを立ち上げる |
 
-<!-- 64 行 / 全83機能中。除外: MOD-orchestrator の内部関数18本と MODULE-sample-project-mathkit -->
+<!-- 除外: MOD-orchestrator の内部関数と MODULE-sample-project-mathkit(機能の総数は 03 の機能表が持つ) -->
 
 ### PLAN-cli-stop
 
@@ -116,8 +116,7 @@ reason: '`D0-env-05` 項2 の拡張で `stop` の設計上の期待が変わる�
   - **セッション由来の資源の削除は遊休判定より前**でなければならない。順序が逆だと、自分の
     セッションが作ったコンテナが `claude-dev-net` に繋がっている場合に「稼働中のコンテナがある」と
     数え、**自分が作ったものを理由に docker-proxy を残し続ける**。
-  - **コンテナを消してからネットワークを消す**(使用中のネットワークは削除できない)。
-  - 冪等: 2回目の `stop` は「対象が無い」経路に入り、終了コード 0 で終わる。
+  - 冪等: 2回目の `stop` も失敗にしない(`FR-env-01` 受入基準8)。
   - 並行: 同じ対象への `stop` / `start` はプロジェクト単位のロックで直列化する。
     別プロジェクトの `stop` とは、遊休判定〜docker-proxy 削除の区間だけが共有資源単位のロックで
     直列化する。

@@ -29,7 +29,9 @@
 | [021-a-quality-attribute-can-be-declined-not-only-measured](021-a-quality-attribute-can-be-declined-not-only-measured.md) | 2026-08-05 | 「測れない非機能要件」への選択肢は《測れる形に書き直す》《測らないと明記する》の2つではなく、《その品質特性自体を追わないと決めて要件を削除する》という3つ目がある。AI は3つ目を選択肢に並べていなかった |
 | [022-lens-substitution-can-be-approved-standing-not-per-run](022-lens-substitution-can-be-approved-standing-not-per-run.md) | 2026-08-05 | 独立レンズの代替可否は「1実行ごとの承認」だけでなく「常設の承認」でも与えられる。人間が先に判断を与えれば、実行のたびに決定シートで問い直す必要はない |
 | [023-a-format-without-operating-rules-pushes-them-onto-every-project](023-a-format-without-operating-rules-pushes-them-onto-every-project.md) | 2026-08-06 | 規範が「書式」だけを定めて「運用規則」を定めないと、その空白は決定シートへ落ち、全プロジェクトが同じ問いを個別に埋め直すことになる |
+| [024-cleanup-scope-is-defined-by-ownership-not-by-harm](024-cleanup-scope-is-defined-by-ownership-not-by-harm.md) | 2026-08-07 | 片付けの範囲は「残ると害があるか」で資源ごとに切るのではなく「誰が作ったか」で一息に決める。害の有無で切ると、説明できない例外が資源の種類だけ増える |
+| [025-unrunnable-verification-is-accepted-not-outstanding](025-unrunnable-verification-is-accepted-not-outstanding.md) | 2026-08-07 | 環境が無くて実行できない検証は「やり残し(issue)」ではなく「受容(pending)」である。AI は環境を作る段取りを推したが、人間は環境の制約を所与として受け入れた |
 
-件数: 23
+件数: 25
 
 <!-- END GENERATED: build-index.py -->
