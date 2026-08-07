@@ -12,8 +12,8 @@ source:
 summary: 機能要件 FR-env-01〜12 と FR-orch-01〜09。受け入れ基準は EARS で書く
 keywords: [機能要件, EARS, FR]
 verified:
-  at: 2026-08-06
-  version: 1.8.1
+  at: 2026-08-07
+  version: 1.9.0
   against:
     - doc: docs/00-requests/request.md
       version: 1.3.0

@@ -1,7 +1,7 @@
 ---
 id: cli-logout
 scope: MOD-cli-logout
-version: 1.3.0
+version: 1.4.0
 updated: 2026-08-07
 source:
   - docs/01-requirements/functional.md
@@ -9,13 +9,13 @@ source:
 summary: MOD-cli-logout(認証情報の破棄)の受入基準⇄テスト対応
 keywords: [テスト]
 verified:
-  at: 2026-08-06
-  version: 1.2.1
+  at: 2026-08-07
+  version: 1.4.0
   against:
     - doc: docs/01-requirements/functional.md
-      version: 1.8.1
+      version: 1.9.0
     - doc: docs/02-design/system.md
-      version: 2.4.0
+      version: 2.5.0
 ---
 # MOD-cli-logout のテスト対応
 
@@ -75,3 +75,4 @@ verified:
 | 12 | FR-env-01 — 受入基準 9(境界値。**`reset` 側**。docker-proxy と `claude-dev-net`) | 自動テストランナーを設けない方針(`DSN-test-01` / `SR-32`)。ラベルを持たない稼働中コンテナを用意する必要があるため実機確認で代替する | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |
 | 13 | FR-env-03 — 受入基準 23(異常系。中断時の終了コード 130) | 自動テストランナーを設けない方針(`DSN-test-01` / `SR-32`)。削除の途中でシグナルを送る必要があるため実機確認で代替する | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |
 | 14 | MODULE-cli-logout — 機能全体 | シェル実装のため自動テストランナーが無く実機確認で代替する | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |
+| 15 | CTR-cli-container(破壊的操作の対象の識別) — 契約の結合テスト | 自動テストランナーを設けない方針(`DSN-test-01` / `SR-32`)。管理ラベルの発行側(`MOD-cli-start`)と組み合わせた実機確認(E2E-01 手順8-5・8-8・8-9・8-10・8-13)で代替する | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |

@@ -8,11 +8,11 @@ kind: other
 summary: ホスト CLI(orchestrate)がオーケストレーターを起動・合流させるときの取り決め
 keywords: [契約, CTR]
 verified:
-  at: 2026-08-06
+  at: 2026-08-07
   version: 1.1.0
   against:
     - doc: docs/02-design/system.md
-      version: 2.4.0
+      version: 2.5.0
 ---
 
 # CTR-cli-orchestrator ホスト CLI(orchestrate) → orchestrator

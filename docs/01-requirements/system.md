@@ -1,7 +1,7 @@
 ---
 id: system
-version: 1.0.1
-updated: 2026-08-06
+version: 1.1.0
+updated: 2026-08-07
 source:
   - docs/00-requests/request.md
   - docs/00-requests/decisions/orch.md
@@ -9,8 +9,8 @@ source:
 summary: システム・環境の要件 SR-01〜SR-34(必須制約・実行環境・依存・運用の前提)
 keywords: [システム要件, SR, 技術前提]
 verified:
-  at: 2026-08-06
-  version: 1.0.1
+  at: 2026-08-07
+  version: 1.1.0
   against:
     - doc: docs/00-requests/request.md
       version: 1.3.0
@@ -29,7 +29,7 @@ verified:
 | SR-01 | ホスト側に Docker Engine が存在し、利用者がそれを操作できること | 本システムは隔離コンテナの提供そのものであり、Docker が無ければ成立しない |
 | SR-02 | コンテナ内資産(イメージ・entrypoint・firewall・docker-proxy)は OS 非依存であること。OS 依存はホスト CLI に閉じること | 同一イメージを Linux と macOS の双方へ配布するため(`NFR-ops-02`) |
 | SR-03 | 認証情報(API キー・トークン・OAuth 資格情報)をイメージへ焼き込まないこと | 配布イメージは全員が pull するため、焼き込みは資格情報の共有と同義になる(`NFR-sec-01`) |
-| SR-04 | 隔離境界はコンテナ/ホスト間にのみ置き、コンテナ側の confinement(seccomp / AppArmor)を緩めないこと | 本システムの安全性はこの1本の境界に依存している(`D0-sec-06`) |
+| SR-04 | 隔離境界はコンテナ/ホスト間にのみ置き、コンテナ側の confinement(seccomp / AppArmor)を緩めないこと | 用語集「安全」が定めるもの(ホストのあらゆる情報を破壊しないこと・鍵情報が直接漏洩しないこと)は、この1本の境界に依存している(`D0-sec-06`) |
 | SR-05 | 利用は信頼できる社内開発用途に限ること | 隔離の強度をこの前提のもとで決めている(`request.md`「やらないこと」2) |
 
 ## 実行環境の要件

@@ -8,11 +8,11 @@ source:
 summary: 開発環境の構成・セットアップ手順・lint/テスト/ドキュメント整合検査の厳密なコマンド文字列・Codex実行設定
 keywords: [開発環境, コマンド, lint, テスト, Codex]
 verified:
-  at: 2026-08-06
+  at: 2026-08-07
   version: 1.1.0
   against:
     - doc: docs/01-requirements/system.md
-      version: 1.0.1
+      version: 1.1.0
     - doc: docs/02-design/architecture.md
       version: 1.3.0
 ---

@@ -1,7 +1,7 @@
 ---
 id: cli-stop
 scope: MOD-cli-stop
-version: 1.3.0
+version: 1.4.0
 updated: 2026-08-07
 source:
   - docs/01-requirements/functional.md
@@ -9,13 +9,13 @@ source:
 summary: MOD-cli-stop(コンテナの停止)の受入基準⇄テスト対応
 keywords: [テスト]
 verified:
-  at: 2026-08-06
-  version: 1.2.1
+  at: 2026-08-07
+  version: 1.4.0
   against:
     - doc: docs/01-requirements/functional.md
-      version: 1.8.1
+      version: 1.9.0
     - doc: docs/02-design/system.md
-      version: 2.4.0
+      version: 2.5.0
 ---
 # MOD-cli-stop のテスト対応
 
@@ -60,3 +60,4 @@ verified:
 | 8 | FR-env-01 — 受入基準 20(境界値) | 自動テストランナーを設けない方針(`DSN-test-01` / `SR-32`)。旧い名前の compose 資源を人為的に作る必要があるため実機確認で代替する | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |
 | 9 | FR-env-01 — 受入基準 21(境界値) | 自動テストランナーを設けない方針(`DSN-test-01` / `SR-32`)。ラベルを持たないコンテナと compose 資源を用意する必要があるため実機確認で代替する | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |
 | 10 | MODULE-cli-stop — 機能全体 | シェル実装のため自動テストランナーが無く実機確認で代替する | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |
+| 11 | CTR-cli-container(破壊的操作の対象の識別) — 契約の結合テスト | 自動テストランナーを設けない方針(`DSN-test-01` / `SR-32`)。管理ラベルの発行側(`MOD-cli-start`)と組み合わせた実機確認(E2E-01 手順8-1・8-2・8-5・8-6・8-7・8-11)で代替する | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |

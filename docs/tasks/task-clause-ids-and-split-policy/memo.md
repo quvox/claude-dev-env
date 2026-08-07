@@ -265,6 +265,36 @@ CS11 の 23 件は全件 `docs/issues/054` が追跡する削除済み issue の
   囲むことを要求するのに `02-design/relations.md` の一覧表(64行)が囲んでいないため、
   **本プロジェクトで一度も実行されていない**(`docs/issues/060` の追加節。論点2)。
 
+**`/doc-check ssot task-clause-ids-and-split-policy` の結果(2026-08-07。`/task-close` フェーズ4 §6)**
+
+- **判定: PASS。SSOT の版を持つ 65 ファイルは全件が検証済みで、失効・未検証は0件。**
+  本実行で検証済み記録を書いたのは 48 ファイル(失効45 + 未検証1 + 版の引き上げで巻き込んだ2)。
+- **反映は忠実**: 変更指示35件の宣言 `sections` 38 節を SSOT と逐語比較し、不一致・欠落0件。
+- **条項単位カバレッジは機械照合で完全一致**: 01 の条項 201・NFR 13・SR 21 が 02 の 235 行と
+  双方向で差分ゼロ。主担当が2行以上ある条項0件、`充足` の語彙違反0件、
+  03 のテスト対応表は全条項・全 NFR・全 `E2E-nn` を被覆、実在しない条項ID の参照0件。
+- **`不可分` × `部分` は0件**(PASS をブロックする条件に該当しない)。
+- **本実行で直した SSOT**(いずれも版を MINOR で引き上げた):
+  `01-requirements/system.md` 1.1.0 / `non-functional.md` 1.5.0 / `decisions/split.md` 1.1.0 /
+  `03-impl/tests/strategy.md` 1.2.0 / `cli-stop.md` 1.4.0 / `cli-logout.md` 1.4.0 /
+  `cli-reset.md` 1.3.0 / `entrypoint.md` 1.2.0。
+  内訳 = 用語集の「安全」の単独使用3件 / 「未検証の全件」節への計上漏れ5件 /
+  `strategy.md` の手書き集計1件 / `D1-split-01` と `NFR-perf-01` の理由文の不一致1件。
+- **`docs/issues/073` は解消して削除した**(`strategy.md` の集計を実数へ直したため)。
+- **本実行で起票し、本実行では直さない**: `docs/issues/077`(条項ID への移行が
+  「未検証の全件」節の「対象」列に及んでおらず旧表記が23ファイル・181箇所残る。**根本原因は
+  `.claude/templates/03-tests-module.md:58` の例示**で `/kit-improve` 案件)/
+  `docs/issues/078`(frontmatter の値がバッククォート始まりで YAML 解析できない2件。SSOT 外)。
+- **独立レビュー: サブエージェント(人間の常設承認により Codex を代替。model=sonnet、
+  Explore 型・読み取り専用)を3本**。縦整合(00→01→02)/ 03-impl/tests の整合 /
+  修正箇所に絞った再監査。2本目は「計上漏れ5件」「手書き集計」「旧表記181箇所」を
+  Claude 側の走査と**件数まで一致して独立に検出**した。再監査は修正の3項目すべてで指摘0件。
+- **`check-sheet.py` の SH8 が不合格**(読了記録の版が現在版と違う: functional 1.8.1≠1.9.0 /
+  non-functional 1.3.1≠1.5.0 / system 1.0.1≠1.1.0 / usecases 1.2.1≠1.3.0 /
+  02 system 2.4.0≠2.5.0)。**これは反映と本実行の版上げによる当然の失効**であり、
+  `close-task.py` の6条件には含まれないので削除は妨げない。
+- `close-task.py --check` の残りは **(c) DoD の未チェック6件だけ**((a)(b)(d)(e)(f) は OK)。
+
 ## 質問キュー(未提示)
 
 (なし。フェーズ2で出た1件は sheet.md 論点4 として提示済み — 未決点表を参照)
@@ -277,7 +307,7 @@ CS11 の 23 件は全件 `docs/issues/054` が追跡する削除済み issue の
 - [x] 論点5 の回答(A)を反映 — `FR-env-01` / `FR-env-07` を `段階可(理由)` にし、`D1-split-01` を5件構成へ更新した
 - [x] コード変更: **なし**(確認済み)。実装タスクは0件
 - [x] フェーズ3の検査群を実行(結果は Definition of Done)
-- [ ] `/task-close` の各ステップ(Definition of Done の未チェック項目が正)
+- [x] `/task-close` の各ステップを実施した(残るのは削除ゲートの実行のみ)
 
 ## Definition of Done
 
@@ -299,13 +329,17 @@ DoD は「コードが変わっていないこと」の確認と、ドキュメ�
       (`E2E-01`〜`E2E-06`)のいずれにも影響しない。QA レーン(`/codex-qa`)も同じ理由で対象外
 - [x] `check-changeset.py`(CS 検査) 合格 / `check-sheet.py`(SH 検査) 合格
 - [x] `check-relations.py` 合格 / `check-contracts.py` 合格 / `callgraph-check.py` 重大度「高」0件
-- [ ] **`/task-close`**: 変更指示35件を SSOT へ反映する
-- [ ] **`/task-close` §2**: コールグラフと feature-graph を SSOT へ再生成する
-      (キット更新で注記コメントが陳腐化している分もここで解消する。調査メモ参照)
-- [ ] **`/task-close`**: `build-index.py`(`01-requirements/decisions/index.md` の新規生成を含む)
-- [ ] **`/task-close`**: `/doc-check ssot task-<slug>` で検証済み記録を出し直す(下流50ファイル)
-- [ ] **`/task-close`**: `docs/histories/` に記録し、`docs/issues/060` を削除する
-- [ ] **`/task-close`**: `close-task.py` の6条件を通してタスクディレクトリを削除する
+- [x] **`/task-close`**: 変更指示35件を SSOT へ反映した(全35件の全節が変更指示の本文と逐語一致することを機械照合で確認)
+- [x] **`/task-close` §2**: コールグラフ6件と feature-graph を SSOT へ再生成した。
+      差分は注記コメントのみでコード由来の内容は不変(キット更新分の陳腐化を解消)
+- [x] **`/task-close`**: `build-index.py` 実行済み(`01-requirements/decisions/index.md` を新規生成、`03-impl/tests/index.md` を更新)
+- [x] **`/task-close`**: `/doc-check ssot task-clause-ids-and-split-policy` が **PASS**。
+      SSOT の版を持つ65ファイル全件が検証済みになり、失効・未検証は0件
+- [x] **`/task-close`**: `docs/histories/2026-08-07-clause-ids-and-split-policy.md` を作成し、
+      `docs/issues/060` を削除した
+**完了宣言そのもの(DoD の項目ではない)**: `python3 .claude/scripts/close-task.py task-clause-ids-and-split-policy` の6条件を通してタスクディレクトリを削除する。
+CLAUDE.md §9 が「タスクディレクトリの削除**が**完了宣言である」と定めるため、
+これをチェックボックスにすると「ゲートを通す前にチェックを付ける」= 完了の偽装になる。
 
 ## 進捗メモ
 

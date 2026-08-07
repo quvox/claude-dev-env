@@ -1,7 +1,7 @@
 ---
 id: entrypoint
 scope: MOD-entrypoint
-version: 1.1.0
+version: 1.2.0
 updated: 2026-08-07
 source:
   - docs/01-requirements/functional.md
@@ -9,13 +9,13 @@ source:
 summary: MOD-entrypoint(コンテナ起動シーケンス)の受入基準⇄テスト対応
 keywords: [テスト]
 verified:
-  at: 2026-08-06
-  version: 1.0.1
+  at: 2026-08-07
+  version: 1.2.0
   against:
     - doc: docs/01-requirements/functional.md
-      version: 1.8.1
+      version: 1.9.0
     - doc: docs/02-design/system.md
-      version: 2.4.0
+      version: 2.5.0
 ---
 
 # MOD-entrypoint のテスト対応
@@ -84,3 +84,5 @@ verified:
 | 19 | FR-env-12 — 受入基準 11(異常系) | 自動テストランナーを設けない方針(`DSN-test-01` / `SR-32`)。実機確認で代替する | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |
 | 20 | NFR-avail-03 — 補助機能の失敗を主機能へ波及させない | 自動テストランナーを設けない方針(`DSN-test-01` / `SR-32`)。実機確認で代替する | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |
 | 21 | MODULE-entrypoint-claude — 機能全体 | シェル実装のため自動テストランナーが無い。codex 経路は `scripts/e2e6-codex.sh` の実機検証で確認する | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |
+| 22 | CTR-cli-container — 契約の結合テスト | 自動テストランナーを設けない方針(`DSN-test-01` / `SR-32`)。`MOD-cli-start` と組み合わせた実機確認(E2E-01 手順3)で代替する | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |
+| 23 | CTR-entrypoint-firewall — 契約の結合テスト | 自動テストランナーを設けない方針(`DSN-test-01` / `SR-32`)。`MOD-firewall` と組み合わせた実機確認(E2E-01 手順4)で代替する | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |

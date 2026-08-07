@@ -8,11 +8,11 @@ kind: other
 summary: entrypoint がファイアウォール適用を1度だけ呼び、成否に関わらず起動を続ける取り決め
 keywords: [契約, CTR]
 verified:
-  at: 2026-08-06
+  at: 2026-08-07
   version: 1.0.1
   against:
     - doc: docs/02-design/system.md
-      version: 2.4.0
+      version: 2.5.0
 ---
 
 <!-- 2026-08-04 /doc-check ssot task-impl-depth(新しい実行): **合格証を再発行した(1.0.0)。**

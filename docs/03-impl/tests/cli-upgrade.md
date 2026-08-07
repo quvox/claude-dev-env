@@ -9,13 +9,13 @@ source:
 summary: MOD-cli-upgrade(CLI とイメージの更新)の受入基準⇄テスト対応
 keywords: [テスト]
 verified:
-  at: 2026-08-06
-  version: 1.0.1
+  at: 2026-08-07
+  version: 1.1.0
   against:
     - doc: docs/01-requirements/functional.md
-      version: 1.8.1
+      version: 1.9.0
     - doc: docs/02-design/system.md
-      version: 2.4.0
+      version: 2.5.0
 ---
 
 # MOD-cli-upgrade のテスト対応
