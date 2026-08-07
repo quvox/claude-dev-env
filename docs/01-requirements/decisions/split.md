@@ -1,6 +1,6 @@
 ---
 id: split
-version: 1.1.0
+version: 1.1.1
 updated: 2026-08-07
 source:
   - docs/00-requests/request.md
@@ -66,7 +66,8 @@ verified:
   (NFR-perf-01〜03 / NFR-avail-01〜03 / NFR-sec-01・03 / NFR-ops-02〜04 / NFR-scale-01・02)。
   うち段階可は `FR-env-01`, `FR-env-07`, `NFR-perf-01`, `NFR-perf-02`, `NFR-scale-01` の5件 /
   `docs/pendings.md` P-005(`FR-env-01` / `FR-env-07` を段階可とする直接の根拠)/
-  `docs/issues/060`(起点)
+  `docs/histories/2026-08-07-clause-ids-and-split-policy.md`(起点。元は issue 060 で、
+  本決定の反映と同時に解消・削除したため、経緯は histories が持つ)
 
 ## D1-split-02 段階可を増やす・不可分へ戻す判断は委任しない
 

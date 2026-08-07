@@ -6,8 +6,8 @@
 
 | タスク | フェーズ | 起点層 | 更新 | 目的 |
 |---|---|---|---|---|
-| [task-clause-ids-and-split-policy](task-clause-ids-and-split-policy/memo.md) | 反映 | 01 | 2026-08-07 | 01 の受入基準に条項ID を振り、全要件に分割可否を入れ、02 の要件カバレッジ表を条項単位 + 充足列へ作り替える |
+| (なし) | - | - | - | - |
 
-件数: 1
+件数: 0
 
 <!-- END GENERATED: build-index.py -->
