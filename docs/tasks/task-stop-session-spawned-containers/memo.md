@@ -182,8 +182,22 @@ compose 資源に限っており、その集合を広げる判断だから。あ
 
 ## Definition of Done
 
+- [x] lint(`go vet ./...`)がグリーン
+- [x] 単体テスト(`cd docker-proxy && go test ./...`)がグリーン(39 本)
+- [x] 受入基準テスト(`FR-env-07-11` / `-12`)が実装済みでグリーン
+- [x] シェル2本の構文検査(`bash -n`)が通る
+- [x] コールグラフを再生成し `callgraph-check.py --to-be` の重大度「高」が0件
+- [x] `check-relations.py` / `check-contracts.py` / `check-changeset.py` が合格
+- [x] `03-impl/tests/` の変更指示を実装結果に合わせて更新した
+- [x] E2E-03 手順5・6(所有者ラベルの付与)を実機で確認した
+- [x] E2E-01 手順8-14 の 3・4・5・6(`stop` の片付け)を実機で確認した
+- [ ] **E2E-01 手順8-14 の 1・2・7 / 手順8-15 / 手順10・12(`reset` 側)と macOS 版**
+      — **専有できる環境が要る**。下の「E2E の未実施分」と `sheet.md` 論点6
+- [ ] SSOT 反映 / `/doc-check` PASS / histories — **`/task-close` で実施**
+
 `git rev-parse HEAD` = **8435b0b**(検証時点。以降のコミットは無し)。
 コマンドは `docs/02-design/environments.md`「lint・テストコマンド」の厳密な文字列を使った。
+各項目の実際の最終出力行は次の表が持つ。
 
 | # | 項目 | コマンド | 最終出力行 | 判定 |
 |---|---|---|---|---|
