@@ -4,9 +4,9 @@ type: modify
 severity: 低
 found: 2026-08-07
 found_in: /doc-check ssot task-clause-ids-and-split-policy(検査 C10 の frontmatter 妥当性を PyYAML で全件解析して検出)
-related: docs/feedbacks/018-mv-atomicity-is-about-the-path-not-the-contents.md, docs/issues/076-bug-check-changeset-treats-staged-callgraphs-as-change-instructions.md, docs/issues/080-modify-destructive-commands-appear-in-no-use-case.md, docs/issues/081-bug-check-changeset-aborts-on-a-non-utf8-file-in-the-task-directory.md, docs/issues/083-modify-requirement-clauses-name-lower-layer-ids-and-file-paths.md
+related: docs/feedbacks/018-mv-atomicity-is-about-the-path-not-the-contents.md, docs/issues/076-bug-check-changeset-treats-staged-callgraphs-as-change-instructions.md, docs/issues/080-modify-destructive-commands-appear-in-no-use-case.md, docs/issues/081-bug-check-changeset-aborts-on-a-non-utf8-file-in-the-task-directory.md
 pattern: frontmatter-scalar-starts-with-backtick
-pattern_survey: docs/ 配下の全 Markdown(仕様ドキュメント4層・issues・feedbacks・histories・pendings)の frontmatter を PyYAML の safe_load で解析。2026-08-07 の再走査で失敗は **5件**(`feedbacks/018` の summary / `issues/076`・`080`・`081` の pattern_survey がバッククォート始まり、`issues/083` の pattern_survey は引用符なしのスカラーにコロンを含む)。**仕様ドキュメント4層には1件も無い**
+pattern_survey: docs/ 配下の全 Markdown(仕様ドキュメント4層・issues・feedbacks・histories・pendings)の frontmatter を PyYAML の safe_load で解析。2026-08-08 の再走査で失敗は **4件**(`feedbacks/018` の summary / `issues/076`・`080`・`081` の pattern_survey がバッククォート始まり)。**仕様ドキュメント4層には1件も無い**(5件目だった `issues/083` は 2026-08-08 の task-layer-placement が解消して削除された)
 summary: frontmatter の値が引用符なしでバッククォート始まり・コロン混じりになっているため YAML として解析できないファイルが5件ある(いずれも SSOT 外)
 ---
 

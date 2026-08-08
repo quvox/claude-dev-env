@@ -7,6 +7,7 @@ sections:
   - "## ドキュメント整合検査コマンド"
 deletes: []
 reason: '2つの受け皿を作る。どちらも**同じ下降で上位層から落とすものの移し先**であり、先に作らないと情報が消える(`.claude/directions/layer-fit.md` §2「移送で最も多い誤りは片側だけで終わること」)。(a) 決定シート 概念3 の裁定に従い、`D0-env-02` から落とす**クライアント側の接続手順(SSH の ControlMaster 経由でトンネルを張る)**の受け皿を「コンテナ・実行環境」に作る。`docs/issues/086` が「移し先が無い2件」の1件として挙げていたものである。**00 の決定(必要なときだけ最小限を公開する)は変えず、実現手段だけをここへ移す**。(b) `docs/issues/085` の #6 の手当 — `02-design/relations.md` が `relations-query.py --health` というツール名と引数を本文に持っていたが、**実行するコマンドの正はこの文書である**のに「ドキュメント整合検査コマンド」の表にその行が無かった。表へ1行足し、relations.md 側は指し先だけにする。**表の他の行と実行順の意味は変えない**(構造の健全性の検査は既存の 1〜7 とは独立に走らせてよい補助検査なので、末尾に置く)。(c) 同じ `docs/issues/085` が **#6 と同じ形**と名指したもう1件 — `03-impl/tests/strategy.md` が持つカバレッジ計測のコマンド(`go test -cover ./...`)が**この文書の表に無い** — を、同じ下降で足す(`.claude/directions/02-design.md`「The command strings written here are authoritative」)'
+reflected: 2026-08-08
 ---
 
 ## lint・テストコマンド

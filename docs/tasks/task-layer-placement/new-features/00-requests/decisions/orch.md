@@ -5,6 +5,7 @@ sections:
   - "## D0-orch-18 「人間を呼ぶ判断」と「自律継続してよい判断」の境界"
 deletes: []
 reason: '`docs/issues/086` の最重要5件のうち1件(#3)を落とす。`D0-orch-18` の内容欄が実装のシンボル名(`orchestrator/trigger.go::Evaluate`)を名指しており、関数名を変えただけで 00 が嘘になる。**境界の定義そのものは同じ項の下表が持っている**ので、シンボル名を落としても定義は失われない(移し先は `docs/03-impl/features.md:95` の `MODULE-orchestrator-trigger` 行で、同じ関数を実装として既に持つ)。設定キー(`stuck_limit` / `review_format_error_limit`)は利用者が設定ファイルで変更できる値であり(`FR-orch-03` 受入基準3)、外から見える名前なので残す。**決定の意味と発火条件は1つも変えない**'
+reflected: 2026-08-08
 ---
 
 ## D0-orch-18 「人間を呼ぶ判断」と「自律継続してよい判断」の境界

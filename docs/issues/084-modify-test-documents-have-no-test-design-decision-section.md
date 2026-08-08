@@ -51,6 +51,11 @@ $ python3 .claude/scripts/check-changeset.py --ssot docs
 `docker-proxy.md` / `e2e.md` / `strategy.md`)なので、そのタスクが `/task-close` で反映されると
 **残りは 27 件**になる。
 
+**2026-08-08 現在は 26 件**。`task-layer-placement` が `cli-logout.md` の節を新設して反映した
+(そのタスクは `FR-env-03-24` を新設するので CS19 の要求により1件だけ埋まった。残る 26 件は
+本 issue のままである)。実測は `python3 .claude/scripts/check-changeset.py --ssot docs` の
+`CS19 理由の網羅: 違反 26 件`。
+
 ## どう直すか(案)
 
 1. ファイルごとに、既存のテストの形から**実際に選ばれている判断**を書き起こす

@@ -5,6 +5,7 @@ sections:
   - "# 用語集"
 deletes: []
 reason: '`docs/issues/086` の最重要5件のうち2件(#4・#5)を落とす。(1)「ブロック対象ドメイン」の定義欄が既定値の在り処を実装のファイルと配列名(`scripts/init-firewall-claude.sh` の `BLACKLIST_DOMAINS`)で名指し、件数(16件・9件・3件・4件・2件)まで持っている。**用語集は語の意味を固定する文書であり、既定値の中身は 03 のもの**である(移し先は `docs/03-impl/relations/MODULE-firewall-init.md:36`・`:68`・`:82` で、配列名も 16 件という数も既に持つ)。**「集合の中身は仕様で固定しない」という定義そのものと、含む例・含まない例の外延は変えない**(件数だけを落とす。含む例のドメイン名は語の外延を決める役割があるので残す — `.claude/directions/00-requests.md` が含む例・含まない例を必須と定める)。英語表記の列は「識別子に使う語」を書く列なので `BLACKLIST_DOMAINS` はそのまま残す。(2)「資源逼迫」の定義欄が実現手段(監視デーモンがヘルスファイルへ書く / tmux とダッシュボードが表示する)と 03 の機能 ID(`MODULE-vm-mode-healthd`)を持つ。**閾値の定義(60% / 15 秒 / 12 回)は語の意味そのものなので残し**、検知したときに何が見えるかは `FR-env-08` 受入基準4 と `FR-orch-08` が既に持つのでそちらを指す。移し先は `docs/03-impl/relations/MODULE-vm-mode-healthd.md` と `docs/03-impl/relations/MODULE-orchestrator-dashboard.md:55`。(3) あわせて「運用状態」の定義欄から実装のファイル名(`plan.json` / `control.json` / `state.json`)を落とす — **語の意味は「`.orchestrator/` に置く、機械だけが読み書きする状態」であってファイル名ではない**。同じ名前を落とす `FR-orch-05` 受入基準7 と同じ下降で行う(移し先は `docs/03-impl/relations/MODULE-orchestrator-state.md` ほか。03 が実ファイル名を持つ)。**どの語の意味も変えない**'
+reflected: 2026-08-08
 ---
 
 # 用語集

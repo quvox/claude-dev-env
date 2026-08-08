@@ -1,7 +1,7 @@
 ---
 id: cli-orchestrator
-version: 1.1.0
-updated: 2026-08-04
+version: 1.2.0
+updated: 2026-08-08
 source:
   - docs/02-design/system.md
 kind: other
@@ -76,11 +76,13 @@ verified:
 **設定に含めないもの**:
 
 - **モデルと effort**。1箇所のポリシー表で工程別に決める(`FR-orch-07` / `NFR-ops-04`)。
-  互換のため `worker_model` キーは解析されるが、**選択には使われない**(実装側で DEPRECATED と明示)。
-- **レビュアのベンダー**。`reviewer_vendor` キーは解析されて保持されるが、
-  **製品コードから一度も参照されておらず、レビュアは常に Claude である**。異種ベンダーの
-  レビュアーを常用へ昇格する判断は取得済みで、実装は `docs/issues/007-future-heterogeneous-vendor-reviewer.md`、
-  設定が効かない事実は `docs/issues/012-modify-reviewer-vendor-setting-has-no-effect.md` が追跡する。
+  互換のため `worker_model` キーは解析されるが、**選択には使われない**。
+- **レビュアのベンダー**。`reviewer_vendor` キーは解析されて保持されるが、**選択には使われない**
+  (レビュアの選択はこの契約の範囲外である)。異種ベンダーのレビュアーを常用へ昇格する判断は
+  `D0-orch-17` が未決として持ち、実装の予定は
+  `docs/issues/007-future-heterogeneous-vendor-reviewer.md`、
+  設定が効かないという実装側の事実は
+  `docs/issues/012-modify-reviewer-vendor-setting-has-no-effect.md` が追跡する。
 
 ## エラーケース
 
@@ -102,12 +104,12 @@ verified:
 生存判定をプロセスの存在で行うのはこの契約の要点である(理由は `architecture.md` の `DSN-orch-02`)。
 セッション名を呼び出し側に推測させないため、セッション名は orchestrator 側から提示できるようにする。
 
-**既知の未適合(設計意図ではなく実装の遅れ)**: macOS 版(`claude-dev-mac`)は生存判定を持たず、
-実行中の run へ再接続したい場合も新しいウィンドウでコントローラがもう1つ起動しうる。したがって
-上表の「生存判定」「分岐」および `FR-env-10`(OS によらず同じ観測可能な結果)は **macOS では
-現状満たされていない**。この契約は Linux 実装を正とし、macOS を追随させる方針を維持する。
-追跡は `docs/issues/003-future-macos-orchestrator-scope.md`。実装側の事実は
-`03-impl/contracts/cli-orchestrator.md`「設計との差異」が持つ。
+**既知の未適合(設計意図ではなく実装の遅れ)**: macOS 版(`claude-dev-mac`)はこの契約の
+「生存判定」「分岐」を満たしておらず、したがって `FR-env-10`(OS によらず同じ観測可能な結果)も
+**macOS では現状満たされていない**。**この契約は Linux 実装を正とし、macOS を追随させる方針を
+維持する。** 追跡は `docs/issues/003-future-macos-orchestrator-scope.md`。
+**未適合の中身(何がどう違うか)は `03-impl/contracts/cli-orchestrator.md`「設計との差異」が持つ**
+(実装側の事実を 02 が写すと、実装が追いついたときに 02 だけが古いまま残る)。
 
 ## 順序性・冪等性・並行性の背景
 

@@ -6,6 +6,7 @@ sections:
   - "## D0-auth-03 認証はコピーと定期書き戻しで共有する(symlink 不採用)"
 deletes: []
 reason: '`docs/issues/086` の最重要5件のうち2件(#1・#2)を落とす。(1) `D0-auth-03` の内容欄が実装のファイルと行番号(`claude-dev:749`〜`:766` / `scripts/entrypoint-claude.sh:199`・`:212`)を名指しており、リファクタリング1回で 00 が嘘になる。落とす先は既に事実を持っている `docs/03-impl/contracts/cli-container.md:52` と `docs/03-impl/relations/MODULE-entrypoint-claude.md:55-56` である。(2) `D0-auth-02` のガードレールが `D0-auth-03` の方式(コピー先のパスと 30 秒周期)を同じファイル内へ書き写しており、所有者が2つになっている(`.claude/directions/layer-fit.md` §0 の「同じことが2つの層に在る」と同じ失敗が同一層内で起きている形)。ポインタだけを残す。**決定の意味は1つも変えない**: 置き場所(プロジェクトディレクトリ配下)・symlink の形・残るリスク・`NFR-sec-01` への関わりはすべて残す。落としたのは「コードのどこにあるか」だけである'
+reflected: 2026-08-08
 ---
 
 ## D0-auth-02 認証の受け渡し実装の細部

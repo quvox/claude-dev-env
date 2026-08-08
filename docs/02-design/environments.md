@@ -1,7 +1,7 @@
 ---
 id: environments
-version: 1.1.0
-updated: 2026-08-06
+version: 1.2.0
+updated: 2026-08-08
 source:
   - docs/01-requirements/system.md
   - docs/02-design/architecture.md
@@ -55,6 +55,7 @@ verified:
 | 単体テスト(docker-proxy) | `cd docker-proxy && go test ./...` | プロキシの検査ロジック |
 | 単体テスト(orchestrator) | `cd orchestrator && go test -mod=vendor ./...` | 制御ループ・状態・レビュー・プロンプト生成など |
 | 単体テスト(自己検証題材) | `cd examples/orch-sample && pytest` | 題材プロジェクト |
+| カバレッジ計測(docker-proxy) | `cd docker-proxy && go test -cover ./...` | テスト戦略が参照する計測手段(`03-impl/tests/strategy.md`)。合否の条件は課さない |
 | 結合テスト | 上記2つの `go test` に含まれる | 契約ごとの責任モジュールは `system.md`「結合テスト対象」が正。シェル側の契約は実機確認 |
 | E2Eテスト | 自動テストランナーは無い。`make orch-sample` で題材を配置し `claude-dev orchestrate` で実走する | シェル系 E2E(E2E-01〜03)は実機確認。手順は `03-impl/tests/e2e.md` |
 | build | `make build` | `claude`(ブラウザ確認なし)+ `claude-vnc` + `docker-proxy` を一括ビルド |
@@ -73,6 +74,11 @@ verified:
 
 - 実行環境の前提は `01-requirements/system.md`(`SR-10`〜`SR-15`)が正。
 - ネットワーク名・ボリューム名・命名規則といった具体的な構成値は `03-impl/infra/local/` が正。
+- **クライアント PC からの到達手順**: `claude-dev forward` が割り当てるのは**サーバ(ホスト)側の
+  ポート**であり、クライアント PC からはそこへ **SSH トンネル**を張って到達する
+  (`claude-dev forward` はそのコマンドを表示する)。**SSH の ControlMaster による接続の多重化を
+  前提とする** — 転送のたびに認証をやり直さずに済ませるためである。**macOS ではポートが直結の
+  ため、この手順は不要である**(`FR-env-10` 受入基準2)。
 
 ## CI
 
@@ -100,13 +106,14 @@ verified:
 | 5 | 契約(02 ⇄ 03 ⇄ コード) | `python3 .claude/scripts/check-contracts.py` | 重大度「高」が 0 件(終了コード 0)。REST API を持たないため CT1〜CT3 は該当なし |
 | 6 | コードとドキュメントの片側漏れ | `python3 .claude/scripts/relations-coverage.py` | 片側にしか無いものが 0 件 |
 | 7 | 目次・進捗の再生成 | `python3 .claude/scripts/build-index.py --check` | 差分なし。差分がある場合は引数なしで再生成する |
+| 8 | 構造の健全性(**モジュール間・機能間の循環の有無**) | `python3 .claude/scripts/relations-query.py --health` | 循環が 0 件(終了コード 0)。**`02-design/relations.md` の `PLAN-cli-common-*` が「循環しない」と課している期待を、この検査が担保する** |
 
 - **前提**: `python3 .claude/scripts/setup-tools.py` を1回実行してキット専用の実行環境
   (`.claude/.venv`)を用意しておくこと。**プロジェクトの環境には入れない。**
 - 実行位置はリポジトリルート。いずれのスクリプトも書き込むのは生成物(`--check` を外したとき)だけで、
   仕様ドキュメント本文は書き換えない。
 - 作業中のタスクの変更指示を合成して検査したいときは `3` に `--to-be <task-slug>` を付ける
-  (未実装のシンボルをエラーにしない)。`4`〜`6` は合成ビューに対応しないため、SSOT へ反映した後に
+  (未実装のシンボルをエラーにしない)。`4`〜`6` と `8` は合成ビューに対応しないため、SSOT へ反映した後に
   実行する。
 
 ## コールグラフ抽出設定

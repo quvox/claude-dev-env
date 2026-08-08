@@ -7,6 +7,7 @@ sections:
   - "### PLAN-cli-common-*(共有基盤)"
 deletes: []
 reason: '`docs/issues/085` の #5・#6 を直す。(a) `PLAN-entrypoint-claude` の「順序性・冪等性・並行性」が **6段の実行順序**(UID/GID 追従 → 認証コピー → 既定設定の補完 → ファイアウォール → VNC/Chrome → tmux)を持っている。**同じ流れを `docs/03-impl/relations/MODULE-entrypoint-claude.md` が 21 手順で持っており、実装が段を1つ足すたびに 02 だけが古くなる**。02 が持つべきは**設計として固定する順序の制約**(ネットワークを使う後続処理より前にファイアウォールを適用する = `CTR-entrypoint-firewall`、認証は起動を止めない)であり、実際の並びは 03 の持ち物である(`.claude/directions/layer-fit.md` の再生成テスト: `/task-close` がコードから 03 を再生成したとき、この6段は 03 側に残り 02 側は根拠を失う)。(b) `PLAN-cli-common-*` が**キットのツール名と引数**(`relations-query.py --health`)を持っている。**実行するコマンドの正は `environments.md` である**(`.claude/directions/02-design.md`「The command strings written here are authoritative」)のに、**その表にこの行が無かった**。同じ下降で `environments.md` の「ドキュメント整合検査コマンド」表へ1行足し(`docs/issues/085` の「どう直すか」1 が指定する手当)、ここからはコマンド名を落として指し先だけにする。**設計上の期待(共有基盤どうしの呼び出しは一方向で循環しない)は変えない**。(c) **フェーズ2 の独立レビュー(`lens: subagent`)が重大度「高」で検出した3件目**: `PLAN-cli-reset` の「順序性・冪等性・並行性」が、2回目の `reset` で「残した資源が無いのに『完全な初期状態には戻っていません』と表示する」という**実装を動かせば消える観測事実**を持ち、自ら「`MODULE-cli-reset` の「既知の制限」がこの事実を持つ」と書いている。`docs/issues/085` の #10・#11(02 が 03 の事実を先取りしている)と同型なので同じ下降で閉じる。**02 に残すのは「2回目も失敗にしない(冪等)」という設計上の期待**で、そのときの実際の表示は 03 の「既知の制限」が持つ。**`/doc-check` の独立レビューが「表示の文言そのものが 02 に半分残っている」と検出したので、文言を落として `logging.md`「共有資源(docker-proxy / `claude-dev-net`)を残した理由」への指し先に替えた。あわせて本 reason が書いていた「20 手順」を現物どおり「21 手順」に直した**'
+reflected: 2026-08-08
 ---
 
 ### PLAN-cli-reset

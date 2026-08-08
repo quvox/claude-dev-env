@@ -1,8 +1,8 @@
 ---
 id: strategy
 scope: 全体
-version: 1.3.0
-updated: 2026-08-07
+version: 1.4.0
+updated: 2026-08-08
 source:
   - docs/02-design/system.md
   - docs/02-design/environments.md
@@ -111,8 +111,8 @@ verified:
 
 | 指標 | 目標 | 現状 | 測定コマンド |
 |---|---|---|---|
-| 行カバレッジ(Go) | **目標値なし**(01 の非機能要件にカバレッジの目標は無い) | 測定していない | `cd docker-proxy && go test -cover ./...` |
-| 受入基準のカバレッジ | すべての受入基準が対応表に行を持つこと(状態は問わない) | 機能要件の全 209 条項に行がある(非機能要件の 13 行を合わせて対応表は 224 行 = 条項 222 件 + `FR-env-01-9` が主担当行を3つ持つ重複2行。重複は `docs/issues/074` が追跡する) | `python3 .claude/scripts/build-index.py --check` で集計を再生成して確認する |
+| 行カバレッジ(Go) | **目標値なし**(01 の非機能要件にカバレッジの目標は無い) | 測定していない | `docs/02-design/environments.md`「lint・テストコマンド」の**カバレッジ計測(docker-proxy)**の行 |
+| 受入基準のカバレッジ | すべての受入基準が対応表に行を持つこと(状態は問わない) | 機能要件の全 210 条項に行がある(非機能要件の 13 行を合わせて対応表は 225 行 = 条項 223 件 + `FR-env-01-9` が主担当行を3つ持つ重複2行。重複は `docs/issues/074` が追跡する) | `python3 .claude/scripts/build-index.py --check` で集計を再生成して確認する |
 
 **カバレッジ率ではなく「受入基準に行があるか」を指標にする。** 自動テストを持てない領域が大きい
 (Bash と Makefile)ため、行カバレッジは実態を表さない。
