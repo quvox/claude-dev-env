@@ -1,6 +1,7 @@
 ---
 id: 091-modify-d0-env-08-item8-lacks-the-reason-for-reset-being-owner-agnostic
 type: modify
+origin_layer: 00
 severity: 低
 found: 2026-08-07
 found_in: /doc-check ssot task-stop-session-spawned-containers(独立レビュー(サブエージェント)の A0 / C 指摘)

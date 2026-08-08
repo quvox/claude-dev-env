@@ -1,6 +1,7 @@
 ---
 id: 085-modify-design-layer-carries-implementation-details
 type: modify
+origin_layer: 02
 severity: 中
 found: 2026-08-07
 found_in: 階層の点検(人間の指示、2026-08-07)。独立レビュー(サブエージェント)による 02-design 全文の精読

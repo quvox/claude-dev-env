@@ -1,6 +1,7 @@
 ---
 id: 089-bug-logout-lists-session-spawned-containers-as-unmanaged
 type: bug
+origin_layer: 03
 severity: 中
 found: 2026-08-07
 found_in: /doc-check ssot task-stop-session-spawned-containers(独立レビュー(サブエージェント)の A3 / C12 照合)

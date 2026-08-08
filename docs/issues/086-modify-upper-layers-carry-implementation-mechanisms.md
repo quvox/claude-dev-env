@@ -1,6 +1,7 @@
 ---
 id: 086-modify-upper-layers-carry-implementation-mechanisms
 type: modify
+origin_layer: 00
 severity: 中
 found: 2026-08-07
 found_in: 階層の点検(人間の指示、2026-08-07)。独立レビュー(サブエージェント)による 00-requests / 01-requirements の全文精読

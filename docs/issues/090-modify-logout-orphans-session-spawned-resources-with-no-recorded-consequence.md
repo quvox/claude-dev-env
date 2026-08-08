@@ -1,6 +1,7 @@
 ---
 id: 090-modify-logout-orphans-session-spawned-resources-with-no-recorded-consequence
 type: modify
+origin_layer: 00
 severity: 中
 found: 2026-08-07
 found_in: /doc-check ssot task-stop-session-spawned-containers(独立レビュー(サブエージェント)の A0 / D13 指摘)

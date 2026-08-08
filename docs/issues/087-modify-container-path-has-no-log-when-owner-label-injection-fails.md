@@ -1,6 +1,7 @@
 ---
 id: 087-modify-container-path-has-no-log-when-owner-label-injection-fails
 type: modify
+origin_layer: 03
 severity: 低
 found: 2026-08-07
 found_in: /doc-check ssot task-stop-session-spawned-containers(独立レビュー(サブエージェント)の 03 ⇄ コード照合)

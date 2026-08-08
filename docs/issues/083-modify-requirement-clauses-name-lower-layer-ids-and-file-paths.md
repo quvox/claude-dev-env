@@ -1,6 +1,7 @@
 ---
 id: 083-modify-requirement-clauses-name-lower-layer-ids-and-file-paths
 type: modify
+origin_layer: 01
 severity: 中
 found: 2026-08-07
 found_in: 規範更新後の再検査(check-changeset.py --ssot docs の CS18。新設された検査)

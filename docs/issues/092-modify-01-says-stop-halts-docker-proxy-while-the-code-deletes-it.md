@@ -1,6 +1,7 @@
 ---
 id: 092-modify-01-says-stop-halts-docker-proxy-while-the-code-deletes-it
 type: modify
+origin_layer: 00
 severity: 中
 found: 2026-08-07
 found_in: /doc-check ssot task-stop-session-spawned-containers(独立レビュー(サブエージェント)の再監査 検査項目1)
