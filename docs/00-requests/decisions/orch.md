@@ -7,8 +7,8 @@ source:
 summary: AIオーケストレーターの制御・介入・状態に関する決定事項(D0-orch-*)
 keywords: [オーケストレーター, 決定事項]
 verified:
-  at: 2026-08-07
-  version: 1.3.0
+  at: 2026-08-08
+  version: 1.4.0
   against:
     - doc: docs/00-requests/request.md
       version: 1.3.0

@@ -9,15 +9,15 @@ source:
 summary: 要件を部分的に満たしてよいかの判断(分割可否)の決定事項 D1-split-*
 keywords: [分割可否, 決定事項, D1]
 verified:
-  at: 2026-08-07
+  at: 2026-08-08
   version: 1.2.0
   against:
     - doc: docs/00-requests/request.md
       version: 1.3.0
     - doc: docs/01-requirements/functional.md
-      version: 1.11.0
+      version: 1.12.0
     - doc: docs/01-requirements/non-functional.md
-      version: 1.5.0
+      version: 1.6.0
 ---
 
 # 分割可否の決定事項

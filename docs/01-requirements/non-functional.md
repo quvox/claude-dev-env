@@ -8,13 +8,13 @@ source:
 summary: 非機能要件 NFR-perf / avail / sec / ops / scale の各分類と目標値・測定方法
 keywords: [非機能要件, NFR]
 verified:
-  at: 2026-08-07
-  version: 1.5.0
+  at: 2026-08-08
+  version: 1.6.0
   against:
     - doc: docs/00-requests/request.md
       version: 1.3.0
     - doc: docs/00-requests/decisions/orch.md
-      version: 1.3.0
+      version: 1.4.0
 ---
 
 <!-- 2026-08-04 /doc-check ssot task-impl-depth(新しい実行): 合格証を再発行した(1.2.0)。

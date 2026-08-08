@@ -7,8 +7,8 @@ source:
 summary: 利用者視点の受け入れ基準 AC-01〜AC-06。前提・操作・期待する結果・不合格の条件で書く
 keywords: [受け入れ基準, AC, シナリオ]
 verified:
-  at: 2026-08-07
-  version: 1.2.0
+  at: 2026-08-08
+  version: 1.3.0
   against:
     - doc: docs/00-requests/request.md
       version: 1.3.0

@@ -1,18 +1,18 @@
 ---
 id: logging
-version: 1.4.0
-updated: 2026-08-07
+version: 1.4.1
+updated: 2026-08-08
 source:
   - docs/01-requirements/non-functional.md
   - docs/02-design/architecture.md
 summary: 端末出力・常駐プロセスログ・機械が読む追記型ログの3系統について、レベル・出力先・保持を定める
 keywords: [ログ, 可観測性]
 verified:
-  at: 2026-08-07
-  version: 1.4.0
+  at: 2026-08-08
+  version: 1.4.1
   against:
     - doc: docs/01-requirements/non-functional.md
-      version: 1.5.0
+      version: 1.6.0
     - doc: docs/02-design/architecture.md
       version: 1.4.0
 ---
@@ -166,3 +166,7 @@ verified:
 - 理由: 中断・再開でやり直しを起こさないことが本ツールの価値であり、その根拠になる記録を
   自動処理で失ってはならない(`D0-orch-13`)。
 - 却下した案: 一定期間で削除する — 再開の根拠を失う。実削除は利用者の明示操作にのみ委ねる。
+
+## 未解決事項
+
+- なし。

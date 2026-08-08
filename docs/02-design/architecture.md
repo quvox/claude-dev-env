@@ -9,13 +9,13 @@ source:
 summary: 全体構成・データモデル・インフラ設計と、アーキテクチャ級の設計判断(DSN-arch / auth / dist / orch)
 keywords: [アーキテクチャ, 全体構成, 設計判断, DSN]
 verified:
-  at: 2026-08-07
+  at: 2026-08-08
   version: 1.4.0
   against:
     - doc: docs/01-requirements/functional.md
-      version: 1.11.0
+      version: 1.12.0
     - doc: docs/01-requirements/non-functional.md
-      version: 1.5.0
+      version: 1.6.0
     - doc: docs/01-requirements/system.md
       version: 1.1.0
 ---

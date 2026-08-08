@@ -8,13 +8,13 @@ source:
 summary: 03-impl 層の目次。機能間連携仕様書群の代表として層全体の版と合格証を持つ
 keywords: [目次]
 verified:
-  at: 2026-08-07
-  version: 1.17.0
+  at: 2026-08-08
+  version: 1.18.0
   against:
     - doc: docs/02-design/system.md
-      version: 2.7.0
+      version: 2.8.0
     - doc: docs/02-design/relations.md
-      version: 1.6.0
+      version: 1.7.0
 ---
 
 <!-- 2026-08-04 /doc-check ssot task-impl-depth(新しい実行): **合格証を再発行した(1.5.0)。**

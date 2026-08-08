@@ -8,11 +8,11 @@ kind: other
 summary: オーケストレーターが worker / 対話 Claude へ渡すプロンプトと受け取る結果の取り決め
 keywords: [契約, CTR]
 verified:
-  at: 2026-08-07
+  at: 2026-08-08
   version: 1.3.0
   against:
     - doc: docs/02-design/system.md
-      version: 2.7.0
+      version: 2.8.0
 ---
 
 # CTR-orchestrator-prompt orchestrator → worker / 対話 Claude

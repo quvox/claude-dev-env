@@ -1,6 +1,6 @@
 ---
 id: environments
-version: 1.2.0
+version: 1.3.0
 updated: 2026-08-08
 source:
   - docs/01-requirements/system.md
@@ -8,8 +8,8 @@ source:
 summary: 開発環境の構成・セットアップ手順・lint/テスト/ドキュメント整合検査の厳密なコマンド文字列・Codex実行設定
 keywords: [開発環境, コマンド, lint, テスト, Codex]
 verified:
-  at: 2026-08-07
-  version: 1.1.0
+  at: 2026-08-08
+  version: 1.3.0
   against:
     - doc: docs/01-requirements/system.md
       version: 1.1.0
@@ -101,10 +101,10 @@ verified:
 | 0 | 生成先の解決(1・2 の前に1回) | `CG_OUT=$(python3 .claude/scripts/resolve-callgraph-out.py)` | 出力先のパスを返す(終了コード 0)。**出力先を自分で決めてはならない**(進行中タスクがあるときはタスク配下、無ければ `docs/03-impl/callgraphs/` を返す) |
 | 1 | コールグラフの鮮度 | `python3 .claude/scripts/build-callgraphs.py --out "$CG_OUT" --check` | 「最新」を返す(終了コード 0)。古い場合は `--out "$CG_OUT"` を付けたまま `--check` を外して再生成してから 2 以降をやり直す |
 | 2 | 機能間関係グラフの鮮度 | `python3 .claude/scripts/cluster-features.py --out "$CG_OUT" --check` | 「最新」を返す(終了コード 0)。古い場合は `--out "$CG_OUT"` を付けたまま `--check` を外して再生成してから 3 以降をやり直す |
-| 3 | コールグラフ ⇄ 機能表 ⇄ 機能間連携仕様書 | `python3 .claude/scripts/callgraph-check.py` | 重大度「高」が 0 件(終了コード 0)。低・参考は残ってよい |
+| 3 | コールグラフ ⇄ 機能表 ⇄ 機能間連携仕様書 | `python3 .claude/scripts/callgraph-check.py` | 重大度「高」が 0 件(終了コード 0)。**中・低・参考は残ってよい**(残っている件数と内訳の正は `03-impl/index.md`「この層の状態」である) |
 | 4 | 機能間連携仕様書の内部整合 | `python3 .claude/scripts/check-relations.py` | 「合格」と表示され終了コード 0 |
 | 5 | 契約(02 ⇄ 03 ⇄ コード) | `python3 .claude/scripts/check-contracts.py` | 重大度「高」が 0 件(終了コード 0)。REST API を持たないため CT1〜CT3 は該当なし |
-| 6 | コードとドキュメントの片側漏れ | `python3 .claude/scripts/relations-coverage.py` | 片側にしか無いものが 0 件 |
+| 6 | コードとドキュメントの片側漏れ | `python3 .claude/scripts/relations-coverage.py` | 片側にしか無いものが、**既知の誤検出を除いて** 0 件。**既知の誤検出の内訳と件数は `03-impl/index.md`「`relations-coverage.py` 最終結果」が正である**(このスクリプトは終了コード 1 を返し続ける) |
 | 7 | 目次・進捗の再生成 | `python3 .claude/scripts/build-index.py --check` | 差分なし。差分がある場合は引数なしで再生成する |
 | 8 | 構造の健全性(**モジュール間・機能間の循環の有無**) | `python3 .claude/scripts/relations-query.py --health` | 循環が 0 件(終了コード 0)。**`02-design/relations.md` の `PLAN-cli-common-*` が「循環しない」と課している期待を、この検査が担保する** |
 
@@ -143,12 +143,16 @@ verified:
 | コマンド | `codex` |
 | **必須フラグ** | **監査・QA で codex を呼ぶときは常に `-c features.use_legacy_landlock=true` を付ける** |
 | プロファイル | 未定(`docs-audit` / `qa` は未作成。codex 既定設定で走らせる) |
-| モデル・reasoning(増分監査 / full監査 / QA) | 未定(codex 既定。固定値を決めたらここに書く) |
+| モデル・reasoning(増分監査) | 未定(いつ決めるか: `docs/issues/031`。**未記入の行は不在として扱われ、キットの既定が効く**) |
+| モデル・reasoning(full監査) | 未定(同上) |
+| モデル・reasoning(QA) | 未定(QA レーン開始時に決める) |
+| 代替レビュー(サブエージェント)のモデル・reasoning | 未定(**未記入なのでキットの既定が効く**。この行を埋めればレンズを常設指名できる) |
 | タイムアウト / 最大出力 | 監査 900 秒 / QA 未定。最大出力は未定 |
 | 最大調査ステップ | 未定 |
 | 書き込み許可ディレクトリ | 未定(QA レーンが未運用のため) |
 | CDP エンドポイント | `http://localhost:9222`(コンテナ内 Chrome) |
-| QA シードコマンド / リセットコマンド | 未定(QA レーン開始時に決める) |
+| QA シードコマンド | 未定(QA レーン開始時に決める) |
+| QA リセットコマンド | 未定(同上) |
 | ブラウザ排他ロック | 未定(同上。`docs/pendings.md` P-003 で追跡。**QA レーン開始の前提条件**) |
 | Claude のシェルからの到達方法 | コンテナ内 CLI(同一コンテナ内で `codex` を直接呼ぶ) |
 | 証跡の保管場所と保持期間 | スクラッチパッドのみ(永続化しない) |

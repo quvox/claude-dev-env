@@ -8,13 +8,13 @@ source:
 summary: ユースケース UC-01〜UC-06。受け入れ基準を基本フロー・代替フロー・例外フローへ形式化したもの
 keywords: [ユースケース, UC, E2Eの上流]
 verified:
-  at: 2026-08-07
-  version: 1.3.0
+  at: 2026-08-08
+  version: 1.4.0
   against:
     - doc: docs/00-requests/acceptances.md
-      version: 1.2.0
+      version: 1.3.0
     - doc: docs/01-requirements/functional.md
-      version: 1.11.0
+      version: 1.12.0
 ---
 
 # ユースケース

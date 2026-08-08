@@ -9,13 +9,13 @@ source:
 summary: MOD-cli-common(CLI 共有基盤の11関数)の受入基準⇄テスト対応
 keywords: [テスト]
 verified:
-  at: 2026-08-07
+  at: 2026-08-08
   version: 1.2.0
   against:
     - doc: docs/01-requirements/functional.md
-      version: 1.11.0
+      version: 1.12.0
     - doc: docs/02-design/system.md
-      version: 2.7.0
+      version: 2.8.0
 ---
 # MOD-cli-common のテスト対応
 
