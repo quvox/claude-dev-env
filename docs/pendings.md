@@ -24,11 +24,11 @@
 - 決めた人: 人間(task-docs-restructure。`02-design/environments.md` の「CI」節が「未定」として保持)
 - 何が不完全か: PR や変更時に `go vet` と `go test` を自動実行する CI が存在しない。
   検査は各自が手元で実行する運用に依存しており、実行漏れを機械的に防げない。
-- なぜ今は OK か: 自動テストを持つのは Go の2モジュール(`docker-proxy/` と `orchestrator/`)だけで、
+- なぜ今は OK か: 自動テストを持つのは Go の `docker-proxy/` 1 モジュールだけで、
   実行時間が短く手元で完結する。利用者が社内の少人数に閉じており、実行漏れの被害範囲が小さい。
 - どうなったら解消が必要か: 開発者が増えて手元実行の運用が守られなくなったとき、または
   Go 以外に自動テストを持つ領域が増えたとき。導入時は `02-design/environments.md` の
-  「CI」節の「未定」を実値へ置き換える(MINOR 変更)。
+  「CI」節の「PR / 変更時」の行を実値へ置き換える(MINOR 変更)。
 - 関連: 02-design/environments.md の「CI」節 / issues: なし
 
 ## P-003 QA レーン(独立QA)の各設定を未定のままにする
@@ -147,3 +147,12 @@
   片付け対象を別の手段で確認する必要がある。
 - 関連: `docs/03-impl/relations/MODULE-cli-stop.md`「既知の制限」/ `CTR-cli-container` の規則 D /
   `SR-05` / issues: なし
+
+## 残務(文書整合ほか)
+
+- 2026-08-10 `INDEX.md`:全体 4層構成へ移行する前のパス(`docs/00-requests/decisions.md` / `glossary.md` / `acceptance.md` / `docs/01-requirements/core.md` / `docs/03-impl/cli.md` ほか)と `docs/_steering/` / `docs/knowledge/` / `docs/feedback/log.md` を指したままで、実在するファイルとほとんど対応していない。
+- 2026-08-10 `README.md`:「ドキュメント」表 `docs/01_getting-started.md`〜`docs/10_ghcr-images.md` と `docs/impl/INDEX.md` を指したままで、いずれも 4層構成への移行で実在しない。
+- 2026-08-10 `.claude/scripts/`:2026-08-10 のキット書き換えでプロジェクト固有の `*.local.json` が失われた。`callgraph-config.local.json` は task-remove-orchestrator で作り直したが、`entrypoint-patterns.local.json` / `changeset-invariants.local.json` の有無は未確認。
+- 2026-08-10 `docs/issues/030`:`03-impl/index.md` の乖離件数の記述を問題にしているが、根拠に挙げる issue のうち `013` / `014` は task-remove-orchestrator で削除された。index.md の実測値を書き直したあとに閉じられるか再判定する。
+- 2026-08-10 `docs/03-impl/tests/*.md`:状態列が「対象外(理由: …)」を使っているが、2026-08-10 のキット書き換え後の `build-index.py` は「テスト対象外」だけを数えるため、`tests/index.md` の第3列が全て 0 になる差分が出る(本タスクの範囲外なので `git checkout` で戻した)。語彙をどちらへ揃えるか決めて一括で直す。
+- 2026-08-10 `docs/issues/009`:指摘の実体(約27件のシグネチャ不一致)は orchestrator の relations ごと消えたため 0 件になった。残るのは「省略記法を許容するかの規約が無い」という規約側の欠落だけで、`related` は実在しない ID を指したままである。
