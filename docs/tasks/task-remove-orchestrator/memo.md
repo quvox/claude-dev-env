@@ -227,7 +227,11 @@ AIオーケストレーター(`orchestrator/` の Go 実装、`claude-dev orches
 ## 決定シート(回答済み)
 > 回答済み: sheet.md(転記済み。**フェーズ2 の `/doc-check` が 論点5 を追記し、一括回答で settle して転記した**)
 
-(memo-1.md に移動)
+フェーズ2 までの回答は memo-1.md に移動。フェーズ3 の末尾に提示した 論点6 の回答:
+
+| # | 論点 | 回答 | 反映先 |
+|---|---|---|---|
+| 論点6 | 2026-08-10 のキット書き換えとフェーズ2 の成果物が 5 箇所で食い違い、AI の判断で吸収した。`/task-close`(SSOT 68 文書の一括書き換え)を今走らせてよいか | **回答**(2026-08-10、チャット): 「そのまま /task-close へ (推奨)」— 選択肢の説明「吸収の内訳は memo.md と pendings.md に全件記録済み。合成ビューでの検査はすべて合格(check-relations / relations-coverage / check-contracts / callgraph-check 重大度「高」0)。反映は git で戻せる。」 | `/task-close task-remove-orchestrator` の実行。吸収の内訳は本 memo「進捗メモ」2026-08-10 行、キット側の残りは `docs/pendings.md`「残務」の 3 行 |
 
 ## 未決点
 
@@ -257,7 +261,7 @@ AIオーケストレーター(`orchestrator/` の Go 実装、`claude-dev orches
 
 | # | 論点 | 何が止まるか | 推奨する回答(暫定) |
 |---|---|---|---|
-| 1 | 2026-08-10 のキット書き換えが本タスクの成果物と 5 箇所で食い違い、AI の判断で吸収した(`version_bump` の付与 32 件 / 見出し改名の記法 / relations の全文形式化 / `compose-changeset.py` の最小修正 2 箇所 / features.md の手作業ぶん)。**`.claude/` は git 追跡外**なので、この吸収は版管理の外にある | `/task-close`(SSOT の一括書き換え)を今走らせてよいか | **走らせてよい**。反映は git で戻せる。キット側の残りは `docs/pendings.md` の残務 3 行が追跡する |
+| - | なし(論点6 は 2026-08-10 に提示し回答済み。上の「決定シート(回答済み)」を見る) | - | - |
 
 ## タスクリスト
 
