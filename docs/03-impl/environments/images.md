@@ -6,6 +6,11 @@ source:
   - docs/02-design/environments.md
 summary: 配布イメージ(claude-cli / claude-vnc)のステージ構成・ビルド引数・キャッシュの効かせ方
 keywords: [イメージ, Dockerfile, ビルド]
+verified:
+  at: 2026-08-10
+  version: 1.1.0
+  against:
+    - {doc: docs/02-design/environments.md, version: 1.4.0}
 ---
 
 <!-- 2026-08-04 /doc-check ssot task-impl-depth(新しい実行): **合格証を再発行した(1.0.0)。**

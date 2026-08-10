@@ -6,6 +6,11 @@ source:
   - docs/00-requests/request.md
 summary: 隔離境界と権限制限に関する決定事項(D0-sec-*)
 keywords: [セキュリティ, 隔離, 決定事項]
+verified:
+  at: 2026-08-10
+  version: 1.3.0
+  against:
+    - {doc: docs/00-requests/request.md, version: 1.4.0}
 ---
 
 <!-- 2026-08-04 /doc-check ssot task-impl-depth(新しい実行): 合格証を 1.0.1 → 1.1.0 で再発行した。

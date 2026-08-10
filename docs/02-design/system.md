@@ -1,6 +1,6 @@
 ---
-id: system
-version: 2.9.0
+id: 02-system
+version: 2.9.1
 updated: 2026-08-10
 source:
   - docs/01-requirements/functional.md
@@ -11,6 +11,14 @@ summary: >
   25モジュールの分割定義とその根拠(DSN-mod-*)、要件カバレッジ確認、テスト戦略(単体/結合/E2E)と
   E2Eシナリオ一覧、UI設計を定める。アーキテクチャと契約と設計判断は architecture.md / contracts/ が持つ。
 keywords: [モジュール分割, DSN-mod, テスト戦略, E2E, UI設計, 要件カバレッジ]
+verified:
+  at: 2026-08-10
+  version: 2.9.1
+  against:
+    - {doc: docs/01-requirements/functional.md, version: 1.13.1}
+    - {doc: docs/01-requirements/non-functional.md, version: 1.7.0}
+    - {doc: docs/01-requirements/usecases.md, version: 1.5.0}
+    - {doc: docs/02-design/architecture.md, version: 1.5.0}
 ---
 
 # モジュール分割・テスト戦略・UI設計
@@ -344,7 +352,7 @@ keywords: [モジュール分割, DSN-mod, テスト戦略, E2E, UI設計, 要�
 | 契約 ID | 契約の当事者 | テストを持つ責任モジュール |
 |---|---|---|
 | CTR-cli-container(**起動側**) | MOD-cli-start → MOD-entrypoint | MOD-entrypoint(呼び出し元はシェルで自動テストを持てないため観測側が担当。手段は実機確認) |
-| CTR-cli-container(**破壊的操作の対象の識別**) | **発行側は2つある**: MOD-cli-start(Claude コンテナの管理ラベル)と **MOD-docker-proxy(セッション由来の資源の所有者ラベル。`DSN-env-04`)**。→ 読み手は MOD-cli-stop / MOD-cli-logout / MOD-cli-reset | **MOD-cli-stop / MOD-cli-logout / MOD-cli-reset**(読み手が観測側。`D0-env-08`。**発行側がラベルを付けるのをやめると読み手の削除対象が空になる**ため、契約の遵守は読み手の側でしか観測できない)。全モジュールがシェル実装で自動テストを持てないため、手段は**実機確認 = E2E-01**(`FR-env-01` 受入基準 9・14〜27 / `FR-env-03` 受入基準 14〜23)。**発行側が docker-proxy である分だけは Go の単体テストで機械検証できる**が、それは下の `CTR-docker-api` の行が持つ(この行が観測するのは「読み手が正しい集合を消すか」である) |
+| CTR-cli-container(**破壊的操作の対象の識別**) | **発行側は2つある**: MOD-cli-start(Claude コンテナの管理ラベル)と **MOD-docker-proxy(セッション由来の資源の所有者ラベル。`DSN-env-04`)**。→ 読み手は MOD-cli-stop / MOD-cli-logout / MOD-cli-reset | **MOD-cli-stop / MOD-cli-logout / MOD-cli-reset**(読み手が観測側。`D0-env-08`。**発行側がラベルを付けるのをやめると読み手の削除対象が空になる**ため、契約の遵守は読み手の側でしか観測できない)。全モジュールがシェル実装で自動テストを持てないため、手段は**実機確認 = E2E-01**(`FR-env-01` 受入基準 9・14〜27 / `FR-env-03` 受入基準 14〜23)。**発行側が docker-proxy である分だけは Go の単体テストで機械検証できる**が、それは下の `CTR-docker-api` の行が持つ(この行が観測するのは「読み手が `CTR-cli-container`「削除対象の決め方(4つの規則)」の規則 A〜D が定める集合だけを消すか」である) |
 | CTR-entrypoint-firewall | MOD-entrypoint → MOD-firewall | MOD-entrypoint(手段は実機確認) |
 | CTR-docker-api | Claude コンテナ → MOD-docker-proxy | MOD-docker-proxy(観測側。`go test` で機械検証。**所有者ラベルの付与(`FR-env-07` 受入基準11・12)も、要求ボディの変換なので同じ `go test` で検証できる**) |
 

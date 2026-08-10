@@ -278,9 +278,9 @@ AIオーケストレーター(`orchestrator/` の Go 実装、`claude-dev orches
 - [x] 11. 実行時の運用状態 `.orchestrator/` を削除する(gitignore 済みの生成物) _Boundary:_ `.orchestrator/` _Depends:_ 1
 - [x] 12. `docs/issues/` から次の **21 件**を削除する(調査メモ 12 が根拠。ID を直接書くのは、**67 件の変更指示のうち 14 件しかこれらに言及しておらず、残り 7 件(`001` / `007` / `011` / `012` / `021` / `022` / `026`)はどの変更指示からも参照されないため** — 独立レビュー docs の指摘): `001` / `003` / `007` / `011` / `012` / `013` / `014` / `015` / `021` / `022` / `026` / `033` / `057` / `058` / `059` / `061` / `062` / `063` / `064` / `067` / `068`。あわせて `docs/pendings.md` の P-002 から「Go の2モジュール」の記述を直し、`python3 .claude/scripts/build-index.py` で `docs/issues/index.md` を再生成する _Boundary:_ `docs/issues/` / `docs/pendings.md` _Depends:_ 1〜11
 - [x] 13. lint とテストを実行する(`cd docker-proxy && go vet ./... && go test ./...`) _Depends:_ 1〜11
-- [ ] 15. `/task-close` の反映(`compose-changeset.py --apply`)では表せない箇所を、反映の手順として手で適用する _Depends:_ 14
+- [x] 15. `/task-close` の反映(`compose-changeset.py --apply`)では表せない箇所を、反映の手順として手で適用する _Depends:_ 14 — **b は `compose-changeset.py` を直したので手作業ではなくなった**
   - a. `docs/01-requirements/functional.md` と `docs/01-requirements/non-functional.md` の frontmatter 直後の HTML コメント(削除される ID に触れる検証記録)を削除する。**見出しを持たないため `sections` にも `deletes` にも載せられない**
-  - b. `docs/03-impl/features.md` の `## 統合した機能` / `## 昇格させた共通基盤機能` / `## 到達しない関数についての判断` と frontmatter の `keywords` を、`new-features/03-impl/features.md` の本文どおりに差し替える。**`compose-changeset.py` は features.md について `## 機能一覧` の差分表しか適用しない**(`docs/pendings.md` 残務)。差し替えないと `check-relations.py` の FT3 が `MODULE-sample-project-mathkit` で落ちる
+  - b. (解消)`compose-changeset.py` が `## 機能一覧` 以外の `sections` と frontmatter も適用するようにしたので、手作業は不要になった
   - c. `python3 .claude/scripts/build-index.py` で生成インデックス(`docs/03-impl/relations/index.md` ほか)を再生成する
 - [x] 14. コールグラフと機能間関係グラフを再生成し、`callgraph-check.py` / `check-relations.py` / `check-contracts.py` / `relations-coverage.py` / `relations-query.py --health` を実行して、実測値で `new-features/03-impl/index.md` を書き、`new-features/03-impl/features.md` のファンイン値と `new-features/03-impl/environments/images.md` の行番号を更新する。**あわせて `new-features/03-impl/index.md` へ `## この層の状態` と `## コールグラフ` の 2 節を追記する**(フェーズ2 では実測値が確定しないため意図的に外してある) _Depends:_ 1〜13
 
@@ -298,15 +298,35 @@ AIオーケストレーター(`orchestrator/` の Go 実装、`claude-dev orches
       `callgraph-check.py --to-be task-remove-orchestrator` の重大度「高」が0
 - [x] `check-relations.py` が合格(合成ビューで実測)
 - [x] `relations-query.py --health` の循環が0件(合成ビューで実測)
-- [ ] `new-features/` の全変更指示を SSOT へ反映済み — `/task-close` で実施
-- [ ] `/doc-check` が影響範囲を PASS — `/task-close` で実施
-- [ ] `docs/histories/` に記録 — `/task-close` で実施
-- [x] 見つけた範囲外の問題を `docs/issues/` / `docs/pendings.md` に記録済み(`docs/pendings.md`「残務(文書整合ほか)」に 9 行)
-- [x] `docs/issues/` の該当 **21 件**が削除され、残りが **39 件**であること(タスクリスト 12)。**フェーズ1 の調査メモ 12 は「61 - 21 = 40」と書いていたが、母数 61 は `index.md` を含めた数え間違いで、実体は 60 件だった**(その後 `task-layer-placement` の完了で 5 件減り 1 件増えた分も含めて 2026-08-10 時点で 60 件)
-- [ ] `docs/01-requirements/functional.md` / `non-functional.md` の冒頭 HTML コメントから、削除した ID への言及が消えていること(タスクリスト 15-a) — `/task-close` で実施
+- [x] `new-features/` の全変更指示を SSOT へ反映済み(削除ゲート (a) が 68/68 を「反映済み 2026-08-10」と確認)
+- [x] `/doc-check` が影響範囲を PASS — 2026-08-10 `/doc-check ssot task-remove-orchestrator` が PASS(下の進捗メモ)
+- [x] `docs/histories/2026-08-10-remove-orchestrator.md` と `2026-08-10-doc-check-ssot-remove-orchestrator-recertification.md` を追加
+- [x] 見つけた範囲外の問題を `docs/issues/` / `docs/pendings.md` に記録済み(`docs/pendings.md`「残務(文書整合ほか)」に 14 行。うち 5 行は `/doc-check ssot` が追記)
+- [x] `docs/issues/` の該当 **21 件**が削除され、残りが **38 件**であること(タスクリスト 12。`/doc-check` が解消した `093` をさらに削除したため 39 → 38)。**フェーズ1 の調査メモ 12 は「61 - 21 = 40」と書いていたが、母数 61 は `index.md` を含めた数え間違いで、実体は 60 件だった**(その後 `task-layer-placement` の完了で 5 件減り 1 件増えた分も含めて 2026-08-10 時点で 60 件)
+- [x] `docs/01-requirements/functional.md` / `non-functional.md`(および `docs/03-impl/index.md`)の冒頭 HTML コメント計 5 件を削除した。残る `D0-orch-17` / `NFR-perf-03` の言及は、変更指示が書いた**欠番の記録**(「番号は再利用しない」)である
 - [x] リポジトリ全体に orchestrator への参照が残っていないこと(`docs/` `.claude/` と git 履歴を除く)。**`docs/` に残るのは `/task-close` が反映する SSOT と、範囲外と決めた `docs/orch/` / `docs/histories/` / `docs/feedbacks/` / `docs/kit-report.md` / `docs/ONBOARDING.md` / 残る issue 6 件だけである**
 
 ## 進捗メモ
+
+- 2026-08-10 `/doc-check ssot task-remove-orchestrator`(フェーズ4 §6)判定: **PASS**(反復 1/2)。
+  レビュー: **あり(サブエージェント。`lens: subagent` / model: sonnet / 指摘 中7・低1)**。
+  Codex 利用枠切れのための常設代替(MEMORY「codex-unavailable-use-subagent-lens」)。
+  **検証済み記録を 24 文書へ発行した**(00:6 / 01:5 / 02:6 / 03:7。`relations/MODULE-*` 56 本と
+  `features.md` は `03-impl/index.md` が代表 = 原則6 の例外)。**失効 0 / 未検証 0**。
+  直したもの5件はすべて **PATCH 級**で、版は
+  `functional 1.13.0→1.13.1` / `acceptances 1.4.0→1.4.1` / `01-requirements/system 1.2.0→1.2.1` /
+  `02-design/system 2.9.0→2.9.1` / `03-impl/index 1.19.0→1.19.1`。内訳と根拠は
+  `docs/histories/2026-08-10-doc-check-ssot-remove-orchestrator-recertification.md`。
+  **最大の指摘**: 反映が変更指示の記法(`| FR-env-12-12 | delete | 廃止する… |`)を 01 の受入基準表へ
+  そのまま持ち込んでおり、01 が条項 141 件・02/03 が 140 件で食い違っていた。行を欠番コメントへ
+  置き換えて 01 = 02 = 03 = 140 件の完全一致にした(`docs/issues/093` の案A。**issue は解消したが
+  ファイル削除だけ残務**)。機械検査は `check-relations` 56/56 合格 / `check-contracts` 合格 /
+  `build-callgraphs --check` 最新 / `cluster-features --check` 最新 / `build-index --check` 差分なし /
+  `callgraph-check` 重大度「高」0 / `relations-query --health` 循環0・対応要件が無い機能0。
+  `check-changeset --ssot` の NG は 85 → 84(残りは全件が本タスク以前からの既知で、
+  `docs/issues/054` / `084` / `095` / `pendings.md` 残務が追跡する)。
+  タスクリスト 15-a(01 の冒頭 HTML コメント)は反映コミット `420af38` で実施済みを確認した。
+  決定シート: **なし**(問う基準を満たす論点は出なかった)。
 
 - 2026-08-10 フェーズ3 完了(`/implement`)。**タスク 1〜14 を実施し、15 は `/task-close` の反映手順として残した。**
   対象コミット `e4fc59b1551688f8953393c2f81e272baa8d93ce`(コード削除 `c7f9c21` / issue 削除 `d68a725` / 変更指示 `e4fc59b`)。

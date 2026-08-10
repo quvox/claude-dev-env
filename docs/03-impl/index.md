@@ -1,12 +1,18 @@
 ---
 id: index
-version: 1.19.0
+version: 1.19.1
 updated: 2026-08-10
 source:
   - docs/02-design/system.md
   - docs/02-design/relations.md
 summary: 03-impl 層の目次。機能間連携仕様書群の代表として層全体の版と合格証を持つ
 keywords: [目次]
+verified:
+  at: 2026-08-10
+  version: 1.19.1
+  against:
+    - {doc: docs/02-design/system.md, version: 2.9.1}
+    - {doc: docs/02-design/relations.md, version: 1.8.0}
 ---
 
 # 03-impl 目次
@@ -18,7 +24,7 @@ keywords: [目次]
 | 機能間連携仕様書の本数 | 56 |
 | 網羅しているモジュール | MOD-cli-common, MOD-cli-setup, MOD-cli-start, MOD-cli-stop, MOD-cli-attach, MOD-cli-code, MOD-cli-list, MOD-cli-login, MOD-cli-login-codex, MOD-cli-logout, MOD-cli-forward, MOD-cli-unforward, MOD-cli-ports, MOD-cli-ssh-keys, MOD-cli-firewall, MOD-cli-pull, MOD-cli-upgrade, MOD-cli-reset, MOD-makefile, MOD-entrypoint, MOD-firewall, MOD-docker-proxy, MOD-portsync, MOD-vm-mode, MOD-container-tools(25モジュール) |
 | `check-relations.py` 最終結果 | 合格(2026-08-10 に再実行。56 ファイル / 56 ID。対称性・参照実在・impl パス・必須項目・機能表との 1:1 すべて問題なし) |
-| コードとの乖離として未解決のもの | **0 件**。機能の欠落として数えていた 1 件(macOS のコントローラ生存判定が無い。`docs/issues/003`)は、`orchestrate` サブコマンドごと消えた。本文の叙述レベルの食い違いとして数えていた 17 件(`docs/issues/009` の (a))も、対象が `MODULE-orchestrator-*` の relations だけだったため対象ごと消えた。**`docs/issues/009` 自体は「本文で `ctx` 等の定型引数を省略してよいかの規約が無い」という規約側の欠落として残る**(指摘の実体は 0 件)。集計の維持そのものは `docs/issues/030` で追跡する |
+| コードとの乖離として未解決のもの | **0 件**。機能の欠落として数えていた 1 件(macOS のコントローラ生存判定が無い。issue `003`。対象ごと消えたため issue も削除した)は、`orchestrate` サブコマンドごと消えた。本文の叙述レベルの食い違いとして数えていた 17 件(`docs/issues/009` の (a))も、対象が `MODULE-orchestrator-*` の relations だけだったため対象ごと消えた。**`docs/issues/009` 自体は「本文で `ctx` 等の定型引数を省略してよいかの規約が無い」という規約側の欠落として残る**(指摘の実体は 0 件)。集計の維持そのものは `docs/issues/030` で追跡する |
 | 実装の欠陥として起票済み(コードは未修正) | **11件**。数え方は「`03-impl` のいずれかの `## 既知の制限` から参照されている `type: modify` / `type: bug` の issue」のうち、**本システムが未修正のもの**とする: `docs/issues/002`(`.claude-dev.yaml` が全面上書きされる)/ `005`(docker-proxy が解釈できないボディを検査せず中継する)/ `010`(forward のホストポート選択の競合)/ `023`(`CLAUDE_DEV_SSH_BRIDGE_PORT` を無検証で採る)/ `028`(名前の一意性が `NFR-scale-01` を満たさない)/ `047`(`reset` が `claude-dev-vm-*` ボリュームを消さない)/ `052`(`logout` が削除対象0件の経路でラベル無しコンテナの警告を出さない)/ `053`(`logout` が列挙できない共有ボリュームを「空」と判定する)/ `087`(所有者ラベルの注入失敗がコンテナ経路でログに出ない)/ `088`(`stop` が compose 既定ネットワークの削除失敗を表示しない)/ `089`(`logout` がセッション由来のコンテナを「管理ラベルを持たない」と誤表示する)。**2026-08-08 のオーケストレーター削除で 10 件(`001` / `011` / `012` / `013` / `015` / `021` / `022` / `026` / `057` / `058`)が対象の実装ごと消え、21 件から 11 件になった。** `014` / `046` / `051` / `054` は、どの「既知の制限」からも参照されていないためこの数に含めない(いずれもコードは未修正である。集計の対象は「既知の制限」から参照されているものに限る、という数え方の定義による)。集計の維持そのものは `docs/issues/030` で追跡する |
 | `relations-coverage.py` 最終結果 | 合格(2026-08-10 に再実行。機能間連携仕様書 56 本 / エントリポイント候補 0 件 / 未記載 0 件)。**2026-08-07 に検出していた未記載 30 件は、その全件が `scan-entrypoints.py` の Go `switch` 誤検出(orchestrator の設定キー・TUI のキー入力・JSON の型識別子・git のサブコマンド文字列)であり、対象の実装ごと消えた。** 残る Go は `docker-proxy/` だけで、コードとの一致は `callgraph-check.py` と `check-relations.py` が担保する |
 

@@ -8,6 +8,12 @@ source:
   - docs/02-design/system.md
 summary: MOD-makefile(ビルド・導入・運用ターゲット)の受入基準⇄テスト対応
 keywords: [テスト]
+verified:
+  at: 2026-08-10
+  version: 1.2.0
+  against:
+    - {doc: docs/01-requirements/functional.md, version: 1.13.1}
+    - {doc: docs/02-design/system.md, version: 2.9.1}
 ---
 
 # MOD-makefile のテスト対応

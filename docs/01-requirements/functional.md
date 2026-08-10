@@ -1,6 +1,6 @@
 ---
 id: functional
-version: 1.13.0
+version: 1.13.1
 updated: 2026-08-10
 source:
   - docs/00-requests/request.md
@@ -10,6 +10,15 @@ source:
   - docs/00-requests/decisions/sec.md
 summary: 機能要件 FR-env-01〜12。受け入れ基準は EARS で書く
 keywords: [機能要件, EARS, FR]
+verified:
+  at: 2026-08-10
+  version: 1.13.1
+  against:
+    - {doc: docs/00-requests/request.md, version: 1.4.0}
+    - {doc: docs/00-requests/acceptances.md, version: 1.4.1}
+    - {doc: docs/00-requests/decisions/auth.md, version: 1.3.0}
+    - {doc: docs/00-requests/decisions/env.md, version: 1.5.0}
+    - {doc: docs/00-requests/decisions/sec.md, version: 1.3.0}
 ---
 
 # 機能要件
@@ -300,7 +309,9 @@ keywords: [機能要件, EARS, FR]
 | FR-env-12-9 | 境界値 | WHERE `workspace-write` が指定された場合は本要件の対象外とし(**対象外とする理由は `D0-dist-04` 項6 が持つ**)、書き込みを伴う自動化は既定設定で実行する |
 | FR-env-12-10 | 異常系 | IF 既存の設定ファイルが解釈できない、または追記内容が検証に通らないならば、システムは既存ファイルを書き換えてはならず、警告だけを出して起動を続行しなければならない |
 | FR-env-12-11 | 異常系 | IF 既定設定の生成・追記に失敗したならば、システムはコンテナの起動を止めてはならない(codex を使わない利用者の起動を妨げない) |
-| FR-env-12-12 | delete | 廃止する。旧内容は「本要件の対象は開発者が対話的に codex を使うことであり、オーケストレーターが worker/レビューアーとして codex を常用することは対象外とする(`D0-orch-17` 未決)」。オーケストレーターと `D0-orch-17` の双方が消えるため、対象外を宣言する相手が存在しない。**番号 12 は欠番のままにし、再利用しない** |
+
+<!-- FR-env-12-12 は 2026-08-10 に廃止した(オーケストレーターの削除にともない、対象外を宣言する
+     相手だった `D0-orch-17` が消えたため)。番号は再利用しない。 -->
 
 ## 要求カバレッジ確認
 

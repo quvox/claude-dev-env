@@ -8,6 +8,13 @@ source:
   - docs/01-requirements/system.md
 summary: 全体構成・データモデル・インフラ設計と、アーキテクチャ級の設計判断(DSN-arch / auth / dist)
 keywords: [アーキテクチャ, 全体構成, 設計判断, DSN]
+verified:
+  at: 2026-08-10
+  version: 1.5.0
+  against:
+    - {doc: docs/01-requirements/functional.md, version: 1.13.1}
+    - {doc: docs/01-requirements/non-functional.md, version: 1.7.0}
+    - {doc: docs/01-requirements/system.md, version: 1.2.1}
 ---
 
 <!-- 2026-08-04 /task-close: 認証の置き場所の記述を**実装に合わせた**(人間の裁定=実装が正。

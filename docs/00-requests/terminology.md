@@ -6,6 +6,11 @@ source:
   - docs/00-requests/request.md
 summary: 本システムで使う語の定義・英語表記(識別子)・使ってはいけない言い方
 keywords: [用語集, 識別子, 表記ゆれ]
+verified:
+  at: 2026-08-10
+  version: 1.5.0
+  against:
+    - {doc: docs/00-requests/request.md, version: 1.4.0}
 ---
 
 # 用語集

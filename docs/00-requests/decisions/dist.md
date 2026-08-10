@@ -6,6 +6,11 @@ source:
   - docs/00-requests/request.md
 summary: イメージの配布と外部 CLI の同梱に関する決定事項(D0-dist-*)
 keywords: [配布, GHCR, 決定事項]
+verified:
+  at: 2026-08-10
+  version: 1.2.0
+  against:
+    - {doc: docs/00-requests/request.md, version: 1.4.0}
 ---
 
 # 配布・同梱の決定事項

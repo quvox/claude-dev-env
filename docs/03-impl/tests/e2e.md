@@ -8,6 +8,12 @@ source:
   - docs/01-requirements/usecases.md
 summary: E2Eシナリオ E2E-01〜E2E-03 と E2E-06 ⇄ テスト対応
 keywords: [テスト, E2E]
+verified:
+  at: 2026-08-10
+  version: 1.5.0
+  against:
+    - {doc: docs/02-design/system.md, version: 2.9.1}
+    - {doc: docs/01-requirements/usecases.md, version: 1.5.0}
 ---
 
 # E2E テスト対応

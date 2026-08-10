@@ -7,6 +7,10 @@ summary: >
   Claude Code を Docker コンテナで動かす隔離開発環境を、レビュー前コードをホストから隔離し
   チーム全員が同一構成を使えるようにするために提供する。信頼できる社内開発用途に限定。
 keywords: [claude-dev, Docker開発環境, 隔離, 配布, CodexCLI]
+verified:
+  at: 2026-08-10
+  version: 1.4.0
+  against: []
 ---
 
 # 要求定義書:claude-dev-env

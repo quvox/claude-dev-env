@@ -8,6 +8,12 @@ source:
   - docs/02-design/system.md
 summary: どのモジュールにも属さないイメージのビルドと GHCR 配布の受入基準⇄テスト対応
 keywords: [テスト, イメージ, GHCR]
+verified:
+  at: 2026-08-10
+  version: 1.3.0
+  against:
+    - {doc: docs/01-requirements/functional.md, version: 1.13.1}
+    - {doc: docs/02-design/system.md, version: 2.9.1}
 ---
 
 # イメージのビルドと GHCR 配布 のテスト対応

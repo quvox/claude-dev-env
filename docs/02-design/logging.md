@@ -7,6 +7,12 @@ source:
   - docs/02-design/architecture.md
 summary: 端末出力と常駐プロセスログの2種類について、レベル・出力先・保持を定める
 keywords: [ログ, 可観測性]
+verified:
+  at: 2026-08-10
+  version: 1.5.0
+  against:
+    - {doc: docs/01-requirements/non-functional.md, version: 1.7.0}
+    - {doc: docs/02-design/architecture.md, version: 1.5.0}
 ---
 
 # ログ戦略・ログ仕様

@@ -8,6 +8,12 @@ source:
   - docs/02-design/environments.md
 summary: テストのレベル別実行方法・状態列の語彙・受入基準の配分規約
 keywords: [テスト, 方針]
+verified:
+  at: 2026-08-10
+  version: 1.5.0
+  against:
+    - {doc: docs/02-design/system.md, version: 2.9.1}
+    - {doc: docs/02-design/environments.md, version: 1.4.0}
 ---
 
 # テスト実装仕様 — 実行方法と共通の流儀

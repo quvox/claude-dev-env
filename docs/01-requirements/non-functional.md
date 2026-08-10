@@ -6,6 +6,11 @@ source:
   - docs/00-requests/request.md
 summary: 非機能要件 NFR-perf / avail / sec / ops / scale の各分類と目標値・測定方法
 keywords: [非機能要件, NFR]
+verified:
+  at: 2026-08-10
+  version: 1.7.0
+  against:
+    - {doc: docs/00-requests/request.md, version: 1.4.0}
 ---
 
 # 非機能要件

@@ -8,6 +8,13 @@ source:
   - docs/01-requirements/non-functional.md
 summary: 要件を部分的に満たしてよいかの判断(分割可否)の決定事項 D1-split-*
 keywords: [分割可否, 決定事項, D1]
+verified:
+  at: 2026-08-10
+  version: 1.3.0
+  against:
+    - {doc: docs/00-requests/request.md, version: 1.4.0}
+    - {doc: docs/01-requirements/functional.md, version: 1.13.1}
+    - {doc: docs/01-requirements/non-functional.md, version: 1.7.0}
 ---
 
 # 分割可否の決定事項
