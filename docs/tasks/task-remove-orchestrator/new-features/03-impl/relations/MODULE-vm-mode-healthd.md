@@ -1,0 +1,96 @@
+---
+target: docs/03-impl/relations/MODULE-vm-mode-healthd.md
+change: replace
+version_bump: patch
+reason: 'オーケストレーターの全面削除にともなう読み手の修正(決定シート 概念1)。`## 戻り値・副作用` の永続化の行が、health ファイルの書式を「`MODULE-vm-mode-cli` の `vm status` と `MODULE-orchestrator-dashboard` の VM バナーが読んで依存する」と書いている。`MODULE-orchestrator-dashboard` を削除するので、読み手は `MODULE-vm-mode-cli` の `vm status` だけになる。**書式そのものも tmux ユーザ変数 `@vm_health` の書き込みも変えない**(`FR-env-08` 受入基準4 が課す tmux ステータス行の表示は残る)。`docs/issues/063`(VM の資源逼迫でダッシュボードが赤いバナーを出す振る舞いに受入基準が無い)は、そのダッシュボードごと消えるので同 issue を削除する。**`## 実装上の判断` を再掲する**: `.claude/directions/delegation.md` §3.1 に従って既存の判断行を1件ずつ読み直した結果、**すべて継続**である(オーケストレーターの削除で見直す条件が発火した行は1件も無い)。`CS19` はこの節が変更のたびに読み直されることを要求するので、変更が無い場合も再掲する'
+id: MODULE-vm-mode-healthd
+module: MOD-vm-mode
+kind: tool
+sync: sync
+impl: scripts/vm-healthd.sh::main#--loop, scripts/vm-healthd.sh::main
+callers: なし
+callees: なし
+contracts: なし
+design: DSN-mod-01, DSN-mod-03, DSN-arch-01
+requirements: FR-env-08
+tests: なし(未実装。シェル実装のため自動テストランナーが無く実機確認で代替する。静的検証として `bash -n` は緑)
+updated: 2026-08-05
+summary: QEMU の CPU 使用率から資源逼迫を検知し tmux と health へ書く
+---
+
+# MODULE-vm-mode-healthd VM の資源逼迫監視
+
+## 目的
+
+ゲスト VM が**資源逼迫**(用語集。QEMU プロセスの CPU 使用率が割り当て上限に対して 60% 以上の
+状態が 15 秒周期で 12 回連続して観測された状態)に入ったことに人間が気づけるようにする
+(FR-env-08 受け入れ基準4)。**ゲストがスラッシングに陥ると ssh も docker も応答しなくなる**ため、
+ゲストの中を観測せず、**claude コンテナ側から見える QEMU プロセスの CPU 使用率だけ**で判定するのが
+この機能の要点である。
+
+## 処理の流れ
+
+1. `evaluate_once`: pidfile から QEMU の pid を得る(無ければ `STATE=OFF` を書いて終わる)。
+2. `/proc/<pid>/stat` の `utime + stime` を `VM_HEALTH_INTERVAL`(既定15秒)間隔で2点サンプルし、
+   `getconf CLK_TCK` を使って1コア基準の CPU% を算出する。
+3. 上限 `CEIL` は `/proc/<pid>/cmdline` から解決した `-smp N` × 100% とする。比率 = CPU% ÷ CEIL。
+4. **判定**: 比率が `VM_HEALTH_CPU_PCT`(既定60)以上を「hot」とし、`VM_HEALTH_SUSTAIN`
+   (既定12回 ≒ 3分)連続で hot なら `WARN` にする。hot が途切れれば OK に戻す。
+   低めの閾値と長めの窓を組み合わせ、一過性のビルドを除外しつつスラッシングを捕まえる。
+5. **health ファイル**: `${VM_HOME}/health` を毎周回アトミックに上書きする
+   (`STATE` / `CPU` / `CEIL` / `TS` / `MSG`)。
+6. **tmux 連携**: WARN の間は `tmux set -g @vm_health "⚠ VM資源逼迫…"`、OK へ戻ったら `set -gu` で
+   クリアする。OK → WARN の遷移時、または `VM_HEALTH_COOLDOWN`(既定600秒)が経過したときだけ
+   `display-message` でフラッシュする。tmux サーバが起動していない(`has-session` が失敗する)ときは
+   各操作をスキップする。
+
+## 呼び出され方
+
+- 契機: `MODULE-vm-mode-up` が dockerd の準備完了後に `--loop` で常駐起動する。
+- 前提条件: QEMU が pidfile 付きで動いていること。
+- 引数:
+
+| 引数 | 型 | 必須 | 制約 |
+|---|---|---|---|
+| `--loop` | フラグ | 任意 | 常駐する。省略時は一度評価して終わる |
+| `VM_HEALTH_INTERVAL` / `_CPU_PCT` / `_SUSTAIN` / `_COOLDOWN` | 環境変数 | 任意 | 既定 15 / 60 / 12 / 600 |
+
+- 認可: コンテナ内のユーザ。
+
+## 連携先と連携内容
+
+連携先なし(`tmux` の実行は外部コマンド呼び出し)。
+
+## 戻り値・副作用
+
+| 種別 | 内容 |
+|---|---|
+| 戻り値 | 0。`--loop` は終了しない |
+| 永続化 | **`${HOME}/.claude-dev-vm/health`**(`STATE` / `CPU` / `CEIL` / `TS` / `MSG` を tmp → rename でアトミック上書き)。**この書式をこの機能が決め、`MODULE-vm-mode-cli` の `vm status` が読んで依存する**(鮮度は `TS` で判定する)。tmux ユーザ変数 `@vm_health` |
+| 発火するイベント | tmux の `display-message` によるフラッシュ通知 |
+| ログ | `${HOME}/.claude-dev-vm/logs/vm-healthd.log` |
+
+## 異常系
+
+| 条件 | 実際の振る舞い | 呼び出し元への影響 |
+|---|---|---|
+| QEMU が動いていない | `STATE=OFF` を書いて終わる | `vm status` が停止として表示する |
+| tmux サーバが起動していない | `has-session` の失敗を見て各 tmux 操作をスキップする | バナーは出ないが health ファイルは更新される |
+| 一過性の高負荷(ビルド等) | `VM_HEALTH_SUSTAIN` 連続で hot にならなければ WARN にしない | 誤警告が出ない |
+| health ファイルが古い | 読む側(`vm status` / ダッシュボード)が `TS` で鮮度を判定して無視する | 古い警告が残らない |
+| 一時的な `/proc` 読み取り失敗 | `set -u` のみで `-e` を付けていないためループは止まらない | 次の周回で再評価する |
+
+## 実装上の判断
+
+| # | 判断内容 | 根拠(委任ID) |
+|---|---|---|
+| 1 | ゲストへ問い合わせず、ホスト側(claude コンテナ側)から見える QEMU の CPU だけで判定する(スラッシング中はゲストが応答しないため) | D0-scope-04 |
+| 2 | サンプリング窓をループ周期と兼ねる(`sleep INTERVAL` を評価の内側に含める) | D0-scope-04 |
+| 3 | 低め閾値(60%)+ 長め窓(3分)にする(一過性ビルドを除外しつつスラッシングを捕まえる) | D0-scope-04 |
+
+## 既知の制限
+
+| 制限 | 影響 | 関連 issue |
+|---|---|---|
+| CPU 使用率からの間接推定 | メモリ不足以外の理由による高負荷(ゲスト内のビルド・テストなど)も WARN になる。**この機能はゲストのメモリ使用量を観測しない** | なし |
+| `VM_HEALTH_*` は環境変数の上書きのみ | CLI からの明示的な受け渡し口が無い(既定値運用)。**用語集「資源逼迫」の3つの数値を上書きする唯一の手段がこの環境変数である** | なし |
