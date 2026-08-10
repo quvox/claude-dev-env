@@ -599,7 +599,7 @@ diff --git a/.claude/scripts/test-compose-changeset.py b/.claude/scripts/test-co
  """)
          out=r/"preview"; p=run(r,"task-x","--preview",str(out),"--date","2026-08-10")
          assert p.returncode==0,p.stderr
-@@ -171,12 +204,22 @@
+@@ -171,18 +204,84 @@
          assert "new parent" in result and "new child" in result and "keep body" in result
          assert "added body" in result and "## Tail" not in result
          assert "version: 1.3.0" in result and "verified:" not in result
@@ -624,11 +624,11 @@ diff --git a/.claude/scripts/test-compose-changeset.py b/.claude/scripts/test-co
          base=json.loads(p.stdout)["base_hash"]
          a=run(r,"task-x","--apply-preview",str(out))
          assert a.returncode==0,a.stderr
-@@ -184,6 +227,61 @@
+         assert "reflected: 2026-08-10" in (r/"docs/tasks/task-x/new-features/02-design/system.md").read_text()
          b=run(r,"task-x","--apply-preview",str(out))
          assert b.returncode!=0
- 
 -    print("OK compose-changeset: replace/add/delete/anchor/relation/layer-bump/stale-hash/reflected")
++
 +    # 否定側: relations の replace が SSOT の見出しを落としていたら止める。
 +    # **部分本文の変更指示を全文置換として適用すると本文の大半が消える**(実測 350 行→53 行)。
 +    with tempfile.TemporaryDirectory() as td2:
