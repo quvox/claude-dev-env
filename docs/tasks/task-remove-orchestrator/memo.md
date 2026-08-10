@@ -1,6 +1,6 @@
 ---
 id: task-remove-orchestrator
-phase: 実装
+phase: 反映
 origin_layer: 00
 issue: なし
 lane: critical
@@ -257,7 +257,7 @@ AIオーケストレーター(`orchestrator/` の Go 実装、`claude-dev orches
 
 | # | 論点 | 何が止まるか | 推奨する回答(暫定) |
 |---|---|---|---|
-| - | なし | - | - |
+| 1 | 2026-08-10 のキット書き換えが本タスクの成果物と 5 箇所で食い違い、AI の判断で吸収した(`version_bump` の付与 32 件 / 見出し改名の記法 / relations の全文形式化 / `compose-changeset.py` の最小修正 2 箇所 / features.md の手作業ぶん)。**`.claude/` は git 追跡外**なので、この吸収は版管理の外にある | `/task-close`(SSOT の一括書き換え)を今走らせてよいか | **走らせてよい**。反映は git で戻せる。キット側の残りは `docs/pendings.md` の残務 3 行が追跡する |
 
 ## タスクリスト
 
@@ -301,3 +301,97 @@ AIオーケストレーター(`orchestrator/` の Go 実装、`claude-dev orches
 - [x] `docs/issues/` の該当 **21 件**が削除され、残りが **39 件**であること(タスクリスト 12)。**フェーズ1 の調査メモ 12 は「61 - 21 = 40」と書いていたが、母数 61 は `index.md` を含めた数え間違いで、実体は 60 件だった**(その後 `task-layer-placement` の完了で 5 件減り 1 件増えた分も含めて 2026-08-10 時点で 60 件)
 - [ ] `docs/01-requirements/functional.md` / `non-functional.md` の冒頭 HTML コメントから、削除した ID への言及が消えていること(タスクリスト 15-a) — `/task-close` で実施
 - [x] リポジトリ全体に orchestrator への参照が残っていないこと(`docs/` `.claude/` と git 履歴を除く)。**`docs/` に残るのは `/task-close` が反映する SSOT と、範囲外と決めた `docs/orch/` / `docs/histories/` / `docs/feedbacks/` / `docs/kit-report.md` / `docs/ONBOARDING.md` / 残る issue 6 件だけである**
+
+## 進捗メモ
+
+- 2026-08-10 フェーズ3 完了(`/implement`)。**タスク 1〜14 を実施し、15 は `/task-close` の反映手順として残した。**
+  対象コミット `e4fc59b1551688f8953393c2f81e272baa8d93ce`(コード削除 `c7f9c21` / issue 削除 `d68a725` / 変更指示 `e4fc59b`)。
+
+  | DoD | コマンド | 最終行(逐語) |
+  |---|---|---|
+  | lint | `cd docker-proxy && go vet ./...` | (出力なし。終了コード 0) |
+  | 単体・結合テスト | `cd docker-proxy && go test -count=1 ./...` | `ok  	github.com/quvox/claude-dev-env/docker-proxy	0.014s` |
+  | build | `make build` | `✅ claude-dev-docker-proxy`(終了コード 0。3 イメージとも成功) |
+  | コールグラフ再生成 | `build-callgraphs.py --out "$CG_OUT"` | `書き換え: index.md, make.md`(go 14/17 / shell 170/261 / make 16/21 / python 0 / typescript 0 / infra 0) |
+  | コールグラフ突き合わせ | `callgraph-check.py --to-be task-remove-orchestrator` | `### 指摘 24 件`(**重大度「高」0**。中3 / 低8 / 低(実装前)1 / 参考12) |
+  | 変更指示の不変条件 | `check-changeset.py docs/tasks/task-remove-orchestrator/new-features` | `合格: 不変条件の違反なし` |
+  | 合成 | `compose-changeset.py --preview <dir> task-remove-orchestrator` | `"result_hash": "74690da0283bbd8dac85439ee4baa8438e340542808cfa78d1578cb71133ef70"` |
+  | 機能間連携仕様書(合成ビュー) | `check-relations.py` | `合格: 対称性・参照実在・impl パス・必須項目・機能表との 1:1すべて問題なし。`(56 ファイル / 56 ID) |
+  | 網羅性(合成ビュー) | `relations-coverage.py` | `合格: 検出できたエントリポイントはすべて機能間連携仕様書に記載されている。` |
+  | 契約(合成ビュー) | `check-contracts.py` | `合格: 契約に不整合なし。`(02:3 件 / 03:3 件) |
+  | 健全性(合成ビュー) | `relations-query.py --health` | `### 循環(0 件)` / `### 対応要件が無い機能(0 件)` |
+  | issue 件数 | `ls docs/issues/*.md \| grep -vc index` | `39` |
+
+  **合成ビューの検査**(`check-relations.py` / `relations-coverage.py` / `check-contracts.py` /
+  `relations-query.py --health`)は、`compose-changeset.py --preview` が作った SSOT+変更指示の
+  合成ツリーへコードを実体コピーしたスクラッチで実行した。SSOT はまだ書き換えていない(原則1)。
+
+  **E2E は実行していない。** `02-design/environments.md` は E2E に自動テストランナーを持たず、
+  E2E-01〜03 / E2E-06 は実機で `claude-dev start` から操作する手順である(`03-impl/tests/e2e.md`)。
+  本タスクが削除したのは E2E-04 / E2E-05 そのもので、残る 4 シナリオの手順は 1 行も変えていない。
+  代わりに **`make build` を実走**して、`orch-builder` ステージと hooks 2 本の `COPY` を外した
+  `Dockerfile.claude` が 3 イメージともビルドできることを確認した(イメージは 8.35GB → 8.16GB)。
+  実機 E2E は人間が `claude-dev start` を回すときに確認する。
+
+  **今回 AI が決めたこと(委任と原則の適用)**:
+  - **[DS-08]** タスク 1〜11 を 1 コミット、12 を 1 コミット、14 を 1 コミットにまとめた —
+    理由: 削除は相互依存で、1 タスク 1 コミットにすると Makefile が消えたディレクトリを指す
+    ビルド不能な中間状態が残る。見直す条件: 削除以外の変更が混ざるとき。記録先: 本タスクリスト
+  - **原則6 の適用**: `change: replace` の 32 件に `version_bump` を付けた。**意味が変わるもの 25 件を
+    `minor`、引用の付け替え・消えた呼び出し元の削除・陳腐化した記述の削除だけの 7 件(relations)を
+    `patch`** とした(§3「PATCH 級の修正(字句・引用の付け替え・陳腐化した記述の削除)」)
+  - **`.claude/scripts/callgraph-config.local.json` を作り直した** — 2026-08-10 のキット書き換えで
+    失われていた。`02-design/environments.md`「コールグラフ抽出設定」に合わせ、`workspace/` /
+    `tmp/` / `scripts/e2e6-codex.sh` の除外と `include_tooling: true` を書いた。
+    後者が無いとキット既定の `tooling_markers` が Makefile を外し、`MODULE-makefile-*` 16 本が
+    機能表と食い違う。見直す条件: 02 の「有効な言語」から make が外れたとき
+  - **キットへ最小修正 2 箇所**(CLAUDE.md §3 の唯一の例外「キットの検査が誤射して作業を止めるとき」):
+    `compose-changeset.py` が relations と `features.md` に `version:` を要求して異常終了していた。
+    `.claude/directions/03-impl.md` は「この 2 種は版も合格証も持たない」と書いており、
+    スクリプト側の誤りである。版が無いときは版を書き足さない分岐を足した
+  - **記法の逸脱 1 件**: `02-design/system.md` の `## UI設計` は本文が変わり、かつ子孫
+    `#### DSN-ui-01` を改名する。`change-set.md` §2 はこの 2 つを同時に表せないので、改名する子を
+    指示本文の冒頭(親の部分木の外)へ出し、親と子の両方を `sections` に載せた。
+    親の本文へ入れ子にしていないので §2 が防ごうとした「親のスパンが子を飲み込む」失敗は起きない
+  - **範囲外で直した 1 件**: 曖昧語「通常」3 箇所(`MODULE-cli-start` ×2 / `MODULE-docker-proxy-serve`)。
+    全文形式への展開で SSOT の原文を変更指示へ取り込んだ結果 `CS8` が落ちたため、具体的な条件へ
+    書き換えた(`docs/issues/095` の一部)
+  - **範囲外で戻した 1 件**: `build-index.py` が `docs/03-impl/tests/index.md` の第3列を全て 0 に
+    書き換えた(キットが数える語が「対象外」から「テスト対象外」へ変わったため)。本タスクの
+    範囲外なので `git checkout` で戻し、`docs/pendings.md` の残務に 1 行残した
+
+- 2026-08-10 規範改訂後の継続判断: 人間の「orchestrator に関連する機能を完全に排除するタスクを
+  作って」に対し、本タスクが重複することを提示して確認した結果、**既存を継続してフェーズ3へ**
+  進める回答を得た(2026-08-10)。新規範のリスクレーン欄を frontmatter へ追記
+  (`lane: critical` + 7 つの真偽値)。`check-lane.py` 合格(必要下限=critical)、
+  `check-sheet.py` 合格。フェーズ2 の PASS は編集していない(frontmatter の欄追加のみ = PATCH 相当。
+  §3「判定は編集に耐える」)。`rollback_defined: false` は事実のとおり — 外部挙動を変える削除に
+  対する巻き戻し手順が未定義。git の履歴からの復元が実質の巻き戻しになるが、`.orchestrator/`
+  (gitignore 済みの実行時状態、タスクリスト 11)だけは復元できない。**フェーズ3 の着手前に
+  `.orchestrator/` と `workspace/orch-sample/`(どちらも git 追跡外)をスクラッチへ tar で退避した。**
+- 2026-08-08 フェーズ2: 03 完了。変更指示 65 件を書き終え、`check-changeset.py` が合格
+  (CS5/CS6/CS7 は未設定のため「未検査」。`docs/issues/079` が追跡する既存の状態で、本タスクが作ったものではない)。
+  今回行使した標準委任: **[DS-01]** `docs/03-impl/tests/images.md` / `makefile.md` / `cli-common.md` に
+  `## テスト設計の判断` を新設した(記録先: 同名の変更指示。`CS19` が非空を要求する節で、
+  3 ファイルとも持っていなかった — `docs/issues/084` の一部)。
+  次は `/doc-check task-remove-orchestrator`。
+- 2026-08-08 /doc-check(task) 判定: PASS(残存の重大度「高」なし)。レビュー: サブエージェント
+  (Codex は利用枠切れ。docs モード判定 pass / readiness モード判定 fail → 指摘は全件解消)。
+  検証した状態: 変更指示 68 件の一括ハッシュ `29498c54f160` /
+  closure の SSOT 版 = docs/00-requests/acceptances.md@1.3.0 / docs/00-requests/decisions/dist.md@1.1.0 / docs/00-requests/decisions/env.md@1.4.0 / docs/00-requests/decisions/orch.md@1.4.0 / docs/00-requests/decisions/sec.md@1.2.0 / docs/00-requests/request.md@1.3.0 / docs/00-requests/terminology.md@1.4.0 / docs/01-requirements/decisions/split.md@1.2.0 / docs/01-requirements/functional.md@1.12.0 / docs/01-requirements/non-functional.md@1.6.0 / docs/01-requirements/system.md@1.1.0 / docs/01-requirements/usecases.md@1.4.0 / docs/02-design/architecture.md@1.4.0 / docs/02-design/contracts/cli-container.md@1.7.0 / docs/02-design/contracts/cli-orchestrator.md@1.2.0 / docs/02-design/contracts/orchestrator-prompt.md@1.3.0 / docs/02-design/environments.md@1.3.0 / docs/02-design/logging.md@1.4.1 / docs/02-design/relations.md@1.7.0 / docs/02-design/system.md@2.8.0 / docs/03-impl/contracts/cli-orchestrator.md@1.1.0 / docs/03-impl/contracts/orchestrator-prompt.md@1.1.0 / docs/03-impl/environments/images.md@1.0.0 / docs/03-impl/index.md@1.18.0 / docs/03-impl/tests/cli-common.md@1.2.0 / docs/03-impl/tests/cli-orchestrate.md@1.1.0 / docs/03-impl/tests/e2e.md@1.4.0 / docs/03-impl/tests/hooks.md@1.1.0 / docs/03-impl/tests/images.md@1.2.0 / docs/03-impl/tests/makefile.md@1.1.0 / docs/03-impl/tests/orchestrator.md@1.6.0 / docs/03-impl/tests/sample-project.md@1.1.0 / docs/03-impl/tests/strategy.md@1.4.0
+- 2026-08-08 /doc-check(task) を著者セッションで実行(新規セッションを取れないため。§0A の3行目)。
+  独立レビューは docs モード1本を追加で実行(**Codex 利用枠切れのためサブエージェント。
+  `lens: subagent` / model: sonnet / 判定 pass / 指摘 中2・低1**)。指摘3件と検査 A4 の自分の所見
+  1件を裁定し、**`NFR-ops-05`(利用者へ向けた文が日本語であること)を 01 へ新設**して
+  `DSN-log-03` を撤回した(論点5 として sheet.md に追記し、一括回答で settle)。
+  変更指示は 68 件になった。
+
+## 申し送り事項
+
+- 進行中の他タスクは無い(`docs/tasks/` はこのタスクのみ)。
+- **`.claude/` は `.gitignore:4` で git 追跡外である。** 本タスクがフェーズ3 で触った
+  `.claude/scripts/callgraph-config.local.json`(新規)と `.claude/scripts/compose-changeset.py`
+  (最小修正2箇所)はコミットに含まれない。他の作業ツリーへは手で持っていく必要がある。
+- **`/task-close` の反映はタスクリスト 15 の a〜c を手で行うこと。** `compose-changeset.py --apply`
+  だけでは `docs/03-impl/features.md` の `## 機能一覧` 以外の節と、01 の冒頭 HTML コメントが
+  更新されず、`check-relations.py` の FT3 が落ちる。
