@@ -55,3 +55,4 @@ summary: 検証済みの変更指示は「規範が変わらない」ことに�
 
 - `docs/histories/2026-08-10-remove-orchestrator.md`(この事故を含むタスクの記録)
 - `docs/pendings.md`「残務(文書整合ほか)」の 2026-08-10 の各行(キット側に残した課題と、入れた最小修正の記録)
+- `kit-patches/2026-08-10-compose-changeset-and-close-task.patch`(本流へ戻す修正一式。退行版 7 種で回帰検査が効くことを確認済み)
