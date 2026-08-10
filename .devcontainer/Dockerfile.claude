@@ -8,18 +8,6 @@
 # ブラックリスト方式ファイアウォール
 # 認証情報はボリュームマウントで管理
 # =============================================================================
-# =============================================================================
-# orchestrator ビルドステージ（AI オーケストレーター / Go）
-# 依存（bubbletea/lipgloss ＝ダッシュボード TUI）は vendoring で取り込む
-# （ビルド時ネットワーク非依存・再現性。docs/impl/60）。
-# =============================================================================
-FROM golang:1.24-alpine AS orch-builder
-WORKDIR /app
-COPY orchestrator/go.mod orchestrator/go.sum ./
-COPY orchestrator/vendor/ ./vendor/
-COPY orchestrator/*.go ./
-RUN CGO_ENABLED=0 go build -ldflags="-s -w" -mod=vendor -o /claude-orchestrator .
-
 FROM ubuntu:24.04 AS base
 
 ENV DEBIAN_FRONTEND=noninteractive
@@ -271,8 +259,6 @@ COPY .devcontainer/tmux.conf /etc/tmux.conf
 # --- スクリプト設置 ---
 COPY scripts/init-firewall-claude.sh /usr/local/bin/init-firewall.sh
 COPY scripts/entrypoint-claude.sh /usr/local/bin/entrypoint.sh
-COPY scripts/save_prompt.sh /usr/local/bin/save_prompt.sh
-COPY scripts/sendslackmsg.sh /usr/local/bin/sendslackmsg.sh
 COPY scripts/wait-limit-reset.sh /usr/local/bin/wait-limit-reset.sh
 # --- VM モード（QEMU + virtiofs）スクリプト ---
 COPY scripts/vm-up.sh /usr/local/bin/vm-up.sh
@@ -282,15 +268,9 @@ COPY scripts/vm-healthd.sh /usr/local/bin/vm-healthd.sh
 COPY scripts/dood-portsync.sh /usr/local/bin/dood-portsync.sh
 COPY scripts/VM_DEV.md.tmpl /usr/local/share/claude-dev/VM_DEV.md.tmpl
 RUN chmod +x /usr/local/bin/init-firewall.sh /usr/local/bin/entrypoint.sh \
-    /usr/local/bin/save_prompt.sh /usr/local/bin/sendslackmsg.sh \
     /usr/local/bin/wait-limit-reset.sh \
     /usr/local/bin/vm-up.sh /usr/local/bin/vm /usr/local/bin/vm-portsync.sh \
     /usr/local/bin/vm-healthd.sh /usr/local/bin/dood-portsync.sh
-
-# --- orchestrator バイナリ + instruction テンプレート ---
-COPY --from=orch-builder /claude-orchestrator /usr/local/bin/claude-orchestrator
-COPY orchestrator/instructions/ /usr/local/share/claude-orchestrator/
-RUN chmod +x /usr/local/bin/claude-orchestrator
 
 # --- 作業ディレクトリ ---
 RUN mkdir -p /workspace && chown $USERNAME:$USERNAME /workspace

@@ -1539,46 +1539,6 @@ code)
     ;;
 
 # -----------------------------------------------------------------------------
-# AI オーケストレーターを新しい tmux ウィンドウで起動
-#   claude-dev orchestrate [<ゴール>] [--fresh]
-#   ゴールは任意（既定は壁打ちから開始）。
-#   --fresh で前回の実行状態（state/plan/control・worktree/orch ブランチ）を
-#   破棄して壁打ちから新規開始する（中断した executing/intervening の再開を上書き）。
-#   worker の実行内容はダッシュボードの [d] キーでライブ表示できる。
-# -----------------------------------------------------------------------------
-orchestrate)
-    require_setup
-    NAME=$(container_name)
-
-    if ! is_running "$NAME"; then
-        echo "❌ コンテナが起動していません: claude-dev start を先に実行"
-        exit 1
-    fi
-    CUSER="$(resolve_container_user "$NAME")"   # 稼働中コンテナ側のユーザーで exec する
-
-    shift  # "orchestrate" を除去
-    _fresh=""
-    _goal=""
-    for a in "$@"; do
-        case "$a" in
-            --fresh) _fresh="--fresh" ;;
-            *) if [ -z "$_goal" ]; then _goal="$a"; else _goal="$_goal $a"; fi ;;
-        esac
-    done
-
-    # コンテナ内コマンドを組み立てる（workspace は /workspace 固定）
-    _cmd="claude-orchestrator --workspace /workspace"
-    [ -n "$_fresh" ] && _cmd="$_cmd $_fresh"
-    if [ -n "$_goal" ]; then
-        _esc=$(printf '%s' "$_goal" | sed 's/"/\\"/g')
-        _cmd="$_cmd \"$_esc\""
-    fi
-
-    docker exec -it -u "$CUSER" "$NAME" tmux new-window -t main -c /workspace "$_cmd"
-    docker exec -it -u "$CUSER" "$NAME" tmux attach -t main
-    ;;
-
-# -----------------------------------------------------------------------------
 # 既存セッションに接続
 # -----------------------------------------------------------------------------
 attach)
@@ -2260,9 +2220,6 @@ claude-dev - Claude Code 安全開発環境（macOS 版）
   claude-dev start               カレントディレクトリで環境を起動（VNC + Chrome 付き）
   claude-dev start --no-vnc      Chrome / VNC なしで起動（軽量）
   claude-dev code                新しい tmux ウィンドウで Claude Code を起動
-  claude-dev orchestrate [<ゴール>] [--fresh]
-                                 AI オーケストレーター（壁打ち→自律実行）を起動
-                                 （--fresh で前回の実行状態を破棄し壁打ちから再開）
   claude-dev attach [NAME]       既存セッションに接続
   claude-dev stop [NAME]         セッションを停止
   claude-dev list                実行中セッション一覧

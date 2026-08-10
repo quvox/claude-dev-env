@@ -11,7 +11,7 @@
 # 警告の出し先:
 #   (1) tmux: WARN 中は `@vm_health` を set（status-right が表示）、OK 復帰で unset。
 #       OK→WARN 遷移時に display-message でフラッシュ（cooldown で再フラッシュ抑制）。
-#   (2) health ファイル(${VM_HOME}/health): vm status / orchestrator dashboard が読む。
+#   (2) health ファイル(${VM_HOME}/health): vm status が読む。
 #
 # 使い方:
 #   vm-healthd.sh          一度だけ評価して health を書く

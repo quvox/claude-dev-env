@@ -27,16 +27,9 @@ Claude Code をそのまま使うと、ファイル変更やコマンド実行�
 - **同じディレクトリで既にコンテナが起動済みなら、`claude-dev start` は起動中コンテナへ「再ログイン」**する（新しく立て直さず、作業をそのまま継続できる）。
 - 起動すると、そのコンテナ内の **tmux セッションに接続**された状態になる。
 
-### 2. コンテナの中で Claude を動かす — 2 通り
+### 2. コンテナの中で Claude を動かす
 
-tmux に接続されたら、Claude の動かし方は 2 つ。**どちらも中身は同じ Claude Code**で、違いは「**作業全体を監視・指揮する司令塔（AI オーケストレーター）を挟むかどうか**」だけ（オーケストレーターも内部では結局 Claude Code を動かす）。
-
-- **① 素の Claude Code**：`claude-dev start` で入った後、tmux 内で **`claude`** を実行 → 承認待ちなしの Claude Code がそのまま起動する（1 エージェントで対話しながら作業。オーケストレーターは付かない）。
-- **② AI オーケストレーター**：ブレインストーミング（検討）→ 実行計画 → 複数 worker への並列委譲 → 相互レビュー、までを**自律で回す司令塔**（設計は [docs/06](docs/06_orchestration.md)）。起動は 2 通り：
-  - **`claude-dev start` した後、tmux 内で `claude-orchestrator` を実行**すると AI オーケストレーターが起動する。
-  - **`claude-dev orchestrate` を実行**すると、（コンテナ未起動なら）**`start` した後に tmux 内で自動的に** AI オーケストレーターが起動する。ゴールを渡すこともできる：`claude-dev orchestrate "ユーザー認証を実装"`。
-
-> 「素の Claude Code が欲しい → tmux 内で `claude`」「全体を任せて自律で回したい → `claude-dev orchestrate`（または tmux 内で `claude-orchestrator`）」。
+`claude-dev start` で tmux に接続されたら、tmux 内で **`claude`** を実行する → 承認待ちなしの Claude Code がそのまま起動する（1 エージェントで対話しながら作業する）。
 
 ### 3. 抜け方（コンテナは裏で動き続ける）
 
@@ -106,7 +99,6 @@ VNC あり（既定）で起動すると、コンテナ内の Chrome を**ブラ
 | Docker Socket Proxy | Docker API を検査中継し、ホスト bind・privileged 等の危険操作をブロック |
 | SSH agent 転送 | 秘密鍵ファイルを渡さず署名操作のみ許可 |
 | ブラックリスト FW | ペーストサイト・Webhook・メタデータ・SMTP・外部 SSH を遮断 |
-| AI オーケストレーター | `claude-dev orchestrate`：ブレインストーミング→ worker への並列委譲で自律実行（[docs/06](docs/06_orchestration.md)） |
 | VM モード（Linux） | コンテナ内ゲスト VM でネイティブ Docker（bind/compose/privileged 可） |
 | GHCR 配布 | GitHub Actions が毎日ビルドしたイメージを `claude-dev pull` で取得（amd64/arm64） |
 
@@ -212,13 +204,8 @@ claude-dev start --no-vnc        # Chrome/VNC なしの軽量モード
 claude-dev attach my-project     # 名前指定で接続
 
 # tmux 内で（コンテナの中）
-claude                           # 素の Claude Code を起動
-claude-orchestrator              # AI オーケストレーターを起動（orchestrate と同じ司令塔）
+claude                           # Claude Code を起動
 Ctrl-_ d                         # tmux をデタッチ（コンテナは動き続ける）→ さらに Ctrl-D でコンテナを抜ける
-
-# AI オーケストレーター（コンテナ未起動なら自動起動 → tmux 内で司令塔を起動 → 接続）
-claude-dev orchestrate                       # ブレインストーミングから開始
-claude-dev orchestrate "ユーザー認証を実装"   # ゴールを与えて開始
 
 # Web アプリのポートフォワード
 claude-dev forward 3000          # host:8100 → container:3000
@@ -299,8 +286,6 @@ claude-dev-env/
 │   └── ghcr-images.yml          GHCR へ毎日・マルチアーキで push する CI
 │
 ├── docker-proxy/                Docker Socket Proxy ソース（Go）
-├── orchestrator/                AI オーケストレーター ソース（Go。claude-orchestrator）
-├── examples/orch-sample/        オーケストレーター自己検証用サンプル
 │
 ├── scripts/
 │   ├── entrypoint-claude.sh     コンテナ起動スクリプト（UID/GID 追従・認証共有・VNC/Chrome 起動）
@@ -308,8 +293,6 @@ claude-dev-env/
 │   ├── dood-portsync.sh         DooD 時のホスト公開ポートを 127.0.0.1 へ同期
 │   ├── vm-up.sh / vm / vm-*.sh  VM モード：ゲスト VM 起動・操作・ポート同期・監視
 │   ├── VM_DEV.md.tmpl           VM モードのエージェント向け情報テンプレート
-│   ├── save_prompt.sh / sendslackmsg.sh  Claude Code hook（履歴保存・Slack 通知）
-│   ├── orch-sample.sh           サンプル scaffold
 │   └── tmux.conf                tmux 設定（prefix: Ctrl-_）
 │
 └── docs/                        設計・実装仕様・レビュー（下表）
@@ -325,7 +308,6 @@ claude-dev-env/
 | [docs/03_security.md](docs/03_security.md) | 脅威モデルと防御層の詳細 |
 | [docs/04_cli-reference.md](docs/04_cli-reference.md) | 全コマンドのリファレンス |
 | [docs/05_customization.md](docs/05_customization.md) | ファイアウォール・CLAUDE.md・tmux・hooks/env 等のカスタマイズ |
-| [docs/06_orchestration.md](docs/06_orchestration.md) | AI オーケストレーターの設計 |
 | [docs/08_vm-mode.md](docs/08_vm-mode.md) | VM モード（Linux）の設計 |
 | [docs/09_macos-support.md](docs/09_macos-support.md) | macOS（Docker Desktop）対応の設計（claude-dev-mac） |
 | [docs/10_ghcr-images.md](docs/10_ghcr-images.md) | GHCR への定期 push・pull 運用の設計 |
