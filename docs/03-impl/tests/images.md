@@ -1,21 +1,19 @@
 ---
 id: images
+version: 1.3.0
+updated: 2026-08-10
 scope: (モジュール外)イメージのビルドと GHCR 配布
-version: 1.2.0
-updated: 2026-08-07
 source:
   - docs/01-requirements/functional.md
   - docs/02-design/system.md
 summary: どのモジュールにも属さないイメージのビルドと GHCR 配布の受入基準⇄テスト対応
 keywords: [テスト, イメージ, GHCR]
 verified:
-  at: 2026-08-08
-  version: 1.2.0
+  at: 2026-08-10
+  version: 1.3.0
   against:
-    - doc: docs/01-requirements/functional.md
-      version: 1.12.0
-    - doc: docs/02-design/system.md
-      version: 2.8.0
+    - {doc: docs/01-requirements/functional.md, version: 1.13.1}
+    - {doc: docs/02-design/system.md, version: 2.9.1}
 ---
 
 # イメージのビルドと GHCR 配布 のテスト対応
@@ -38,7 +36,6 @@ verified:
 | FR-env-12-2 | 正常系 | — | - | 未検証(テスト未実装) |
 | FR-env-12-3 | 正常系 | — | - | 未検証(テスト未実装) |
 | FR-env-12-9 | 境界値 | — | - | 未検証(テスト未実装) |
-| FR-env-12-12 | 対象外 | — | - | 対象外(理由: 要件が「オーケストレーターによる常用は対象外」と定めた範囲そのもの) |
 | NFR-perf-01 | 非機能 | — | - | 未検証(テスト未実装) |
 | NFR-perf-02 | 非機能 | — | - | 未検証(テスト未実装) |
 
@@ -73,3 +70,8 @@ verified:
 | 13 | FR-env-12 — 受入基準 9(境界値) | 同上 | 同上 |
 | 14 | NFR-perf-01 — 取得の増分性 | CI 成果物の検証を自動化していない。日次ビルド後に人が、前日分のイメージを持つ環境で `docker pull` を実行し `Already exists` 以外の層が出ないことを確認する | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |
 | 15 | NFR-perf-02 — ベース層の共有と追加層の限定 | CI 成果物の検証を自動化していない。日次ビルド後に人が `docker history --no-trunc` で 2 イメージの層を並べ、**(1) 共通部分の最終層のダイジェストが一致すること、(2) ブラウザ確認ありイメージだけが持つ追加層の `CREATED BY` に現れる導入物が、`NFR-perf-02` の挙げる6カテゴリ(VNC・GUI ブラウザ・日本語入力とロケール・端末/キー操作と gsettings/dconf バックエンド・フォント・computer-use MCP)のいずれかに割り当てられること**を確認する。同梱エージェント CLI の層は両イメージが等しく持つので対象外である | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |
+## テスト設計の判断
+
+<!-- このファイルのテストの作り方(DS-01 で AI が決めた部分)の理由を置く。何を検証するかは 01 が正である。 -->
+
+- 判断なし: このファイルが持つ全 15 行はいずれも `未検証(テスト未実装)` か `対象外` であり、テストの作り方を選ぶ余地が生じていない。イメージのビルドと GHCR 配布はコールグラフに入口を持たずモジュールにしていないため(`DSN-mod-05`)、自動テストランナーの割り当ても `DSN-test-01` の既定(Go の docker-proxy に集中させ、それ以外は実機確認)から動かしていない

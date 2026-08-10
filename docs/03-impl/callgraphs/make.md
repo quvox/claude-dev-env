@@ -2,9 +2,9 @@
 id: make
 language: make
 tier: 3
-symbols: 19
-edges: 22
-endpoints: 19
+symbols: 16
+edges: 21
+endpoints: 16
 unresolved: 0
 ---
 
@@ -24,15 +24,12 @@ unresolved: 0
 | cli | `dispatch build-claude @ Makefile::build-claude` | `/Makefile/build-claude` | `Makefile::build-claude` | Makefile |
 | cli | `dispatch build-claude-vnc @ Makefile::build-claude-vnc` | `/Makefile/build-claude-vnc` | `Makefile::build-claude-vnc` | Makefile |
 | cli | `dispatch build-docker-proxy @ Makefile::build-docker-proxy` | `/Makefile/build-docker-proxy` | `Makefile::build-docker-proxy` | Makefile |
-| cli | `dispatch build-orchestrator @ Makefile::build-orchestrator` | `/Makefile/build-orchestrator` | `Makefile::build-orchestrator` | Makefile |
 | cli | `dispatch clean @ Makefile::clean` | `/Makefile/clean` | `Makefile::clean` | Makefile |
 | cli | `dispatch env @ Makefile::env` | `/Makefile/env` | `Makefile::env` | Makefile |
 | cli | `dispatch help @ Makefile::help` | `/Makefile/help` | `Makefile::help` | Makefile |
 | cli | `dispatch install @ Makefile::install` | `/Makefile/install` | `Makefile::install` | Makefile |
 | cli | `dispatch login @ Makefile::login` | `/Makefile/login` | `Makefile::login` | Makefile |
 | cli | `dispatch network @ Makefile::network` | `/Makefile/network` | `Makefile::network` | Makefile |
-| cli | `dispatch orch-sample @ Makefile::orch-sample` | `/Makefile/orch-sample` | `Makefile::orch-sample` | Makefile |
-| cli | `dispatch orch-sample-clean @ Makefile::orch-sample-clean` | `/Makefile/orch-sample-clean` | `Makefile::orch-sample-clean` | Makefile |
 | cli | `dispatch setup @ Makefile::setup` | `/Makefile/setup` | `Makefile::setup` | Makefile |
 | cli | `dispatch status @ Makefile::status` | `/Makefile/status` | `Makefile::status` | Makefile |
 | cli | `dispatch uninstall @ Makefile::uninstall` | `/Makefile/uninstall` | `Makefile::uninstall` | Makefile |
@@ -48,15 +45,12 @@ unresolved: 0
 | `Makefile::build-claude` | handler | public | - | `Makefile::build`, `Makefile::build-claude-vnc`, `Makefile::help` |
 | `Makefile::build-claude-vnc` | handler | public | `Makefile::build-claude` | `Makefile::build`, `Makefile::help` |
 | `Makefile::build-docker-proxy` | handler | public | - | `Makefile::build`, `Makefile::help` |
-| `Makefile::build-orchestrator` | handler | public | - | `Makefile::help` |
 | `Makefile::clean` | handler | public | - | `Makefile::help` |
 | `Makefile::env` | handler | public | - | `Makefile::setup` |
-| `Makefile::help` | handler | public | `Makefile::build`, `Makefile::build-claude`, `Makefile::build-claude-vnc`, `Makefile::build-docker-proxy`, `Makefile::build-orchestrator`, `Makefile::clean`, `Makefile::login`, `Makefile::setup`, `Makefile::status`, `Makefile::uninstall`, `Makefile::update-claude`, `Makefile::upgrade` | (エントリポイント) |
+| `Makefile::help` | handler | public | `Makefile::build`, `Makefile::build-claude`, `Makefile::build-claude-vnc`, `Makefile::build-docker-proxy`, `Makefile::clean`, `Makefile::login`, `Makefile::setup`, `Makefile::status`, `Makefile::uninstall`, `Makefile::update-claude`, `Makefile::upgrade` | (エントリポイント) |
 | `Makefile::install` | handler | public | - | `Makefile::setup` |
 | `Makefile::login` | handler | public | - | `Makefile::help`, `Makefile::setup` |
 | `Makefile::network` | handler | public | - | `Makefile::setup` |
-| `Makefile::orch-sample` | handler | public | - | (エントリポイント) |
-| `Makefile::orch-sample-clean` | handler | public | - | (エントリポイント) |
 | `Makefile::setup` | handler | public | `Makefile::build`, `Makefile::env`, `Makefile::install`, `Makefile::login`, `Makefile::network`, `Makefile::volumes` | `Makefile::help` |
 | `Makefile::status` | handler | public | - | `Makefile::help` |
 | `Makefile::uninstall` | handler | public | - | `Makefile::help` |

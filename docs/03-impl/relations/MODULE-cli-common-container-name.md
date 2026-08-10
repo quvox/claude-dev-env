@@ -1,16 +1,16 @@
 ---
 id: MODULE-cli-common-container-name
+updated: 2026-08-10
 module: MOD-cli-common
 kind: function-call
 sync: sync
 impl: claude-dev::container_name, claude-dev-mac::container_name
-callers: MODULE-cli-attach, MODULE-cli-code, MODULE-cli-firewall, MODULE-cli-forward, MODULE-cli-orchestrate, MODULE-cli-ports, MODULE-cli-ssh-keys, MODULE-cli-ssh-keys-reset, MODULE-cli-start, MODULE-cli-stop, MODULE-cli-unforward
+callers: MODULE-cli-attach, MODULE-cli-code, MODULE-cli-firewall, MODULE-cli-forward, MODULE-cli-ports, MODULE-cli-ssh-keys, MODULE-cli-ssh-keys-reset, MODULE-cli-start, MODULE-cli-stop, MODULE-cli-unforward
 callees: なし
 contracts: なし
 design: DSN-mod-01, DSN-mod-02
 requirements: FR-env-01
 tests: なし(未実装。シェル実装のため自動テストランナーが無く実機確認で代替する)
-updated: 2026-08-02
 summary: プロジェクト名からコンテナ名を導出する(命名規則の実体)
 ---
 

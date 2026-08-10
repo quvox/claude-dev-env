@@ -1,5 +1,6 @@
 ---
 id: MODULE-docker-proxy-serve
+updated: 2026-08-10
 module: MOD-docker-proxy
 kind: tool
 sync: sync
@@ -10,7 +11,6 @@ contracts: CTR-docker-api
 design: DSN-mod-01, DSN-arch-01, DSN-mod-04, DSN-env-04
 requirements: FR-env-07, NFR-sec-01
 tests: docker-proxy/labels_test.go::TestValidateContainerCreate_InjectsOwnerLabels, docker-proxy/labels_test.go::TestValidateContainerCreate_InjectsOwnerLabelsWithoutHostConfig, docker-proxy/labels_test.go::TestValidateContainerCreate_InjectionLeavesOtherFieldsIntact, docker-proxy/labels_test.go::TestValidateContainerCreate_OverwritesUserSuppliedOwnerLabel, docker-proxy/labels_test.go::TestValidateContainerCreate_NoOwnerLabelWhenCallerUnknown, docker-proxy/labels_test.go::TestValidateContainerCreate_NoOwnerLabelWhenProjectDirEmpty, docker-proxy/labels_test.go::TestValidateContainerCreate_UnparseableBodyRelayedUnchanged, docker-proxy/labels_test.go::TestValidateContainerCreate_RejectedRequestIsNotLabelled, docker-proxy/labels_test.go::TestValidateContainerCreate_BindRewriteAndLabelShareOneReconstruction, docker-proxy/labels_test.go::TestValidateContainerCreate_LabelsIndependentOfBindSwitch, docker-proxy/labels_test.go::TestLabelNetworkCreate_InjectsOwnerLabels, docker-proxy/labels_test.go::TestLabelNetworkCreate_NoOwnerLeavesBodyUntouched, docker-proxy/labels_test.go::TestNetworkCreateRe, docker-proxy/labels_test.go::TestInjectOwnerLabels_EmptyOwnerIsNoop, docker-proxy/main_test.go::TestValidateContainerCreate_BlocksPrivileged, docker-proxy/main_test.go::TestValidateContainerCreate_BlocksPidHost, docker-proxy/main_test.go::TestValidateContainerCreate_BlocksNetworkHost, docker-proxy/main_test.go::TestValidateContainerCreate_BlocksUsernsHost, docker-proxy/main_test.go::TestValidateContainerCreate_BlocksDangerousCaps, docker-proxy/main_test.go::TestValidateContainerCreate_BlocksDevices, docker-proxy/main_test.go::TestValidateExecCreate_BlocksPrivileged, docker-proxy/main_test.go::TestContainerCreateRe, docker-proxy/main_test.go::TestHijackEndpointRe, docker-proxy/binds_test.go::TestContainWorkspacePath, docker-proxy/binds_test.go::TestContainWorkspacePath_LexicalOnly, docker-proxy/binds_test.go::TestRewriteBinds_RewritesUnderWorkspace, docker-proxy/binds_test.go::TestRewriteBinds_RejectsOutsideWorkspace, docker-proxy/binds_test.go::TestRewriteBinds_MountsBindOutsideRejected, docker-proxy/binds_test.go::TestValidateContainerCreate_RewritesWorkspaceBind, docker-proxy/main_test.go::TestValidateContainerCreate_BlocksHostBind, docker-proxy/main_test.go::TestValidateContainerCreate_BlocksBindMount, docker-proxy/main_test.go::TestValidateContainerCreate_AllowsSafeCaps, docker-proxy/main_test.go::TestValidateContainerCreate_AllowsEmptyBody, docker-proxy/main_test.go::TestValidateContainerCreate_AllowsNoHostConfig, docker-proxy/main_test.go::TestValidateContainerCreate_AllowsCleanRequest, docker-proxy/main_test.go::TestValidateContainerCreate_AllowsNamedVolume, docker-proxy/main_test.go::TestValidateExecCreate_AllowsNormal, docker-proxy/binds_test.go::TestRewriteBinds_MountsBind, docker-proxy/binds_test.go::TestRewriteBinds_EmptyProjectRejectsAbsolute
-updated: 2026-08-07
 summary: Docker API を検査・書き換えして中継し、作られた資源に所有者ラベルを付ける常駐プロキシ
 ---
 
@@ -149,7 +149,7 @@ NFR-sec-01)。ホスト掌握につながる操作(privileged・host namespace�
 | 中継に失敗した | `ErrorHandler` が `502 Bad Gateway` を返しログへ出す | docker クライアントがエラーを受け取る |
 | ボディが JSON として解釈できない | **許可する**(Docker 側の検証に委ねる)。**所有者ラベルも注入できない** | 検査をすり抜けるが、Docker が最終的に弾く。**作られた資源は `stop` / `reset` の片付け対象から外れる**(`FR-env-07` 受入基準12) |
 | 呼び出し元コンテナを特定できない(接続元 IP に一致するコンテナが無い) | 2値とも空になる。`/` 始まりの bind をすべて拒否し、**所有者ラベルも付与せずに中継する**(作成は拒否しない) | 名前付きボリュームだけが使える。**作られた資源は片付け対象から外れる** |
-| **呼び出し元は特定できたが `claude-dev.project-dir` ラベルを持たない**(管理ラベルが付く前に起動された Claude コンテナ) | **bind の書き換えは通常どおり行う**(マウント元は得られる)。**所有者ラベルだけを付与せずに中継する** | そのセッションから作られた資源は片付け対象から外れる。**`stop` 側も同じラベルが読めず片付けをスキップする**ので、片方だけが成功する状態は生じない |
+| **呼び出し元は特定できたが `claude-dev.project-dir` ラベルを持たない**(管理ラベルが付く前に起動された Claude コンテナ) | **bind の書き換えはラベルを持つ場合と同じ手順で行う**(マウント元は得られる)。**所有者ラベルだけを付与せずに中継する** | そのセッションから作られた資源は片付け対象から外れる。**`stop` 側も同じラベルが読めず片付けをスキップする**ので、片方だけが成功する状態は生じない |
 | **所有者ラベルの書き込みに失敗した**(ボディの再構成に失敗した等) | **元のボディのまま中継する**(作成を拒否しない)。**ネットワーク作成では理由をログへ出すが、コンテナ作成では出ない** — 分岐が「付与した」と「所有者が空」の2つしかなく、所有者が解決できたあとの注入失敗に対応するログが無い(`docs/issues/087`) | 作られた資源は片付け対象から外れる |
 | **利用者が `claude-dev.role` / `claude-dev.owner-project-dir` と同じキーのラベルを指定していた** | **proxy の値で上書きする** | 利用者の指定は失われる。所有者の判定が利用者の入力で狂わない |
 | `/workspace` 外の bind | `403`(cap や device の検査より**前**に判定する) | 拒否理由が bind として返る |
@@ -161,7 +161,7 @@ NFR-sec-01)。ホスト掌握につながる操作(privileged・host namespace�
 |---|---|---|
 | 1 | symlink の実体解決を行わず、字句的な封じ込めだけにする(proxy はホストのファイルシステムを持たず `EvalSymlinks` が常に失敗するため) | D0-sec-05 |
 | 2 | パース不能なボディは中継を許可する(独自の解釈で誤って弾かないため) | D0-sec-05 |
-| 3 | `resolveProjectDir` を変数として保持し、テストでスタブを注入できるようにする(この結果、静的解析では `cachedResolveProjectDir` / `lookupProjectDir` への辺が見えない) | D0-orch-02 |
+| 3 | `resolveProjectDir` を変数として保持し、テストでスタブを注入できるようにする(この結果、静的解析では `cachedResolveProjectDir` / `lookupProjectDir` への辺が見えない) | D0-scope-02 |
 | 4 | 標準ライブラリだけで実装する(依存を増やさない) | D0-scope-02 |
 | 5 | **所有者ラベルの注入を、拒否判定をすべて通過したあとに置く。** 拒否される要求に印を付けても意味が無く、注入を先に置くと注入の失敗が拒否判定を飛ばしうる。**ネットワーク作成要求は拒否判定を持たない**ので、注入だけを行う | D0-env-10 / `DSN-env-04` |
 | 6 | **注入に失敗しても作成要求を拒否しない**(元のボディのまま中継する)。`DSN-dp-01`「判定できない入力は通す」と同じ倒し方であり、片付けの都合でコンテナが作れなくなるほうが害が大きい。**代償は「片付けられない資源が生じうる」ことで、それは「既知の制限」に書く** | D0-env-10 / `D0-sec-05` |

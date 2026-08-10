@@ -1,17 +1,16 @@
 ---
 id: env
-version: 1.4.0
-updated: 2026-08-08
+version: 1.5.0
+updated: 2026-08-10
 source:
   - docs/00-requests/request.md
 summary: 開発環境・実行環境の構成に関する決定事項(D0-env-*)
 keywords: [開発環境, 決定事項]
 verified:
-  at: 2026-08-08
-  version: 1.4.0
+  at: 2026-08-10
+  version: 1.5.0
   against:
-    - doc: docs/00-requests/request.md
-      version: 1.3.0
+    - {doc: docs/00-requests/request.md, version: 1.4.0}
 ---
 
 # 開発環境の決定事項
@@ -141,14 +140,13 @@ verified:
   (`container=<runtime>`)に合わせる。**起動時の付与ではなくイメージ側で付ける**(起動経路に
   よらず常に付いていることを条件とするため)。**変数の名前と値の形式は 02 の契約
   `CTR-cli-container` が定める**。
-- 理由: 内部プロセス(entrypoint・各スクリプト・オーケストレーター)が環境依存の分岐を
+- 理由: 内部プロセス(entrypoint・各スクリプト)が環境依存の分岐を
   **起動経路によらず同じ判定で**行える恒久マーカーが要る。起動時の `-e` 付与は
   `docker run` 以外の経路(一時コンテナ・`docker exec` で作られたプロセス)で欠落しうるため、
   イメージ側で常時保証する。
 - 却下した案: 起動時に `-e container=docker` を付ける — `docker run` 以外の経路(一時コンテナ等)で
   漏れる。独自の変数名を使う — 外部ツールとの互換を失う。
 - 関連: FR-env-01
-
 ## D0-env-07 MCP ツールの本格導入
 
 - 区分: 要確認

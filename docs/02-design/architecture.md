@@ -1,23 +1,20 @@
 ---
 id: architecture
-version: 1.4.0
-updated: 2026-08-07
+version: 1.5.0
+updated: 2026-08-10
 source:
   - docs/01-requirements/functional.md
   - docs/01-requirements/non-functional.md
   - docs/01-requirements/system.md
-summary: 全体構成・データモデル・インフラ設計と、アーキテクチャ級の設計判断(DSN-arch / auth / dist / orch)
+summary: 全体構成・データモデル・インフラ設計と、アーキテクチャ級の設計判断(DSN-arch / auth / dist)
 keywords: [アーキテクチャ, 全体構成, 設計判断, DSN]
 verified:
-  at: 2026-08-08
-  version: 1.4.0
+  at: 2026-08-10
+  version: 1.5.0
   against:
-    - doc: docs/01-requirements/functional.md
-      version: 1.12.0
-    - doc: docs/01-requirements/non-functional.md
-      version: 1.6.0
-    - doc: docs/01-requirements/system.md
-      version: 1.1.0
+    - {doc: docs/01-requirements/functional.md, version: 1.13.1}
+    - {doc: docs/01-requirements/non-functional.md, version: 1.7.0}
+    - {doc: docs/01-requirements/system.md, version: 1.2.1}
 ---
 
 <!-- 2026-08-04 /task-close: 認証の置き場所の記述を**実装に合わせた**(人間の裁定=実装が正。
@@ -42,23 +39,18 @@ graph TD
     EP[entrypoint]
     FW[firewall]
     PS[portsync]
-    ORCH[orchestrator]
-    HK[hooks]
     CT[container-tools]
   end
   DP[docker-proxy<br/>全コンテナで共有]
   GH[GitHub Actions → GHCR]
-  SP[自己検証題材]
 
   MK --> Container
   MK --> DP
   GH --> Container
   CLI -->|start/stop/forward/login| Container
-  CLI -->|orchestrate| ORCH
   CLI --> VM
   EP --> FW
   EP --> PS
-  ORCH --> SP
   Container -->|DOCKER_HOST| DP
   VM -.->|virtiofs で /workspace 共有| Container
 ```
@@ -67,7 +59,6 @@ graph TD
 - コンテナ起動時は `entrypoint` が UID/GID 追従・認証コピー・ファイアウォール起動・MCP/VNC 設定・
   tmux 開始を行う。
 - コンテナ内 Docker は共有の `docker-proxy` を介して制限付きで使う。重い案件は VM モード。
-- `orchestrator`(Go、コンテナ内常駐)が 2 モードで worker を並列制御する。
 - イメージは Makefile でビルドし、GitHub Actions で GHCR へ配布する。
 
 ## コンポーネントの責務
@@ -75,17 +66,14 @@ graph TD
 | コンポーネント | 責務 | 対応要件 |
 |---|---|---|
 | claude-dev(ホスト CLI) | コンテナのライフサイクル・ポート・認証・SSH 鍵の操作 | FR-env-01, FR-env-03, FR-env-04, FR-env-06 |
-| Makefile | ビルド・セットアップ・CLI の導入/除去・自己検証題材の配置 | FR-env-09, FR-env-10, FR-orch-09 |
+| Makefile | ビルド・セットアップ・CLI の導入/除去 | FR-env-09, FR-env-10 |
 | コンテナイメージ | 開発ツール・エージェント CLI・ブラウザ確認資産を同梱した実行基盤 | FR-env-09, FR-env-11, FR-env-12 |
 | entrypoint | コンテナ起動時の初期化(UID/GID・認証・既定設定・ファイアウォール・VNC・tmux・同期ループ) | FR-env-02, FR-env-03, FR-env-05, FR-env-11, FR-env-12 |
 | firewall | コンテナ内の外向き通信制御 | FR-env-05 |
 | docker-proxy | Docker API の検査・書き換え・拒否。全コンテナで共有。**あわせてコンテナ作成要求とネットワーク作成要求へ所有者ラベルを注入し、セッション由来の資源に「誰が後で片付けてよいか」の印を付ける**(`DSN-env-04`。**印を読んで削除するのはホスト CLI 側**である) | FR-env-01, FR-env-07, NFR-sec-01 |
 | portsync | 公開ポートの検出と転送(DooD / VM の両経路) | FR-env-06 |
-| orchestrator | 2モードの制御ループ・worker 並列・介入・レビュー・TUI・通知・状態保全 | FR-orch-01〜FR-orch-08 |
-| hooks | エージェントのイベントを受けてプロンプト保存と通知を行う | FR-orch-07 |
 | container-tools | コンテナ内で利用者が使う補助資産(レート制限の待機など) | FR-env-01 |
 | VM モード | ゲスト VM の起動・provision・ポート同期・資源逼迫の監視 | FR-env-08 |
-| 自己検証題材 | オーケストレーターを実走させて振る舞いを確認するための題材 | FR-orch-09 |
 
 ## データの流れ
 
@@ -93,8 +81,7 @@ graph TD
    `start` 時にプロジェクトディレクトリ配下へコピー → コンテナ内の同期ループが 30 秒ごとに
    変更を共有ボリュームへ書き戻す。**ホストのホームディレクトリの認証情報は読まない。**
 2. **ソースコード**: カレントディレクトリを `/workspace` にマウントする(ライブ反映)。
-   VM モードでは同じパスを virtiofs でゲストにも共有する。worker は `/workspace` 内の
-   git worktree で作業し、統合はコントローラが直列に行う。
+   VM モードでは同じパスを virtiofs でゲストにも共有する。
 3. **Docker 操作**: コンテナ内の `docker` → `DOCKER_HOST` → docker-proxy が検査 →
    **許可(透過)/ 書き換えて許可 / 所有者ラベルを付与して許可 / 拒否** → ホストの Docker Engine。
    検査の対象はコンテナ作成要求・**ネットワーク作成要求**・コマンド実行(exec)作成要求のボディと
@@ -103,19 +90,16 @@ graph TD
    (`CTR-cli-container` の `DSN-env-04`)。
 4. **公開**: 既定ではポートを公開しない。`forward` のときだけ中継コンテナを立ててホスト側ポートを
    割り当てる。ブラウザ確認ありの場合は noVNC ポートのみ起動時に公開する。
-5. **運用状態**: オーケストレーターの plan・制御・状態・追記型ログは `/workspace/.orchestrator/` に
-   置き、機械だけが読み書きする。
 
 ## 外部システムとの境界
 
 | 外部システム | 何を渡すか | 何を受け取るか | 失敗時の方針 |
 |---|---|---|---|
-| Anthropic API | プロンプト(worker / 対話 Claude 経由) | 応答 | エージェント側の失敗として扱う。実行ループは停止条件に従う |
+| Anthropic API | プロンプト(Claude Code 経由) | 応答 | エージェント側の失敗として扱う |
 | OpenAI API | プロンプト(codex 経由) | 応答 | codex を使わない利用者の起動を妨げない |
 | GHCR | 認証(CI 側) | 配布イメージ | 取得失敗は非0終了。ローカルビルドで代替できる |
 | npm registry / Claude Code リリース配布 | なし | 最新バージョン文字列(CI の prepare) | CI の失敗として扱う。手動バージョン指定で回避する |
 | GitHub Meta API | なし | 許可する IP レンジ | 名前解決へフォールバックし、それも失敗した場合は当該通信が不許可になる |
-| Slack | 通知本文(コントローラのみ) | なし | 失敗しても実行を止めない。トークンは worker へ渡さない |
 | ホストの Docker Engine | 検査済みの Docker API リクエスト | 応答 | 中継失敗は 502 を返す |
 
 ## インフラ構成の設計
@@ -139,33 +123,31 @@ graph TD
   毎回組み立てることになり、構成が揃わない。
 - 影響する要件: FR-env-01, FR-env-07, FR-env-10, NFR-ops-02
 
-### DSN-arch-02 状態は「共有ボリューム」「プロジェクトディレクトリ」「運用状態」の3箇所にだけ置く
+### DSN-arch-02 状態は「共有ボリューム」と「プロジェクトディレクトリ」の2箇所にだけ置く
 
-- 判断: 永続する状態を次の3種類に限定する。
+- 判断: 永続する状態を次の2種類に限定する。
   1. **共有ボリューム**(`claude-dev-auth` / `claude-dev-config` / `claude-dev-history`): 認証・
      シェル設定・コマンド履歴。全コンテナで共有する。
   2. **プロジェクトディレクトリ**(`/workspace`): ソースコード、`.claude-dev.yaml`、
      **認証・設定の実体**(`/workspace/.claude/` `/workspace/.codex/`。コンテナのホームからは
      symlink で参照する。下の表と `DSN-auth-01` を参照)。
-  3. **運用状態**(`/workspace/.orchestrator/`): plan・制御・状態・追記型ログ。機械のみが読み書きする。
 
   | エンティティ | 置き場所 | 所有 | 共有範囲 |
   |---|---|---|---|
   | 認証ファイル(Claude / Codex) | 共有ボリューム → **プロジェクトディレクトリ配下(`/workspace/.claude/` `/workspace/.codex/`)へコピー**。ホームからは symlink で参照 | entrypoint(コピーは CLI) | 全コンテナ |
   | セッション・設定(`settings.json` / `config.toml` 等) | プロジェクトディレクトリ | entrypoint | コンテナ固有 |
   | `.claude-dev.yaml`(SSH 鍵の指定) | プロジェクトディレクトリ | ホスト CLI | プロジェクト固有 |
-  | plan / control / state / 追記型ログ | 運用状態 | orchestrator | プロジェクト固有 |
   | Docker リソース(ネットワーク・ボリューム・イメージ) | ホストの Docker | ホスト CLI / Makefile | `claude-dev-` 接頭辞で命名 |
   | **セッション由来の Docker リソース**(コンテナ・ネットワーク) | ホストの Docker | **docker-proxy**(作成要求の中継時に所有者ラベルを付ける) | **名前ではなく所有者ラベルで識別する**(`claude-dev.role=spawned` / `claude-dev.owner-project-dir`。名前は利用者が決めるので接頭辞の規則を課せない。`DSN-env-04`) |
-- 理由: 「共有すべきもの(認証)」と「共有してはならないもの(セッション・運用状態)」を置き場所で
+- 理由: 「共有すべきもの(認証)」と「共有してはならないもの(セッション)」を置き場所で
   分けると、同期ループも片付け操作も分岐を持たずに済む。
 - 却下した案: すべてをプロジェクトディレクトリに置く — プロジェクトごとに再ログインが必要になる。
   すべてを共有ボリュームに置く — セッションが混ざり、複数プロジェクトの同時利用が壊れる。
-- 影響する要件: FR-env-03, FR-orch-05
+- 影響する要件: FR-env-03
 
-### DSN-arch-03 主要フロー(起動から自律実行まで)
+### DSN-arch-03 主要フロー(起動から開発開始まで)
 
-- 判断: 利用者の操作から自律実行までを次の一本道に固定し、途中に別経路を作らない。
+- 判断: 利用者の操作から開発を始められる状態までを次の一本道に固定し、途中に別経路を作らない。
 
 ```mermaid
 sequenceDiagram
@@ -173,22 +155,18 @@ sequenceDiagram
   participant CLI as ホスト CLI
   participant EP as entrypoint
   participant DP as docker-proxy
-  participant O as orchestrator
   U->>CLI: claude-dev start
   CLI->>EP: コンテナ起動(マウント・環境変数)
   EP->>EP: UID/GID 追従・認証コピー・firewall・MCP/VNC・tmux
-  U->>CLI: claude-dev orchestrate
-  CLI->>O: コントローラ常駐起動 / 合流 / 再開
-  O->>O: ブレインストーミング → plan 確定 → worker 並列(worktree)
-  O->>DP: worker の docker 利用(検査・許可/拒否)
-  O-->>U: 状況サマリ / 要判断の通知
+  U->>CLI: tmux 内で claude / codex を実行
+  CLI->>DP: コンテナ内からの docker 利用(検査・許可/拒否)
 ```
 
-- 理由: オーケストレーターの起動をコンテナ起動の後段に固定すると、認証・ネットワーク・ポートの
-  前提が整った状態から始められる。
-- 却下した案: オーケストレーターをホスト側で動かす — レビュー前コードをホストで実行することになり、
+- 理由: 認証・ネットワーク・ポートの前提が整った状態からエージェントを使い始められるようにすると、
+  利用者が起動後に追加の準備をしなくて済む。
+- 却下した案: エージェントをホスト側で動かす — レビュー前コードをホストで実行することになり、
   隔離の目的に反する。
-- 影響する要件: FR-env-01, FR-orch-01, FR-orch-02
+- 影響する要件: FR-env-01, FR-env-03, FR-env-07
 
 ### DSN-arch-04 配布はマルチアーキ日次ビルドの GHCR 公開に一本化する
 
@@ -252,28 +230,6 @@ sequenceDiagram
   成功する**ところまで観測し、判定は成果物で行う。`use_legacy_landlock` は deprecated であり版更新で
   撤去されうるため、E2E に landlock の疎通確認を含めて回帰を検知する。
 - 影響する要件: FR-env-12(受け入れ基準4〜11), NFR-sec-01
-
-### DSN-orch-01 自作の外部制御ループ(コントローラがループを所有する)
-
-- 判断: 継続/停止の判定をコードが持つ外部制御ループを自作し、推論ループは `claude -p` / 対話 Claude
-  から借りる。
-- 理由: 暴走しない・コンテキストを汚さない・再開可能。変化の速い依存を中核に据えると配布の安定性に
-  リスクがある。
-- 却下した案: Docker Agent 方式(推論と委譲の配管を任せる) — 変化が速く中核に据えられない。
-  Stop-hook による力技の連続走行 — 停止条件を LLM の裁量に委ねることになる。
-- 影響する要件: FR-orch-02, FR-orch-03, FR-orch-05
-
-### DSN-orch-02 コントローラは tmux セッションに常駐させる
-
-- 判断: コントローラを `orch-<project>-main` セッションの `dashboard` ウィンドウで常駐させ、
-  worker とブレインストーミングを同セッションの独立ウィンドウにする。生存判定はプロセスの存在で行う。
-- 理由: クライアント端末が壊れても tmux サーバがセッションを保持するため、再接続で復旧できる。
-  完全デーモン化より単純で、ダッシュボードの描画を別プロセスに分けずに済む。セッションの存在で
-  生存を判定すると、空き殻を生存と誤判定して二重起動や合流不能を招く。
-- 却下した案: `setsid` による完全デーモン化 — 描画の別プロセス化が必要で複雑になる。
-  常駐しない — 端末を閉じると実行が失われる。
-- 影響する要件: FR-orch-02(受け入れ基準2・4), NFR-avail-01
-
 ## 未解決事項
 
 - なし

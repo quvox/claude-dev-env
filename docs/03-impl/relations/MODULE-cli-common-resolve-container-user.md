@@ -1,16 +1,16 @@
 ---
 id: MODULE-cli-common-resolve-container-user
+updated: 2026-08-10
 module: MOD-cli-common
 kind: function-call
 sync: sync
 impl: claude-dev::resolve_container_user, claude-dev-mac::resolve_container_user
-callers: MODULE-cli-attach, MODULE-cli-code, MODULE-cli-orchestrate, MODULE-cli-start
+callers: MODULE-cli-attach, MODULE-cli-code, MODULE-cli-start
 callees: なし
 contracts: なし
 design: DSN-mod-01, DSN-mod-02, DSN-dist-01
 requirements: FR-env-01, FR-env-02, FR-env-09
 tests: なし(未実装。シェル実装のため自動テストランナーが無く実機確認で代替する)
-updated: 2026-08-02
 summary: docker exec に渡す実行ユーザを稼働中コンテナ自身の env から決定する
 ---
 
@@ -32,8 +32,8 @@ summary: docker exec に渡す実行ユーザを稼働中コンテナ自身の e
 
 ## 呼び出され方
 
-- 契機: 稼働中コンテナへ `docker exec` する直前(`start` の再接続経路 / `code` / `orchestrate` /
-  `attach`)。いずれも `is_running` の確認後に `CUSER="$(resolve_container_user "$NAME")"` と
+- 契機: 稼働中コンテナへ `docker exec` する直前(`start` の再接続経路 / `code` / `attach`)。
+  いずれも `is_running` の確認後に `CUSER="$(resolve_container_user "$NAME")"` と
   上書きしてから使う。
 - 前提条件: 対象コンテナが存在すること。
 - 引数:

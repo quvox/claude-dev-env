@@ -1,20 +1,18 @@
 ---
 id: environments
-version: 1.3.0
-updated: 2026-08-08
+version: 1.4.0
+updated: 2026-08-10
 source:
   - docs/01-requirements/system.md
   - docs/02-design/architecture.md
 summary: 開発環境の構成・セットアップ手順・lint/テスト/ドキュメント整合検査の厳密なコマンド文字列・Codex実行設定
 keywords: [開発環境, コマンド, lint, テスト, Codex]
 verified:
-  at: 2026-08-08
-  version: 1.3.0
+  at: 2026-08-10
+  version: 1.4.0
   against:
-    - doc: docs/01-requirements/system.md
-      version: 1.1.0
-    - doc: docs/02-design/architecture.md
-      version: 1.4.0
+    - {doc: docs/01-requirements/system.md, version: 1.2.1}
+    - {doc: docs/02-design/architecture.md, version: 1.5.0}
 ---
 
 <!-- 2026-08-04 /doc-check ssot task-impl-depth(新しい実行): **合格証を再発行した(1.0.0)。**
@@ -44,22 +42,19 @@ verified:
 | 認証(Claude) | `make login` |
 | 認証(Codex) | `claude-dev login-codex` |
 | 配布イメージの取得 | `claude-dev pull` |
-| 自己検証題材の配置 / 初期化 | `make orch-sample` / `make orch-sample-clean` |
 | 状態の確認 | `make status` |
 
 ## lint・テストコマンド
 
 | 用途 | コマンド | 備考 |
 |---|---|---|
-| lint | `go vet ./...` | 各 Go モジュール(`docker-proxy/` と `orchestrator/`)のディレクトリで実行する。**Bash には自動 lint を設けていない**(`SR-32`) |
+| lint | `go vet ./...` | `docker-proxy/` のディレクトリで実行する。**Bash には自動 lint を設けていない**(`SR-32`) |
 | 単体テスト(docker-proxy) | `cd docker-proxy && go test ./...` | プロキシの検査ロジック |
-| 単体テスト(orchestrator) | `cd orchestrator && go test -mod=vendor ./...` | 制御ループ・状態・レビュー・プロンプト生成など |
-| 単体テスト(自己検証題材) | `cd examples/orch-sample && pytest` | 題材プロジェクト |
 | カバレッジ計測(docker-proxy) | `cd docker-proxy && go test -cover ./...` | テスト戦略が参照する計測手段(`03-impl/tests/strategy.md`)。合否の条件は課さない |
-| 結合テスト | 上記2つの `go test` に含まれる | 契約ごとの責任モジュールは `system.md`「結合テスト対象」が正。シェル側の契約は実機確認 |
-| E2Eテスト | 自動テストランナーは無い。`make orch-sample` で題材を配置し `claude-dev orchestrate` で実走する | シェル系 E2E(E2E-01〜03)は実機確認。手順は `03-impl/tests/e2e.md` |
+| 結合テスト | 上記の `go test` に含まれる | 契約ごとの責任モジュールは `system.md`「結合テスト対象」が正。シェル側の契約は実機確認 |
+| E2Eテスト | 自動テストランナーは無い。実機で `claude-dev` を操作する | シェル系 E2E(E2E-01〜03・E2E-06)はすべて実機確認。手順は `03-impl/tests/e2e.md` |
 | build | `make build` | `claude`(ブラウザ確認なし)+ `claude-vnc` + `docker-proxy` を一括ビルド |
-| build(個別) | `make build-claude` / `make build-claude-vnc` / `make build-docker-proxy` / `make build-orchestrator` | `claude-vnc` はベースに続けてビルドする |
+| build(個別) | `make build-claude` / `make build-claude-vnc` / `make build-docker-proxy` | `claude-vnc` はベースに続けてビルドする |
 | 再ビルド(キャッシュ無し) | `make upgrade` | 全イメージを作り直す |
 
 ## コンテナ・実行環境
@@ -86,10 +81,11 @@ verified:
 |---|---|---|
 | 日次 03:30 JST | エージェント CLI のバージョン解決 → マルチアーキ(amd64/arm64)でイメージをビルド → GHCR へ push(タイムスタンプタグ + `latest`) | その日の配布イメージが更新されない(前日のイメージは残る) |
 | 手動実行 | 上と同じ。エージェント CLI のバージョンを入力で指定できる | 切り戻しができない |
-| PR / 変更時 | **自動化されていない(未定)**。`go vet` と `go test` は手元で実行する運用 | — |
+| PR / 変更時 | **自動化していない。** `go vet` と `go test` は手元で実行する運用 | — |
 
-**未定(いつ決めるか)**: PR での自動テスト実行は導入していない。Go の2モジュールに閉じた検査
-なので CI 化の障壁は低いが、導入時期は未定(`docs/pendings.md` で管理する)。
+**PR での自動テスト実行は導入していない。** docker-proxy に閉じた検査なので CI 化の障壁は低い。
+導入するかどうかと、その時期は `docs/pendings.md` の **P-002** が持つ(意図的な棚上げであり、
+この文書の未解決事項ではない)。
 
 ## ドキュメント整合検査コマンド
 
@@ -120,17 +116,16 @@ verified:
 
 | 項目 | 値 |
 |---|---|
-| internal_roots | リポジトリルート(`claude-dev` / `claude-dev-mac` / `scripts/` / `Makefile` / `orchestrator/` / `docker-proxy/` / `examples/orch-sample/`) |
+| internal_roots | リポジトリルート(`claude-dev` / `claude-dev-mac` / `scripts/` / `Makefile` / `docker-proxy/`) |
 | 有効な言語 | shell / make / go / python / typescript / infra |
 | 抽出器が無い言語 | **Dockerfile と GitHub Actions**。この2つはコールグラフに現れないため、モジュール分割定義から外し `03-impl/environments/` と `03-impl/infra/local/` が記述を持つ(`DSN-mod-05`) |
 | Tier | shell=3 / make=3 / go=2 / python=2 / typescript=2 / infra=2 |
 | ツール環境 | `.claude/.venv`(キット専用。**プロジェクトの環境には入れない**) |
 | 用意するコマンド | `python3 .claude/scripts/setup-tools.py` |
-| 除外するパス | `orchestrator/vendor/` / `workspace/` / `tmp/` / `.orchestrator/` / `scripts/e2e6-codex.sh`(E2E の実機検証スクリプトであり、機能ではなく検証手段のため。決定シート2 論点9) |
+| 除外するパス | `workspace/` / `tmp/` / `scripts/e2e6-codex.sh`(E2E の実機検証スクリプトであり、機能ではなく検証手段のため。決定シート2 論点9) |
 | 出力先 | `docs/03-impl/callgraphs/` |
 | 鮮度検査 | `python3 .claude/scripts/build-callgraphs.py --out "$(python3 .claude/scripts/resolve-callgraph-out.py)" --check` |
 | CI で検査するか | いいえ(未定。PR での自動実行を導入する際に併せて決める) |
-
 ## Codex実行設定
 
 | 項目 | 値 |

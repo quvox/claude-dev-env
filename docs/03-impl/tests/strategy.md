@@ -1,21 +1,19 @@
 ---
 id: strategy
+version: 1.5.0
+updated: 2026-08-10
 scope: 全体
-version: 1.4.0
-updated: 2026-08-08
 source:
   - docs/02-design/system.md
   - docs/02-design/environments.md
 summary: テストのレベル別実行方法・状態列の語彙・受入基準の配分規約
 keywords: [テスト, 方針]
 verified:
-  at: 2026-08-08
-  version: 1.4.0
+  at: 2026-08-10
+  version: 1.5.0
   against:
-    - doc: docs/02-design/system.md
-      version: 2.8.0
-    - doc: docs/02-design/environments.md
-      version: 1.3.0
+    - {doc: docs/02-design/system.md, version: 2.9.1}
+    - {doc: docs/02-design/environments.md, version: 1.4.0}
 ---
 
 # テスト実装仕様 — 実行方法と共通の流儀
@@ -25,11 +23,9 @@ verified:
 | レベル | ツール | コマンド | 実行環境 | 所要時間の目安 |
 |---|---|---|---|---|
 | 単体(docker-proxy) | `go test` | `cd docker-proxy && go test ./...` | ホストまたはコンテナ内。外部接続なし | 数秒 |
-| 単体(orchestrator) | `go test` | `cd orchestrator && go test -mod=vendor ./...` | 同上 | 十数秒 |
-| 単体(自己検証題材) | `pytest` | `cd examples/orch-sample && pytest` | 同上 | 数秒 |
-| lint | `go vet` | `go vet ./...`(各 Go モジュールのディレクトリで) | 同上 | 数秒 |
-| 結合 | `go test` + 実機確認 | 上記2つの `go test` に含まれる。シェル側の契約は実機確認 | Go は単体と同じ。実機分はコンテナ起動を伴う | Go は単体に含まれる |
-| E2E | 実機操作 + 自己検証題材 | 自動テストランナーは無い。`make orch-sample` で題材を配置し `claude-dev orchestrate` で実走する | 実際のホストとコンテナ。実 tmux・実エージェント | 手順による(E2E-04 は数十分) |
+| lint | `go vet` | `go vet ./...`(`docker-proxy/` のディレクトリで) | 同上 | 数秒 |
+| 結合 | `go test` + 実機確認 | 上記の `go test` に含まれる。シェル側の契約は実機確認 | Go は単体と同じ。実機分はコンテナ起動を伴う | Go は単体に含まれる |
+| E2E | 実機操作 | 自動テストランナーは無い。専用のプロジェクトディレクトリで `claude-dev` を操作する | 実際のホストとコンテナ。実 tmux | 手順による(E2E-01 は十数分) |
 
 **Bash と Makefile には自動テストランナーを設けていない**(`SR-32` / `DSN-test-01`)。
 動作確認は実機で行い、手順は `e2e.md` が持つ。静的検査として `bash -n` による構文確認だけは
@@ -41,9 +37,6 @@ verified:
 |---|---|
 | 1パッケージだけ | `cd docker-proxy && go test ./...`(単一パッケージ構成のため全体と同じ) |
 | 1テストだけ(docker-proxy) | `cd docker-proxy && go test -run TestValidateContainerCreate_BlocksHostBind ./...` |
-| 1テストだけ(orchestrator) | `cd orchestrator && go test -mod=vendor -run TestArchiveRun_MovesNotDeletes ./...` |
-| 前方一致でまとめて | `cd orchestrator && go test -mod=vendor -run 'TestDash.*' ./...` |
-| 題材の1テストだけ | `cd examples/orch-sample && pytest -k mathkit` |
 | シェルの構文確認だけ | `bash -n claude-dev` / `bash -n scripts/entrypoint-claude.sh` |
 
 ## テストデータの準備と後始末
@@ -51,9 +44,8 @@ verified:
 | レベル | 準備 | 後始末 | 冪等か |
 |---|---|---|---|
 | 単体(Go) | テスト内で組み立てる。ファイルを使うものは一時ディレクトリを作る | Go のテスト機構が一時ディレクトリを破棄する | 冪等 |
-| 単体(Python) | テスト内で組み立てる | 不要 | 冪等 |
 | 結合(Go) | 同上。外部サービスへ接続しない | 同上 | 冪等 |
-| 結合・E2E(実機) | 専用のプロジェクトディレクトリを作って `claude-dev start` する。オーケストレーターは `make orch-sample` で使い捨ての作業コピーを配置する | `claude-dev stop` でコンテナと compose 生成物を片付ける。題材は `make orch-sample-clean` で初期化する | 配置は冪等(再初期化は明示指定が必要) |
+| 結合・E2E(実機) | 専用のプロジェクトディレクトリを作って `claude-dev start` する | `claude-dev stop` でコンテナと compose 生成物を片付ける | 冪等(同一ディレクトリでの再実行は再接続になる) |
 
 **実機確認は既存の作業用プロジェクトで行わない。** 認証・ポート・compose の生成物が混ざるため、
 必ず専用のディレクトリを作る。
@@ -64,10 +56,6 @@ verified:
 |---|---|---|
 | Docker API のリクエストを組み立てる | テストローカルのヘルパー | `docker-proxy/main_test.go` |
 | bind の書き換えを検証する | 同上 | `docker-proxy/binds_test.go` |
-| 運用状態の往復(保存 → 読み込み)を検証する | 一時ディレクトリと状態構造体 | `orchestrator/state_test.go` |
-| TUI の描画と入力を検証する | bubbletea のモデルへ直接メッセージを送る | `orchestrator/dashtui_test.go` |
-| プロンプト生成を検証する | ポリシーとモードの構造体 | `orchestrator/policy_test.go` / `orchestrator/mode_test.go` |
-| 自己検証題材 | 題材のテスト一式 | `examples/orch-sample/` |
 
 新しいテストは、対象と同じディレクトリに `<対象>_test.go` として置き、既存のテーブル駆動の
 書き方に合わせる。
@@ -78,7 +66,6 @@ verified:
 |---|---|---|
 | 単体(Go) | 対象と同じパッケージ | `<対象>_test.go` / `Test<対象>_<条件>` |
 | 結合(Go) | 同上(実行環境が単体と同じため分けない) | 同上 |
-| 単体(Python) | 題材の中 | `test_*.py` |
 | E2E(手順) | 自動テストは無い。手順を文書として持つ | `docs/03-impl/tests/e2e.md` の `E2E-nn` |
 
 ## 状態列の語彙の定義
@@ -112,7 +99,7 @@ verified:
 | 指標 | 目標 | 現状 | 測定コマンド |
 |---|---|---|---|
 | 行カバレッジ(Go) | **目標値なし**(01 の非機能要件にカバレッジの目標は無い) | 測定していない | `docs/02-design/environments.md`「lint・テストコマンド」の**カバレッジ計測(docker-proxy)**の行 |
-| 受入基準のカバレッジ | すべての受入基準が対応表に行を持つこと(状態は問わない) | 機能要件の全 210 条項に行がある(非機能要件の 13 行を合わせて対応表は 225 行 = 条項 223 件 + `FR-env-01-9` が主担当行を3つ持つ重複2行。重複は `docs/issues/074` が追跡する) | `python3 .claude/scripts/build-index.py --check` で集計を再生成して確認する |
+| 受入基準のカバレッジ | すべての受入基準が対応表に行を持つこと(状態は問わない) | 機能要件の全 140 条項に行がある(非機能要件の 10 行を合わせて対応表は 152 行 = 条項 150 件 + `FR-env-01-9` が主担当行を3つ持つ重複2行。重複は `docs/issues/074` が追跡する) | `python3 .claude/scripts/build-index.py --check` で集計を再生成して確認する |
 
 **カバレッジ率ではなく「受入基準に行があるか」を指標にする。** 自動テストを持てない領域が大きい
 (Bash と Makefile)ため、行カバレッジは実態を表さない。

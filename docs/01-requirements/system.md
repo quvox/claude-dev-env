@@ -1,23 +1,18 @@
 ---
-id: system
-version: 1.1.0
-updated: 2026-08-07
+id: 01-system
+version: 1.2.1
+updated: 2026-08-10
 source:
   - docs/00-requests/request.md
-  - docs/00-requests/decisions/orch.md
   - docs/00-requests/decisions/sec.md
 summary: システム・環境の要件 SR-01〜SR-34(必須制約・実行環境・依存・運用の前提)
 keywords: [システム要件, SR, 技術前提]
 verified:
-  at: 2026-08-08
-  version: 1.1.0
+  at: 2026-08-10
+  version: 1.2.1
   against:
-    - doc: docs/00-requests/request.md
-      version: 1.3.0
-    - doc: docs/00-requests/decisions/orch.md
-      version: 1.4.0
-    - doc: docs/00-requests/decisions/sec.md
-      version: 1.2.0
+    - {doc: docs/00-requests/request.md, version: 1.4.0}
+    - {doc: docs/00-requests/decisions/sec.md, version: 1.3.0}
 ---
 
 # システム・環境の要件
@@ -29,7 +24,7 @@ verified:
 | SR-01 | ホスト側に Docker Engine が存在し、利用者がそれを操作できること | 本システムは隔離コンテナの提供そのものであり、Docker が無ければ成立しない |
 | SR-02 | コンテナ内資産(イメージ・entrypoint・firewall・docker-proxy)は OS 非依存であること。OS 依存はホスト CLI に閉じること | 同一イメージを Linux と macOS の双方へ配布するため(`NFR-ops-02`) |
 | SR-03 | 認証情報(API キー・トークン・OAuth 資格情報)をイメージへ焼き込まないこと | 配布イメージは全員が pull するため、焼き込みは資格情報の共有と同義になる(`NFR-sec-01`) |
-| SR-04 | 隔離境界はコンテナ/ホスト間にのみ置き、コンテナ側の confinement(seccomp / AppArmor)を緩めないこと | 用語集「安全」が定めるもの(ホストのあらゆる情報を破壊しないこと・鍵情報が直接漏洩しないこと)は、この1本の境界に依存している(`D0-sec-06`) |
+| SR-04 | 隔離境界はコンテナ/ホスト間にのみ置き、コンテナ側の confinement(seccomp / AppArmor)を緩めないこと | 用語集「安全」が定めるもの(ホストのあらゆる情報を破壊しないこと・鍵情報が直接漏洩しないこと)は、この1本の境界に依存している(`D0-sec-06`。コンテナ内で動くプロセスは同一コンテナを共有し、プロセスごとには隔離しない) |
 | SR-05 | 利用は信頼できる社内開発用途に限ること | 隔離の強度をこの前提のもとで決めている(`request.md`「やらないこと」2) |
 
 ## 実行環境の要件
@@ -48,17 +43,18 @@ verified:
 | ID | 要件 | 補足 |
 |---|---|---|
 | SR-20 | ホスト CLI と補助スクリプトは Bash で実装すること | 追加ランタイムを要求せず、Linux/macOS の標準環境で動くため |
-| SR-21 | docker-proxy と orchestrator は Go で実装すること。単一バイナリで配布できること | コンテナへ実行時依存を持ち込まないため |
-| SR-22 | Go の依存は原則として標準ライブラリに限ること。ダッシュボード TUI に限り外部ライブラリを許容し、依存はリポジトリへ同梱すること | 配布の安定性を優先する(`D0-orch-14`) |
-| SR-23 | 自己検証題材は Python + 自動テストで、合否が機械判定できること | オーケストレーターの振る舞いを機械的に確認するため(`FR-orch-09`) |
+| SR-21 | docker-proxy は Go で実装すること。単一バイナリで配布できること | コンテナへ実行時依存を持ち込まないため |
 | SR-24 | コンテナイメージはマルチステージビルドで構成し、エージェント CLI の導入を配布ステージの終端レイヤーに置くこと | 更新時の再取得範囲を最小化するため(`NFR-perf-01`) |
+
+<!-- SR-22(Go の依存の限定と TUI の例外)と SR-23(自己検証題材)は 2026-08-08 に廃止した
+     (オーケストレーターの削除)。番号は再利用しない。 -->
 
 ## 開発環境・開発ツールの要件
 
 | ID | 要件 | 補足 |
 |---|---|---|
 | SR-30 | すべてのビルド・セットアップ操作を単一の入口(Makefile)から実行できること | 利用可能な操作を一覧できること(`NFR-ops-03`) |
-| SR-31 | Go の各モジュールに自動テストがあり、変更時に実行できること | 実コマンドは `02-design/environments.md` が正 |
+| SR-31 | docker-proxy に自動テストがあり、変更時に実行できること | 実コマンドは `02-design/environments.md` が正 |
 | SR-32 | Bash 実装には自動テストランナーを設けない。動作確認は実機で行うこと | 現状の割り切り。テスト戦略で明示する(`02-design/system.md`) |
 | SR-33 | イメージのビルドと配布を CI(GitHub Actions)で日次実行できること | `FR-env-09` |
 | SR-34 | 外部エージェント(Codex)へ監査・QA を委譲する場合、コンテナの confinement を緩めずに実行できること | `SR-04` の帰結。実行設定は `02-design/environments.md`「Codex実行設定」が正 |
@@ -67,13 +63,11 @@ verified:
 
 | 依存先 | 用途 | 可用性の前提 | 代替手段 |
 |---|---|---|---|
-| Anthropic API(Claude) | Claude Code / worker の推論 | 開発時に到達可能であること。ファイアウォールで許可する | なし(本システムの前提) |
+| Anthropic API(Claude) | Claude Code の推論 | 開発時に到達可能であること。ファイアウォールで許可する | なし(本システムの前提) |
 | OpenAI API(Codex) | Codex CLI の推論 | codex を使う場合のみ必要 | 使わない運用が可能(未ログインでも起動できる) |
 | GHCR(GitHub Container Registry) | 配布イメージの取得 | 取得時のみ必要 | ローカルビルド(`make build`) |
 | npm registry / Claude Code のリリース配布 | イメージビルド時のバージョン解決 | CI 実行時のみ必要 | 手動でのバージョン指定(`FR-env-09` 受け入れ基準7) |
 | GitHub Meta API | ファイアウォールの許可 IP 取得 | 起動時のみ。失敗時は名前解決へフォールバックする | フォールバックも失敗すると GitHub への SSH が不許可になる |
-| Slack | 実行状況の非同期通知 | 未設定でも動作すること | 通知なしで実行を継続する(`FR-orch-07`) |
-
 ## 未解決事項
 
 - なし
