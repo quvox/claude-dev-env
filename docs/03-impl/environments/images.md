@@ -1,17 +1,11 @@
 ---
 id: images
-version: 1.0.0
-updated: 2026-08-03
+version: 1.1.0
+updated: 2026-08-10
 source:
   - docs/02-design/environments.md
 summary: 配布イメージ(claude-cli / claude-vnc)のステージ構成・ビルド引数・キャッシュの効かせ方
 keywords: [イメージ, Dockerfile, ビルド]
-verified:
-  at: 2026-08-08
-  version: 1.0.0
-  against:
-    - doc: docs/02-design/environments.md
-      version: 1.3.0
 ---
 
 <!-- 2026-08-04 /doc-check ssot task-impl-depth(新しい実行): **合格証を再発行した(1.0.0)。**
@@ -28,20 +22,17 @@ verified:
 
 ```mermaid
 graph LR
-  OB[orch-builder<br/>golang:1.24-alpine] --> BASE
   BASE[base<br/>ubuntu:24.04<br/>開発ツール一式] --> VNC[vnc-base<br/>VNC/Chrome/日本語入力]
   BASE --> CLI[claude-cli<br/>= 配布イメージ・ブラウザ確認なし]
   VNC --> VNCF[claude-vnc<br/>= 配布イメージ・ブラウザ確認あり]
 ```
 
-- `orch-builder`(`.devcontainer/Dockerfile.claude:16`)で orchestrator をビルドし、成果物を
-  後段のステージへコピーする。
-- `base`(`:23`)が `ubuntu:24.04` の上に開発ツール(Go・Python・各種 CLI)を積む。
-  **`ENV container=docker`(`:307`)はここで焼き込む**ので、`vnc-base` も終端ステージも継承する
+- `base` が `ubuntu:24.04` の上に開発ツール(Go・Python・各種 CLI)を積む。
+  **`ENV container=docker` はここで焼き込む**ので、`vnc-base` も終端ステージも継承する
   (`D0-env-06`)。
-- `vnc-base`(`:318`)が `FROM base` で VNC・Chrome・日本語入力を積む。
-- 終端ステージ `claude-cli`(`:506`)と `claude-vnc`(`:534`)が、それぞれ `FROM base` /
-  `FROM vnc-base` で**最後にエージェント CLI だけを入れる**(`:514`/`:517`、`:542`/`:545`)。
+- `vnc-base` が `FROM base` で VNC・Chrome・日本語入力を積む。
+- 終端ステージ `claude-cli` と `claude-vnc` が、それぞれ `FROM base` /
+  `FROM vnc-base` で**最後にエージェント CLI だけを入れる**。
   この2つが配布物である。
 
 エージェント CLI の導入を終端に置くのは、更新のたびに失効するレイヤーを CLI のバイナリ層だけに
@@ -52,14 +43,14 @@ graph LR
 
 | ファイル | 役割 |
 |---|---|
-| `.devcontainer/Dockerfile.claude` | 配布イメージ2つ(と中間ステージ2つ)の定義 |
+| `.devcontainer/Dockerfile.claude` | 配布イメージ2つ(と中間ステージ1つ)の定義 |
 | `.devcontainer/Dockerfile.docker-proxy` | docker-proxy イメージの定義 |
 | `.devcontainer/tmux.conf` | コンテナ内の tmux 設定(イメージへ同梱し、起動時に読み取り専用でマウントする) |
 | `Makefile` | ビルドの入口(`MODULE-makefile-build*`) |
 | `.github/workflows/ghcr-images.yml` | CI からのビルドと公開。構成値は `infra/local/ghcr.md` が正 |
 | `scripts/entrypoint-claude.sh` | イメージの ENTRYPOINT(実装仕様は `MODULE-entrypoint-claude`) |
 | `scripts/init-firewall-claude.sh` | `/usr/local/bin/init-firewall.sh` として同梱(`MODULE-firewall-init`) |
-| `scripts/dood-portsync.sh` / `scripts/wait-limit-reset.sh` / `scripts/save_prompt.sh` / `scripts/sendslackmsg.sh` | コンテナ内で使う資産として同梱(それぞれ機能間連携仕様書を持つ) |
+| `scripts/dood-portsync.sh` / `scripts/wait-limit-reset.sh` | コンテナ内で使う資産として同梱(それぞれ機能間連携仕様書を持つ) |
 
 ## 使い方(実際のコマンド)
 
@@ -75,8 +66,7 @@ graph LR
 
 ```mermaid
 graph LR
-  OB[orch-builder] --> BASE[base]
-  BASE --> VNC[vnc-base]
+  BASE[base] --> VNC[vnc-base]
   BASE --> CLI[claude-cli]
   VNC --> VNCF[claude-vnc]
 ```
@@ -90,15 +80,14 @@ graph LR
 
 | 変数 | 用途 | 既定値 | 必須 | 定義箇所 |
 |---|---|---|---|---|
-| `USERNAME` | コンテナ内ユーザー名 | `devuser` | 任意 | `.devcontainer/Dockerfile.claude:29` |
-| `USER_UID` / `USER_GID` | ビルド時のユーザー ID(起動時に entrypoint がホストへ追従させる) | `1500` / `1500` | 任意 | `:30`〜`:31` |
-| `IMAGE_VERSION` | イメージのラベルに入れる版(タイムスタンプ) | `local` | 任意 | `:38`〜`:39` |
-| `GO_VERSION` | 同梱する Go | `1.26.1` | 任意 | `:140` |
-| `PYTHON_VERSION` | 同梱する Python | `3.13` | 任意 | `:152` |
-| `CLAUDE_VERSION` | 同梱する Claude Code。**CI が具体バージョンへ解決して渡す** | `latest` | 実質必須(CI から) | `:509` / `:537` |
-| `CODEX_VERSION` | 同梱する Codex CLI。**CI が具体バージョンへ解決して渡す** | `latest` | 実質必須(CI から) | `:510` / `:538` |
-| `container`(ENV) | コンテナ内であることのマーカー | `docker` | 必須 | `:307` |
-
+| `USERNAME` | コンテナ内ユーザー名 | `devuser` | 任意 | `.devcontainer/Dockerfile.claude:17` |
+| `USER_UID` / `USER_GID` | ビルド時のユーザー ID(起動時に entrypoint がホストへ追従させる) | `1500` / `1500` | 任意 | `:18`〜`:19` |
+| `IMAGE_VERSION` | イメージのラベルに入れる版(タイムスタンプ) | `local` | 任意 | `:26`〜`:27` |
+| `GO_VERSION` | 同梱する Go | `1.26.1` | 任意 | `:128` |
+| `PYTHON_VERSION` | 同梱する Python | `3.13` | 任意 | `:140` |
+| `CLAUDE_VERSION` | 同梱する Claude Code。**CI が具体バージョンへ解決して渡す** | `latest` | 実質必須(CI から) | `:489` / `:517` |
+| `CODEX_VERSION` | 同梱する Codex CLI。**CI が具体バージョンへ解決して渡す** | `latest` | 実質必須(CI から) | `:490` / `:518` |
+| `container`(ENV) | コンテナ内であることのマーカー | `docker` | 必須 | `:287` |
 ## 落とし穴
 
 | 事象 | 原因 | 回避方法 |

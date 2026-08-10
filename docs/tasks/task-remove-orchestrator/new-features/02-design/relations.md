@@ -9,6 +9,7 @@ sections:
 deletes:
   - "### PLAN-orchestrator-main"
 reason: 'オーケストレーターの全面削除にともなう想定機能連携の整理(決定シート 概念1・概念2)。(1) 一覧から 8 行を削除する(65 → 57 行): `PLAN-cli-orchestrate` / `PLAN-orchestrator-main` / `PLAN-makefile-build-orchestrator` / `PLAN-makefile-orch-sample` / `PLAN-makefile-orch-sample-clean` / `PLAN-sample-project-scaffold` / `PLAN-hooks-save-prompt` / `PLAN-hooks-send-slack-message`。あわせて残る行の 呼び出し元 / 呼び出す先 の欄から消えた `PLAN-*` を外す: `PLAN-cli-start` の呼び出し元が `PLAN-cli-orchestrate` だけだったので「なし」になり、`PLAN-cli-common-container-name` / `-is-running` / `-require-setup` / `-resolve-container-user` の呼び出し元から `PLAN-cli-orchestrate` が消える。網羅の範囲を述べる冒頭のコメントから「MOD-orchestrator の内部関数18本と自己検証題材の実装本体」の記述を外す。**あわせて表の直後にある `<!-- 除外: MOD-orchestrator の内部関数と MODULE-sample-project-mathkit(機能の総数は 03 の機能表が持つ) -->` のコメントを削除する** — 除外していた対象そのものが消えるため、除外の宣言が指す先が無くなる(独立レビュー readiness の指摘)。(2) 連携図から `ORCH` / `SP` / `HK` のノードと、それらへの辺(`CLI --> ORCH` / `ORCH --> SP` / `AGENT --> HK`)を削除し、`PLAN-cli-*` を 17 サブコマンド・`PLAN-makefile-*` を 16 ターゲットへ改める。(3) 連携の詳細から `### PLAN-orchestrator-main` を削除する。`### PLAN-cli-common-*(共有基盤)` の「18 のサブコマンドが同じ規則で」を 17 へ改める。**`### PLAN-cli-start` / `### PLAN-cli-stop` / `### PLAN-cli-reset` / `### PLAN-entrypoint-claude` / `### PLAN-docker-proxy-serve` は変えない**。(4) `## 未実装として認識しているもの`(「なし」)は変えない — 削除後も全 `PLAN-*` に対応する `MODULE-*` が存在する。**`## 連携の詳細(設計上の期待)` を親ごと差し替える**のは `PLAN-*` の詳細が `###` の子であるためである(`.claude/directions/change-set.md` §2)'
+reflected: 2026-08-10
 ---
 
 ## 一覧

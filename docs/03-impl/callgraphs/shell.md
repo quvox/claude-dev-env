@@ -2,10 +2,10 @@
 id: shell
 language: shell
 tier: 3
-symbols: 176
-edges: 270
-endpoints: 51
-unresolved: 4
+symbols: 170
+edges: 261
+endpoints: 46
+unresolved: 3
 ---
 
 <!-- BEGIN NOTE: build-callgraphs.py -->
@@ -41,17 +41,12 @@ unresolved: 4
 | cli | `dispatch login-codex @ claude-dev::main` | `/claude-dev/login-codex` | `claude-dev::main#login-codex` | claude-dev |
 | cli | `dispatch logout @ claude-dev-mac::main` | `/claude-dev-mac/logout` | `claude-dev-mac::main#logout` | claude-dev-mac |
 | cli | `dispatch logout @ claude-dev::main` | `/claude-dev/logout` | `claude-dev::main#logout` | claude-dev |
-| cli | `dispatch orch-sample.sh @ scripts/orch-sample.sh::main` | `/orch-sample.sh` | `scripts/orch-sample.sh::main` | scripts/orch-sample.sh |
-| cli | `dispatch orchestrate @ claude-dev-mac::main` | `/claude-dev-mac/orchestrate` | `claude-dev-mac::main#orchestrate` | claude-dev-mac |
-| cli | `dispatch orchestrate @ claude-dev::main` | `/claude-dev/orchestrate` | `claude-dev::main#orchestrate` | claude-dev |
 | cli | `dispatch ports @ claude-dev-mac::main` | `/claude-dev-mac/ports` | `claude-dev-mac::main#ports` | claude-dev-mac |
 | cli | `dispatch ports @ claude-dev::main` | `/claude-dev/ports` | `claude-dev::main#ports` | claude-dev |
 | cli | `dispatch pull @ claude-dev-mac::main` | `/claude-dev-mac/pull` | `claude-dev-mac::main#pull` | claude-dev-mac |
 | cli | `dispatch pull @ claude-dev::main` | `/claude-dev/pull` | `claude-dev::main#pull` | claude-dev |
 | cli | `dispatch reset @ claude-dev-mac::main` | `/claude-dev-mac/reset` | `claude-dev-mac::main#reset` | claude-dev-mac |
 | cli | `dispatch reset @ claude-dev::main` | `/claude-dev/reset` | `claude-dev::main#reset` | claude-dev |
-| cli | `dispatch save_prompt.sh @ scripts/save_prompt.sh::main` | `/save_prompt.sh` | `scripts/save_prompt.sh::main` | scripts/save_prompt.sh |
-| cli | `dispatch sendslackmsg.sh @ scripts/sendslackmsg.sh::main` | `/sendslackmsg.sh` | `scripts/sendslackmsg.sh::main` | scripts/sendslackmsg.sh |
 | cli | `dispatch setup @ claude-dev-mac::main` | `/claude-dev-mac/setup` | `claude-dev-mac::main#setup` | claude-dev-mac |
 | cli | `dispatch setup @ claude-dev::main` | `/claude-dev/setup` | `claude-dev::main#setup` | claude-dev |
 | cli | `dispatch ssh-keys @ claude-dev-mac::main` | `/claude-dev-mac/ssh-keys` | `claude-dev-mac::main#ssh-keys` | claude-dev-mac |
@@ -89,7 +84,7 @@ unresolved: 4
 | `claude-dev-mac::compose_project_name_legacy` | function | private | - | `claude-dev-mac::compose_project_name`, `claude-dev-mac::main#stop` |
 | `claude-dev-mac::container_exists` | function | private | - | `claude-dev-mac::ensure_docker_proxy_container`, `claude-dev-mac::main#forward`, `claude-dev-mac::main#logout`, `claude-dev-mac::main#reset`, `claude-dev-mac::main#start`, `claude-dev-mac::main#stop`, `claude-dev-mac::main#unforward` |
 | `claude-dev-mac::container_is_managed` | function | private | - | `claude-dev-mac::main#stop` |
-| `claude-dev-mac::container_name` | function | private | `claude-dev-mac::project_name` | `claude-dev-mac::main#attach`, `claude-dev-mac::main#code`, `claude-dev-mac::main#firewall`, `claude-dev-mac::main#forward`, `claude-dev-mac::main#orchestrate`, `claude-dev-mac::main#ports`, `claude-dev-mac::main#ssh-keys.reset`, `claude-dev-mac::main#start`, `claude-dev-mac::main#stop`, `claude-dev-mac::main#unforward` |
+| `claude-dev-mac::container_name` | function | private | `claude-dev-mac::project_name` | `claude-dev-mac::main#attach`, `claude-dev-mac::main#code`, `claude-dev-mac::main#firewall`, `claude-dev-mac::main#forward`, `claude-dev-mac::main#ports`, `claude-dev-mac::main#ssh-keys.reset`, `claude-dev-mac::main#start`, `claude-dev-mac::main#stop`, `claude-dev-mac::main#unforward` |
 | `claude-dev-mac::container_project_dir` | function | private | - | `claude-dev-mac::main#start`, `claude-dev-mac::main#stop` |
 | `claude-dev-mac::destructive_abort_if_interrupted` | function | private | `claude-dev-mac::destructive_report` | `claude-dev-mac::main#logout`, `claude-dev-mac::main#reset` |
 | `claude-dev-mac::destructive_arm_interrupt` | function | private | - | `claude-dev-mac::main#logout`, `claude-dev-mac::main#reset` |
@@ -113,7 +108,7 @@ unresolved: 4
 | `claude-dev-mac::get_novnc_url` | function | private | - | `claude-dev-mac::main#list`, `claude-dev-mac::main#ports`, `claude-dev-mac::main#start` |
 | `claude-dev-mac::image_exists` | function | private | - | `claude-dev-mac::ensure_docker_proxy_container`, `claude-dev-mac::main#reset`, `claude-dev-mac::require_setup` |
 | `claude-dev-mac::image_version` | function | private | - | `claude-dev-mac::main#start` |
-| `claude-dev-mac::is_running` | function | private | - | `claude-dev-mac::ensure_docker_proxy_container`, `claude-dev-mac::main#attach`, `claude-dev-mac::main#code`, `claude-dev-mac::main#firewall`, `claude-dev-mac::main#forward`, `claude-dev-mac::main#list`, `claude-dev-mac::main#orchestrate`, `claude-dev-mac::main#ports`, `claude-dev-mac::main#start`, `claude-dev-mac::stop_proxy_if_idle` |
+| `claude-dev-mac::is_running` | function | private | - | `claude-dev-mac::ensure_docker_proxy_container`, `claude-dev-mac::main#attach`, `claude-dev-mac::main#code`, `claude-dev-mac::main#firewall`, `claude-dev-mac::main#forward`, `claude-dev-mac::main#list`, `claude-dev-mac::main#ports`, `claude-dev-mac::main#start`, `claude-dev-mac::stop_proxy_if_idle` |
 | `claude-dev-mac::main` | handler | private | - | - |
 | `claude-dev-mac::main#attach` | handler | private | `claude-dev-mac::container_name`, `claude-dev-mac::is_running`, `claude-dev-mac::require_setup`, `claude-dev-mac::resolve_container_user` | (エントリポイント) |
 | `claude-dev-mac::main#code` | handler | private | `claude-dev-mac::container_name`, `claude-dev-mac::is_running`, `claude-dev-mac::require_setup`, `claude-dev-mac::resolve_container_user` | (エントリポイント) |
@@ -123,7 +118,6 @@ unresolved: 4
 | `claude-dev-mac::main#login` | handler | private | `claude-dev-mac::acquire_lock`, `claude-dev-mac::ensure_infrastructure`, `claude-dev-mac::release_lock`, `claude-dev-mac::require_setup` | (エントリポイント) |
 | `claude-dev-mac::main#login-codex` | handler | private | `claude-dev-mac::acquire_lock`, `claude-dev-mac::ensure_infrastructure`, `claude-dev-mac::release_lock`, `claude-dev-mac::require_setup` | (エントリポイント) |
 | `claude-dev-mac::main#logout` | handler | private | `claude-dev-mac::acquire_lock`, `claude-dev-mac::container_exists`, `claude-dev-mac::destructive_abort_if_interrupted`, `claude-dev-mac::destructive_arm_interrupt`, `claude-dev-mac::destructive_deleted`, `claude-dev-mac::destructive_failed`, `claude-dev-mac::destructive_plan`, `claude-dev-mac::destructive_report`, `claude-dev-mac::destructive_rm`, `claude-dev-mac::destructive_skipped`, `claude-dev-mac::net_other_running_containers`, `claude-dev-mac::release_lock`, `claude-dev-mac::require_setup` | (エントリポイント) |
-| `claude-dev-mac::main#orchestrate` | handler | private | `claude-dev-mac::container_name`, `claude-dev-mac::is_running`, `claude-dev-mac::require_setup`, `claude-dev-mac::resolve_container_user` | (エントリポイント) |
 | `claude-dev-mac::main#ports` | handler | private | `claude-dev-mac::container_name`, `claude-dev-mac::get_novnc_url`, `claude-dev-mac::is_running` | (エントリポイント) |
 | `claude-dev-mac::main#pull` | handler | private | - | (エントリポイント) |
 | `claude-dev-mac::main#reset` | handler | private | `claude-dev-mac::acquire_lock`, `claude-dev-mac::container_exists`, `claude-dev-mac::destructive_abort_if_interrupted`, `claude-dev-mac::destructive_arm_interrupt`, `claude-dev-mac::destructive_failed`, `claude-dev-mac::destructive_plan`, `claude-dev-mac::destructive_report`, `claude-dev-mac::destructive_rm`, `claude-dev-mac::destructive_skipped`, `claude-dev-mac::image_exists`, `claude-dev-mac::net_other_running_containers`, `claude-dev-mac::release_lock`, `claude-dev-mac::spawned_resources` | (エントリポイント) |
@@ -138,8 +132,8 @@ unresolved: 4
 | `claude-dev-mac::net_other_running_containers` | function | private | - | `claude-dev-mac::main#logout`, `claude-dev-mac::main#reset`, `claude-dev-mac::stop_proxy_if_idle` |
 | `claude-dev-mac::project_name` | function | private | - | `claude-dev-mac::container_name` |
 | `claude-dev-mac::release_lock` | function | private | `claude-dev-mac::_lock_path`, `claude-dev-mac::_release_lock_path` | `claude-dev-mac::main#login`, `claude-dev-mac::main#login-codex`, `claude-dev-mac::main#logout`, `claude-dev-mac::main#reset`, `claude-dev-mac::main#start`, `claude-dev-mac::main#stop` |
-| `claude-dev-mac::require_setup` | function | private | `claude-dev-mac::image_exists` | `claude-dev-mac::main#attach`, `claude-dev-mac::main#code`, `claude-dev-mac::main#login`, `claude-dev-mac::main#login-codex`, `claude-dev-mac::main#logout`, `claude-dev-mac::main#orchestrate`, `claude-dev-mac::main#start` |
-| `claude-dev-mac::resolve_container_user` | function | private | - | `claude-dev-mac::main#attach`, `claude-dev-mac::main#code`, `claude-dev-mac::main#orchestrate`, `claude-dev-mac::main#start` |
+| `claude-dev-mac::require_setup` | function | private | `claude-dev-mac::image_exists` | `claude-dev-mac::main#attach`, `claude-dev-mac::main#code`, `claude-dev-mac::main#login`, `claude-dev-mac::main#login-codex`, `claude-dev-mac::main#logout`, `claude-dev-mac::main#start` |
+| `claude-dev-mac::resolve_container_user` | function | private | - | `claude-dev-mac::main#attach`, `claude-dev-mac::main#code`, `claude-dev-mac::main#start` |
 | `claude-dev-mac::resolve_ssh_keys_for_start` | function | private | `claude-dev-mac::_parse_ssh_keys_yaml` | `claude-dev-mac::main#start` |
 | `claude-dev-mac::select_ssh_keys_interactive` | function | private | `claude-dev-mac::discover_ssh_keys`, `claude-dev-mac::write_project_ssh_keys` | `claude-dev-mac::ensure_project_config`, `claude-dev-mac::main#ssh-keys.select` |
 | `claude-dev-mac::sha256_hex` | function | private | - | `claude-dev-mac::compose_project_name` |
@@ -151,7 +145,6 @@ unresolved: 4
 | `claude-dev::_lock_busy_message` | function | private | - | `claude-dev::acquire_lock` |
 | `claude-dev::_lock_link` | function | private | - | `claude-dev::acquire_lock` |
 | `claude-dev::_lock_path` | function | private | - | `claude-dev::acquire_lock`, `claude-dev::release_lock` |
-| `claude-dev::_orch_alive` | function | private | - | `claude-dev::main#orchestrate` |
 | `claude-dev::_parse_ssh_keys_yaml` | function | private | - | `claude-dev::load_ssh_keys_from_config` |
 | `claude-dev::_release_all_locks` | function | private | `claude-dev::_release_lock_path` | - |
 | `claude-dev::_release_lock_path` | function | private | - | `claude-dev::_release_all_locks`, `claude-dev::release_lock` |
@@ -161,7 +154,7 @@ unresolved: 4
 | `claude-dev::compose_project_name_legacy` | function | private | - | `claude-dev::compose_project_name`, `claude-dev::main#stop` |
 | `claude-dev::container_exists` | function | private | - | `claude-dev::ensure_docker_proxy_container`, `claude-dev::main#forward`, `claude-dev::main#logout`, `claude-dev::main#reset`, `claude-dev::main#start`, `claude-dev::main#stop`, `claude-dev::main#unforward` |
 | `claude-dev::container_is_managed` | function | private | - | `claude-dev::main#stop` |
-| `claude-dev::container_name` | function | private | `claude-dev::project_name` | `claude-dev::main#attach`, `claude-dev::main#code`, `claude-dev::main#firewall`, `claude-dev::main#forward`, `claude-dev::main#orchestrate`, `claude-dev::main#ports`, `claude-dev::main#ssh-keys`, `claude-dev::main#start`, `claude-dev::main#stop`, `claude-dev::main#unforward` |
+| `claude-dev::container_name` | function | private | `claude-dev::project_name` | `claude-dev::main#attach`, `claude-dev::main#code`, `claude-dev::main#firewall`, `claude-dev::main#forward`, `claude-dev::main#ports`, `claude-dev::main#ssh-keys`, `claude-dev::main#start`, `claude-dev::main#stop`, `claude-dev::main#unforward` |
 | `claude-dev::container_project_dir` | function | private | - | `claude-dev::main#start`, `claude-dev::main#stop` |
 | `claude-dev::destructive_abort_if_interrupted` | function | private | `claude-dev::destructive_report` | `claude-dev::main#logout`, `claude-dev::main#reset` |
 | `claude-dev::destructive_arm_interrupt` | function | private | - | `claude-dev::main#logout`, `claude-dev::main#reset` |
@@ -181,7 +174,7 @@ unresolved: 4
 | `claude-dev::get_novnc_url` | function | private | - | `claude-dev::main#list`, `claude-dev::main#ports`, `claude-dev::main#start` |
 | `claude-dev::image_exists` | function | private | - | `claude-dev::ensure_docker_proxy_container`, `claude-dev::main#reset`, `claude-dev::require_setup` |
 | `claude-dev::image_version` | function | private | - | `claude-dev::main#start` |
-| `claude-dev::is_running` | function | private | - | `claude-dev::ensure_docker_proxy_container`, `claude-dev::main#attach`, `claude-dev::main#code`, `claude-dev::main#firewall`, `claude-dev::main#forward`, `claude-dev::main#list`, `claude-dev::main#orchestrate`, `claude-dev::main#ports`, `claude-dev::main#start`, `claude-dev::stop_proxy_if_idle` |
+| `claude-dev::is_running` | function | private | - | `claude-dev::ensure_docker_proxy_container`, `claude-dev::main#attach`, `claude-dev::main#code`, `claude-dev::main#firewall`, `claude-dev::main#forward`, `claude-dev::main#list`, `claude-dev::main#ports`, `claude-dev::main#start`, `claude-dev::stop_proxy_if_idle` |
 | `claude-dev::load_ssh_keys_from_config` | function | private | `claude-dev::_parse_ssh_keys_yaml` | `claude-dev::ensure_ssh_agent` |
 | `claude-dev::main` | handler | private | - | - |
 | `claude-dev::main#attach` | handler | private | `claude-dev::container_name`, `claude-dev::is_running`, `claude-dev::require_setup`, `claude-dev::resolve_container_user` | (エントリポイント) |
@@ -192,7 +185,6 @@ unresolved: 4
 | `claude-dev::main#login` | handler | private | `claude-dev::acquire_lock`, `claude-dev::ensure_infrastructure`, `claude-dev::release_lock`, `claude-dev::require_setup` | (エントリポイント) |
 | `claude-dev::main#login-codex` | handler | private | `claude-dev::acquire_lock`, `claude-dev::ensure_infrastructure`, `claude-dev::release_lock`, `claude-dev::require_setup` | (エントリポイント) |
 | `claude-dev::main#logout` | handler | private | `claude-dev::acquire_lock`, `claude-dev::container_exists`, `claude-dev::destructive_abort_if_interrupted`, `claude-dev::destructive_arm_interrupt`, `claude-dev::destructive_deleted`, `claude-dev::destructive_failed`, `claude-dev::destructive_plan`, `claude-dev::destructive_report`, `claude-dev::destructive_rm`, `claude-dev::destructive_skipped`, `claude-dev::net_other_running_containers`, `claude-dev::release_lock`, `claude-dev::require_setup` | (エントリポイント) |
-| `claude-dev::main#orchestrate` | handler | private | `claude-dev::_orch_alive`, `claude-dev::container_name`, `claude-dev::is_running`, `claude-dev::require_setup`, `claude-dev::resolve_container_user` | (エントリポイント) |
 | `claude-dev::main#ports` | handler | private | `claude-dev::container_name`, `claude-dev::get_novnc_url`, `claude-dev::is_running` | (エントリポイント) |
 | `claude-dev::main#pull` | handler | private | - | (エントリポイント) |
 | `claude-dev::main#reset` | handler | private | `claude-dev::acquire_lock`, `claude-dev::container_exists`, `claude-dev::destructive_abort_if_interrupted`, `claude-dev::destructive_arm_interrupt`, `claude-dev::destructive_failed`, `claude-dev::destructive_plan`, `claude-dev::destructive_report`, `claude-dev::destructive_rm`, `claude-dev::destructive_skipped`, `claude-dev::image_exists`, `claude-dev::net_other_running_containers`, `claude-dev::release_lock`, `claude-dev::spawned_resources` | (エントリポイント) |
@@ -207,8 +199,8 @@ unresolved: 4
 | `claude-dev::net_other_running_containers` | function | private | - | `claude-dev::main#logout`, `claude-dev::main#reset`, `claude-dev::stop_proxy_if_idle` |
 | `claude-dev::project_name` | function | private | - | `claude-dev::container_name` |
 | `claude-dev::release_lock` | function | private | `claude-dev::_lock_path`, `claude-dev::_release_lock_path` | `claude-dev::main#login`, `claude-dev::main#login-codex`, `claude-dev::main#logout`, `claude-dev::main#reset`, `claude-dev::main#start`, `claude-dev::main#stop` |
-| `claude-dev::require_setup` | function | private | `claude-dev::image_exists` | `claude-dev::main#attach`, `claude-dev::main#code`, `claude-dev::main#login`, `claude-dev::main#login-codex`, `claude-dev::main#logout`, `claude-dev::main#orchestrate`, `claude-dev::main#start` |
-| `claude-dev::resolve_container_user` | function | private | - | `claude-dev::main#attach`, `claude-dev::main#code`, `claude-dev::main#orchestrate`, `claude-dev::main#start` |
+| `claude-dev::require_setup` | function | private | `claude-dev::image_exists` | `claude-dev::main#attach`, `claude-dev::main#code`, `claude-dev::main#login`, `claude-dev::main#login-codex`, `claude-dev::main#logout`, `claude-dev::main#start` |
+| `claude-dev::resolve_container_user` | function | private | - | `claude-dev::main#attach`, `claude-dev::main#code`, `claude-dev::main#start` |
 | `claude-dev::select_ssh_keys_interactive` | function | private | `claude-dev::discover_ssh_keys`, `claude-dev::write_project_ssh_keys` | `claude-dev::ensure_project_config`, `claude-dev::main#ssh-keys.select` |
 | `claude-dev::sha256_hex` | function | private | - | `claude-dev::compose_project_name` |
 | `claude-dev::spawned_resources` | function | private | - | `claude-dev::main#reset`, `claude-dev::main#stop` |
@@ -224,9 +216,6 @@ unresolved: 4
 | `scripts/entrypoint-claude.sh::ensure_codex_config` | function | private | - | `scripts/entrypoint-claude.sh::main` |
 | `scripts/entrypoint-claude.sh::main` | handler | private | `scripts/entrypoint-claude.sh::ensure_codex_config` | (エントリポイント) |
 | `scripts/init-firewall-claude.sh::main` | handler | private | - | (エントリポイント) |
-| `scripts/orch-sample.sh::main` | handler | private | - | (エントリポイント) |
-| `scripts/save_prompt.sh::main` | handler | private | - | (エントリポイント) |
-| `scripts/sendslackmsg.sh::main` | handler | private | - | (エントリポイント) |
 | `scripts/vm-healthd.sh::cpu_ticks` | function | private | - | `scripts/vm-healthd.sh::evaluate_once` |
 | `scripts/vm-healthd.sh::evaluate_once` | function | private | `scripts/vm-healthd.sh::cpu_ticks`, `scripts/vm-healthd.sh::log`, `scripts/vm-healthd.sh::smp_of`, `scripts/vm-healthd.sh::tmux_clear`, `scripts/vm-healthd.sh::tmux_flash`, `scripts/vm-healthd.sh::tmux_set`, `scripts/vm-healthd.sh::write_health` | `scripts/vm-healthd.sh::main`, `scripts/vm-healthd.sh::main#--loop` |
 | `scripts/vm-healthd.sh::log` | function | private | - | `scripts/vm-healthd.sh::evaluate_once`, `scripts/vm-healthd.sh::main#--loop` |
@@ -261,5 +250,4 @@ unresolved: 4
 |---|---|---|---|
 | `claude-dev-mac::main` | `source $CONFIG_FILE` | dynamic | - |
 | `claude-dev::main` | `source $CONFIG_FILE` | dynamic | - |
-| `claude-dev::main#orchestrate` | `_cmd="[ -f /etc/claude-dev/vm.env ] && . /etc/claude-dev/vm.env; $_cmd"` | dynamic | - |
 | `claude-dev::main#start` | `eval "_val=\${$_v:-}"` | dynamic | - |

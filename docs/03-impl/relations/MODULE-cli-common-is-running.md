@@ -1,16 +1,16 @@
 ---
 id: MODULE-cli-common-is-running
+updated: 2026-08-10
 module: MOD-cli-common
 kind: function-call
 sync: sync
 impl: claude-dev::is_running, claude-dev-mac::is_running
-callers: MODULE-cli-attach, MODULE-cli-code, MODULE-cli-firewall, MODULE-cli-forward, MODULE-cli-list, MODULE-cli-orchestrate, MODULE-cli-ports, MODULE-cli-start, MODULE-cli-stop
+callers: MODULE-cli-attach, MODULE-cli-code, MODULE-cli-firewall, MODULE-cli-forward, MODULE-cli-list, MODULE-cli-ports, MODULE-cli-start, MODULE-cli-stop
 callees: なし
 contracts: なし
 design: DSN-mod-01, DSN-mod-02
 requirements: FR-env-01
 tests: なし(未実装。シェル実装のため自動テストランナーが無く実機確認で代替する)
-updated: 2026-08-02
 summary: 指定コンテナが running 状態かを判定する
 ---
 

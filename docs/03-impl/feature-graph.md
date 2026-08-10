@@ -1,11 +1,11 @@
 ---
 id: feature-graph
-features: 83
-edges: 129
-confirmed_edges: 122
-candidate_edges: 7
-shared: 29
-unreached: 19
+features: 56
+edges: 76
+confirmed_edges: 76
+candidate_edges: 0
+shared: 28
+unreached: 8
 coupled_resources: 0
 unlinked_pairs: 0
 ---
@@ -58,10 +58,6 @@ unlinked_pairs: 0
 | MODULE-cli-logout | MODULE-cli-common-container-exists | 確定 | `claude-dev-mac::main#logout` → `claude-dev-mac::container_exists`, `claude-dev::main#logout` → `claude-dev::container_exists` |
 | MODULE-cli-logout | MODULE-cli-common-lock | 確定 | `claude-dev-mac::main#logout` → `claude-dev-mac::acquire_lock`, `claude-dev-mac::main#logout` → `claude-dev-mac::release_lock`, `claude-dev::main#logout` → `claude-dev::acquire_lock` ほか 1 件 |
 | MODULE-cli-logout | MODULE-cli-common-require-setup | 確定 | `claude-dev-mac::main#logout` → `claude-dev-mac::require_setup`, `claude-dev::main#logout` → `claude-dev::require_setup` |
-| MODULE-cli-orchestrate | MODULE-cli-common-container-name | 確定 | `claude-dev-mac::main#orchestrate` → `claude-dev-mac::container_name`, `claude-dev::main#orchestrate` → `claude-dev::container_name` |
-| MODULE-cli-orchestrate | MODULE-cli-common-is-running | 確定 | `claude-dev-mac::main#orchestrate` → `claude-dev-mac::is_running`, `claude-dev::main#orchestrate` → `claude-dev::is_running` |
-| MODULE-cli-orchestrate | MODULE-cli-common-require-setup | 確定 | `claude-dev-mac::main#orchestrate` → `claude-dev-mac::require_setup`, `claude-dev::main#orchestrate` → `claude-dev::require_setup` |
-| MODULE-cli-orchestrate | MODULE-cli-common-resolve-container-user | 確定 | `claude-dev-mac::main#orchestrate` → `claude-dev-mac::resolve_container_user`, `claude-dev::main#orchestrate` → `claude-dev::resolve_container_user` |
 | MODULE-cli-ports | MODULE-cli-common-container-name | 確定 | `claude-dev-mac::main#ports` → `claude-dev-mac::container_name`, `claude-dev::main#ports` → `claude-dev::container_name` |
 | MODULE-cli-ports | MODULE-cli-common-get-novnc-url | 確定 | `claude-dev-mac::main#ports` → `claude-dev-mac::get_novnc_url`, `claude-dev::main#ports` → `claude-dev::get_novnc_url` |
 | MODULE-cli-ports | MODULE-cli-common-is-running | 確定 | `claude-dev-mac::main#ports` → `claude-dev-mac::is_running`, `claude-dev::main#ports` → `claude-dev::is_running` |
@@ -99,7 +95,6 @@ unlinked_pairs: 0
 | MODULE-makefile-help | MODULE-makefile-build-claude | 確定 | `Makefile::help` → `Makefile::build-claude` |
 | MODULE-makefile-help | MODULE-makefile-build-claude-vnc | 確定 | `Makefile::help` → `Makefile::build-claude-vnc` |
 | MODULE-makefile-help | MODULE-makefile-build-docker-proxy | 確定 | `Makefile::help` → `Makefile::build-docker-proxy` |
-| MODULE-makefile-help | MODULE-makefile-build-orchestrator | 確定 | `Makefile::help` → `Makefile::build-orchestrator` |
 | MODULE-makefile-help | MODULE-makefile-clean | 確定 | `Makefile::help` → `Makefile::clean` |
 | MODULE-makefile-help | MODULE-makefile-login | 確定 | `Makefile::help` → `Makefile::login` |
 | MODULE-makefile-help | MODULE-makefile-setup | 確定 | `Makefile::help` → `Makefile::setup` |
@@ -113,54 +108,6 @@ unlinked_pairs: 0
 | MODULE-makefile-setup | MODULE-makefile-login | 確定 | `Makefile::setup` → `Makefile::login` |
 | MODULE-makefile-setup | MODULE-makefile-network | 確定 | `Makefile::setup` → `Makefile::network` |
 | MODULE-makefile-setup | MODULE-makefile-volumes | 確定 | `Makefile::setup` → `Makefile::volumes` |
-| MODULE-orchestrator-claude-exec | MODULE-orchestrator-controller | 候補 | `orchestrator/worker.go::ExecClaude.RunPrompt` → `orchestrator/controller.go::Controller.Run`(候補) |
-| MODULE-orchestrator-claude-exec | MODULE-orchestrator-session | 候補 | `orchestrator/worker.go::ExecClaude.RunPrompt` → `orchestrator/session.go::SessionManager.Run`(候補) |
-| MODULE-orchestrator-claude-exec | MODULE-orchestrator-streamlog | 確定 | `orchestrator/worker.go::ExecClaude.RunPrompt` → `orchestrator/streamlog.go::newStreamPrettyWriter` |
-| MODULE-orchestrator-controller | MODULE-orchestrator-claude-exec | 確定 | `orchestrator/controller.go::Controller.checkCompletion` → `orchestrator/worker.go::ExecClaude.RunPrompt` |
-| MODULE-orchestrator-controller | MODULE-orchestrator-dashboard | 確定 | `orchestrator/controller.go::Controller.refreshInterventionCount` → `orchestrator/dashboard.go::DashboardState.Set`, `orchestrator/controller.go::Controller.runBrainstormingSession` → `orchestrator/dashtui.go::newDashProgram`, `orchestrator/controller.go::Controller.runExecuting` → `orchestrator/dashtui.go::newDashProgram` ほか 1 件 |
-| MODULE-orchestrator-controller | MODULE-orchestrator-handoff | 確定 | `orchestrator/controller.go::Controller.Run` → `orchestrator/handoff.go::Handoff.DiscardStale`, `orchestrator/controller.go::Controller.resolveInterventionInSession` → `orchestrator/handoff.go::Handoff.WaitConsume`, `orchestrator/controller.go::Controller.runBrainstorming` → `orchestrator/handoff.go::Handoff.Consume` ほか 2 件 |
-| MODULE-orchestrator-controller | MODULE-orchestrator-mode | 確定 | `orchestrator/controller.go::Controller.resolveInterventionInSession` → `orchestrator/mode.go::Mode.IntervenePrompt`, `orchestrator/controller.go::Controller.resolveInterventionInSession` → `orchestrator/mode.go::Mode.WriteLaunchScript`, `orchestrator/controller.go::Controller.runBrainstorming` → `orchestrator/mode.go::Mode.BrainstormingArgs` ほか 4 件 |
-| MODULE-orchestrator-controller | MODULE-orchestrator-plan | 確定 | `orchestrator/controller.go::Controller.runExecuting` → `orchestrator/controller.go::AllSettled`, `orchestrator/controller.go::Controller.runExecuting` → `orchestrator/controller.go::MarkBlockedByFailedDeps`, `orchestrator/controller.go::Controller.runExecuting` → `orchestrator/controller.go::NormalizeForResume` ほか 2 件 |
-| MODULE-orchestrator-controller | MODULE-orchestrator-review | 確定 | `orchestrator/controller.go::Controller.runTaskPipeline` → `orchestrator/review.go::Reviewer.RunGate` |
-| MODULE-orchestrator-controller | MODULE-orchestrator-session | 確定 | `orchestrator/controller.go::Controller.Run` → `orchestrator/session.go::SessionManager.DetectSession`, `orchestrator/controller.go::Controller.Run` → `orchestrator/session.go::SessionManager.SetupMainSession`, `orchestrator/controller.go::Controller.closeBrainstormingSession` → `orchestrator/session.go::SessionManager.BrainstormingWindow` ほか 19 件 |
-| MODULE-orchestrator-controller | MODULE-orchestrator-state | 確定 | `orchestrator/controller.go::Controller.Run` → `orchestrator/state.go::Store.LoadState`, `orchestrator/controller.go::Controller.Run` → `orchestrator/state.go::Store.SaveState`, `orchestrator/controller.go::Controller.openInterventionLocked` → `orchestrator/state.go::Store.SavePlan` ほか 12 件 |
-| MODULE-orchestrator-controller | MODULE-orchestrator-state-intervention | 確定 | `orchestrator/controller.go::Controller.Run` → `orchestrator/state.go::Store.AppendAudit`, `orchestrator/controller.go::Controller.openIDForTask` → `orchestrator/state.go::Store.LoadOpenInterventions`, `orchestrator/controller.go::Controller.openInterventionLocked` → `orchestrator/state.go::Store.AddOpenIntervention` ほか 24 件 |
-| MODULE-orchestrator-controller | MODULE-orchestrator-term | 確定 | `orchestrator/controller.go::Controller.reportNotExecutable` → `orchestrator/mode.go::isTTY`, `orchestrator/controller.go::Controller.resolveInterventionInSession` → `orchestrator/term.go::printModeBanner`, `orchestrator/controller.go::Controller.runBrainstorming` → `orchestrator/term.go::printModeBanner` ほか 5 件 |
-| MODULE-orchestrator-controller | MODULE-orchestrator-trigger | 確定 | `orchestrator/controller.go::Controller.evalStuck` → `orchestrator/trigger.go::Evaluate`, `orchestrator/controller.go::Controller.runExecuting` → `orchestrator/trigger.go::Evaluate`, `orchestrator/controller.go::Controller.runTaskPipeline` → `orchestrator/trigger.go::Evaluate` |
-| MODULE-orchestrator-controller | MODULE-orchestrator-worker | 確定 | `orchestrator/controller.go::Controller.runTaskPipeline` → `orchestrator/worker.go::Worker.Dispatch`, `orchestrator/controller.go::parseCompletionVerdict` → `orchestrator/worker.go::extractFromClaudeEnvelope`, `orchestrator/controller.go::parseCompletionVerdict` → `orchestrator/worker.go::resultFromStream` |
-| MODULE-orchestrator-controller | MODULE-orchestrator-worktree | 確定 | `orchestrator/controller.go::Controller.integrate` → `orchestrator/worker.go::ExecGit.Merge` |
-| MODULE-orchestrator-dashboard | MODULE-orchestrator-session | 確定 | `orchestrator/dashtui.go::dashModel.Update` → `orchestrator/session.go::SessionManager.BrainstormingWindow`, `orchestrator/dashtui.go::dashModel.Update` → `orchestrator/session.go::SessionManager.SwitchTo`, `orchestrator/dashtui.go::dashModel.Update` → `orchestrator/session.go::SessionManager.WorkerWindow` |
-| MODULE-orchestrator-dashboard | MODULE-orchestrator-state | 確定 | `orchestrator/dashtui.go::detailTails` → `orchestrator/state.go::Store.WorkerLogPath` |
-| MODULE-orchestrator-handoff | MODULE-orchestrator-state-intervention | 確定 | `orchestrator/handoff.go::Handoff.Consume` → `orchestrator/state.go::Store.DeleteControl`, `orchestrator/handoff.go::Handoff.Consume` → `orchestrator/state.go::Store.LoadControl`, `orchestrator/handoff.go::Handoff.DiscardStale` → `orchestrator/state.go::Store.DeleteControl` |
-| MODULE-orchestrator-main | MODULE-orchestrator-config | 確定 | `orchestrator/main.go::run` → `orchestrator/config.go::LoadConfig` |
-| MODULE-orchestrator-main | MODULE-orchestrator-controller | 確定 | `orchestrator/main.go::run` → `orchestrator/controller.go::Controller.Run`, `orchestrator/main.go::run` → `orchestrator/controller.go::newRunID` |
-| MODULE-orchestrator-main | MODULE-orchestrator-plan | 確定 | `orchestrator/main.go::run` → `orchestrator/controller.go::AllDone` |
-| MODULE-orchestrator-main | MODULE-orchestrator-session | 確定 | `orchestrator/main.go::main` → `orchestrator/session.go::NewSessionManager`, `orchestrator/main.go::main` → `orchestrator/session.go::SessionManager.MainSession`, `orchestrator/main.go::run` → `orchestrator/session.go::NewSessionManager` |
-| MODULE-orchestrator-main | MODULE-orchestrator-slack | 確定 | `orchestrator/main.go::run` → `orchestrator/slack.go::NewSlackNotifier` |
-| MODULE-orchestrator-main | MODULE-orchestrator-state | 確定 | `orchestrator/main.go::run` → `orchestrator/state.go::NewStore`, `orchestrator/main.go::seedPlanReady` → `orchestrator/state.go::Store.LoadPlan` |
-| MODULE-orchestrator-main | MODULE-orchestrator-term | 確定 | `orchestrator/main.go::run` → `orchestrator/term.go::ttyRestoreSane` |
-| MODULE-orchestrator-main | MODULE-orchestrator-worktree | 確定 | `orchestrator/main.go::run` → `orchestrator/worker.go::CleanOrchWorktrees` |
-| MODULE-orchestrator-mode | MODULE-orchestrator-claude-exec | 確定 | `orchestrator/mode.go::Mode.RunInteractive` → `orchestrator/claudebin.go::claudeChildEnv`, `orchestrator/mode.go::Mode.RunInteractive` → `orchestrator/claudebin.go::claudePath`, `orchestrator/mode.go::Mode.WriteLaunchScript` → `orchestrator/claudebin.go::claudePath` ほか 1 件 |
-| MODULE-orchestrator-mode | MODULE-orchestrator-controller | 候補 | `orchestrator/mode.go::Mode.RunInteractive` → `orchestrator/controller.go::Controller.Run`(候補) |
-| MODULE-orchestrator-mode | MODULE-orchestrator-session | 候補 | `orchestrator/mode.go::Mode.RunInteractive` → `orchestrator/session.go::SessionManager.Run`(候補) |
-| MODULE-orchestrator-mode | MODULE-orchestrator-state | 確定 | `orchestrator/mode.go::Mode.ResolveArgs` → `orchestrator/state.go::LoadProjectPolicy`, `orchestrator/mode.go::Mode.ResolveArgs` → `orchestrator/state.go::VMModePreamble`, `orchestrator/mode.go::Mode.WriteLaunchScript` → `orchestrator/state.go::Store.path` ほか 5 件 |
-| MODULE-orchestrator-mode | MODULE-orchestrator-state-intervention | 確定 | `orchestrator/mode.go::Mode.IntervenePrompt` → `orchestrator/mode.go::Store.ReadQuestion`, `orchestrator/mode.go::Mode.ResolveArgs` → `orchestrator/mode.go::Store.ReadQuestion`, `orchestrator/mode.go::Mode.ResolveArgsOne` → `orchestrator/mode.go::Store.ReadQuestion` ほか 1 件 |
-| MODULE-orchestrator-mode | MODULE-orchestrator-state-io | 確定 | `orchestrator/mode.go::Mode.WriteLaunchScript` → `orchestrator/state.go::writeAtomic` |
-| MODULE-orchestrator-mode | MODULE-orchestrator-term | 確定 | `orchestrator/mode.go::Mode.RunInteractive` → `orchestrator/term.go::ttyRestoreSane` |
-| MODULE-orchestrator-review | MODULE-orchestrator-state | 確定 | `orchestrator/review.go::Reviewer.Review` → `orchestrator/state.go::Store.WorkerLogPath`, `orchestrator/review.go::Reviewer.Review` → `orchestrator/state.go::Store.WorktreeAbs`, `orchestrator/review.go::Reviewer.buildReviewPrompt` → `orchestrator/state.go::LoadProjectPolicy` ほか 1 件 |
-| MODULE-orchestrator-review | MODULE-orchestrator-state-intervention | 確定 | `orchestrator/review.go::Reviewer.Review` → `orchestrator/state.go::Store.AppendAudit`, `orchestrator/review.go::Reviewer.RunGate` → `orchestrator/state.go::Store.AppendAudit`, `orchestrator/review.go::appendReviseError` → `orchestrator/state.go::Store.AppendAudit` |
-| MODULE-orchestrator-review | MODULE-orchestrator-worker | 確定 | `orchestrator/review.go::ParseReviewResult` → `orchestrator/worker.go::extractFromClaudeEnvelope`, `orchestrator/review.go::ParseReviewResult` → `orchestrator/worker.go::resultFromStream`, `orchestrator/review.go::Reviewer.RunGate` → `orchestrator/worker.go::Worker.Dispatch` ほか 1 件 |
-| MODULE-orchestrator-session | MODULE-orchestrator-controller | 候補 | `orchestrator/session.go::tmuxRun` → `orchestrator/controller.go::Controller.Run`(候補) |
-| MODULE-orchestrator-session | MODULE-orchestrator-mode | 確定 | `orchestrator/session.go::SessionManager.LaunchInteractive` → `orchestrator/mode.go::shellSingleQuote` |
-| MODULE-orchestrator-state | MODULE-orchestrator-state-io | 確定 | `orchestrator/state.go::Store.LoadPlan` → `orchestrator/state.go::readJSON`, `orchestrator/state.go::Store.LoadState` → `orchestrator/state.go::readJSON`, `orchestrator/state.go::Store.SavePlan` → `orchestrator/state.go::writeJSONAtomic` ほか 2 件 |
-| MODULE-orchestrator-state-intervention | MODULE-orchestrator-state | 確定 | `orchestrator/mode.go::Store.ReadQuestion` → `orchestrator/state.go::Store.path`, `orchestrator/state.go::Store.AppendAssumption` → `orchestrator/state.go::Store.path`, `orchestrator/state.go::Store.AppendAudit` → `orchestrator/state.go::Store.path` ほか 9 件 |
-| MODULE-orchestrator-state-intervention | MODULE-orchestrator-state-io | 確定 | `orchestrator/state.go::Store.AppendAssumption` → `orchestrator/state.go::appendJSONL`, `orchestrator/state.go::Store.AppendAudit` → `orchestrator/state.go::appendJSONL`, `orchestrator/state.go::Store.AppendIntervention` → `orchestrator/state.go::appendJSONL` ほか 5 件 |
-| MODULE-orchestrator-term | MODULE-orchestrator-controller | 候補 | `orchestrator/term.go::sttyRun` → `orchestrator/controller.go::Controller.Run`(候補) |
-| MODULE-orchestrator-term | MODULE-orchestrator-session | 候補 | `orchestrator/term.go::sttyRun` → `orchestrator/session.go::SessionManager.Run`(候補) |
-| MODULE-orchestrator-worker | MODULE-orchestrator-state | 確定 | `orchestrator/worker.go::Worker.BuildPrompt` → `orchestrator/state.go::LoadProjectPolicy`, `orchestrator/worker.go::Worker.BuildPrompt` → `orchestrator/state.go::VMModePreamble`, `orchestrator/worker.go::Worker.Dispatch` → `orchestrator/state.go::Store.WorkerLogPath` ほか 1 件 |
-| MODULE-orchestrator-worker | MODULE-orchestrator-state-intervention | 確定 | `orchestrator/worker.go::Worker.Dispatch` → `orchestrator/state.go::Store.AppendAudit` |
-| MODULE-orchestrator-worker | MODULE-orchestrator-worktree | 確定 | `orchestrator/worker.go::Worker.Dispatch` → `orchestrator/worker.go::Worker.PrepareWorktree` |
-| MODULE-orchestrator-worktree | MODULE-orchestrator-state | 確定 | `orchestrator/worker.go::Worker.PrepareWorktree` → `orchestrator/state.go::Store.WorktreeAbs`, `orchestrator/worker.go::Worker.PrepareWorktree` → `orchestrator/state.go::Store.WorktreeRel` |
 
 ## 複数機能から到達される共有関数(境界の実体)
 
@@ -172,7 +119,6 @@ unlinked_pairs: 0
 |---|---|---|
 | `claude-dev-mac::net_other_running_containers` | 3 | MODULE-cli-logout, MODULE-cli-reset, MODULE-cli-stop |
 | `claude-dev::net_other_running_containers` | 3 | MODULE-cli-logout, MODULE-cli-reset, MODULE-cli-stop |
-| `orchestrator/dashboard.go::oneline` | 3 | MODULE-orchestrator-controller, MODULE-orchestrator-dashboard, MODULE-orchestrator-streamlog |
 | `claude-dev-mac::compose_project_name` | 2 | MODULE-cli-start, MODULE-cli-stop |
 | `claude-dev-mac::compose_project_name_legacy` | 2 | MODULE-cli-start, MODULE-cli-stop |
 | `claude-dev-mac::container_project_dir` | 2 | MODULE-cli-start, MODULE-cli-stop |
@@ -204,27 +150,18 @@ unlinked_pairs: 0
 
 **候補辺も算入した上で**到達しない(`.claude/directions/features.md` §5:「無い」の主張は広く)。到達不能コードの候補だが、**削ってよいかは決めない** — 動的呼び出し・外部からの参照・ツール未対応の可能性がある。
 
-| シンボル |
-|---|
-| `claude-dev-mac::_destructive_done` |
-| `claude-dev-mac::_release_all_locks` |
-| `claude-dev-mac::main` |
-| `claude-dev::_destructive_done` |
-| `claude-dev::_release_all_locks` |
-| `claude-dev::main` |
-| `docker-proxy/main.go::cachedResolveProjectDir` |
-| `docker-proxy/main.go::lookupProjectDir` |
-| `orchestrator/controller.go::Controller.openInterventionCount` |
-| `orchestrator/controller.go::Controller.resolveInterventions` |
-| `orchestrator/controller.go::Controller.resolveOne` |
-| `orchestrator/dashboard.go::DashboardState.SelectableWorker` |
-| `orchestrator/dashboard.go::DashboardState.SelectableWorkerStatus` |
-| `orchestrator/dashboard.go::selectableWorker` |
-| `orchestrator/dashboard.go::selectableWorkerID` |
-| `orchestrator/main.go::terminalConfirm` |
-| `orchestrator/state.go::Store.RemoveSidecar` |
-| `orchestrator/state.go::Store.SaveControl` |
-| `orchestrator/term.go::resolveMenu` |
+**注意: うち 6 件は Tier 3(正規表現抽出)言語のシンボル** — 呼び出し関係が系統的に不完全で、**「到達しない」は取りこぼしでありうる**(features.md §5.1)。削除候補として扱う前に人間が確認すること。
+
+| シンボル | 備考 |
+|---|---|
+| `claude-dev-mac::_destructive_done` | Tier 3(取りこぼしの可能性) |
+| `claude-dev-mac::_release_all_locks` | Tier 3(取りこぼしの可能性) |
+| `claude-dev-mac::main` | Tier 3(取りこぼしの可能性) |
+| `claude-dev::_destructive_done` | Tier 3(取りこぼしの可能性) |
+| `claude-dev::_release_all_locks` | Tier 3(取りこぼしの可能性) |
+| `claude-dev::main` | Tier 3(取りこぼしの可能性) |
+| `docker-proxy/main.go::cachedResolveProjectDir` | - |
+| `docker-proxy/main.go::lookupProjectDir` | - |
 
 ## 同じ資源を触るのに呼び出し辺が無い機能
 

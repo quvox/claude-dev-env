@@ -16,6 +16,7 @@ requirements: FR-env-01
 tests: なし(未実装。シェル実装のため自動テストランナーが無く実機確認で代替する)
 updated: 2026-08-02
 summary: 指定コンテナが running 状態かを判定する
+reflected: 2026-08-10
 ---
 
 # MODULE-cli-common-is-running セッション稼働判定

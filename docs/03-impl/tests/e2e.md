@@ -1,22 +1,15 @@
 ---
 id: e2e
+version: 1.5.0
+updated: 2026-08-10
 scope: E2E
-version: 1.4.0
-updated: 2026-08-08
 source:
   - docs/02-design/system.md
   - docs/01-requirements/usecases.md
-summary: E2Eシナリオ E2E-01〜E2E-06 ⇄ テスト対応
+summary: E2Eシナリオ E2E-01〜E2E-03 と E2E-06 ⇄ テスト対応
 keywords: [テスト, E2E]
-verified:
-  at: 2026-08-08
-  version: 1.4.0
-  against:
-    - doc: docs/02-design/system.md
-      version: 2.8.0
-    - doc: docs/01-requirements/usecases.md
-      version: 1.4.0
 ---
+
 # E2E テスト対応
 
 ## E2Eシナリオ ⇄ テスト対応表
@@ -26,8 +19,6 @@ verified:
 | E2E-01 | UC-01 | `claude-dev start`(ブラウザ確認あり / `--no-vnc`)→ `/workspace` マウント・認証・ファイアウォール・tmux → `claude` 起動 → 再実行での再接続 → **同名衝突で稼働中のコンテナを失わないこと(手順7)→ 破壊的操作が「自分が作った資源」にだけ効くこと(手順8: 管理ラベル・遊休判定・排他ロック・ラベル無しコンテナの保護・compose 資源の隔離・受理しない名前・プロジェクト配下の認証コピー・確認と非対話時の中止・削除失敗の列挙・**セッション由来の資源の片付け(手順8-14・8-15)・`logout` 後に回収できないこと(手順8-16)**)** | 手順のみ(下記「実機確認の手順」E2E-01) | 未検証(テスト未実装) |
 | E2E-02 | UC-02 | `claude-dev forward` → 8100 番台の割当と SSH トンネル → クライアントのブラウザで表示 → `claude-dev ports` で確認 | 手順のみ(同 E2E-02) | 未検証(テスト未実装) |
 | E2E-03 | UC-03 | コンテナ内で危険な `docker run` → 拒否 / `/workspace` bind の許可 / 拒否条件に当たらない要求の透過 / **作られたコンテナとネットワークに所有者ラベルが付くこと** | 手順のみ(同 E2E-03)。判定ロジックは `cd docker-proxy && go test ./...` が単体で検証済み。**条項ごとに単体でどこまで検証済みかは `03-impl/tests/docker-proxy.md` が正である** | 未検証(テスト未実装) |
-| E2E-04 | UC-04 | `orchestrate` → ブレインストーミング → plan 確定 → worker 並列 → 要判断1件のみ待機・他は継続 → 回答で復帰 → 完了 | 手順のみ(同 E2E-04)。`make orch-sample` で題材を配置して実走する | 未検証(テスト未実装) |
-| E2E-05 | UC-05 | 実行中に端末を全終了 → `orchestrate` 再実行 → 合流/再開・完了済みの非再実行・plan と履歴の保持 | 手順のみ(同 E2E-05) | 未検証(テスト未実装) |
 | E2E-06 | UC-06 | `claude-dev login-codex` → デバイス認証 → 別プロジェクトで `start` → 再ログイン不要で `codex` が起動し、シェルコマンドが成功して `/workspace` を読み書きできる。landlock の疎通確認が通り、読み取り専用の明示指定で読み取りが成功する | `scripts/e2e6-codex.sh`(実機で実行する検証スクリプト。自動テストランナーからは呼ばれない) | 未検証(テスト未実装) |
 
 ## 通過する機能(トレーサビリティ)
@@ -37,8 +28,6 @@ verified:
 | E2E-01 | MODULE-cli-start → MODULE-cli-common-require-setup → MODULE-cli-common-container-name → **MODULE-cli-common-lock** → MODULE-cli-common-ensure-infrastructure → MODULE-cli-common-select-ssh-keys → MODULE-entrypoint-claude → MODULE-firewall-init / MODULE-portsync-dood。再接続は MODULE-cli-common-is-running → MODULE-cli-common-resolve-container-user → MODULE-cli-common-get-novnc-url。**手順8 の破壊的操作は MODULE-cli-stop / MODULE-cli-logout / MODULE-cli-reset → MODULE-cli-common-lock(排他と残骸の引き継ぎ)。手順8-14・8-15 のセッション由来の資源は、印を付ける側が MODULE-docker-proxy-serve、読んで消す側が MODULE-cli-stop / MODULE-cli-reset である** |
 | E2E-02 | MODULE-cli-forward → MODULE-cli-common-container-name / MODULE-cli-common-is-running。確認は MODULE-cli-ports、解除は MODULE-cli-unforward |
 | E2E-03 | MODULE-docker-proxy-serve(コンテナ内の docker クライアントから見た経路。起動は MODULE-cli-start の `ensure_docker_proxy_container`)。**手順5 の所有者ラベルの付与も同じ機能が行う** |
-| E2E-04 | MODULE-cli-orchestrate → MODULE-orchestrator-main → MODULE-orchestrator-controller → MODULE-orchestrator-mode / MODULE-orchestrator-plan / MODULE-orchestrator-worker / MODULE-orchestrator-worktree / MODULE-orchestrator-review / MODULE-orchestrator-trigger / MODULE-orchestrator-handoff / MODULE-orchestrator-dashboard / MODULE-orchestrator-slack。題材は MODULE-sample-project-scaffold → MODULE-sample-project-mathkit |
-| E2E-05 | MODULE-cli-orchestrate → MODULE-orchestrator-main → MODULE-orchestrator-state / MODULE-orchestrator-state-io / MODULE-orchestrator-session |
 | E2E-06 | MODULE-cli-login-codex → **MODULE-cli-common-lock** → MODULE-cli-start → MODULE-entrypoint-claude(codex 認証のコピーと既定設定の補完) |
 
 ## テスト環境
@@ -46,11 +35,11 @@ verified:
 | 項目 | 値 |
 |---|---|
 | ツール | 実機操作(`claude-dev` / `make`)。自動テストランナーは無い |
-| 起動するサービス | Claude コンテナ(対象プロジェクト用)、docker-proxy(自動で起動する)、E2E-04/05 は tmux と実エージェント |
+| 起動するサービス | Claude コンテナ(対象プロジェクト用)、docker-proxy(自動で起動する) |
 | ブラウザ・CDP エンドポイント | `http://localhost:9222`(コンテナ内 Chrome。ブラウザ確認ありのイメージのみ) |
-| シードコマンド | `make orch-sample`(E2E-04 / E2E-05 の題材配置) |
-| リセットコマンド | `make orch-sample-clean`(題材の初期化)、`claude-dev stop`(コンテナと compose 生成物の片付け) |
-| ブラウザ排他ロック | 未定(QA レーンが未運用のため。`docs/02-design/environments.md` の Codex実行設定と一致させる)。**追跡先は `docs/pendings.md` の P-003**。QA レーンを開始する前に決めること — 決めずに同時実行すると互いのブラウザ状態を壊す |
+| シードコマンド | 無し(4 シナリオのいずれも題材の配置を要さない。専用のディレクトリを作って `claude-dev start` するところから始める) |
+| リセットコマンド | `claude-dev stop`(コンテナと compose 生成物の片付け) |
+| ブラウザ排他ロック | 設けていない(QA レーンが未運用のため。`docs/02-design/environments.md` の Codex実行設定と一致させる)。**棚上げの追跡先は `docs/pendings.md` の P-003** で、QA レーンを開始する前に決める — 決めずに同時実行すると互いのブラウザ状態を壊す |
 
 ## 実機確認の手順
 
@@ -346,27 +335,6 @@ verified:
    **手順5 が作るコンテナは `-d ... sleep 60` で名前を占有したまま停止済みとして残る**ので、
    消さずに2回目を流すと同名の `docker run` が失敗する。
 
-### E2E-04
-
-1. `make orch-sample` で題材を配置する。
-2. 題材のディレクトリで `claude-dev orchestrate` を実行する。
-3. ブレインストーミングで plan を確定し、実行モードへ入ることを確認する。
-4. 複数の worker が並行して動くこと、要判断が出たタスクだけが待機し他が継続することを確認する。
-5. 待機中のタスクへ回答し、そのタスクが復帰することを確認する。
-6. 完了時に成果が統合され、完了が通知されることを確認する。
-7. `.orchestrator/*.jsonl` に委譲・結果・仮定・介入が記録されていることを確認する。
-8. **秘密情報が worker とレビューアーの環境に無いこと**(`NFR-sec-03`): 手順4 で worker が
-   動いている間に、その worker ウィンドウと、レビューを走らせているウィンドウで `env` を実行し、
-   **`SLACK_BOT_TOKEN` が1つも出ない**ことを確認する。**期待する結果**: どちらの環境にも当該変数が
-   無い。**不合格の条件**: いずれかの環境に現れる(コントローラとフックだけが持ってよい)。
-   **対話 Claude の経路は単体テストが固定しているのでここでは確認しない**(`docs/03-impl/tests/orchestrator.md` の該当行が正である)。
-
-### E2E-05
-
-1. E2E-04 の実行中に、tmux クライアントをすべて閉じる。
-2. 入り直して `claude-dev orchestrate` を再実行し、同じ状態へ戻ることを確認する。
-3. 完了済みタスクが再実行されないこと、plan と履歴が消えていないことを確認する。
-
 ### E2E-06
 
 1. `claude-dev login-codex` でデバイス認証を済ませる。
@@ -389,7 +357,6 @@ verified:
 - [DS-01] 新設した手順が作った資源の**後片付けを各シナリオの末尾の手順として明示する**(E2E-01 手順8-17 / E2E-03 手順7) — 理由: 手順5 以降は `-d ... sleep 60` と `--name` で名前を占有するので、片付けないと**2回目の実行が同名衝突で落ちる** / 見直す条件: 手順が名前付きの資源を作らなくなったとき
 - [DS-01] このホストで実行できない部分手順(2セッション同時・`reset` の破壊・macOS)を**手順から外さず、未実施として記録する形にする** — 理由: 手順を消すと「確認しなくてよい」と読めるが、実際には専有環境があれば確認できる。未実施の理由と代替として確認したことは、本ファイルの「未検証(テスト未実装)の全件」と `docs/pendings.md` に残す / 見直す条件: 専有できるホストで一通り流し切ったとき(そのときは未実施の記録を消す)
 - [DS-01] **`FR-env-03-24` の確認を手順8-15(`reset`)より後の部分手順16 に置く** — 理由: この確認は `logout` で Claude コンテナを消してから `stop` を走らせるので、**先に置くと以降の部分手順が使うセッション `aaa` が失われる**。手順8-15 までの前提を壊さない位置は末尾しかない / 見直す条件: `logout` が Claude コンテナを削除しなくなったとき(そのときは順序の制約が消える)
-
 ## 未検証(テスト未実装)の全件
 
 | # | E2E ID | なぜ未実装か | 解消の条件 |
@@ -397,12 +364,11 @@ verified:
 | 1 | E2E-01 | 対象がホスト CLI(Bash)であり、自動テストランナーを設けない方針(`DSN-test-01`)。実行に実 Docker とホスト環境を要する | 自動化の予定は無い。方針を変える場合は 02 の `DSN-test-01` から見直す |
 | 2 | E2E-02 | 同上。加えてクライアント PC のブラウザ操作を含む | 同上 |
 | 3 | E2E-03 | 判定ロジックは単体テストで検証済み。経路全体(コンテナ → proxy → Engine)の確認に実 Docker を要する | 同上 |
-| 4 | E2E-04 | 実 tmux と実エージェント(課金を伴う推論)を要するため自動化していない | 同上 |
-| 5 | E2E-05 | 同上。加えて端末破壊の再現を要する | 同上 |
-| 6 | E2E-06 | 検証スクリプト `scripts/e2e6-codex.sh` はあるが、自動テストランナーからは呼ばれない(実機で人が実行する) | 同上 |
+| 4 | E2E-06 | 検証スクリプト `scripts/e2e6-codex.sh` はあるが、自動テストランナーからは呼ばれない(実機で人が実行する) | 同上 |
 
 ## 対象外としたシナリオ
 
 | E2E ID | 対応 UC | 対象外とする理由 |
 |---|---|---|
-| なし | — | 全 UC(UC-01〜UC-06)が E2E-01〜E2E-06 に対応しており、対象外としたシナリオは無い |
+| なし | — | 残る全 UC(UC-01〜UC-03 / UC-06)が E2E-01〜E2E-03 / E2E-06 に対応しており、対象外としたシナリオは無い |
+

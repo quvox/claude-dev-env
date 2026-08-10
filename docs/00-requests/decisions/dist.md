@@ -1,17 +1,11 @@
 ---
 id: dist
-version: 1.1.0
-updated: 2026-08-08
+version: 1.2.0
+updated: 2026-08-10
 source:
   - docs/00-requests/request.md
 summary: イメージの配布と外部 CLI の同梱に関する決定事項(D0-dist-*)
 keywords: [配布, GHCR, 決定事項]
-verified:
-  at: 2026-08-08
-  version: 1.1.0
-  against:
-    - doc: docs/00-requests/request.md
-      version: 1.3.0
 ---
 
 # 配布・同梱の決定事項
@@ -79,8 +73,7 @@ verified:
      共有する。方式は `D0-auth-03` と同じ。`config.toml`・セッション履歴はコンテナ固有に保つ。
   4. **ログイン導線**: ホスト CLI に独立サブコマンド `claude-dev login-codex` を追加する
      (既存 `login` は Claude 専用のまま。`logout` は共有ボリュームを空にする挙動を維持する)。
-  5. **スコープ**: 本決定は「開発者がコンテナ内で codex を使える状態」までであり、オーケストレーターが
-     worker/レビューアーとして codex を常用するかは `D0-orch-17` のまま未決。
+  5. **スコープ**: 本決定は「開発者がコンテナ内で codex を使える状態」までである。
   6. **サンドボックス方針**: コンテナ内の codex は**既定では自前のサンドボックスを使わず**、
      **読み取り専用を明示要求された場合に備えて landlock バックエンドを有効化しておく**。
      既定として `sandbox_mode = "danger-full-access"` / `approval_policy = "never"` /

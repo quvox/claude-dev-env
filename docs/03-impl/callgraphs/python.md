@@ -2,7 +2,7 @@
 id: python
 language: python
 tier: 2
-symbols: 5
+symbols: 0
 edges: 0
 endpoints: 0
 unresolved: 0
@@ -26,11 +26,7 @@ unresolved: 0
 
 | シンボル | 種別 | 可視性 | 呼び出す先 | 呼び出し元 |
 |---|---|---|---|---|
-| `examples/orch-sample/src/mathkit/geometry.py::circle_area` | function | public | - | - |
-| `examples/orch-sample/src/mathkit/geometry.py::rect_area` | function | public | - | - |
-| `examples/orch-sample/src/mathkit/stats.py::mean` | function | public | - | - |
-| `examples/orch-sample/src/mathkit/stats.py::median` | function | public | - | - |
-| `examples/orch-sample/src/mathkit/strings.py::slugify` | function | public | - | - |
+| (なし) | - | - | - | - |
 
 ## 解決できなかった呼び出し
 

@@ -16,6 +16,7 @@ requirements: FR-env-01
 tests: なし(未実装。シェル実装のため自動テストランナーが無く実機確認で代替する)
 updated: 2026-08-02
 summary: プロジェクト名からコンテナ名を導出する(命名規則の実体)
+reflected: 2026-08-10
 ---
 
 # MODULE-cli-common-container-name コンテナ名の導出

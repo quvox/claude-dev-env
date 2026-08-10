@@ -1,18 +1,19 @@
 ---
 id: MODULE-cli-start
+updated: 2026-08-10
 module: MOD-cli-start
 kind: tool
 sync: sync
 impl: claude-dev::main#start, claude-dev-mac::main#start
-callers: MODULE-cli-orchestrate
+callers: なし
 callees: MODULE-entrypoint-claude, MODULE-cli-common-container-exists, MODULE-cli-common-container-name, MODULE-cli-common-dev-agent-path, MODULE-cli-common-ensure-infrastructure, MODULE-cli-common-get-novnc-url, MODULE-cli-common-image-exists, MODULE-cli-common-is-running, MODULE-cli-common-lock, MODULE-cli-common-require-setup, MODULE-cli-common-resolve-container-user, MODULE-cli-common-select-ssh-keys, MODULE-cli-common-write-project-ssh-keys
 contracts: CTR-cli-container
 design: DSN-mod-01, DSN-mod-02, DSN-arch-01, DSN-auth-01, DSN-dist-02, DSN-env-01, DSN-env-02, DSN-env-03
 requirements: FR-env-01, FR-env-02, FR-env-03, FR-env-04, FR-env-05, FR-env-06, FR-env-07, FR-env-08, FR-env-11, FR-env-12
 tests: なし(未実装。シェル実装のため自動テストランナーが無く実機確認で代替する)
-updated: 2026-08-05
 summary: カレントディレクトリで開発コンテナを起動する(VNC+Chrome が既定)
 ---
+
 # MODULE-cli-start 開発コンテナの起動
 
 ## 目的
@@ -117,7 +118,7 @@ docker-proxy 経由の Docker アクセス(FR-env-07)、VM モード(FR-env-08)�
     名前衝突でなく、かつ対象が稼働中でないときだけ作りかけのコンテナを `docker rm -f` し、
     エラーがポート競合かつ VNC 有効なら別ポートを取り直して最大20回再試行する。
     他の失敗または上限超過も stderr へ出して `exit 1`。
-16. tmux の起動を待ち(通常30秒 / VM は420秒で15秒ごとに進捗表示)、noVNC URL を表示し、
+16. tmux の起動を待ち(VM モード以外は30秒 / VM は420秒。15秒ごとに進捗表示)、noVNC URL を表示し、
     `CLAUDE_DEV_NO_ATTACH != 1` なら `tmux attach -t main` する。上限を超えても終了せず状況を案内して
     `exit 0`(コンテナは `--restart unless-stopped` で稼働を続ける)。
 17. **`tmux attach` の前にプロジェクト単位のロックを解放する**(アタッチは利用者の対話であり、
@@ -127,10 +128,8 @@ docker-proxy 経由の Docker アクセス(FR-env-07)、VM モード(FR-env-08)�
 ## 呼び出され方
 
 - 契機: 利用者が `claude-dev start [--no-vnc] [--kvm] [--vm] [--vm-fresh]` を実行したとき。
-  `MODULE-cli-orchestrate` も未起動時に `CLAUDE_DEV_NO_ATTACH=1` を付けて本機能を再帰的に呼ぶ
-  (**Linux 版だけの経路**。macOS 版の `orchestrate` はコンテナが未起動なら `claude-dev start` を
-  案内して `exit 1` で終わり、`start` を呼ばない。macOS 版 `start` は `CLAUDE_DEV_NO_ATTACH` を
-  判定せず常に `tmux attach` する。macOS 版 `orchestrate` の未実装部分は `docs/issues/003` で追跡)。
+  **Linux 版は環境変数 `CLAUDE_DEV_NO_ATTACH=1` が設定されていればアタッチせずに戻る**
+  (macOS 版は `CLAUDE_DEV_NO_ATTACH` を判定せず常に `tmux attach` する)。
 - 前提条件: カレントディレクトリが対象プロジェクトであること。`docker` / `jq`(macOS は `socat` も)が
   導入済みであること。
 - 引数(**フラグは `case` の1回走査で解釈し、順序は結果に影響しない**):
@@ -318,7 +317,7 @@ docker-proxy 経由の Docker アクセス(FR-env-07)、VM モード(FR-env-08)�
 | noVNC ポート競合 | **稼働中でない**作成途中のコンテナだけを掃除し、別ポートで最大20回再試行する。**共有資源単位のロックは再試行ループを抜けるまで保持する**(途中で離すと次の試行で作られるコンテナが保護の外に出る) | 割り当てポートが 6080 以外になる |
 | **同名コンテナが競合で作られた(手順7 の判定後に他プロセスが作った)** | エラー文言が `Conflict.` / `already in use by container` に一致するので**再試行せず**、**既存コンテナを削除せずに** `exit 1`。文面は対象が稼働中か停止中かで分ける。**稼働中で管理ラベル `claude-dev.project-dir` を持つ場合は、可能性ではなく「どのディレクトリで起動されたか」という事実を表示する** | **一方の `start` だけが成功し、そのコンテナは失われない** |
 | リトライ上限を超えた/ポート競合以外の失敗 | stderr にエラーを出して `exit 1` | 起動しない |
-| tmux 起動タイムアウト(通常30秒 / VM 420秒) | 終了せず状況を案内して `exit 0`。コンテナは稼働を続ける | 再 `start` の attach 経路で接続できる |
+| tmux 起動タイムアウト(VM モード以外は30秒 / VM は420秒) | 終了せず状況を案内して `exit 0`。コンテナは稼働を続ける | 再 `start` の attach 経路で接続できる |
 | `--vm` 指定で `/dev/kvm` が無い(Linux) | `exit 1`(`--kvm` のみなら警告して続行)。**ロックを取った直後だが `trap` が即座に解放する** | 起動しない |
 | **`--kvm` / `--vm` / `--vm-fresh` を macOS で指定した** | 早期に拒否して `exit 1`。**ロックは取得済みで `trap` が解放する**。**このとき `ensure_project_config` は既に走っているので、`.claude-dev.yaml` が無かった場合はそれが作られた状態で終わる**(macOS 版はフラグ解析が `ensure_project_config` より後にあるため。判断11)。Docker 資源は何も作られない | 起動しない |
 

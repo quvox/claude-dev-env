@@ -1,5 +1,6 @@
 ---
 id: MODULE-vm-mode-healthd
+updated: 2026-08-10
 module: MOD-vm-mode
 kind: tool
 sync: sync
@@ -10,7 +11,6 @@ contracts: なし
 design: DSN-mod-01, DSN-mod-03, DSN-arch-01
 requirements: FR-env-08
 tests: なし(未実装。シェル実装のため自動テストランナーが無く実機確認で代替する。静的検証として `bash -n` は緑)
-updated: 2026-08-05
 summary: QEMU の CPU 使用率から資源逼迫を検知し tmux と health へ書く
 ---
 
@@ -62,7 +62,7 @@ summary: QEMU の CPU 使用率から資源逼迫を検知し tmux と health �
 | 種別 | 内容 |
 |---|---|
 | 戻り値 | 0。`--loop` は終了しない |
-| 永続化 | **`${HOME}/.claude-dev-vm/health`**(`STATE` / `CPU` / `CEIL` / `TS` / `MSG` を tmp → rename でアトミック上書き)。**この書式をこの機能が決め、`MODULE-vm-mode-cli` の `vm status` と `MODULE-orchestrator-dashboard` の VM バナーが読んで依存する**(鮮度は `TS` で判定する)。tmux ユーザ変数 `@vm_health` |
+| 永続化 | **`${HOME}/.claude-dev-vm/health`**(`STATE` / `CPU` / `CEIL` / `TS` / `MSG` を tmp → rename でアトミック上書き)。**この書式をこの機能が決め、`MODULE-vm-mode-cli` の `vm status` が読んで依存する**(鮮度は `TS` で判定する)。tmux ユーザ変数 `@vm_health` |
 | 発火するイベント | tmux の `display-message` によるフラッシュ通知 |
 | ログ | `${HOME}/.claude-dev-vm/logs/vm-healthd.log` |
 

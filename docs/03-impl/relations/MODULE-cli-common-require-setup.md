@@ -1,16 +1,16 @@
 ---
 id: MODULE-cli-common-require-setup
+updated: 2026-08-10
 module: MOD-cli-common
 kind: function-call
 sync: sync
 impl: claude-dev::require_setup, claude-dev-mac::require_setup
-callers: MODULE-cli-attach, MODULE-cli-code, MODULE-cli-login, MODULE-cli-login-codex, MODULE-cli-logout, MODULE-cli-orchestrate, MODULE-cli-start
+callers: MODULE-cli-attach, MODULE-cli-code, MODULE-cli-login, MODULE-cli-login-codex, MODULE-cli-logout, MODULE-cli-start
 callees: MODULE-cli-common-image-exists
 contracts: なし
 design: DSN-mod-01, DSN-mod-02
 requirements: FR-env-01, FR-env-09
 tests: なし(未実装。シェル実装のため自動テストランナーが無く実機確認で代替する)
-updated: 2026-08-02
 summary: セットアップ未実施なら必要なイメージを自動ビルドする事前条件ゲート
 ---
 
@@ -35,7 +35,7 @@ summary: セットアップ未実施なら必要なイメージを自動ビル�
 ## 呼び出され方
 
 - 契機: `setup` 以外のサブコマンドが処理の先頭で呼ぶ(`start` / `login` / `login-codex` /
-  `logout` / `attach` / `code` / `orchestrate`)。
+  `logout` / `attach` / `code`)。
 - 前提条件: `docker` が実行でき、`<BASE_DIR>/.devcontainer/Dockerfile.claude` が存在すること。
 - 引数: なし。
 

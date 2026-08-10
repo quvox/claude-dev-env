@@ -9,6 +9,7 @@ sections:
   - "## 環境変数(ビルド引数)"
 deletes: []
 reason: 'オーケストレーターの全面削除にともなうイメージ構成の更新(決定シート 概念1・概念2)。(1) `## 何をどう制御しているか` のステージ図から `orch-builder`(`golang:1.24-alpine`)のノードと `base` への辺を削除し、「`orch-builder` で orchestrator をビルドし、成果物を後段のステージへコピーする」の箇条書きを削除する。**ステージは4つ(`orch-builder` / `base` / `vnc-base` / 終端2つの計5つ)から4つ(`base` / `vnc-base` / 終端2つ)になる** — `DSN-dist-01` が定める「重い共通層を `base` に集め、ブラウザ確認資産を `vnc-base` に積み、終端でエージェント CLI だけを載せる」という4ステージ構成そのものは変わらない。(2) `## 関係するファイル` の同梱スクリプトの行から `scripts/save_prompt.sh` と `scripts/sendslackmsg.sh` を外す(通知フックの削除)。(3) `## 依存サービスと起動順` の Mermaid から `orch-builder` のノードと辺を削除する。(4) **本文が引用している `.devcontainer/Dockerfile.claude` の行番号は、`orch-builder` ステージ(現行 `:12`〜`:21`)と orchestrator のコピー(現行 `:290`〜`:293`)を削除すると前後にずれる。フェーズ3 で実際に Dockerfile を編集したあと、`/implement` C-1 が本変更指示の行番号を実測へ更新する**(コードが正 — 原則2)。**実測の結果、`orch-builder` ステージ(旧 `:12`〜`:21`、区切りの空行を含めて 12 行)の削除で `.devcontainer/Dockerfile.claude` の行番号は一律 12 行ぶん繰り上がった**。行番号を引用しているのは `## 環境変数(ビルド引数)` の定義箇所の列 8 行だけなので、この節を `sections` に足して実測値へ書き換える(`USERNAME` `:29`→`:17` / `USER_UID` `USER_GID` `:30`〜`:31`→`:18`〜`:19` / `IMAGE_VERSION` `:38`〜`:39`→`:26`〜`:27` / `GO_VERSION` `:140`→`:128` / `PYTHON_VERSION` `:152`→`:140` / `CLAUDE_VERSION` `:509` `:537`→`:489` `:517` / `CODEX_VERSION` `:510` `:538`→`:490` `:518` / `container` `:307`→`:287`)。`## 落とし穴` は行番号を引用していないので触らない'
+reflected: 2026-08-10
 ---
 
 ## 何をどう制御しているか

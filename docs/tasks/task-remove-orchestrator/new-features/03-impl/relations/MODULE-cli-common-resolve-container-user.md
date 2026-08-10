@@ -16,6 +16,7 @@ requirements: FR-env-01, FR-env-02, FR-env-09
 tests: なし(未実装。シェル実装のため自動テストランナーが無く実機確認で代替する)
 updated: 2026-08-02
 summary: docker exec に渡す実行ユーザを稼働中コンテナ自身の env から決定する
+reflected: 2026-08-10
 ---
 
 # MODULE-cli-common-resolve-container-user exec 実行ユーザの解決

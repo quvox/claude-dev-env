@@ -16,6 +16,7 @@ requirements: FR-env-08
 tests: なし(未実装。シェル実装のため自動テストランナーが無く実機確認で代替する。静的検証として `bash -n` は緑)
 updated: 2026-08-05
 summary: QEMU の CPU 使用率から資源逼迫を検知し tmux と health へ書く
+reflected: 2026-08-10
 ---
 
 # MODULE-vm-mode-healthd VM の資源逼迫監視

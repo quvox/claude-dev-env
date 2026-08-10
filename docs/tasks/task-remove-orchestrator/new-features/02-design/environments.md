@@ -9,6 +9,7 @@ sections:
   - "## コールグラフ抽出設定"
 deletes: []
 reason: 'オーケストレーターの全面削除にともなう開発環境・コマンドの整理(決定シート 概念1・論点4)。**この文書の lint / テストコマンドは実行される厳密な文字列なので、消えるモジュールを指したままにできない**(CLAUDE.md §9)。(1) セットアップ手順の表から「自己検証題材の配置 / 初期化 = `make orch-sample` / `make orch-sample-clean`」の行を削除する(7 行 → 6 行)。(2) lint・テストコマンドの表から 3 行を削除する: 単体テスト(orchestrator)= `cd orchestrator && go test -mod=vendor ./...` / 単体テスト(自己検証題材)= `cd examples/orch-sample && pytest` / build(個別)の `make build-orchestrator`。lint の備考を「各 Go モジュール(`docker-proxy/` と `orchestrator/`)のディレクトリで実行する」から「`docker-proxy/` のディレクトリで実行する」へ、結合テストを「上記2つの `go test` に含まれる」から「上記の `go test` に含まれる」へ、E2E テストを「`make orch-sample` で題材を配置し `claude-dev orchestrate` で実走する」から「実機で `claude-dev` を操作する」へ改める。**`docker-proxy` の単体テストとカバレッジ計測・`make build` 系・`make upgrade` は変えない**。(3) CI の「Go の2モジュールに閉じた検査」を「docker-proxy に閉じた検査」へ改める(日次ビルドと手動実行の行は変えない)。(4) コールグラフ抽出設定の `internal_roots` から `orchestrator/` と `examples/orch-sample/` を外し、`除外するパス` から `orchestrator/vendor/` と `.orchestrator/` を外す(どちらのディレクトリも消えるため、除外を残すと実在しないパスの設定になる)。**`workspace/` / `tmp/` / `scripts/e2e6-codex.sh` の除外は残す**(`docs/pendings.md` P-001 が `e2e6-codex.sh` の除外を追跡している)。**有効な言語・Tier・ツール環境・出力先・鮮度検査・CI で検査するかは変えない**。(4-2) `## CI` の「PR / 変更時」の行と直後の段落から未決点の書き方(「未定」)を外し、棚上げの追跡先が `docs/pendings.md` P-002 であることを明示する(**判断は変えていない** — 導入しないという棚上げのままである。`CS8` が「未決点が仕様に残っている」と読む書き方を、pendings を指す書き方へ改めただけ)。(5) `## ドキュメント整合検査コマンド` / `## コンテナ・実行環境` / `## Codex実行設定` / `## 将来設定` / `## 未解決事項` は変えない — いずれもオーケストレーターに依存しない'
+reflected: 2026-08-10
 ---
 
 ## セットアップ手順

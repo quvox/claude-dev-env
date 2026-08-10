@@ -1,17 +1,11 @@
 ---
 id: terminology
-version: 1.4.0
-updated: 2026-08-08
+version: 1.5.0
+updated: 2026-08-10
 source:
   - docs/00-requests/request.md
 summary: 本システムで使う語の定義・英語表記(識別子)・使ってはいけない言い方
 keywords: [用語集, 識別子, 表記ゆれ]
-verified:
-  at: 2026-08-08
-  version: 1.4.0
-  against:
-    - doc: docs/00-requests/request.md
-      version: 1.3.0
 ---
 
 # 用語集
@@ -24,7 +18,7 @@ verified:
 | 破壊的操作 | **利用者の作業内容またはログイン状態を失わせうる削除**を行うサブコマンド。現時点では `claude-dev stop` / `claude-dev logout` / `claude-dev reset` の3つを指す(`D0-env-08`) | `claude-dev logout`(共有ボリュームの認証を消す)/ `claude-dev reset`(共有資源を消す)/ `claude-dev stop`(**セッション由来の資源**を消す。`D0-env-05` 項2) | `claude-dev list` / `claude-dev ports`(読み取りだけ)/ `claude-dev unforward`(中継コンテナだけを消し、作業内容もログイン状態も失わせない) | destructive command | 「危険な操作」(Docker API 側の拒否対象 = `FR-env-07` と混同する) |
 | 管理ラベル | 本システムが作る、または**本システム(docker-proxy)を通して作られる** Docker 資源に付ける **Docker ラベル**。「本システムが作った/本システムを通して作られた」ことと「どのプロジェクトのものか」を表す。名前と値の形式は契約 `CTR-cli-container` が定める(`D0-env-08` / `D0-env-10`) | プロジェクトごとの Claude コンテナに付く、所有と対象プロジェクトを表すラベル / **docker-proxy がセッション由来の資源に付ける、所有者(起動ディレクトリの絶対パス)を表すラベル**(`D0-env-08` 項8) | docker-proxy / `fwd-*` 中継コンテナ / 共有ボリューム / ネットワーク / イメージ(**固定名または固定接頭辞で所有権が読み取れる**ので、ラベルではなく名前で識別する)/ compose が付ける `com.docker.compose.*`(**Docker/compose が予約する接頭辞**であり本システムのものではない) | management label | 「タグ」(Docker のイメージタグと紛れる) |
 | セッション由来の資源 | ある Claude コンテナの中から **docker-proxy を経由して**作られた Docker 資源。対象は**コンテナとネットワーク**である(片付けの対象になる範囲は `FR-env-01` 受入基準22 が定める)(`D0-env-05` 項2 / `D0-env-08` 項8) | コンテナ内で `docker run -d nginx` として作られたコンテナ / コンテナ内で `docker compose up` として作られたコンテナと compose 既定ネットワーク | **名前付きボリューム**(利用者のデータであり片付けの対象にしない。`D0-env-05` 項2)/ **VM モードのゲスト内で作られたコンテナ**(ホストの Docker に現れない)/ 利用者がホスト側で直接 `docker run` したコンテナ(docker-proxy を通らないので所有者ラベルが付かない)/ `fwd-*` 中継コンテナ(ホスト CLI が作る) | session-spawned resource | 「子コンテナ」「compose のコンテナ」(前者は親子関係の別概念、後者は経路を compose に限る言い方になる) |
-| 資源逼迫 | **ゲスト VM の QEMU プロセスの CPU 使用率が、割り当て上限(`-smp` の値)に対して 60% 以上である状態が、15 秒周期で 12 回連続(合計約3分)観測された状態**。**この3つの数値は既定値であり、上書きする手段は 03 の実装仕様が定める**。この状態を検知したときに利用者へ何が見えるかは `FR-env-08` 受入基準4 が定める(**ダッシュボードの表示は要件として課しておらず、実装の事実は 03 の実装仕様が持つ**) | 4 vCPU を割り当てた VM で QEMU の CPU 使用率が 240%(= 上限比 60%)以上を約3分続けた状態 | 同じ負荷が 1 分で収まった状態(12 回連続に達しない)/ ゲストの RAM 使用率だけが高く CPU 使用率が閾値未満の状態(**監視は CPU 使用率しか見ない**) | resource pressure | 「重い」「逼迫している」(閾値を伴わない表現)。「RAM 逼迫」(本定義は CPU 使用率だけを見るので別概念になる) |
+| 資源逼迫 | **ゲスト VM の QEMU プロセスの CPU 使用率が、割り当て上限(`-smp` の値)に対して 60% 以上である状態が、15 秒周期で 12 回連続(合計約3分)観測された状態**。**この3つの数値は既定値であり、上書きする手段は 03 の実装仕様が定める**。この状態を検知したときに利用者へ何が見えるかは `FR-env-08` 受入基準4 が定める | 4 vCPU を割り当てた VM で QEMU の CPU 使用率が 240%(= 上限比 60%)以上を約3分続けた状態 | 同じ負荷が 1 分で収まった状態(12 回連続に達しない)/ ゲストの RAM 使用率だけが高く CPU 使用率が閾値未満の状態(**監視は CPU 使用率しか見ない**) | resource pressure | 「重い」「逼迫している」(閾値を伴わない表現)。「RAM 逼迫」(本定義は CPU 使用率だけを見るので別概念になる) |
 | claude-dev | ホスト側 CLI。コンテナのライフサイクル・認証・ポート・SSH 鍵を操作する。Linux は `claude-dev`、macOS は `claude-dev-mac`(`make install` が OS を判定して symlink を統一する) | | | `claude-dev` / `claude-dev-mac` | 「CLIツール」単独表記 |
 | Claude コンテナ | プロジェクトごとに起動する開発用コンテナ。ブラウザ確認あり(`claude-dev-claude-vnc`)/なし(`claude-dev-claude`) | | | `claude-dev-<project>` | — (「プロジェクトコンテナ」は同義。文脈で使い分ける) |
 | Codex CLI | OpenAI 製のコーディングエージェント CLI(npm パッケージ `@openai/codex`、コマンド名 `codex`)。Claude コンテナに同梱し、`codex login --device-auth` で認証する。認証ファイルは `~/.codex/auth.json` | | | `codex` | 本文で `codex` と書く(コマンド名を指すときのみ可) |
@@ -33,15 +27,6 @@ verified:
 | forward プロキシ | `claude-dev forward` が立てる `fwd-<name>-<port>` の socat コンテナ。Web アプリのポート中継用 | | | `fwd-<name>-<port>` | docker-proxy と混同する書き方 |
 | DooD | Docker-outside-of-Docker。コンテナがホストの Docker デーモンを(docker-proxy 経由で)使う既定方式 | | | `dood` | DinD(本構成では非採用)と混同する書き方 |
 | VM モード | オプトイン(`--vm`)。ゲスト VM(QEMU+virtiofs)内でネイティブ Docker を動かす層構成 | | | `vm-mode` | — |
-| オーケストレーター | プロジェクトに1体立てる AIオーケストレーター。ブレインストーミング/実行の2モードを持つ「1実体」 | | | `orchestrator` | リードエージェント(旧称) |
-| コントローラ | オーケストレーターの外部制御ループ本体(Go 実装。`orchestrate` で起動し tmux に常駐する) | | | `controller` | — |
-| worker | 実装/レビューを行うコーディングエージェント(`claude -p`)。git worktree で分離する | | | `worker` | ワーカー、コーディングエージェント(同義だが表記は worker に統一) |
-| ブレインストーミングモード | 人間×対話 Claude でゴール/仕様を固める検討モード(自動化しない) | | | `brainstorming` | ブレスト(本文では正式名を使う) |
-| 実行モード | plan の各タスクを worker へ並行ディスパッチして自律実装するモード | | | `execute` | — |
-| 介入 | 実行中に要判断が出たタスク1件を保留し、その worker ウィンドウで対話 Claude に諮ること | | | `intervention` | ストップ・ザ・ワールド(旧廃止方式) |
-| 介入トリガー | 人間の判断を仰ぐ5条件(重大判断/曖昧さ/行き詰まり/方針分岐/前提崩れ) | | | `trigger` | — |
-| 運用状態 | `.orchestrator/` に置く plan・制御・実行状態と追記型ログ。機械が読み書きし、人間は直接編集しない | | | `.orchestrator/` | — |
-| ORCHESTRATOR.md | リポジトリルートに置く任意のプロジェクト固有方針(コミット対象。運用状態とは別) | | | `ORCHESTRATOR.md` | — |
 
 ## 判断に迷いやすい区別
 
@@ -50,7 +35,4 @@ verified:
 | docker-proxy | forward プロキシ(socat) | 前者は Docker API を検査・制限する共有プロキシ。後者は Web アプリのポートを中継する使い捨てコンテナ |
 | DooD(既定) | VM モード | DooD はホストの Docker デーモンを proxy 経由で使う軽量既定。VM モードは VM 内ネイティブ Docker(bind/compose/privileged 可)でオプトイン |
 | セッション由来の資源 | compose 資源 | 前者は**作られた経路(docker-proxy を通ったか)**で決まる集合で、`docker run` も compose も含む。後者は**compose が作ったもの**という部分集合である。**2つを識別する方法はそれぞれ違い、02 の契約が定める**(`D0-env-08` 項7・項8) |
-| ブレインストーミングモード | 実行モード | 前者は人間主導・同期・自動化しない検討。後者は自律・並列の実装。境界は仕様ドキュメント |
-| 仕様(`docs/`) | 運用状態(`.orchestrator/`) | 固まった仕様は `docs/` に、進捗・仮定・plan 等の運用状態は `.orchestrator/` に置く |
 | Codex サンドボックス | Claude コンテナの隔離 | 前者は codex がコンテナ内で自前に張る隔離(既定は無効化。読み取り専用を要求する呼び出しのためだけに landlock を残す)。後者はコンテナ/ホスト間の隔離境界(唯一の境界であり緩めない) |
-| Codex CLI の同梱 | 異種ベンダー worker の常用 | 前者は開発者がコンテナ内で codex を使える状態にすること(決定済み)。後者はオーケストレーターが worker/レビューアーとして codex を常用すること(未決) |

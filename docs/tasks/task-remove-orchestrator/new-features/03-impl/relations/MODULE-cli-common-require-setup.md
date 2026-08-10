@@ -16,6 +16,7 @@ requirements: FR-env-01, FR-env-09
 tests: なし(未実装。シェル実装のため自動テストランナーが無く実機確認で代替する)
 updated: 2026-08-02
 summary: セットアップ未実施なら必要なイメージを自動ビルドする事前条件ゲート
+reflected: 2026-08-10
 ---
 
 # MODULE-cli-common-require-setup セットアップ事前条件ゲート

@@ -158,4 +158,5 @@
 - 2026-08-10 `docs/03-impl/features.md`「到達しない関数についての判断」:再生成した `feature-graph.md` が挙げる未到達 8 件のうち、`claude-dev::_destructive_done` / `_release_all_locks` と `claude-dev-mac::` の同名対 4 件に仕分けの行が無い(削除前から無い)。
 - 2026-08-10 `.claude/directions/change-set.md` §2:「親の本文が変わり、かつ子見出しを改名する」を一つの変更指示で表せない(親を `sections` に載せると `merge_existing` が改名した子を拒否し、親を外すと `CS19` が「判断の節が `sections` に無い」で落ちる)。task-remove-orchestrator では改名する子を指示本文の冒頭へ出して回避した。
 - 2026-08-10 `.claude/scripts/compose-changeset.py`:`docs/03-impl/features.md` の変更指示は `## 機能一覧` の差分表しか適用されず、`sections` に挙げた他の節(統合した機能 / 昇格させた共通基盤機能 / 到達しない関数についての判断)と frontmatter の `keywords` に届かない。`.claude/directions/change-set.md` 例外1 の「§2 frontmatter still applies」と食い違う。
+- 2026-08-10 `.claude/directions/change-set.md` §2:最初の見出しより前の本文(frontmatter 直後の HTML コメント)を `sections` にも `deletes` にも載せられないため、陳腐化した検証記録の削除が反映時の手作業として残る。task-remove-orchestrator では `01-requirements/functional.md` / `non-functional.md` / `03-impl/index.md` の 5 件を手で消した。
 - 2026-08-10 `docs/issues/009`:指摘の実体(約27件のシグネチャ不一致)は orchestrator の relations ごと消えたため 0 件になった。残るのは「省略記法を許容するかの規約が無い」という規約側の欠落だけで、`related` は実在しない ID を指したままである。
