@@ -6,7 +6,7 @@
 
 | タスク | フェーズ | 起点層 | 更新 | 目的 |
 |---|---|---|---|---|
-| [task-remove-orchestrator](task-remove-orchestrator/memo.md) | 実装 | 00 | 2026-08-10 | orchestrator に関する記述・機能・実装を SSOT とコードから全て削除し、残りの辻褄を合わせる |
+| [task-remove-orchestrator](task-remove-orchestrator/memo.md) | 反映 | 00 | 2026-08-10 | orchestrator に関する記述・機能・実装を SSOT とコードから全て削除し、残りの辻褄を合わせる |
 
 件数: 1
 
