@@ -206,6 +206,50 @@ summary: logout の削除結果の記録(消えていない資源を削除済み
   開示先は `MODULE-cli-logout` の「実装上の判断」19〜22 と `tests/*.md` の「テスト設計の判断」。
   パス2 の事実は調査メモ 13〜15 に記録した。`check-changeset.py` **合格(違反なし)**。
 
+- 2026-08-11 **/doc-check(task) 判定: PASS**。実行形態: 作成者セッション(サブエージェント不可のため
+  §0A のフォールバック)。**独立レビュー: Codex**(`gpt-5.6-sol` / reasoning high、指摘 5 件)。
+  レンズは作業ツリーへ書き込んでいない(前後の `git status` の差分は私が生成した staged callgraph のみ)。
+  反復 1/2 で収束。
+  **レンズ指摘の裁定**:
+  - **高1(A3)**: 手順10 が列挙の終了ステータスを見ないので、印の直後に `ls` が失敗すると
+    「消去に成功して空になった」と読み替える → **確認済み。実測で裏付けた**: 一時コンテナに渡す
+    コマンドは `rm -rf …; echo 印; ls -A /auth` の順で、**最後が列挙なのでコンテナの終了ステータスは
+    `ls` の状態**である(`rm` の非0は混ざらない)。02 契約は既に「列挙そのものができなかった場合も
+    『消去を確認できなかった』として同じ扱いにする」と課しており、**03 がそれを受けていなかった**。
+    手順10 を手順6 と同じ3条件へ揃え、判断4 を更新した(**MINOR**)。
+  - **高2(A3)**: `tests/cli-logout.md` が受入基準17・18 の確認先を手順8-18 の (b) に割り当てて
+    いたが、(b) は `--yes` 側を持たず削除まで到達しない → **確認済み**。指し先を
+    受入基準18 = 手順8-18 の (a)(b) の `--yes` 側 / 受入基準17 = 手順8-10 の後半 へ付け替え(**PATCH**)、
+    (a) に「削除した資源に現れないこと」を、(b) に `--yes` 側を新設(**MINOR**)。
+  - **中1(C8)**: `FR-env-03-19` が1条項で4義務 → **裁定: 修正しない**。条項を分けると 02 カバレッジ表と
+    03 テスト表の行追加を伴い、人間が承認した方針(「条項 ID は動かさない」)を超える。
+    `docs/pendings.md` の残務へ1行として起票済み(2026-08-11)。
+  - **低2件**: E2E-01 手順8-3 の「すぐに」= 前タスクで既に残務へ起票済み(範囲外の既存記述)。
+    `reason` の「判断3行」が実体4行 → 実体へ修正(**PATCH**)。
+  **変更指示の合計バイト: 167,322 → 170,802(+3,480)**。増加は (a) 手順10 の3条件と判断4 の更新、
+  (b) E2E の `--yes` 側2つの新設による。**削除では直せない**(受けていない義務を受ける記述である)。
+  行使した委任: [DS-03] / [DS-05]。
+  変更指示のハッシュ(sha256 先頭12桁):
+    - 01-requirements/functional.md 665b5acdaeb5
+    - 02-design/contracts/cli-container.md 9ec279e966cf
+    - 02-design/logging.md 78150c05f440
+    - 03-impl/contracts/cli-container.md b052bff3f914
+    - 03-impl/relations/MODULE-cli-logout.md d57361cca2c3
+    - 03-impl/tests/cli-logout.md fd36edf23155
+    - 03-impl/tests/e2e.md ea6be7e7f971
+  closure の版: functional.md@1.14.0 / contracts/cli-container.md@1.9.0 / logging.md@1.6.0 /
+  03-impl/index.md@1.23.0 / 03-impl/contracts/cli-container.md@1.8.0 / tests/cli-logout.md@1.6.1 /
+  tests/e2e.md@1.8.0
+  機械検査: `check-changeset.py` 合格 / `build-callgraphs --check` 最新 /
+  `cluster-features --check` 最新 / `callgraph-check --to-be` 高0 / `check-relations` 合格 /
+  `check-contracts` 合格。
+  **最弱点**: 手順6 と手順10 が同じ3条件の判定を**それぞれ持つ**こと(判断15 の [DS-05] が
+  「3箇所目まで関数に切り出さない」と定めているため)。今回2箇所を同時に直したので食い違いは無いが、
+  **次にどちらか片方だけを触るタスクが出たときに、もう片方が取り残される形は残っている**。
+- 2026-08-11 staged callgraph(`new-features/03-impl/callgraphs/` と `feature-graph.md`)を生成した。
+  進行中タスクがある間は SSOT の代わりにこれが合成ビューの根拠になる(`change-set.md` §1)。
+  **中身は変更前のコードの鏡**であり、`/implement` C-1 が実装後に再生成する。
+
 ## 申し送り事項
 
 - **`docs/issues/055`(受入基準17 が停止中のラベル無しコンテナの列挙まで求める / 01 ⇄ 02 の
