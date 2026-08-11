@@ -704,10 +704,19 @@ func validateContainerCreate(r *http.Request, logger *log.Logger) error {
 	if bindsChanged {
 		logger.Printf("REWRITE binds: /workspace -> %s", projectDir)
 	}
-	if labelled {
+	// Every path that relays without the owner label logs its reason
+	// (FR-env-07 受入基準12 / 02-design/logging.md「所有者ラベルを付与せずに中継した」).
+	// The network path already had both reasons; the container path used to have
+	// only "caller not identified", so a resolvable owner whose injection failed
+	// relayed silently and the resource dropped out of `stop`/`reset` cleanup
+	// with nothing in the log to explain it.
+	switch {
+	case labelled:
 		logger.Printf("OWNER-LABEL container: owner=%s", owner)
-	} else if owner == "" {
+	case owner == "":
 		logger.Printf("NO-OWNER-LABEL container: caller not identified; relaying unlabelled")
+	default:
+		logger.Printf("NO-OWNER-LABEL container: body not rewritable; relaying unlabelled")
 	}
 
 	return nil
