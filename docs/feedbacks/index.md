@@ -32,7 +32,8 @@
 | [024-cleanup-scope-is-defined-by-ownership-not-by-harm](024-cleanup-scope-is-defined-by-ownership-not-by-harm.md) | 2026-08-07 | 片付けの範囲は「残ると害があるか」で資源ごとに切るのではなく「誰が作ったか」で一息に決める。害の有無で切ると、説明できない例外が資源の種類だけ増える |
 | [025-unrunnable-verification-is-accepted-not-outstanding](025-unrunnable-verification-is-accepted-not-outstanding.md) | 2026-08-07 | 環境が無くて実行できない検証は「やり残し(issue)」ではなく「受容(pending)」である。AI は環境を作る段取りを推したが、人間は環境の制約を所与として受け入れた |
 | [026-a-kit-rewrite-invalidates-change-sets-already-verified](026-a-kit-rewrite-invalidates-change-sets-already-verified.md) | 2026-08-10 | 検証済みの変更指示は「規範が変わらない」ことに依存していた。キットを書き換えると、合格証を持つ成果物が黙って反映不能になる。壊れ方は反映の直前まで見えない |
+| [027-a-single-remaining-option-is-not-a-question](027-a-single-remaining-option-is-not-a-question.md) | 2026-08-11 | 実行できる選択肢が1つしか残らないものを決定シートに載せた。人間に押し戻され、事実の記録へ格下げした |
 
-件数: 26
+件数: 27
 
 <!-- END GENERATED: build-index.py -->

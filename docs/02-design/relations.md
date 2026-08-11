@@ -1,7 +1,7 @@
 ---
 id: relations
-version: 1.8.0
-updated: 2026-08-10
+version: 1.9.0
+updated: 2026-08-11
 source:
   - docs/01-requirements/functional.md
   - docs/01-requirements/usecases.md
@@ -9,12 +9,12 @@ source:
 summary: 設計が想定する機能連携 PLAN-* の一覧。03-impl/relations との突き合わせの当事者
 keywords: [想定機能連携, PLAN]
 verified:
-  at: 2026-08-10
-  version: 1.8.0
+  at: 2026-08-11
+  version: 1.9.0
   against:
     - {doc: docs/01-requirements/functional.md, version: 1.13.1}
     - {doc: docs/01-requirements/usecases.md, version: 1.5.0}
-    - {doc: docs/02-design/system.md, version: 2.9.1}
+    - {doc: docs/02-design/system.md, version: 2.10.0}
 ---
 
 # 想定機能連携一覧
@@ -33,33 +33,38 @@ verified:
 |---|---|---|---|---|---|---|---|---|
 | PLAN-cli-attach | MOD-cli-attach | tool | sync | なし | PLAN-cli-common-container-name, PLAN-cli-common-is-running, PLAN-cli-common-require-setup, PLAN-cli-common-resolve-container-user | なし | FR-env-01 | 実行中コンテナの tmux セッションに接続する |
 | PLAN-cli-code | MOD-cli-code | tool | sync | なし | PLAN-cli-common-container-name, PLAN-cli-common-is-running, PLAN-cli-common-require-setup, PLAN-cli-common-resolve-container-user | なし | FR-env-01, FR-env-08, FR-env-12 | 新しい tmux ウィンドウで Claude Code を起動する |
+| PLAN-cli-common-compose-project-name | MOD-cli-common | function-call | sync | PLAN-cli-start, PLAN-cli-stop | なし | CTR-cli-container | FR-env-01, FR-env-07 | compose プロジェクト名の一意化名と旧い名前を、両 OS で同じ値になる1機能で導出する |
 | PLAN-cli-common-container-exists | MOD-cli-common | function-call | sync | PLAN-cli-forward, PLAN-cli-logout, PLAN-cli-reset, PLAN-cli-start, PLAN-cli-stop, PLAN-cli-unforward | なし | なし | FR-env-01 | 指定名のコンテナが存在するか(停止中を含む)を判定する |
 | PLAN-cli-common-container-name | MOD-cli-common | function-call | sync | PLAN-cli-attach, PLAN-cli-code, PLAN-cli-firewall, PLAN-cli-forward, PLAN-cli-ports, PLAN-cli-ssh-keys, PLAN-cli-ssh-keys-reset, PLAN-cli-start, PLAN-cli-stop, PLAN-cli-unforward | なし | なし | FR-env-01 | プロジェクト名からコンテナ名を導出する(命名規則の実体) |
+| PLAN-cli-common-container-project-dir | MOD-cli-common | function-call | sync | PLAN-cli-start, PLAN-cli-stop | なし | CTR-cli-container | FR-env-01 | コンテナの管理ラベル claude-dev.project-dir(起動時の絶対パス)を読む |
+| PLAN-cli-common-destructive | MOD-cli-common | function-call | sync | PLAN-cli-logout, PLAN-cli-reset | なし | CTR-cli-container | FR-env-01, FR-env-03 | 削除の計画・実行・結果の記録と、中断要求の遅延を扱う共通手順 |
 | PLAN-cli-common-dev-agent-path | MOD-cli-common | function-call | sync | PLAN-cli-ssh-keys-reset, PLAN-cli-start, PLAN-cli-stop | なし | なし | FR-env-04, FR-env-10 | macOS の専用 ssh-agent とブリッジのファイル配置を決める |
 | PLAN-cli-common-ensure-infrastructure | MOD-cli-common | function-call | sync | PLAN-cli-login, PLAN-cli-login-codex, PLAN-cli-start | なし | CTR-cli-container | FR-env-01, FR-env-03 | docker network と共有 3 ボリュームを冪等に作成する |
 | PLAN-cli-common-get-novnc-url | MOD-cli-common | function-call | sync | PLAN-cli-list, PLAN-cli-ports, PLAN-cli-start | なし | なし | FR-env-11 | 公開中の noVNC ポートから接続 URL を組み立てる |
 | PLAN-cli-common-image-exists | MOD-cli-common | function-call | sync | PLAN-cli-common-require-setup, PLAN-cli-reset, PLAN-cli-start | なし | なし | FR-env-01, FR-env-09 | 指定イメージがローカルに存在するかを判定する |
 | PLAN-cli-common-is-running | MOD-cli-common | function-call | sync | PLAN-cli-attach, PLAN-cli-code, PLAN-cli-firewall, PLAN-cli-forward, PLAN-cli-list, PLAN-cli-ports, PLAN-cli-start, PLAN-cli-stop | なし | なし | FR-env-01 | 指定コンテナが running 状態かを判定する |
 | PLAN-cli-common-lock | MOD-cli-common | function-call | sync | PLAN-cli-login, PLAN-cli-login-codex, PLAN-cli-logout, PLAN-cli-reset, PLAN-cli-start, PLAN-cli-stop | なし | CTR-cli-container | FR-env-01, FR-env-03 | 共有資源を触る6コマンドを直列化するロックを取得・解放し、残骸を引き継ぐ |
+| PLAN-cli-common-net-other-running-containers | MOD-cli-common | function-call | sync | PLAN-cli-logout, PLAN-cli-reset, PLAN-cli-stop | なし | CTR-cli-container | FR-env-01, FR-env-03 | 遊休判定に使う「claude-dev-net に接続している稼働中の他コンテナ」を列挙する |
 | PLAN-cli-common-require-setup | MOD-cli-common | function-call | sync | PLAN-cli-attach, PLAN-cli-code, PLAN-cli-login, PLAN-cli-login-codex, PLAN-cli-logout, PLAN-cli-start | PLAN-cli-common-image-exists | なし | FR-env-01, FR-env-09 | セットアップ未実施なら必要なイメージを自動ビルドする事前条件ゲート |
 | PLAN-cli-common-resolve-container-user | MOD-cli-common | function-call | sync | PLAN-cli-attach, PLAN-cli-code, PLAN-cli-start | なし | なし | FR-env-01, FR-env-02, FR-env-09 | docker exec に渡す実行ユーザを稼働中コンテナ自身の env から決定する |
 | PLAN-cli-common-select-ssh-keys | MOD-cli-common | function-call | sync | PLAN-cli-ssh-keys-select, PLAN-cli-start | PLAN-cli-common-write-project-ssh-keys | なし | FR-env-04 | 利用可能な SSH 鍵を列挙し対話選択させて保存する |
+| PLAN-cli-common-spawned-resources | MOD-cli-common | function-call | sync | PLAN-cli-reset, PLAN-cli-stop | なし | CTR-cli-container | FR-env-01, FR-env-03 | セッション由来の資源を種別とラベルフィルタ式から名前で列挙する |
 | PLAN-cli-common-write-project-ssh-keys | MOD-cli-common | function-call | sync | PLAN-cli-common-select-ssh-keys, PLAN-cli-start | なし | なし | FR-env-04 | 選択した鍵を .claude-dev.yaml へ書き出す |
 | PLAN-cli-firewall | MOD-cli-firewall | tool | sync | なし | PLAN-cli-common-container-name, PLAN-cli-common-is-running | なし | FR-env-05 | コンテナ内のファイアウォールルールを表示する |
 | PLAN-cli-forward | MOD-cli-forward | tool | sync | なし | PLAN-cli-common-container-exists, PLAN-cli-common-container-name, PLAN-cli-common-is-running | なし | FR-env-06 | 指定コンテナポートのホスト側フォワードを動的に追加する |
 | PLAN-cli-list | MOD-cli-list | tool | sync | なし | PLAN-cli-common-get-novnc-url, PLAN-cli-common-is-running | なし | FR-env-01, FR-env-11 | 実行中セッションの一覧と noVNC URL を表示する |
 | PLAN-cli-login | MOD-cli-login | tool | sync | なし | PLAN-cli-common-ensure-infrastructure, PLAN-cli-common-lock, PLAN-cli-common-require-setup | CTR-cli-container | FR-env-03 | Claude の OAuth ログインをコンテナ内で実行し共有ボリュームへ保存する |
 | PLAN-cli-login-codex | MOD-cli-login-codex | tool | sync | なし | PLAN-cli-common-ensure-infrastructure, PLAN-cli-common-lock, PLAN-cli-common-require-setup | CTR-cli-container | FR-env-03, FR-env-12 | Codex のデバイス認証を実行し認証情報を共有ボリュームの codex/ へ置く |
-| PLAN-cli-logout | MOD-cli-logout | tool | sync | なし | PLAN-cli-common-container-exists, PLAN-cli-common-lock, PLAN-cli-common-require-setup | CTR-cli-container | FR-env-03 | Claude と Codex の認証情報を共有ボリュームごと削除する |
+| PLAN-cli-logout | MOD-cli-logout | tool | sync | なし | PLAN-cli-common-container-exists, PLAN-cli-common-destructive, PLAN-cli-common-lock, PLAN-cli-common-net-other-running-containers, PLAN-cli-common-require-setup | CTR-cli-container | FR-env-03 | Claude と Codex の認証情報を共有ボリュームごと削除する |
 | PLAN-cli-ports | MOD-cli-ports | tool | sync | なし | PLAN-cli-common-container-name, PLAN-cli-common-get-novnc-url, PLAN-cli-common-is-running | なし | FR-env-06, FR-env-11 | コンテナのポートフォワード一覧と noVNC URL を表示する |
 | PLAN-cli-pull | MOD-cli-pull | tool | sync | なし | なし | なし | FR-env-09 | GHCR からビルド済みイメージを取得して latest へ retag する |
-| PLAN-cli-reset | MOD-cli-reset | tool | sync | なし | PLAN-cli-common-container-exists, PLAN-cli-common-image-exists, PLAN-cli-common-lock | CTR-cli-container | FR-env-01, FR-env-03 | 管理ラベルを持つ Claude コンテナ・**所有者を問わないセッション由来の資源**・固定名の共有資源(ボリューム・イメージ・docker-proxy・ネットワーク)を削除して初期状態へ戻す(共有 docker-proxy とネットワークは遊休のときだけ) |
+| PLAN-cli-reset | MOD-cli-reset | tool | sync | なし | PLAN-cli-common-container-exists, PLAN-cli-common-destructive, PLAN-cli-common-image-exists, PLAN-cli-common-lock, PLAN-cli-common-net-other-running-containers, PLAN-cli-common-spawned-resources | CTR-cli-container | FR-env-01, FR-env-03 | 管理ラベルを持つ Claude コンテナ・**所有者を問わないセッション由来の資源**・固定名の共有資源(ボリューム・イメージ・docker-proxy・ネットワーク)を削除して初期状態へ戻す(共有 docker-proxy とネットワークは遊休のときだけ) |
 | PLAN-cli-setup | MOD-cli-setup | tool | sync | なし | なし | なし | FR-env-01, FR-env-09 | イメージをビルドし docker network と共有ボリュームを作る初回セットアップ |
 | PLAN-cli-ssh-keys | MOD-cli-ssh-keys | tool | sync | なし | PLAN-cli-common-container-name | なし | FR-env-04 | ssh-keys の引数を reset / select へ振り分けるディスパッチャ |
 | PLAN-cli-ssh-keys-reset | MOD-cli-ssh-keys | tool | sync | なし | PLAN-cli-common-container-name, PLAN-cli-common-dev-agent-path | なし | FR-env-04 | このプロジェクトの SSH 鍵選択を初期化する |
 | PLAN-cli-ssh-keys-select | MOD-cli-ssh-keys | tool | sync | なし | PLAN-cli-common-select-ssh-keys | なし | FR-env-04 | 使う SSH 鍵を対話選択して .claude-dev.yaml に保存する |
-| PLAN-cli-start | MOD-cli-start | tool | sync | なし | PLAN-entrypoint-claude, PLAN-cli-common-container-exists, PLAN-cli-common-container-name, PLAN-cli-common-dev-agent-path, PLAN-cli-common-ensure-infrastructure, PLAN-cli-common-get-novnc-url, PLAN-cli-common-image-exists, PLAN-cli-common-is-running, PLAN-cli-common-lock, PLAN-cli-common-require-setup, PLAN-cli-common-resolve-container-user, PLAN-cli-common-select-ssh-keys, PLAN-cli-common-write-project-ssh-keys | CTR-cli-container | FR-env-01, FR-env-02, FR-env-03, FR-env-04, FR-env-05, FR-env-06, FR-env-07, FR-env-08, FR-env-11, FR-env-12 | カレントディレクトリで開発コンテナを起動する(VNC+Chrome が既定) |
-| PLAN-cli-stop | MOD-cli-stop | tool | sync | なし | PLAN-cli-common-container-exists, PLAN-cli-common-container-name, PLAN-cli-common-dev-agent-path, PLAN-cli-common-is-running, PLAN-cli-common-lock | CTR-cli-container | FR-env-01, FR-env-07 | セッションと、**そのセッションが作った資源(コンテナ・ネットワーク)**を停止・削除し、遊休なら docker-proxy と ssh ブリッジも止める |
+| PLAN-cli-start | MOD-cli-start | tool | sync | なし | PLAN-entrypoint-claude, PLAN-cli-common-compose-project-name, PLAN-cli-common-container-exists, PLAN-cli-common-container-name, PLAN-cli-common-container-project-dir, PLAN-cli-common-dev-agent-path, PLAN-cli-common-ensure-infrastructure, PLAN-cli-common-get-novnc-url, PLAN-cli-common-image-exists, PLAN-cli-common-is-running, PLAN-cli-common-lock, PLAN-cli-common-require-setup, PLAN-cli-common-resolve-container-user, PLAN-cli-common-select-ssh-keys, PLAN-cli-common-write-project-ssh-keys | CTR-cli-container | FR-env-01, FR-env-02, FR-env-03, FR-env-04, FR-env-05, FR-env-06, FR-env-07, FR-env-08, FR-env-11, FR-env-12 | カレントディレクトリで開発コンテナを起動する(VNC+Chrome が既定) |
+| PLAN-cli-stop | MOD-cli-stop | tool | sync | なし | PLAN-cli-common-compose-project-name, PLAN-cli-common-container-exists, PLAN-cli-common-container-name, PLAN-cli-common-container-project-dir, PLAN-cli-common-dev-agent-path, PLAN-cli-common-is-running, PLAN-cli-common-lock, PLAN-cli-common-net-other-running-containers, PLAN-cli-common-spawned-resources | CTR-cli-container | FR-env-01, FR-env-07 | セッションと、**そのセッションが作った資源(コンテナ・ネットワーク)**を停止・削除し、遊休なら docker-proxy と ssh ブリッジも止める |
 | PLAN-cli-unforward | MOD-cli-unforward | tool | sync | なし | PLAN-cli-common-container-exists, PLAN-cli-common-container-name | なし | FR-env-06 | 指定ポートのフォワードを解除する |
 | PLAN-cli-upgrade | MOD-cli-upgrade | tool | sync | なし | なし | なし | FR-env-01, FR-env-09 | 全イメージを --no-cache で再ビルドして更新する |
 | PLAN-container-tools-wait-limit-reset | MOD-container-tools | tool | sync | なし | なし | なし | FR-env-01 | Claude のレート制限解除時刻まで待機し tmux 経由で作業を再開させる |
@@ -217,7 +222,7 @@ graph LR
 
 ### PLAN-cli-common-*(共有基盤)
 
-- 目的: 17 のサブコマンドが同じ規則で名前・状態・インフラ・**排他**を扱えるようにする。
+- 目的: 17 のサブコマンドが同じ規則で名前・状態・インフラ・**排他**・**削除結果の記録**を扱えるようにする。
 - 契機と前提条件: 各サブコマンドからの呼び出し。
 - 呼び出す先ごとの期待: 共有基盤どうしの呼び出しは**一方向で循環しないものに限る**
   (現に存在するのは `PLAN-cli-common-require-setup` → `PLAN-cli-common-image-exists` と
@@ -225,15 +230,24 @@ graph LR
   いずれも一方向である。**循環が無いことは `environments.md`「ドキュメント整合検査コマンド」の
   構造の健全性の検査が担保する**)。
   **この2本を「例外」とみなすか、宣言のほうを直すべきかは `docs/issues/048` で追跡する。**
-  共有基盤は3種類に分かれる。**判定系**(名前・状態・存在・URL の導出)は状態を変えない。
+  共有基盤は4種類に分かれる。**判定系**(名前・状態・存在・URL・compose 一意化名・
+  管理ラベルの値・遊休判定の集合・セッション由来の資源の一覧の導出)は状態を変えない。
   **用意系**(インフラ・鍵の保存)は冪等な副作用を持つ。**排他系**(`PLAN-cli-common-lock`)は
   **意図的に冪等でない**副作用を持つ — 同じキーを2つの操作が同時に取れないことがその機能である。
+  **記録系**(`PLAN-cli-common-destructive`)は**呼び出しをまたいで状態を持つ** —
+  削除の予定・成功・失敗と中断要求を溜め、最後にまとめて列挙する。
+  溜めずに1件ずつ判定すると「消えなかった資源を全件列挙して非0で終わる」
+  (`FR-env-03` 受入基準18)も「進行中の1件を終えてから中断する」(同23)も成立しない。
+  **記録系だけが呼び出し順に意味を持つ**(`plan` で対象を出そろえてから `arm_interrupt` →
+  `rm` → `abort_if_interrupted` → `report`)ので、順序は `PLAN-cli-logout` / `PLAN-cli-reset` の
+  実装仕様が持つ。
 - 順序性・冪等性・並行性: 用意系はすべて冪等であること(複数プロジェクトの同時起動で競合しない)。
   **排他系だけは例外で、競合を検出して非0で返すことが仕様である**(`FR-env-01` 受入基準16。
   待たない)。ロックの副作用はホストのファイルシステム上に閉じ、Docker 資源には及ばない。
   **キーの体系(プロジェクト単位 / 共有資源単位)と取得順の固定は契約 `CTR-cli-container` の
   「排他(ロックキー)」が正**であり、この節では持たない。
-- 対応する設計判断: DSN-mod-03 / **DSN-env-02**(排他の2段構成)
+- 対応する設計判断: DSN-mod-03 / **DSN-env-02**(排他の2段構成)/ **DSN-mod-07**(機能数が目安を超えることの許容)/ **DSN-env-03**(compose 一意化名)/ **DSN-env-04**(所有者ラベル)
+
 ## 未実装として認識しているもの
 
 | PLAN-ID | 状態 | 理由・予定 |

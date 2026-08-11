@@ -1,7 +1,7 @@
 ---
 id: 02-system
-version: 2.9.1
-updated: 2026-08-10
+version: 2.10.1
+updated: 2026-08-11
 source:
   - docs/01-requirements/functional.md
   - docs/01-requirements/non-functional.md
@@ -12,8 +12,8 @@ summary: >
   E2Eシナリオ一覧、UI設計を定める。アーキテクチャと契約と設計判断は architecture.md / contracts/ が持つ。
 keywords: [モジュール分割, DSN-mod, テスト戦略, E2E, UI設計, 要件カバレッジ]
 verified:
-  at: 2026-08-10
-  version: 2.9.1
+  at: 2026-08-11
+  version: 2.10.0
   against:
     - {doc: docs/01-requirements/functional.md, version: 1.13.1}
     - {doc: docs/01-requirements/non-functional.md, version: 1.7.0}
@@ -26,11 +26,11 @@ verified:
 ## モジュール分割定義
 
 <!-- 25モジュール。CLI はサブコマンド単位で1モジュール(決定シート 論点3)。
-     機能(relations)は56本で、その境界は docs/03-impl/features.md が持つ。 -->
+     機能(relations)は61本で、その境界は docs/03-impl/features.md が持つ。 -->
 
 | モジュールID | 責務 | 対応要件 | 依存 | 詳細設計 | relations の接頭辞 |
 |---|---|---|---|---|---|
-| MOD-cli-common | ホスト CLI の共有基盤。コンテナ名の導出、稼働・存在・イメージの判定、インフラ(ネットワーク・共有ボリューム)の用意、SSH 鍵の選択と保存、noVNC URL の組み立て、実行ユーザの解決、**共有資源を触る6コマンドの排他ロックの取得・解放・残骸の引き継ぎ**(`D0-env-08` 項6 / `DSN-env-02`) | FR-env-01, FR-env-02, FR-env-03, FR-env-04, FR-env-09, FR-env-10, FR-env-11, NFR-ops-02, NFR-ops-03, NFR-ops-05, NFR-scale-01, SR-01, SR-10, SR-11, SR-12, SR-20 | — | なし | `MODULE-cli-common-*` |
+| MOD-cli-common | ホスト CLI の共有基盤。コンテナ名の導出、稼働・存在・イメージの判定、インフラ(ネットワーク・共有ボリューム)の用意、SSH 鍵の選択と保存、noVNC URL の組み立て、実行ユーザの解決、**共有資源を触る6コマンドの排他ロックの取得・解放・残骸の引き継ぎ**(`D0-env-08` 項6 / `DSN-env-02`)、**compose 一意化名の導出**(`DSN-env-03`)、**管理ラベル `claude-dev.project-dir` の読み取り**、**セッション由来の資源の列挙**(`DSN-env-04`)、**共有資源の遊休判定に使う集合の算出**、**`logout` / `reset` が共有する削除結果の記録と中断の遅延**(`D0-env-08` 項5) | FR-env-01, FR-env-02, FR-env-03, FR-env-04, FR-env-07, FR-env-09, FR-env-10, FR-env-11, NFR-ops-02, NFR-ops-03, NFR-ops-05, NFR-scale-01, SR-01, SR-10, SR-11, SR-12, SR-20 | — | なし | `MODULE-cli-common-*` |
 | MOD-cli-setup | イメージをビルドし、ネットワークと共有ボリュームを作る初回セットアップ | FR-env-01, FR-env-09, SR-01, NFR-ops-05 | MOD-cli-common | なし | `MODULE-cli-setup` |
 | MOD-cli-start | 開発コンテナの起動(既定はブラウザ確認あり)。再接続・VM モード・認証受け渡し・鍵転送・ポート割当を含む | FR-env-01〜08, FR-env-11, FR-env-12, NFR-avail-02, NFR-scale-01, NFR-sec-01, NFR-ops-02, SR-04, SR-14, SR-20, NFR-ops-05 | MOD-cli-common, MOD-entrypoint | なし | `MODULE-cli-start` |
 | MOD-cli-stop | セッションの停止と、**そのセッションが作った資源(セッション由来のコンテナとネットワーク。経路が `docker run` か `docker compose` かを問わない)**の片付け。遊休なら docker-proxy と SSH ブリッジも停止する。**セッション由来の資源は所有者ラベル(`DSN-env-04` の規則 D)で、compose 資源は加えて一意化した compose プロジェクト名(`DSN-env-03`)で引く** | FR-env-01, FR-env-07, NFR-ops-02, SR-20, NFR-ops-05 | MOD-cli-common | なし | `MODULE-cli-stop` |
@@ -134,6 +134,31 @@ verified:
 - 却下した案: Makefile のターゲットを用途別に束ねる — 束ねた内部に境界が埋没し、記述量は減らない。
   ターゲットごとにモジュールを立てる — 1ファイルが 16 モジュールにまたがり、物理配置との
   1対1が崩れる。
+
+### DSN-mod-07 共有基盤の機能数が目安を超えることを許容する
+
+- 判断: `MOD-cli-common`(17機能)は、1モジュールあたり 15 本という分割見直しの目安を超えるが、
+  分割しない。`docs/histories/2026-08-11-promote-shared-helpers.md` の昇格(ファンイン2以上の共有関数5件を機能へ上げる)で
+  12 → 17 になったものである。
+- 理由: `DSN-mod-03` が「共有基盤は1モジュールに集約する」と定めており、分割すると
+  `DSN-mod-03` そのものを書き換えることになる。また昇格した5機能はいずれも
+  **利用者から見た入口を持たない**ので、`DSN-mod-01` の「モジュールは利用者から見た入口と
+  1対1」を満たすモジュールには切り出せない。目安の 15 本は
+  `relations-query.py --health` が分割の見直しを**提案する**閾値であって禁止ではなく、
+  同じ状況を `DSN-mod-06` が `MOD-makefile`(16機能)について既に許容している。
+- 却下した案: 破壊的操作の記録系と compose 命名系を `MOD-cli-destructive` /
+  `MOD-cli-naming` へ切り出す — 入口を持たないモジュールが2つ増え、`DSN-mod-01` と
+  `DSN-mod-03` の両方に反する。共有基盤を昇格させずに畳み込んだままにする —
+  `MODULE-cli-logout` と `MODULE-cli-reset` が同一実装について別々の記述を持ち続け、
+  片方だけを直したときに2つの仕様が食い違う(`docs/histories/2026-08-11-promote-shared-helpers.md` が実測した4項目)。
+- 見直す条件: `MOD-cli-common` が **20 機能を超えたとき**、または**共有基盤どうしが呼び合う辺が
+  5本を超えて、共有基盤の内側に階層ができたとき**(現在は2本 —
+  `PLAN-cli-common-require-setup` → `PLAN-cli-common-image-exists` と
+  `PLAN-cli-common-select-ssh-keys` → `PLAN-cli-common-write-project-ssh-keys`)。
+  そのときは `DSN-mod-03` の集約方針から見直す。
+  **「互いに呼び合わない塊が在ること」は見直す条件にしない** — 共有基盤は互いに呼び合わないのが
+  既定の姿(`02-design/relations.md`「共有基盤どうしは一方向で循環しない」)であり、
+  それを条件にすると新設した時点で常に成立してしまう。
 
 ## 要件カバレッジ確認
 
@@ -435,6 +460,7 @@ verified:
 - 前提不足(未セットアップ・未認証・設定ファイルが無い)は、止めずに次の操作を案内する。
   止めざるを得ない場合は、原因と復旧手段を日本語1行で示してから終了する。
 - 端末が対話的でない場合は、選択を求めずに既定値で進む。
+
 ## 未解決事項
 
 - なし

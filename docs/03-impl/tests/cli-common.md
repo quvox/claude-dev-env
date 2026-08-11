@@ -1,19 +1,19 @@
 ---
 id: cli-common
-version: 1.3.0
-updated: 2026-08-10
+version: 1.4.1
+updated: 2026-08-11
 scope: MOD-cli-common
 source:
   - docs/01-requirements/functional.md
   - docs/02-design/system.md
-summary: MOD-cli-common(CLI 共有基盤の11関数)の受入基準⇄テスト対応
+summary: MOD-cli-common(CLI 共有基盤の17機能)の受入基準⇄テスト対応
 keywords: [テスト]
 verified:
-  at: 2026-08-10
-  version: 1.3.0
+  at: 2026-08-11
+  version: 1.4.0
   against:
     - {doc: docs/01-requirements/functional.md, version: 1.13.1}
-    - {doc: docs/02-design/system.md, version: 2.9.1}
+    - {doc: docs/02-design/system.md, version: 2.10.0}
 ---
 
 # MOD-cli-common のテスト対応
@@ -48,15 +48,20 @@ verified:
 |---|---|---|
 | MODULE-cli-common-container-exists | - | 未検証(テスト未実装) |
 | MODULE-cli-common-container-name | - | 未検証(テスト未実装) |
+| MODULE-cli-common-compose-project-name | - | 未検証(テスト未実装) |
+| MODULE-cli-common-container-project-dir | - | 未検証(テスト未実装) |
+| MODULE-cli-common-destructive | - | 未検証(テスト未実装) |
 | MODULE-cli-common-dev-agent-path | - | 未検証(テスト未実装) |
 | MODULE-cli-common-ensure-infrastructure | - | 未検証(テスト未実装) |
 | MODULE-cli-common-get-novnc-url | - | 未検証(テスト未実装) |
 | MODULE-cli-common-image-exists | - | 未検証(テスト未実装) |
 | MODULE-cli-common-is-running | - | 未検証(テスト未実装) |
 | MODULE-cli-common-lock | - | 未検証(テスト未実装) |
+| MODULE-cli-common-net-other-running-containers | - | 未検証(テスト未実装) |
 | MODULE-cli-common-require-setup | - | 未検証(テスト未実装) |
 | MODULE-cli-common-resolve-container-user | - | 未検証(テスト未実装) |
 | MODULE-cli-common-select-ssh-keys | - | 未検証(テスト未実装) |
+| MODULE-cli-common-spawned-resources | - | 未検証(テスト未実装) |
 | MODULE-cli-common-write-project-ssh-keys | - | 未検証(テスト未実装) |
 
 ## 未検証(テスト未実装)の全件
@@ -83,6 +88,11 @@ verified:
 | 18 | MODULE-cli-common-select-ssh-keys — 機能全体 | シェル実装のため自動テストランナーが無く実機確認で代替する | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |
 | 19 | MODULE-cli-common-write-project-ssh-keys — 機能全体 | シェル実装のため自動テストランナーが無く実機確認で代替する | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |
 | 20 | NFR-ops-05 — 利用者へ向けた文が日本語であること | 自動テストランナーを設けない方針(`DSN-test-01` / `SR-32`)。実機確認で代替する | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |
+| 21 | MODULE-cli-common-compose-project-name — 機能全体 | シェル実装のため自動テストランナーが無く実機確認で代替する | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |
+| 22 | MODULE-cli-common-container-project-dir — 機能全体 | シェル実装のため自動テストランナーが無く実機確認で代替する | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |
+| 23 | MODULE-cli-common-destructive — 機能全体 | シェル実装のため自動テストランナーが無く実機確認で代替する | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |
+| 24 | MODULE-cli-common-net-other-running-containers — 機能全体 | シェル実装のため自動テストランナーが無く実機確認で代替する | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |
+| 25 | MODULE-cli-common-spawned-resources — 機能全体 | シェル実装のため自動テストランナーが無く実機確認で代替する | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |
 
 ## テスト設計の判断
 
@@ -90,3 +100,4 @@ verified:
 
 - 判断なし(**テストの実装方式について**): このファイルが持つ全行はいずれも `未検証(テスト未実装)` であり、テストの作り方(種別の割り当て・フィクスチャ・テストデータ)を選ぶ余地が生じていない。共有基盤は Bash 実装で、自動テストランナーを設けないのは `DSN-test-01` / `SR-32` の既定であり、そこから動かしていない。**行をどのファイルに置くかについては判断があり、次の行がそれである**
 - [DS-01] 担い手が複数モジュールにまたがる非機能要件(`NFR-ops-02` / `NFR-ops-05`)の行を、共有基盤である本ファイルに1行ずつ置く — 理由: 主担当を1つに決める規則(`.claude/directions/02-design.md`)を満たしつつ、同じ要件の行が各 `MOD-cli-*` のファイルに重複するのを避けるため(重複すると集計が二重になる) / 見直す条件: 当該の非機能要件が単一モジュールで観測できる形に変わったとき
+- [DS-01] `docs/histories/2026-08-11-promote-shared-helpers.md` で昇格させた5機能にも、既存の12機能と同じく `未検証(テスト未実装)` の行だけを置き、実機確認の手順を新たに設けない — 理由: 昇格はコードを1行も変えない境界の記録であり、検証すべき振る舞いが増えていない。既存の実機確認(`E2E-01`)がこの5機能を通る経路をすでに含む / 見直す条件: 昇格した機能のどれかが単独で観測できる入口を持つようになったとき、または `DSN-test-01` の「シェル系は実機確認で担保する」方針が変わったとき
