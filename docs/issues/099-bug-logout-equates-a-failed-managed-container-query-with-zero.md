@@ -1,7 +1,7 @@
 ---
 id: 099-bug-logout-equates-a-failed-managed-container-query-with-zero
 type: bug
-origin_layer: 03
+origin_layer: 01
 severity: 中
 found: 2026-08-11
 found_in: /task-close task-fix-logout-zero-target-path §6(独立レビュー Codex の指摘1 を裁定して起票)
@@ -46,6 +46,16 @@ summary: logout の手順4 が管理ラベル付きコンテナの docker ps の
 必要がある。daemon が落ちていれば両方失敗するので手順6 の印の条件で止まる。したがって
 一過性のエラー・filter の構文エラー・部分的な権限エラーに限られる。**severity を「中」とした理由**は
 この狭さと、共有ボリューム側の同型の欠陥(当時の `053`。`docs/histories/2026-08-11-fix-logout-zero-target-path.md` で解消)が「中」と裁定されていたことの一貫性である。
+
+## 起点層（2026-08-11 に 03 → 01 へ改めた）
+
+起票時は `origin_layer: 03` としたが、`/task-new` §2 の判定で **01** へ改めた。
+`FR-env-03-19` は条件節に「管理ラベルを持つコンテナ(停止中を含む)が無く」と**世界の状態**を
+書いており、その状態が**不明**なときの禁止を課していない。共有ボリュームについては
+2026-08-11 に「空であることを**確認できた**」と「確認できなかったならこの経路に入ってはならない」を
+加えたが、コンテナの集合には同じ手当てが無い。したがってこの欠陥を閉じるには**要件に義務を1つ
+足す**必要があり、03 だけでは閉じない(同型の判断を人間が「01 を先に直す」と裁定した先例:
+`docs/histories/2026-08-11-fix-logout-zero-target-path.md` の論点2)。
 
 ## 範囲外とした理由
 
