@@ -1,6 +1,6 @@
 ---
 id: task-fix-logout-zero-target-path
-phase: 実装
+phase: 反映
 lane: critical
 origin_layer: 01
 external_behavior: true
@@ -109,19 +109,22 @@ summary: logout の削除対象0件の経路で、ラベル無しコンテナの
 
 > 回答済み: sheet.md(転記済み)
 
-<!-- 2026-08-11 に人間が sheet.md へ記入した(概念3件に記入あり、論点3件は空欄)。
-     「一括回答」と「記入完了」は空欄。人間の発言「記入したので進めて」(2026-08-11)により
-     返答済みと確定し、空欄のブロックは task-memo.md §1.2 の規則どおり「既定を承認」
-     (= 各ブロックの「未回答時の既定」= AI推奨のとおりにする)として扱う。 -->
+<!-- 2026-08-11(1回目)に人間が sheet.md へ記入した(概念3件に記入あり、論点3件は空欄)。
+     人間の発言「記入したので進めて」により返答済みと確定し、空欄は task-memo.md §1.2 の
+     規則どおり「既定を承認」として扱った。
+     2026-08-11(2回目・フェーズ3 C-2)に人間が論点1〜4 のすべてへ逐語「AI推奨のとおり」と
+     記入した(発言「記入した」)。論点1〜3 は1回目の「既定を承認」と同じ帰結であり、
+     明示回答へ格上げになっただけである。「一括回答」と「記入完了」は空欄のまま。 -->
 
 | # | 論点 | 回答 | 反映先 |
 |---|---|---|---|
 | 概念1 | 「共有ボリュームが空」の外延 | 回答(sheet.md 逐語: 「AI推奨のとおり」)= 空 は**空であることを確かめられた状態**。一時コンテナを起動できず出力が空だった場合は「空」に含まない | `FR-env-03-19` / `new-features/01-requirements/functional.md` |
 | 概念2 | 「削除対象が0件」に何を数えるか | 回答(sheet.md 逐語: 「AI推奨のとおりにする((b) は「やらないこと」へ回す)」)= ラベル無し稼働コンテナも遊休 docker-proxy も0件には数えない。ただしラベル無しが在れば名前と書き戻しの警告を表示する。(b) 遊休 docker-proxy は「やらないこと」 | `FR-env-03-19` / `new-features/01-requirements/functional.md` |
 | 概念3 | 状態を確認できなかったときの振る舞い | 回答(sheet.md 逐語: 「AI推奨のとおり」)= (i) 通常経路へ進める(列挙 → 確認 → 削除 → 手順10 の印で失敗を検出し終了コード 1) | `FR-env-03-19` / `new-features/01-requirements/functional.md` + `new-features/02-design/logging.md`(新設行) |
-| 論点1 | `docs/issues/052` の対処 | 既定を承認(空欄 = 未回答時の既定 = AI推奨)= **案A**。`FR-env-03-19` に「ラベル無しの稼働中コンテナがあるなら名前と書き戻しの警告は表示する」を足す。**受入基準17 は触らない**ので `docs/issues/055` は範囲外のまま | `FR-env-03-19` / `new-features/01-requirements/functional.md` + `new-features/02-design/logging.md`(既存2行の発火条件の明示) |
-| 論点2 | `docs/issues/053` の対処 | 既定を承認(同上)= **案B**。`FR-env-03-19` に「共有ボリュームの状態を確認できなかった場合はこの経路に入らない」を明記してから実装を直す | `FR-env-03-19` / `new-features/01-requirements/functional.md` + `new-features/02-design/contracts/cli-container.md`(エラーケース新設行) |
-| 論点3 | `docs/issues/089` を畳むか | 既定を承認(同上)= **畳む(案A)**。closure に 089 分(`MODULE-cli-logout` 手順4 と「既知の制限」/ 実装2箇所)を加える。01/02 は動かない | `MODULE-cli-logout` / `new-features/03-impl/relations/MODULE-cli-logout.md` |
+| 論点1 | `docs/issues/052` の対処 | 回答(sheet.md 逐語: 「AI推奨のとおり」)= **案A**。`FR-env-03-19` に「ラベル無しの稼働中コンテナがあるなら名前と書き戻しの警告は表示する」を足す。**受入基準17 は触らない**ので `docs/issues/055` は範囲外のまま | `FR-env-03-19` / `new-features/01-requirements/functional.md` + `new-features/02-design/logging.md`(既存2行の発火条件の明示) |
+| 論点2 | `docs/issues/053` の対処 | 回答(sheet.md 逐語: 「AI推奨のとおり」)= **案B**。`FR-env-03-19` に「共有ボリュームの状態を確認できなかった場合はこの経路に入らない」を明記してから実装を直す | `FR-env-03-19` / `new-features/01-requirements/functional.md` + `new-features/02-design/contracts/cli-container.md`(エラーケース新設行) |
+| 論点3 | `docs/issues/089` を畳むか | 回答(sheet.md 逐語: 「AI推奨のとおり」)= **畳む(案A)**。closure に 089 分(`MODULE-cli-logout` 手順4 と「既知の制限」/ 実装2箇所)を加える。01/02 は動かない | `MODULE-cli-logout` / `new-features/03-impl/relations/MODULE-cli-logout.md` |
+| 論点4 | E2E-01 手順8 の実機実行を誰がやるか(フェーズ3 C-2 で追加) | 回答(sheet.md 逐語: 「AI推奨のとおり」)= **案A**。隔離ハーネスの結果を根拠に `/task-close` へ進み、実機 E2E-01 手順8 は `docs/pendings.md` の残務へ1行残して人間が都合のよいときに流す | `docs/pendings.md` の残務(1行)/ 本 memo の DoD 表 |
 | 方針合意 | 各ドキュメントへの変更方針8行 | 空欄 = 全方針に合意(sheet.md「方針合意」節) | シートの「方針合意」節がそのままフェーズ2の作業方針 |
 
 ## 未決点
@@ -266,8 +269,11 @@ summary: logout の削除対象0件の経路で、ラベル無しコンテナの
 
 - 2026-08-11 DoD 表の測定時点は**コードの最終コミット `56a65ba`**である(記録のコミットは `4ae0131`。コードは `56a65ba` 以降変わっていない)。
 
-- 2026-08-11 **回答待ち**: `sheet.md` の**論点4**(E2E-01 手順8 の実機実行を誰がやるか)。
-  未回答のまま `/task-close` へは進まない(`/implement` C-4-4)。
+- 2026-08-11 **論点4 に回答あり(逐語「AI推奨のとおり」= 案A)**。回答待ちは解消した。
+  案A が求める残務(実機 E2E-01 手順8 の未実施)を `docs/pendings.md` へ1行起票し、
+  `phase: 反映` へ進めて `/task-close` を実行する。**回答は反映・検証済み記録より前に適用済み**
+  (`/implement` C-2 の順序)。回答が変えたのは「誰がいつ実機 E2E を流すか」だけで、
+  変更指示・実装・受入基準には差分が生じない(論点1〜3 は1回目の既定承認と同じ帰結)。
 
 ## 申し送り事項
 
