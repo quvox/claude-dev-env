@@ -14,7 +14,7 @@
 | [cli-list](cli-list.md) | MOD-cli-list | 0 / **2** / 0 | 1.1.0 | 2026-08-07 | MOD-cli-list(セッション一覧の表示)の受入基準⇄テスト対応 |
 | [cli-login](cli-login.md) | MOD-cli-login | 0 / **3** / 0 | 1.1.0 | 2026-08-07 | MOD-cli-login(Claude の認証)の受入基準⇄テスト対応 |
 | [cli-login-codex](cli-login-codex.md) | MOD-cli-login-codex | 0 / **4** / 0 | 1.2.0 | 2026-08-07 | MOD-cli-login-codex(Codex CLI のデバイス認証)の受入基準⇄テスト対応 |
-| [cli-logout](cli-logout.md) | MOD-cli-logout | 0 / **16** / 0 | 1.6.0 | 2026-08-11 | MOD-cli-logout(認証情報の破棄)の受入基準⇄テスト対応 |
+| [cli-logout](cli-logout.md) | MOD-cli-logout | 0 / **16** / 0 | 1.6.1 | 2026-08-11 | MOD-cli-logout(認証情報の破棄)の受入基準⇄テスト対応 |
 | [cli-ports](cli-ports.md) | MOD-cli-ports | 0 / **2** / 0 | 1.1.0 | 2026-08-07 | MOD-cli-ports(公開ポートの一覧)の受入基準⇄テスト対応 |
 | [cli-pull](cli-pull.md) | MOD-cli-pull | 0 / **5** / 0 | 1.2.0 | 2026-08-07 | MOD-cli-pull(GHCR からのイメージ取得)の受入基準⇄テスト対応 |
 | [cli-reset](cli-reset.md) | MOD-cli-reset | 0 / **3** / 0 | 1.4.0 | 2026-08-07 | MOD-cli-reset(環境の初期化)の受入基準⇄テスト対応 |
@@ -26,7 +26,7 @@
 | [cli-upgrade](cli-upgrade.md) | MOD-cli-upgrade | 0 / **1** / 0 | 1.1.0 | 2026-08-07 | MOD-cli-upgrade(CLI とイメージの更新)の受入基準⇄テスト対応 |
 | [container-tools](container-tools.md) | MOD-container-tools | 0 / **1** / 0 | 1.1.0 | 2026-08-07 | MOD-container-tools(コンテナ内補助ツール)の受入基準⇄テスト対応 |
 | [docker-proxy](docker-proxy.md) | MOD-docker-proxy | 10 / **2** / 0 | 1.3.0 | 2026-08-07 | MOD-docker-proxy(Docker API の検査と中継)の受入基準⇄テスト対応 |
-| [e2e](e2e.md) | E2E | 0 / **4** / 0 | 1.7.0 | 2026-08-11 | E2Eシナリオ E2E-01〜E2E-03 と E2E-06 ⇄ テスト対応 |
+| [e2e](e2e.md) | E2E | 0 / **4** / 0 | 1.8.0 | 2026-08-11 | E2Eシナリオ E2E-01〜E2E-03 と E2E-06 ⇄ テスト対応 |
 | [entrypoint](entrypoint.md) | MOD-entrypoint | 0 / **23** / 0 | 1.2.0 | 2026-08-07 | MOD-entrypoint(コンテナ起動シーケンス)の受入基準⇄テスト対応 |
 | [firewall](firewall.md) | MOD-firewall | 0 / **5** / 0 | 1.2.0 | 2026-08-07 | MOD-firewall(外向き通信のブラックリスト適用)の受入基準⇄テスト対応 |
 | [images](images.md) | (モジュール外)イメージのビルドと GHCR 配布 | 0 / **15** / 0 | 1.3.0 | 2026-08-10 | どのモジュールにも属さないイメージのビルドと GHCR 配布の受入基準⇄テスト対応 |

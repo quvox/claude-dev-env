@@ -7,6 +7,11 @@ source:
 kind: other
 summary: ホスト CLI がコンテナへ渡す環境変数・マウント・起動オプションの取り決め
 keywords: [契約, CTR]
+verified:
+  at: 2026-08-11
+  version: 1.9.0
+  against:
+    - {doc: docs/02-design/system.md, version: 2.11.0}
 ---
 
 # CTR-cli-container ホスト CLI → コンテナ/entrypoint

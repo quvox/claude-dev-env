@@ -11,6 +11,14 @@ summary: >
   25モジュールの分割定義とその根拠(DSN-mod-*)、要件カバレッジ確認、テスト戦略(単体/結合/E2E)と
   E2Eシナリオ一覧、UI設計を定める。アーキテクチャと契約と設計判断は architecture.md / contracts/ が持つ。
 keywords: [モジュール分割, DSN-mod, テスト戦略, E2E, UI設計, 要件カバレッジ]
+verified:
+  at: 2026-08-11
+  version: 2.11.0
+  against:
+    - {doc: docs/01-requirements/functional.md, version: 1.14.0}
+    - {doc: docs/01-requirements/non-functional.md, version: 1.7.0}
+    - {doc: docs/01-requirements/usecases.md, version: 1.5.0}
+    - {doc: docs/02-design/architecture.md, version: 1.5.0}
 ---
 
 # モジュール分割・テスト戦略・UI設計

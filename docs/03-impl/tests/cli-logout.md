@@ -1,6 +1,6 @@
 ---
 id: cli-logout
-version: 1.6.0
+version: 1.6.1
 updated: 2026-08-11
 scope: MOD-cli-logout
 source:
@@ -8,6 +8,12 @@ source:
   - docs/02-design/system.md
 summary: MOD-cli-logout(認証情報の破棄)の受入基準⇄テスト対応
 keywords: [テスト]
+verified:
+  at: 2026-08-11
+  version: 1.6.1
+  against:
+    - {doc: docs/01-requirements/functional.md, version: 1.14.0}
+    - {doc: docs/02-design/system.md, version: 2.11.0}
 ---
 
 # MOD-cli-logout のテスト対応
@@ -32,7 +38,7 @@ keywords: [テスト]
 | FR-env-03-16 | 正常系 | — | -(実機確認手順。`logout` / `reset` の両方。`docs/03-impl/tests/e2e.md` の E2E-01 手順8) | 未検証(テスト未実装) |
 | FR-env-03-17 | 正常系 | — | -(実機確認手順。`logout` / `reset` の両方。`docs/03-impl/tests/e2e.md` の E2E-01 手順8-5 = ラベル無しコンテナを削除せず名前を表示すること、および**セッション由来のコンテナがその列に現れないこと**) | 未検証(テスト未実装) |
 | FR-env-03-18 | 異常系 | — | -(実機確認手順。`logout` / `reset` の両方。`docs/03-impl/tests/e2e.md` の E2E-01 手順8) | 未検証(テスト未実装) |
-| FR-env-03-19 | 境界値 | — | -(実機確認手順。`docs/03-impl/tests/e2e.md` の E2E-01 **手順8-8 の (d)** = 削除対象0件で確認を求めず終了コード 0、**同 (e)** = ラベル無しの稼働中コンテナがあるときは名前と書き戻しの警告が出ること。**手順8-18** = 共有ボリュームが空かを確かめられない状態ではこの経路に入らないこと) | 未検証(テスト未実装) |
+| FR-env-03-19 | 境界値 | — | -(実機確認手順。`docs/03-impl/tests/e2e.md` の E2E-01 **手順8-8 の (d)** = 削除対象0件で確認を求めず終了コード 0、**同 (e)** = ラベル無しの稼働中コンテナがあるときは名前と書き戻しの警告が出ること。**手順8-18 の (a)** = 印が出ない状態(一時コンテナが起動できない)、**同 (b)** = 印は出るが列挙の終了ステータスが非0の状態。どちらでもこの経路に入らないこと) | 未検証(テスト未実装) |
 | FR-env-03-20 | 正常系 | — | -(実機確認手順。`docs/03-impl/tests/e2e.md` の E2E-01 手順8) | 未検証(テスト未実装) |
 | FR-env-03-21 | 境界値 | — | -(実機確認手順。`docs/03-impl/tests/e2e.md` の E2E-01 手順8) | 未検証(テスト未実装) |
 | FR-env-03-22 | 正常系 | — | -(実機確認手順。`docs/03-impl/tests/e2e.md` の E2E-01 手順8。`reset` について確認する) | 未検証(テスト未実装) |

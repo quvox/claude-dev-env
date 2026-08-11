@@ -1,6 +1,6 @@
 ---
 id: e2e
-version: 1.7.0
+version: 1.8.0
 updated: 2026-08-11
 scope: E2E
 source:
@@ -8,6 +8,12 @@ source:
   - docs/01-requirements/usecases.md
 summary: E2Eシナリオ E2E-01〜E2E-03 と E2E-06 ⇄ テスト対応
 keywords: [テスト, E2E]
+verified:
+  at: 2026-08-11
+  version: 1.8.0
+  against:
+    - {doc: docs/02-design/system.md, version: 2.11.0}
+    - {doc: docs/01-requirements/usecases.md, version: 1.5.0}
 ---
 
 # E2E テスト対応
@@ -338,14 +344,34 @@ keywords: [テスト, E2E]
       ないので、同じ状態を作れる別の手段でもよい。**満たすべき条件は
       「`require_setup` が通る」かつ「一時コンテナが起動できない」の2つ**である。)
       この状態で `claude-dev logout < /dev/null` を実行する。
-      **期待する結果**: **「削除対象がありません」を表示して 0 で終わらない。**
+      **期待する結果 (a)**: **「削除対象がありません」を表示して 0 で終わらない。**
       共有ボリュームの状態を確かめられなかった旨が表示され、削除対象の列挙と確認へ進む
       (標準入力が TTY でないので `--yes` が無ければ**終了コード 1 で中止**する —
       受入基準15)。続けて `claude-dev logout --yes` を実行した場合は削除を試み、
       **消去を確認できないので消えなかった資源として列挙し終了コード 1 で終わる**(受入基準18)。
       **不合格の条件**: 「削除対象がありません」と表示して**終了コード 0** で終わる
       (共有ボリュームに認証が残っているのに、利用者は消えたと解釈する)。
-      **後片付け**: `docker tag claude-dev-claude.e2e-backup claude-dev-claude` で元へ戻し、
+      **(b) 印は出るが列挙そのものが失敗する状態**(受入基準19 の「空であることを確認できた」の
+      3条件のうち、**一時コンテナの終了ステータスが 0** だけが欠ける場合。(a) では印も出ないので
+      この条件は確かめられない)。**一時コンテナが起動でき、印を出したうえで `ls` が非0で終わる**
+      イメージへ差し替える:
+      ```
+      docker tag claude-dev-claude claude-dev-claude.e2e-backup
+      printf 'FROM claude-dev-claude.e2e-backup\nUSER root\nRUN mv /bin/ls /bin/ls.orig \
+        && printf "#!/bin/sh\\nexit 2\\n" > /bin/ls && chmod +x /bin/ls\n' \
+        | docker build -t claude-dev-claude -f - .
+      ```
+      (`/auth` の権限を落とす方法は使えない — このイメージの既定ユーザは `root` なので
+      `chmod 000` でも `ls` が成功する。実測で確認済み。**満たすべき条件は「`require_setup` が通る」
+      「印が出る」「列挙が非0で終わる」の3つ**であり、同じ状態を作れる別の手段でもよい。)
+      この状態で、共有ボリュームに認証を置いたまま `claude-dev logout < /dev/null` を実行する。
+      **期待する結果 (b)**: (a) と同じ — **「削除対象がありません」を表示して 0 で終わらず**、
+      確かめられなかった旨を表示して確認へ進み、非 TTY なので終了コード 1 で中止する。
+      **不合格の条件**: 終了コード 0 で「削除対象がありません」と表示する
+      (= 印だけを見て終了ステータスを見ていない。`MODULE-cli-logout` 判断15 の `[DS-02]` が
+      閉じたはずの経路である)。
+      **後片付け**: (a) と (b) のどちらを実行した場合も
+      `docker tag claude-dev-claude.e2e-backup claude-dev-claude` で元へ戻し、
       `docker rmi claude-dev-claude.e2e-backup` と `docker rmi busybox`(他の手順で使っていなければ)
       を実行する。そのうえで `claude-dev logout --yes` を実行して共有ボリュームを実際に空にする。
    - macOS(`claude-dev-mac`)でも同じ手順を実行する。実行できない場合は
