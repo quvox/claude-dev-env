@@ -6,8 +6,8 @@
 
 | タスク | フェーズ | 起点層 | 更新 | 目的 |
 |---|---|---|---|---|
-| [task-fix-logout-zero-target-path](task-fix-logout-zero-target-path/memo.md) | 反映 | 01 | 2026-08-11 | logout の削除対象0件の経路で、ラベル無しコンテナの警告に到達せず、共有ボリュームの状態を確かめずに 0 で終わる2つの欠陥を閉じる |
+| (なし) | - | - | - | - |
 
-件数: 1
+件数: 0
 
 <!-- END GENERATED: build-index.py -->
