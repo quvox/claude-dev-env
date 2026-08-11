@@ -350,7 +350,7 @@ ensure_project_config() {
 
 # Docker リソースの準備
 ensure_infrastructure() {
-    docker network create "$NETWORK" 2>/dev/null || true
+    docker network create "$NETWORK" >/dev/null 2>&1 || true
     docker volume create "$VOL_AUTH" >/dev/null 2>&1 || true
     docker volume create "$VOL_HISTORY" >/dev/null 2>&1 || true
     docker volume create "$VOL_CONFIG" >/dev/null 2>&1 || true
@@ -758,7 +758,7 @@ setup)
     fi
 
     # ネットワーク
-    docker network create "$NETWORK" 2>/dev/null || true
+    docker network create "$NETWORK" >/dev/null 2>&1 || true
     echo "✅ ネットワーク: $NETWORK"
 
     # ボリューム
@@ -1010,7 +1010,7 @@ logout)
     # 列挙に必要な問い合わせの失敗）である。
     _unmanaged_notice=""
     if [ ${#_unmanaged[@]} -gt 0 ]; then
-        _unmanaged_notice="ℹ️  管理ラベルを持たないため削除しなかったコンテナ（本変更より前に起動した可能性があります）:"$'\n'
+        _unmanaged_notice="ℹ️  管理ラベルを持たないため削除しなかったコンテナ（管理ラベルが付く前に起動した可能性があります）:"$'\n'
         for _c in "${_unmanaged[@]}"; do
             _unmanaged_notice="${_unmanaged_notice}     - ${_c}"$'\n'
         done
@@ -1695,7 +1695,7 @@ stop)
         # 本体は名前で1件を指した削除なので、管理ラベルの有無を問わず削除する（規則B）
         docker rm -f "$NAME" >/dev/null
         if [ "$_stop_managed" = "0" ]; then
-            echo "ℹ️  ${NAME} は本システムの管理ラベルを持ちません（本変更より前に起動した可能性があります）。名前で指定された1件なので削除しました。"
+            echo "ℹ️  ${NAME} は本システムの管理ラベルを持ちません（管理ラベルが付く前に起動した可能性があります）。名前で指定された1件なので削除しました。"
         fi
         echo "✅ ${NAME} を停止しました"
     else
@@ -1727,6 +1727,13 @@ stop)
         done < <(docker ps -a --filter "label=com.docker.compose.project=${_cproj}" --format '{{.Names}}' 2>/dev/null || true)
         if docker network rm "${_cproj}_default" >/dev/null 2>&1; then
             _spawned_deleted+=("ネットワーク: ${_cproj}_default")
+        else
+            # 削除に失敗した compose 既定ネットワークも、所有者ラベル経由のネットワークと
+            # 同じく利用者へ表示する（FR-env-01 受入基準24 は「握って続行する」だけを課しており、
+            # 表示しないことは課していない。02-design/logging.md「セッション由来の資源の
+            # 削除に失敗した」）。存在しなかった場合も同じ経路に入るが、
+            # 一覧は「消えなかった資源」ではなく stop の事後報告なので害はない。
+            _spawned_failed+=("ネットワーク: ${_cproj}_default")
         fi
 
         # 手順8: 所有者ラベルでセッション由来の資源を削除する（FR-env-01 受入基準22）。
@@ -2063,6 +2070,15 @@ reset)
     while IFS= read -r _v; do
         [ -n "$_v" ] && _rc_volumes+=("$_v")
     done < <(docker volume ls -q --filter "name=^${VOL_CHROME_PREFIX}-" 2>/dev/null || true)
+    # VM モードのゲストディスク claude-dev-vm-<name>（固定接頭辞なので名前で一意に決まる）。
+    #   reset は「ホスト全体を初期状態へ戻す」操作であり、契約 CTR-cli-container
+    #   「識別の手段は資源ごとに違う」がこの接頭辞を本システムの共有ボリュームとして挙げている
+    #   （D0-env-08 項1）。D0-env-05 項2 が「削除しない」と定める名前付きボリュームは
+    #   **セッション由来の資源**を指すのでこれには当たらない。
+    #   削除前の確認（FR-env-03 受入基準14）に列挙されるので、--yes なしなら利用者が中止できる。
+    while IFS= read -r _v; do
+        [ -n "$_v" ] && _rc_volumes+=("$_v")
+    done < <(docker volume ls -q --filter "name=^claude-dev-vm-" 2>/dev/null || true)
     # イメージ: 固定名
     _rc_images=()
     for _i in "$IMG_CLAUDE" "$IMG_CLAUDE_VNC" "$IMG_DOCKER_PROXY"; do
@@ -2259,9 +2275,23 @@ reset)
     destructive_abort_if_interrupted
 
     # --- 結果 ---
+    # 残したラベル無しコンテナの表示は**削除の成否で条件づけない**（FR-env-03 受入基準17 は
+    # 成否で条件づけていない。02-design/logging.md「残したものの表示は削除の成否で
+    # 条件づけない」）。先に文面を組み立てて、成功・失敗のどちらの経路でも出す
+    # （logout 側の _unmanaged_notice と同じ形）。
+    _rc_unmanaged_notice=""
+    if [ ${#_rc_unmanaged[@]} -gt 0 ]; then
+        _rc_unmanaged_notice="ℹ️  管理ラベルを持たないため削除しなかったコンテナ（管理ラベルが付く前に起動した可能性があります）:"$'\n'
+        for _c in "${_rc_unmanaged[@]}"; do
+            _rc_unmanaged_notice="${_rc_unmanaged_notice}     - ${_c}"$'\n'
+        done
+        _rc_unmanaged_notice="${_rc_unmanaged_notice}   1件ずつ止めるには 'claude-dev stop <name>' を使ってください。"$'\n'
+        _rc_unmanaged_notice="${_rc_unmanaged_notice}   停止中のものは列挙していません（ネットワークの接続情報からは稼働中しか分かりません）。"$'\n'
+    fi
     if [ ${#_DESTRUCTIVE_FAILED[@]} -gt 0 ]; then
         echo "❌ 削除できなかった資源があります。" >&2
         destructive_report >&2
+        printf '%s' "$_rc_unmanaged_notice"
         exit 1
     fi
     if [ "$_reset_idle" = "1" ]; then
@@ -2270,12 +2300,7 @@ reset)
         echo "✅ 削除を完了しました（共有資源を残したため、完全な初期状態には戻っていません）"
     fi
     destructive_report
-    if [ ${#_rc_unmanaged[@]} -gt 0 ]; then
-        echo "ℹ️  管理ラベルを持たないため削除しなかったコンテナ（本変更より前に起動した可能性があります）:"
-        for _c in "${_rc_unmanaged[@]}"; do echo "     - ${_c}"; done
-        echo "   1件ずつ止めるには 'claude-dev stop <name>' を使ってください。"
-        echo "   停止中のものは列挙していません（ネットワークの接続情報からは稼働中しか分かりません）。"
-    fi
+    printf '%s' "$_rc_unmanaged_notice"
     release_lock shared shared
     ;;
 
