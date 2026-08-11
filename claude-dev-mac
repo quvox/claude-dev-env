@@ -1057,10 +1057,28 @@ logout)
         [ -f "$_f" ] && _authfiles+=("$_f")
     done
 
-    # 共有ボリュームが空か（削除対象0件の判定に使う）
-    _auth_empty=1
-    if [ -n "$(docker run --rm --entrypoint bash -v "${VOL_AUTH}:/auth" "$IMG_CLAUDE" -c 'ls -A /auth 2>/dev/null' 2>/dev/null)" ]; then
-        _auth_empty=0
+    # 共有ボリュームが「空であることを確認できた」か（削除対象0件の判定に使う）。
+    # 判定は3条件の論理積である（FR-env-03 受入基準19 / CTR-cli-container のエラーケース）:
+    #   (i) 印 __CLAUDE_DEV_AUTH_LISTED__ が出ている（＝一時コンテナが起動できた）
+    #   (ii) 一時コンテナの終了ステータスが 0（＝列挙そのものが成功した）
+    #   (iii) 印以外の行が1つも無い
+    # 1つでも欠ければ「空」と判定しない（daemon 断・イメージ欠落・マウント不能・権限）。
+    # 手順10 が rm -rf の終了コードを見ないのは . と .. で非0を返しうるためで、ここは
+    # 列挙しか行わないので終了ステータスが「列挙できたか」をそのまま表す。
+    _auth_empty=0
+    _auth_probe_ok=1
+    _auth_probe=$( ( trap '' INT TERM; docker run --rm --entrypoint bash \
+        -v "${VOL_AUTH}:/auth" \
+        "$IMG_CLAUDE" \
+        -c 'echo "__CLAUDE_DEV_AUTH_LISTED__"; ls -A /auth' ) 2>/dev/null ) \
+        && _auth_probe_status=0 || _auth_probe_status=$?
+    if [ "$_auth_probe_status" != "0" ] \
+        || ! printf '%s\n' "$_auth_probe" | grep -qxF '__CLAUDE_DEV_AUTH_LISTED__'; then
+        _auth_probe_ok=0
+    else
+        # grep -v は一致行が無いとき（＝印だけ＝ボリュームが空）に 1 を返すので || true が要る
+        _auth_probe_left=$(printf '%s\n' "$_auth_probe" | grep -vxF '__CLAUDE_DEV_AUTH_LISTED__' || true)
+        [ -z "$_auth_probe_left" ] && _auth_empty=1
     fi
 
     # 削除対象が0件なら確認を求めない（消すものが無いのに確認を求めると誤解させる）
