@@ -1048,12 +1048,15 @@ logout)
         "$IMG_CLAUDE" \
         -c 'echo "__CLAUDE_DEV_AUTH_LISTED__"; ls -A /auth' ) 2>/dev/null ) \
         && _auth_probe_status=0 || _auth_probe_status=$?
+    # 判定は行の**位置**で行う。印は列挙の直前に1回だけ出すので標準出力の1行目に現れ
+    # （docker 自身の警告は標準エラーへ出るので混ざらない）、2行目以降が中身である。
+    # 内容で除くと /auth/__CLAUDE_DEV_AUTH_LISTED__ という名前のファイルを印と区別できず、
+    # 中身があるのに「空」と判定する（docs/issues/100）。
     if [ "$_auth_probe_status" != "0" ] \
-        || ! printf '%s\n' "$_auth_probe" | grep -qxF '__CLAUDE_DEV_AUTH_LISTED__'; then
+        || [ "$(printf '%s\n' "$_auth_probe" | head -1)" != "__CLAUDE_DEV_AUTH_LISTED__" ]; then
         _auth_probe_ok=0
     else
-        # grep -v は一致行が無いとき（＝印だけ＝ボリュームが空）に 1 を返すので || true が要る
-        _auth_probe_left=$(printf '%s\n' "$_auth_probe" | grep -vxF '__CLAUDE_DEV_AUTH_LISTED__' || true)
+        _auth_probe_left=$(printf '%s\n' "$_auth_probe" | tail -n +2)
         [ -z "$_auth_probe_left" ] && _auth_empty=1
     fi
 
@@ -1161,25 +1164,34 @@ logout)
     done
     destructive_abort_if_interrupted
 
-    # 共有ボリュームを空にする。成否は「削除後の列挙結果」だけで判定し、rm -rf の
-    # 終了コードでは判定しない（rm -rf /auth/* /auth/.* は . と .. に当たって非0を
-    # 返しうる一方、通常のファイルは消えているため、終了コードは「消えたか」を表さない）。
-    # 一時コンテナ自体が起動できなかった場合（daemon 断・イメージ欠落・マウント不能）と
-    # 「消去に成功して空になった」場合は、どちらも出力が空になって区別できない。
-    # 列挙の直前に印を出させ、印が無ければ「削除できなかった」と判定する。
+    # 共有ボリュームを空にする。判定は手順6 と同じ3条件の論理積である:
+    #   (i) 標準出力の1行目が印である（＝一時コンテナが起動できた）
+    #   (ii) コンテナの終了ステータスが 0（＝列挙そのものが成功した）
+    #   (iii) 2行目以降が無い（＝残っていない）
+    # (ii) は rm -rf の終了コードではない: 渡すコマンドは `rm -rf …; echo 印; ls -A /auth` の順で、
+    # rm -rf /auth/* /auth/.* は . と .. に当たって非0を返しうるが**最後のコマンドではない**ので、
+    # コンテナの終了ステータスには現れない。したがって終了ステータスは「列挙できたか」を表す。
+    # 印が出た直後に列挙が失敗すると出力が印だけになり、消去に成功して空になった場合と
+    # 区別できない（CTR-cli-container のエラーケース）。
     _auth_out=$( ( trap '' INT TERM; docker run --rm --entrypoint bash \
         -v "${VOL_AUTH}:/auth" \
         "$IMG_CLAUDE" \
-        -c 'rm -rf /auth/* /auth/.* >/dev/null 2>&1; echo "__CLAUDE_DEV_AUTH_LISTED__"; ls -A /auth 2>/dev/null' ) 2>/dev/null || true)
-    if ! printf '%s\n' "$_auth_out" | grep -qxF '__CLAUDE_DEV_AUTH_LISTED__'; then
-        echo "❌ 共有ボリューム ${VOL_AUTH} の消去を確認できませんでした（一時コンテナを起動できていません）。" >&2
-        destructive_failed "共有ボリューム ${VOL_AUTH} の認証情報（消去を確認できず）"
-        _auth_left=""
+        -c 'rm -rf /auth/* /auth/.* >/dev/null 2>&1; echo "__CLAUDE_DEV_AUTH_LISTED__"; ls -A /auth' ) 2>/dev/null ) \
+        && _auth_out_status=0 || _auth_out_status=$?
+    _auth_verified=1
+    _auth_left=""
+    if [ "$_auth_out_status" != "0" ] \
+        || [ "$(printf '%s\n' "$_auth_out" | head -1)" != "__CLAUDE_DEV_AUTH_LISTED__" ]; then
+        _auth_verified=0
     else
-        # grep -v は一致行が無いとき（＝印だけ＝ボリュームが空）に 1 を返すので || true が要る
-        _auth_left=$(printf '%s\n' "$_auth_out" | grep -vxF '__CLAUDE_DEV_AUTH_LISTED__' || true)
+        _auth_left=$(printf '%s\n' "$_auth_out" | tail -n +2)
     fi
-    if [ -n "$_auth_left" ]; then
+    # 消去を確認できなかった資源は「削除した資源」に記録しない（logging.md の共通制約）。
+    # 同じ資源を削除済みと失敗の両方に記録してはならない。
+    if [ "$_auth_verified" = "0" ]; then
+        echo "❌ 共有ボリューム ${VOL_AUTH} の消去を確認できませんでした（一時コンテナを起動できていないか、中身の列挙そのものが失敗しました）。" >&2
+        destructive_failed "共有ボリューム ${VOL_AUTH} の認証情報（消去を確認できず）"
+    elif [ -n "$_auth_left" ]; then
         destructive_skipped "共有ボリューム ${VOL_AUTH} の認証情報"
         while IFS= read -r _p; do
             [ -n "$_p" ] && destructive_failed "共有ボリューム ${VOL_AUTH} 内: /auth/${_p}"
