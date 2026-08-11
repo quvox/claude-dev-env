@@ -1,10 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"io"
 	"log"
 	"strconv"
+	"strings"
 	"testing"
 )
 
@@ -305,5 +307,54 @@ func TestInjectOwnerLabels_EmptyOwnerIsNoop(t *testing.T) {
 	out, changed := injectOwnerLabels([]byte(body), "")
 	if changed || string(out) != body {
 		t.Errorf("所有者が空なら書き換えない: changed=%v out=%s", changed, out)
+	}
+}
+
+// 所有者ラベルを付与せずに中継したときは、**どの経路でも理由をログへ1行出す**
+// (FR-env-07 受入基準12 / 02-design/logging.md「所有者ラベルを付与せずに中継した」)。
+// コンテナ作成経路は分岐が「付与した」と「所有者が空」の2つしかなく、
+// **所有者は解決できたのに注入に失敗した場合だけ1行も出なかった**(issue 087)。
+func TestValidateContainerCreate_LogsReasonWhenNotLabelled(t *testing.T) {
+	cases := []struct {
+		name  string
+		owner string
+		body  string
+		want  string
+	}{
+		{"呼び出し元を特定できない", "", `{"Image":"busybox"}`, "caller not identified"},
+		// **到達できる失敗の形はこれである**: 外側のボディは読めるので
+		// validateContainerCreate は早期 return せず、injectOwnerLabels の中で
+		// Labels を map[string]string として読む所だけが失敗する。
+		// (ボディ全体が壊れている場合は、その手前の WARN で早期 return する)
+		{"所有者は解決できたが Labels を書き換えられない", testOwner, `{"Image":"busybox","Labels":5}`, "body not rewritable"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			stubCaller(t, "", c.owner)
+			var buf bytes.Buffer
+			req := newRequest("POST", "/containers/create", c.body)
+			req.RemoteAddr = "172.20.0.9:5000"
+			if err := validateContainerCreate(req, log.New(&buf, "", 0)); err != nil {
+				t.Fatalf("拒否されないはず: %v", err)
+			}
+			got := buf.String()
+			if !strings.Contains(got, "NO-OWNER-LABEL container") || !strings.Contains(got, c.want) {
+				t.Errorf("理由つきのログが要る。期待する語=%q / 実際のログ=%q", c.want, got)
+			}
+		})
+	}
+}
+
+// 付与できたときは NO-OWNER-LABEL を出さない(理由のログが常に出るようになっていないこと)。
+func TestValidateContainerCreate_NoReasonLogWhenLabelled(t *testing.T) {
+	stubCaller(t, "", testOwner)
+	var buf bytes.Buffer
+	req := newRequest("POST", "/containers/create", `{"Image":"busybox"}`)
+	req.RemoteAddr = "172.20.0.9:5000"
+	if err := validateContainerCreate(req, log.New(&buf, "", 0)); err != nil {
+		t.Fatalf("拒否されないはず: %v", err)
+	}
+	if strings.Contains(buf.String(), "NO-OWNER-LABEL") {
+		t.Errorf("付与できたのに未付与のログが出ている: %q", buf.String())
 	}
 }
