@@ -7,6 +7,12 @@ source:
   - docs/02-design/relations.md
 summary: 03-impl 層の目次。機能間連携仕様書群の代表として層全体の版と合格証を持つ
 keywords: [目次]
+verified:
+  at: 2026-08-11
+  version: 1.24.0
+  against:
+    - {doc: docs/02-design/system.md, version: 2.11.0}
+    - {doc: docs/02-design/relations.md, version: 1.10.0}
 ---
 
 # 03-impl 目次

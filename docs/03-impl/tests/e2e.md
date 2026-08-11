@@ -8,6 +8,12 @@ source:
   - docs/01-requirements/usecases.md
 summary: E2Eシナリオ E2E-01〜E2E-03 と E2E-06 ⇄ テスト対応
 keywords: [テスト, E2E]
+verified:
+  at: 2026-08-11
+  version: 1.9.0
+  against:
+    - {doc: docs/02-design/system.md, version: 2.11.0}
+    - {doc: docs/01-requirements/usecases.md, version: 1.5.0}
 ---
 
 # E2E テスト対応
@@ -383,7 +389,24 @@ keywords: [テスト, E2E]
       `docs/issues/099`)。**イメージは元に戻してから**((a)(b) の後片付けを先に済ませる)、
       `docker ps` の問い合わせだけが失敗する状態を作る。**満たすべき条件は
       「共有ボリュームの検査は成功する」かつ「管理ラベル付きコンテナの列挙が非0で終わる」の2つ**である
-      (前者が失敗すると (a) の経路で止まり、(c) を確かめられない)。
+      (前者が失敗すると (a) の経路で止まり、(c) を確かめられない。**daemon を止める方法は使えない** —
+      両方が失敗する)。**`docker` を包む実行ファイルを PATH の先頭に置いて、その1つの問い合わせだけを
+      失敗させる**:
+      ```
+      mkdir -p /tmp/e2e-shim
+      cat > /tmp/e2e-shim/docker <<'SH'
+      #!/bin/sh
+      # 管理ラベル付きコンテナの列挙だけを失敗させ、それ以外は本物へ渡す
+      for a in "$@"; do
+        case "$a" in label=claude-dev.managed=1) exit 1 ;; esac
+      done
+      exec /usr/bin/docker "$@"
+      SH
+      chmod +x /tmp/e2e-shim/docker
+      PATH=/tmp/e2e-shim:$PATH claude-dev logout --yes
+      ```
+      (`/usr/bin/docker` は `command -v docker` で確かめた実体のパスに置き換える。
+      同じ状態を作れる別の手段でもよい。)
       この状態で `claude-dev logout --yes` を実行する。
       **期待する結果 (c)**: **「削除対象がありません」を表示して 0 で終わらない。**
       集合を引けなかった旨が表示され、**引けなかったことが「消えなかった資源」として列挙されて

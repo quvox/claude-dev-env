@@ -8,6 +8,12 @@ source:
   - docs/02-design/system.md
 summary: MOD-cli-logout(認証情報の破棄)の受入基準⇄テスト対応
 keywords: [テスト]
+verified:
+  at: 2026-08-11
+  version: 1.7.0
+  against:
+    - {doc: docs/01-requirements/functional.md, version: 1.15.0}
+    - {doc: docs/02-design/system.md, version: 2.11.0}
 ---
 
 # MOD-cli-logout のテスト対応
