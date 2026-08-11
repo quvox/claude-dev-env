@@ -1,12 +1,12 @@
 ---
 id: MODULE-cli-start
-updated: 2026-08-10
+updated: 2026-08-11
 module: MOD-cli-start
 kind: tool
 sync: sync
 impl: claude-dev::main#start, claude-dev-mac::main#start
 callers: なし
-callees: MODULE-entrypoint-claude, MODULE-cli-common-container-exists, MODULE-cli-common-container-name, MODULE-cli-common-dev-agent-path, MODULE-cli-common-ensure-infrastructure, MODULE-cli-common-get-novnc-url, MODULE-cli-common-image-exists, MODULE-cli-common-is-running, MODULE-cli-common-lock, MODULE-cli-common-require-setup, MODULE-cli-common-resolve-container-user, MODULE-cli-common-select-ssh-keys, MODULE-cli-common-write-project-ssh-keys
+callees: MODULE-entrypoint-claude, MODULE-cli-common-compose-project-name, MODULE-cli-common-container-exists, MODULE-cli-common-container-name, MODULE-cli-common-container-project-dir, MODULE-cli-common-dev-agent-path, MODULE-cli-common-ensure-infrastructure, MODULE-cli-common-get-novnc-url, MODULE-cli-common-image-exists, MODULE-cli-common-is-running, MODULE-cli-common-lock, MODULE-cli-common-require-setup, MODULE-cli-common-resolve-container-user, MODULE-cli-common-select-ssh-keys, MODULE-cli-common-write-project-ssh-keys
 contracts: CTR-cli-container
 design: DSN-mod-01, DSN-mod-02, DSN-arch-01, DSN-auth-01, DSN-dist-02, DSN-env-01, DSN-env-02, DSN-env-03
 requirements: FR-env-01, FR-env-02, FR-env-03, FR-env-04, FR-env-05, FR-env-06, FR-env-07, FR-env-08, FR-env-11, FR-env-12
@@ -243,6 +243,25 @@ docker-proxy 経由の Docker アクセス(FR-env-07)、VM モード(FR-env-08)�
 - 何を渡すか: 書き出し先パス(鍵は0件)。 / 何を受け取るか: なし。
 - **失敗したときどうなるか**: `set -e` で非0終了し、起動しない。
 
+### MODULE-cli-common-compose-project-name
+
+- 何のために呼ぶか: `COMPOSE_PROJECT_NAME` に渡す compose 一意化名を作るため(手順13)。
+  **`stop` が同じ関数で再計算する**ので、両者が同じ値を得ることがこの呼び出しの目的である。
+- 何を渡すか: コンテナ名 `NAME` と起動ディレクトリの絶対パス `PROJECT_DIR`。
+- 何を受け取るか: `<正規化名>-<絶対パスの SHA-256 先頭6桁>` の文字列。
+- **失敗したときどうなるか**: ハッシュコマンドが無い環境では空のハッシュが返り、一意化が効かない。
+  **手順1 の前提コマンド検査は `docker` / `jq`(macOS は `socat`)しか見ていない**ので、
+  事前に止まる経路は無い(`MODULE-cli-common-compose-project-name` の「既知の制限」)。
+
+### MODULE-cli-common-container-project-dir
+
+- 何のために呼ぶか: 同名コンテナとの衝突時に、**そのコンテナがどのホスト側ディレクトリで
+  起動されたか**を推測ではなく事実として表示するため(手順15。`FR-env-01` 受入基準12)。
+- 何を渡すか: コンテナ名。
+- 何を受け取るか: 起動時の絶対パス、または空文字列。
+- **失敗したときどうなるか**: 空文字列が返り、**別ディレクトリの同名プロジェクトである可能性**を
+  示す従来の文面に切り替わる。起動の成否は変わらない。
+
 ### MODULE-cli-common-dev-agent-path
 
 - 何のために呼ぶか: macOS で専用 agent ソケットと socat ブリッジの PID / ポートの位置を決めるため。
@@ -253,8 +272,8 @@ docker-proxy 経由の Docker アクセス(FR-env-07)、VM モード(FR-env-08)�
 
 | 種別 | 内容 |
 |---|---|
-| 戻り値 | 0(tmux 待ちタイムアウトでも 0)。前提不足・KVM 不在・リトライ上限超過・**同名コンテナとの衝突**・**ロックを取得できない**場合は 1 |
-| 永続化 | コンテナ `<name>`(**管理ラベル `claude-dev.managed=1` / `claude-dev.role=claude` / `claude-dev.project-dir=<起動ディレクトリの絶対パス>` 付き**)。`${PROJECT_DIR}/.claude/`(認証・`host-hooks.json`・`host-local-bin/`)、`${PROJECT_DIR}/.codex/auth.json`、`${PROJECT_DIR}/.gitignore` への追記、`${PROJECT_DIR}/.claude-dev.yaml`。docker volume `claude-dev-auth` / `claude-dev-history` / `claude-dev-config` / `claude-dev-chrome-<name>` / (VM 時)`claude-dev-vm-<name>`。**ロックのシンボリックリンク `${HOME}/.claude-dev/locks/proj-<name>.lock` と `shared.lock` を作成・削除する**。macOS では `~/.claude-dev/agents/<name>.{sock,pid,bridge.pid,bridge.port}`。**docker-proxy にはラベルを付けない**。**さらに entrypoint がプロジェクト配下へ書く**: `/workspace/.codex/config.toml`(既定鍵の補完)・`/workspace/CLAUDE.md`(マーカー範囲の再生成)・VNC 時の `/workspace/.mcp.json` と `/workspace/.claude/.claude.json`(いずれも `MODULE-entrypoint-claude` の副作用。**`start` を実行すると必ず起きる**) |
+| 戻り値 | 0(tmux 待ちタイムアウトでも 0)。前提不足・KVM 不在・リトライ上限超過・**同名コンテナとの衝突**・**ロックを取得できない**場合は 1。**130**: 手順4 の `acquire_lock` を**呼んだ後**に `INT` / `TERM` を受けた。`trap '_release_all_locks; exit 130' INT TERM` は**取得を試みる前**に張られる(`claude-dev:452` / `claude-dev-mac:517`)ので、**取得に失敗して 1 で終わる経路も、終わるまでは 130 の区間**である |
+| 永続化 | コンテナ `<name>`(**管理ラベル `claude-dev.managed=1` / `claude-dev.role=claude` / `claude-dev.project-dir=<起動ディレクトリの絶対パス>` 付き**)。`${PROJECT_DIR}/.claude/`(認証・`host-hooks.json`・`host-local-bin/`)、`${PROJECT_DIR}/.codex/auth.json`、`${PROJECT_DIR}/.gitignore` への追記、`${PROJECT_DIR}/.claude-dev.yaml`。docker volume `claude-dev-auth` / `claude-dev-history` / `claude-dev-config` / `claude-dev-chrome-<name>` / (VM 時)`claude-dev-vm-<name>`。**ロックのシンボリックリンク `${HOME}/.claude-dev/locks/proj-<name>.lock` と `shared.lock` を作成・削除する**。macOS では `~/.claude-dev/agents/<name>.{sock,pid,bridge.pid,bridge.port}`。**docker-proxy にはラベルを付けない**。**さらに entrypoint がプロジェクト配下へ書く**: `/workspace/.codex/config.toml`(既定鍵の補完)・`/workspace/CLAUDE.md`(マーカー範囲の再生成)・VNC 時の `/workspace/.mcp.json` と `/workspace/.claude/.claude.json`(いずれも `MODULE-entrypoint-claude` の副作用。**コンテナを新規に作る経路でだけ起きる** — 既に稼働中なら再接続して `exit 0` し、`docker run` に到達しないので entrypoint は再実行されない。`claude-dev:1198`-`:1216` / `:1399`) |
 | 発火するイベント | なし |
 | ログ | 標準出力へイメージ名・バージョン・noVNC URL・進捗。失敗とロックの取得失敗・残骸の引き継ぎは stderr |
 
@@ -327,7 +346,7 @@ docker-proxy 経由の Docker アクセス(FR-env-07)、VM モード(FR-env-08)�
 |---|---|---|
 | 1 | `--security-opt` を付けない(Docker 既定の confinement を維持する)。この下では codex の bubblewrap サンドボックスが動かないが、対処はコンテナ側を緩めるのではなく codex 側の無効化で行う | D0-sec-01 |
 | 2 | 認証は symlink ではなくコピーで渡し、書き戻しは entrypoint のバックグラウンド同期に任せる | D0-auth-02 |
-| 3 | `COMPOSE_PROJECT_NAME` を `-e` で渡す(全プロジェクトが `/workspace` にマウントされ compose 既定名 `workspace` が衝突するのを防ぐ。`-e` なら対話・非対話シェルと `docker exec` の全てで有効)。**値に起動ディレクトリの絶対パスのハッシュ短縮値を足して一意化する**(`DSN-env-03`)。ハッシュの計算は Linux が `sha256sum`、macOS が `shasum -a 256` で同じ値になることを確かめる。**一意化名を作る関数を1つに集約し、`stop` と共有する**(その関数は正規化の前に小文字化も行う。`MODULE-cli-stop` 判断13) | D0-scope-02 / `DSN-env-03` / D0-scope-03 |
+| 3 | `COMPOSE_PROJECT_NAME` を `-e` で渡す(全プロジェクトが `/workspace` にマウントされ compose 既定名 `workspace` が衝突するのを防ぐ。`-e` なら対話・非対話シェルと `docker exec` の全てで有効)。**値に起動ディレクトリの絶対パスのハッシュ短縮値を足して一意化する**(`DSN-env-03`)。ハッシュの計算は Linux が `sha256sum`、macOS が `shasum -a 256` で同じ値になることを確かめる。**一意化名を作る関数は `MODULE-cli-common-compose-project-name` として機能に昇格させ、`stop` と共有する**(小文字化・正規化・ハッシュ短縮の規則はその機能が持つ) | D0-scope-02 / `DSN-env-03` / D0-scope-03 |
 | 4 | ホストの `~/.ssh/config` はそのまま渡さず、`IdentityFile` / `IdentitiesOnly` / `IdentityAgent` を除去した一時コピーを RO マウントする | D0-sec-02 |
 | 5 | **後片付けの対象を絞る手段として管理ラベルを導入する**(`D0-env-08` の決定に従う)。付けるのは **Claude コンテナだけ**で、docker-proxy と `fwd-*` には付けない(固定名・固定接頭辞で識別できるため)。**この判断は 2026-08-04 より前の「ラベルを導入しない」という判断を撤回したものである**(当時は `FR-env-01` 受入基準12・13 を満たすのにラベルが要らなかったが、`docs/issues/024` / `029` / `045` を閉じるには所有権の印が要る) | D0-env-10 |
 | 6 | 手順8(停止中の残骸の削除)の稼働中判定は、ロックを入れても**残す**。ロックはホスト CLI のプロセス間だけで有効で、利用者が直接 `docker run` / `docker start` する経路は防げないため、二重の防護として維持する | D0-scope-02 |
@@ -335,7 +354,7 @@ docker-proxy 経由の Docker アクセス(FR-env-07)、VM モード(FR-env-08)�
 | 8 | 名前衝突時のメッセージを**対象が稼働中か停止中かで分ける**。稼働中の場合は、管理ラベル `claude-dev.project-dir` があれば**推測ではなく事実**(どのディレクトリで起動されたか)を示す。ラベルが無い既存コンテナには従来どおり可能性として示す | D0-scope-02 / D0-env-10(表示内容の要件は `FR-env-01` 受入基準12 と `02-design/logging.md` が定める) |
 | 9 | **共有資源単位のロックを「認証コピーの開始からコンテナ作成の確定まで」保持する**(手順9〜15。**手順15 の再試行ループを含む** — 途中で離すと次の試行で作られるコンテナが保護の外に出る)。認証コピーの直後に離すと、(a) `logout` の完走直後に作られたコンテナの同期ループが認証を書き戻して **`logout` が静かに巻き戻る**、(b) 手順13 の `ensure_docker_proxy_container` が `stop` の遊休判定と競合する。守るべきものは「共有ボリュームの内容」だけでなく**「それを読んで作られたコンテナ」**まで含む。**`start` の全区間で保持はしない**(手順1〜8 と手順16 以降を含めると別プロジェクトの `start` が互いに待ち `NFR-scale-01` を損なう) | D0-env-09 / 契約「排他(ロックキー)」 |
 | 10 | **プロジェクト単位のロックは `tmux attach` の前に解放する**(手順17)。アタッチ中は利用者が端末を占有しており、その間 `stop` が「ロックが取れない」で失敗すると、利用者は自分のセッションを止められなくなる | D0-env-09(制約「ロック待ちで固まらない」の趣旨) |
-| 11 | ロックの取得を**コンテナ名が確定した直後・最初の副作用より前**(手順4)に置く。キーがコンテナ名なので名前の確定より前には取れず、`.claude-dev.yaml` の生成(手順5)が最初の副作用であるため、その間が唯一の位置である。**`--vm` 指定かつ `/dev/kvm` 不在の失敗経路(手順6)はロックを取った直後に終わるが、`trap` が即座に解放する**。**macOS 版の `--kvm` / `--vm` 早期拒否も同じ扱いになる**: macOS 版はフラグ解析が `ensure_project_config` より後にあるため、ロックは早期拒否より前に取られる。副作用は何も起きておらず `trap` が解放するので害は無く、むしろロックが取れないときに `require_setup` のイメージビルドも走らない分だけ受入基準16 に対して安全側である | D0-env-09 |
+| 11 | ロックの取得を**コンテナ名が確定した直後・最初の副作用より前**(手順4)に置く。キーがコンテナ名なので名前の確定より前には取れず、`.claude-dev.yaml` の生成(手順5)が最初の副作用であるため、その間が唯一の位置である。**`--vm` 指定かつ `/dev/kvm` 不在の失敗経路(手順6)はロックを取った直後に終わるが、`trap` が即座に解放する**。**macOS 版の `--kvm` / `--vm` 早期拒否はこれと異なる**: macOS 版はフラグ解析が `ensure_project_config` より後にあるため、拒否に至るまでに `acquire_lock`(`claude-dev-mac:1236`)→ `ensure_project_config`(`:1237`)→ 拒否(`:1245`-`:1250`)の順で進み、**`.claude-dev.yaml` の生成という副作用が既に起きていることがある**(Linux 版と違い「副作用ゼロで終わる」経路ではない)。ロック自体は `trap` が解放する。ロックが取れないときに `require_setup` のイメージビルドも走らない点は両 OS で共通で、受入基準16 に対して安全側である | D0-env-09 |
 
 ## 既知の制限
 
@@ -346,4 +365,4 @@ docker-proxy 経由の Docker アクセス(FR-env-07)、VM モード(FR-env-08)�
 | **ロックはホスト CLI のプロセス間でしか有効でない** | 利用者が直接 `docker run` / `docker start` する経路は防げない。そのため手順8 の「稼働中でないことの再確認」を二重の防護として残している | なし(契約 `CTR-cli-container`「ロックが守れない範囲」が明示) |
 | **プロジェクト単位のロックを `tmux attach` の前に解放する** | アタッチ中は排他が効かないので、別プロセスの `stop` が走りうる | なし(閾値の外: アタッチ中も保持すると利用者が自分のセッションを止められなくなる。`MODULE-cli-start` 判断10) |
 | **共有資源単位のロックは `start` の全区間では保持しない** | 手順1〜8 と手順16 以降は保護されない | なし(閾値の外: 全区間で保持すると別プロジェクトの `start` が互いに待ち `NFR-scale-01`(5プロジェクト同時起動)を損なう。判断9) |
-| **`MODULE-cli-common-lock` を含めた呼び出し先が 13 件になった** | `relations-query.py --health` の「呼び出し先が多い機能(> 7)」に載る | なし(閾値の外: 分割は 02 の分割定義の見直し事項である) |
+| **呼び出し先が 15 件になった**(`docs/histories/2026-08-11-promote-shared-helpers.md` の昇格で 13 → 15) | `relations-query.py --health` の「呼び出し先が多い機能(> 7)」に載る | なし(閾値の外: 分割は 02 の分割定義の見直し事項である。共有基盤側の機能数は `DSN-mod-07` が許容している) |

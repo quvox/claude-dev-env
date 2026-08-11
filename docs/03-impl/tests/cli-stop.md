@@ -1,21 +1,21 @@
 ---
 id: cli-stop
 scope: MOD-cli-stop
-version: 1.6.0
-updated: 2026-08-07
+version: 1.6.1
+updated: 2026-08-11
 source:
   - docs/01-requirements/functional.md
   - docs/02-design/system.md
 summary: MOD-cli-stop(コンテナの停止)の受入基準⇄テスト対応
 keywords: [テスト]
 verified:
-  at: 2026-08-08
-  version: 1.6.0
+  at: 2026-08-11
+  version: 1.6.1
   against:
     - doc: docs/01-requirements/functional.md
-      version: 1.12.0
+      version: 1.13.1
     - doc: docs/02-design/system.md
-      version: 2.8.0
+      version: 2.9.1
 ---
 # MOD-cli-stop のテスト対応
 
@@ -33,10 +33,10 @@ verified:
 | FR-env-01-19 | 境界値 | E2E | E2E-01(実機確認手順) | 未検証(テスト未実装) |
 | FR-env-01-20 | 境界値 | E2E | E2E-01(実機確認手順) | 未検証(テスト未実装) |
 | FR-env-01-21 | 境界値 | E2E | E2E-01(実機確認手順 手順8-11) | 未検証(テスト未実装) |
-| FR-env-01-22 | 正常系 | E2E | E2E-01(実機確認手順 手順8-14-3) | 未検証(テスト未実装) |
+| FR-env-01-22 | 正常系 | E2E | E2E-01(実機確認手順 手順8-14-3 (a)(c)) | 未検証(テスト未実装) |
 | FR-env-01-23 | 境界値 | E2E | E2E-01(実機確認手順 手順8-14-6) | 未検証(テスト未実装) |
 | FR-env-01-24 | 異常系 | E2E | E2E-01(実機確認手順 手順8-14-7) | 未検証(テスト未実装) |
-| FR-env-01-26 | 正常系 | E2E | E2E-01(実機確認手順 手順8-14-3) | 未検証(テスト未実装) |
+| FR-env-01-26 | 正常系 | E2E | E2E-01(実機確認手順 手順8-14-3 (b)) | 未検証(テスト未実装) |
 | FR-env-01-27 | 境界値 | E2E | E2E-01(実機確認手順 手順8-14-4) | 未検証(テスト未実装) |
 
 ## 契約の結合テスト
