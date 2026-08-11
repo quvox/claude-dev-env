@@ -1,6 +1,6 @@
 ---
 id: task-fix-logout-records-and-marker
-phase: ドキュメント
+phase: 実装
 lane: critical
 origin_layer: 01
 external_behavior: true
@@ -249,6 +249,14 @@ summary: logout の削除結果の記録(消えていない資源を削除済み
 - 2026-08-11 staged callgraph(`new-features/03-impl/callgraphs/` と `feature-graph.md`)を生成した。
   進行中タスクがある間は SSOT の代わりにこれが合成ビューの根拠になる(`change-set.md` §1)。
   **中身は変更前のコードの鏡**であり、`/implement` C-1 が実装後に再生成する。
+
+- 2026-08-11 フェーズ3 開始。**ゲート3条件を通過**: (1) closure 全 SSOT(7件)の `verified.version` が
+  自身の MAJOR.MINOR と一致。(2) 未決点7件すべて帰着済み(回答 / 委任決定)。(3) `environments.md` の
+  lint = `go vet ./...` / 単体 = `cd docker-proxy && go test ./...` が「未定」でないことを確認し、
+  着手前の回帰確認として両方を実行して exit 0
+  (`ok github.com/quvox/claude-dev-env/docker-proxy`)。フェーズ2 の草案タスクリストをそのまま使う。
+  **タスク2 には /doc-check で足りた「手順10 の終了ステータス条件」も含める**(同じ 20 行の中で、
+  位置ベースの判定と同時に入れる)。
 
 ## 申し送り事項
 
