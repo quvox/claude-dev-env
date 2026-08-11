@@ -1,19 +1,13 @@
 ---
 id: cli-container
-version: 1.7.0
-updated: 2026-08-07
+version: 1.8.0
+updated: 2026-08-11
 source:
   - docs/02-design/contracts/cli-container.md
 kind: other
 impl: claude-dev::main#start, claude-dev-mac::main#start
 summary: ホスト CLI がコンテナへ渡す環境変数・マウント・起動オプションの取り決め(実装側)
 keywords: [契約, CTR, 実装]
-verified:
-  at: 2026-08-08
-  version: 1.7.0
-  against:
-    - doc: docs/02-design/contracts/cli-container.md
-      version: 1.7.0
 ---
 
 # CTR-cli-container ホスト CLI → コンテナ/entrypoint(実装)
@@ -27,37 +21,37 @@ verified:
 
 | 項目 | 実際の値 | 定義箇所 |
 |---|---|---|
-| 起動コマンド | `docker run -d --name <NAME> --hostname <NAME> --network claude-dev-net --cap-add NET_ADMIN --cap-add NET_RAW --restart unless-stopped -t` | `claude-dev:1399`〜`:1427` |
-| `--security-opt` | **付けていない**(Docker 既定の seccomp と `docker-default` AppArmor が有効なまま) | `claude-dev:1399`〜(不在であることが実装) |
-| **管理ラベル** | Claude コンテナにだけ `--label claude-dev.managed=1 --label claude-dev.role=claude --label "claude-dev.project-dir=${PROJECT_DIR}"` の3つを付ける。**他のオプションと違い変数にまとめず、引用付きの引数として直接渡す**(`project-dir` の値は利用者のパスでスペースを含みうるため)。**docker-proxy と `fwd-*` には付けない**。**セッション由来の資源には docker-proxy が `claude-dev.role=spawned` と `claude-dev.owner-project-dir` の2つを付ける**(付与側は `CTR-docker-api` が持つ) | `claude-dev:1406`〜`:1408`(付与), `claude-dev:728`〜`:735`(docker-proxy は付けない) |
-| **セッション由来の資源の削除対象を引く** | 共有関数 `spawned_resources <container|network> <ラベルフィルタ式>` で名前だけを取る。**`stop` は `claude-dev.owner-project-dir=<起動ディレクトリの絶対パス>`**(値は手順4 で読んだ `claude-dev.project-dir` と同じ)、**`reset` は `claude-dev.role=spawned`**(所有者を問わない)。削除はコンテナ → ネットワークの順。`stop` は失敗を握って続行し、`reset` は握らない | `claude-dev:586`(共有関数), `:1729`〜`:1745`(`stop`), `:2060`〜`:2078`(`reset`), `claude-dev-mac` の同一箇所 |
-| `DOCKER_HOST` | `tcp://claude-dev-docker-proxy:2375`。**ホストに Docker ソケットがあるときだけ**付与する(`[ -S ... ]`)。**探す場所は OS で違う**: Linux 版は `/var/run/docker.sock` だけを見る。macOS 版は `detect_docker_sock` が `/var/run/docker.sock` → `${HOME}/.docker/run/docker.sock`(Docker Desktop のユーザソケット)の順に見て、**どちらかがあれば付与する**。VM モードでは entrypoint がゲスト VM 側の値へ上書きする | `claude-dev:1305`〜`:1310`(Linux), `claude-dev-mac:310`〜`:316`(`detect_docker_sock`), `scripts/entrypoint-claude.sh:476`〜 |
-| `COMPOSE_PROJECT_NAME` | **`<正規化名>-<起動ディレクトリの絶対パスの SHA-256 先頭6桁>`**。正規化は `tr '[:upper:]' '[:lower:]'` → `sed 's/[^a-z0-9_-]/-/g'`、ハッシュは Linux が `sha256sum` / macOS が `shasum -a 256`(入力は `printf '%s'` で改行を付けない)。**`start` と `stop` が同じ関数 `compose_project_name` を通す**。**常に付与する** | `claude-dev:539`〜`:559`(関数), `:1318`(`start` の付与), `:1708`(`stop` の再計算) |
-| `CLAUDE_DEV_VM` | CLI は `--vm` / `--vm-fresh` のときだけ `1` を付与する。entrypoint は **`= "1"` の厳密一致**で判定する | `claude-dev:1372`〜`:1378`, `scripts/entrypoint-claude.sh:476` |
-| `VM_PORTS` / `VM_MEM` / `VM_SMP` / `VM_DISK` / `VM_SWAP` | VM モードで、かつホスト側の同名変数が**非空のときだけ**そのまま転送する(値の検証なし) | `claude-dev:1379`〜`:1382` |
+| 起動コマンド | `docker run -d --name <NAME> --hostname <NAME> --network claude-dev-net --cap-add NET_ADMIN --cap-add NET_RAW --restart unless-stopped -t` | `claude-dev:1457`〜`:1485` |
+| `--security-opt` | **付けていない**(Docker 既定の seccomp と `docker-default` AppArmor が有効なまま) | `claude-dev:1457`〜(不在であることが実装) |
+| **管理ラベル** | Claude コンテナにだけ `--label claude-dev.managed=1 --label claude-dev.role=claude --label "claude-dev.project-dir=${PROJECT_DIR}"` の3つを付ける。**他のオプションと違い変数にまとめず、引用付きの引数として直接渡す**(`project-dir` の値は利用者のパスでスペースを含みうるため)。**docker-proxy と `fwd-*` には付けない**。**セッション由来の資源には docker-proxy が `claude-dev.role=spawned` と `claude-dev.owner-project-dir` の2つを付ける**(付与側は `CTR-docker-api` が持つ) | `claude-dev:1464`〜`:1466`(付与), `claude-dev:728`〜`:735`(docker-proxy は付けない) |
+| **セッション由来の資源の削除対象を引く** | 共有関数 `spawned_resources <container|network> <ラベルフィルタ式>` で名前だけを取る。**`stop` は `claude-dev.owner-project-dir=<起動ディレクトリの絶対パス>`**(値は手順4 で読んだ `claude-dev.project-dir` と同じ)、**`reset` は `claude-dev.role=spawned`**(所有者を問わない)。削除はコンテナ → ネットワークの順。`stop` は失敗を握って続行し、`reset` は握らない。**`logout` も同じ共有関数を `container` + `claude-dev.role=spawned` で呼ぶが、削除には使わない** — 「管理ラベルを持たないコンテナ」の表示集合から除くためだけである(規則 D は `logout` に掛からない。引けなかったときは除外せずに表示し、混じっている可能性を出す) | `claude-dev:586`(共有関数の定義), `:1697`・`:1707`(`stop` の呼び出し), `:2035`・`:2040`(`reset` の呼び出し) / `claude-dev-mac:651`(定義), `:1706`・`:1716`(`stop`), `:2059`・`:2064`(`reset`) |
+| `DOCKER_HOST` | `tcp://claude-dev-docker-proxy:2375`。**ホストに Docker ソケットがあるときだけ**付与する(`[ -S ... ]`)。**探す場所は OS で違う**: Linux 版は `/var/run/docker.sock` だけを見る。macOS 版は `detect_docker_sock` が `/var/run/docker.sock` → `${HOME}/.docker/run/docker.sock`(Docker Desktop のユーザソケット)の順に見て、**どちらかがあれば付与する**。VM モードでは entrypoint がゲスト VM 側の値へ上書きする | `claude-dev:1363`〜`:1368`(Linux), `claude-dev-mac:310`〜`:316`(`detect_docker_sock`), `scripts/entrypoint-claude.sh:476`〜 |
+| `COMPOSE_PROJECT_NAME` | **`<正規化名>-<起動ディレクトリの絶対パスの SHA-256 先頭6桁>`**。正規化は `tr '[:upper:]' '[:lower:]'` → `sed 's/[^a-z0-9_-]/-/g'`、ハッシュは Linux が `sha256sum` / macOS が `shasum -a 256`(入力は `printf '%s'` で改行を付けない)。**`start` と `stop` が同じ関数 `compose_project_name` を通す**。**常に付与する** | `claude-dev:539`〜`:559`(関数), `:1376`(`start` の付与), `:1766`(`stop` の再計算) |
+| `CLAUDE_DEV_VM` | CLI は `--vm` / `--vm-fresh` のときだけ `1` を付与する。entrypoint は **`= "1"` の厳密一致**で判定する | `claude-dev:1430`〜`:1436`, `scripts/entrypoint-claude.sh:476` |
+| `VM_PORTS` / `VM_MEM` / `VM_SMP` / `VM_DISK` / `VM_SWAP` | VM モードで、かつホスト側の同名変数が**非空のときだけ**そのまま転送する(値の検証なし) | `claude-dev:1437`〜`:1440` |
 | `CLAUDE_DEV_VNC` | **イメージの `ENV`** で `1`(ブラウザ確認資産入りイメージのみ)。CLI は付与しない。entrypoint は `= "1"` の厳密一致で判定する | `.devcontainer/Dockerfile.claude:473`, `scripts/entrypoint-claude.sh:556`, `:613`, `:678` |
 | `CLAUDE_DEV_DOOD_PORTSYNC` | CLI は付与しない。entrypoint は **`!= "0"`(未設定を含む)** かつ VM モードでない かつ `DOCKER_HOST` が `docker-proxy` を含む かつ同期スクリプトが実行可能、の4条件が揃ったときだけ同期を起動する | `scripts/entrypoint-claude.sh:509`〜`:515` |
-| `CLAUDE_DEV_SSH_BRIDGE_PORT` | macOS のみ付与。entrypoint は**非空かつ `socat` があるとき**に `TCP:host.docker.internal:<値>` へのブリッジを起動し、`/tmp/ssh-agent.sock`(所有者 `$USERNAME`・`mode=600`)を用意する。**値の形式・範囲を検証しない**。ソケットの出現を **0.2 秒 × 最大 20 回(= 最大 4 秒)** 待ち、現れなくても起動を続ける | `claude-dev-mac:1393`(CLI の付与), `:274`(ブリッジ起動側が値を読む), `scripts/entrypoint-claude.sh:96`〜`:103` |
-| `SSH_AUTH_SOCK` | Linux は `-e SSH_AUTH_SOCK=/tmp/ssh-agent.sock` を付け、同じパスへ agent ソケットを読み取り専用でマウントする。`su -l` で失われるため、entrypoint が `/etc/zsh/zshrc` と `/etc/bash.bashrc` へ `export` を追記して全シェルで有効にする | `claude-dev:1324`〜`:1327`, `scripts/entrypoint-claude.sh:105`〜`:116` |
-| `NODE_OPTIONS` | `--max-old-space-size=4096`。常に付与する | `claude-dev:1423`(`claude-dev-mac` の同一箇所) |
+| `CLAUDE_DEV_SSH_BRIDGE_PORT` | macOS のみ付与。entrypoint は**非空かつ `socat` があるとき**に `TCP:host.docker.internal:<値>` へのブリッジを起動し、`/tmp/ssh-agent.sock`(所有者 `$USERNAME`・`mode=600`)を用意する。**値の形式・範囲を検証しない**。ソケットの出現を **0.2 秒 × 最大 20 回(= 最大 4 秒)** 待ち、現れなくても起動を続ける | `claude-dev-mac:1451`(CLI の付与), `:274`(ブリッジ起動側が値を読む), `scripts/entrypoint-claude.sh:96`〜`:103` |
+| `SSH_AUTH_SOCK` | Linux は `-e SSH_AUTH_SOCK=/tmp/ssh-agent.sock` を付け、同じパスへ agent ソケットを読み取り専用でマウントする。`su -l` で失われるため、entrypoint が `/etc/zsh/zshrc` と `/etc/bash.bashrc` へ `export` を追記して全シェルで有効にする | `claude-dev:1382`〜`:1385`, `scripts/entrypoint-claude.sh:105`〜`:116` |
+| `NODE_OPTIONS` | `--max-old-space-size=4096`。常に付与する | `claude-dev:1481`(`claude-dev-mac` の同一箇所) |
 | `container` | `docker`。**起動時ではなくイメージの `ENV` で付与** | `.devcontainer/Dockerfile.claude:307` |
 | コンテナ内ホーム `CHOME` | `/home/<CUSER>`。`CUSER` は**実行するイメージに焼き込まれた `CONTAINER_USER`** を優先し、取れなければホストの `whoami`。稼働中コンテナへ `exec` するときは**そのコンテナ自身**の `CONTAINER_USER` から解決し直す。以下のマウント先はすべてこの `CHOME` を基準にする | `claude-dev:46`〜`:48`(既定), `:54`〜`:59`(`resolve_container_user`) |
-| マウント(常に。**マウント先の絶対パス**) | `<カレントディレクトリ>` → `/workspace`(rw)/ `claude-dev-history` → `${CHOME}/.command_history`(rw)/ `claude-dev-auth` → `${CHOME}/.claude-shared`(rw)/ `claude-dev-config` → `${CHOME}/.config-shared`(rw)/ キット同梱の `scripts/tmux.conf` → `${CHOME}/.tmux.conf`(ro)/ キット同梱の `CLAUDE.md` → `${CHOME}/CLAUDE.md`(ro) | `claude-dev:1409`〜`:1414` |
-| マウント(条件付き。**マウント先の絶対パス**) | `~/.gitconfig` → `${CHOME}/.gitconfig`(ro。**ファイルとして存在するとき**)/ `~/.config/gh` → `${CHOME}/.config/gh`(ro。**ディレクトリとして存在するとき**)/ agent ソケット → `/tmp/ssh-agent.sock`(ro。`${CHOME}` 配下ではない)/ `~/.ssh/known_hosts` → `${CHOME}/.ssh/known_hosts`(ro)/ 加工済み `~/.ssh/config` の一時コピー → `${CHOME}/.ssh/config`(ro)/ ブラウザ確認時のプロファイル用ボリューム `claude-dev-chrome-<NAME>` → `${CHOME}/.chrome-profile`/ VM モードの `claude-dev-vm-<NAME>` → `${CHOME}/.claude-dev-vm` | `claude-dev:1295`〜`:1304`, `:1326`, `:1330`, `:1336`〜`:1339`, `:1346`, `:1378`, `:1409`〜`:1419` |
-| `~/.ssh/config` の加工 | `sed -E '/^[[:space:]]*(IdentityFile\|IdentitiesOnly\|IdentityAgent)/d'` で3種の行を落とした一時コピーを作り、それを ro マウントする(**ホストの設定は変更しない**) | `claude-dev:1332`〜`:1341` |
-| 公開ポート | ブラウザ確認資産を使うときだけ `-p <空きポート>:6080`。空きポートは専用の探索関数が選ぶ | `claude-dev:1343`〜`:1347` |
-| デバイス | `--kvm` / `--vm` / `--vm-fresh` 指定時に `/dev/kvm` `/dev/vhost-net` `/dev/net/tun` のうち**実在するものだけ**を渡す。`/dev/kvm` が**無いとき**の扱いは指定の仕方で分かれる: **`--kvm` だけなら警告して続行**、**`--vm` または `--vm-fresh`(どちらも `USE_VM=1` にする)なら中止して終了コード 1**(TCG では実用にならないため)。`--vm` 系はデバイス判定より前、フラグ解析の直後に判定する | `claude-dev:1182`〜`:1190`(フラグ解析), `:1191`〜`:1195`(中止), `:1354`〜`:1369`(警告と付与) |
-| 起動の再試行 | `docker run` が失敗したときの後片付けは、**エラー文言が名前衝突(`Conflict.` / `already in use by container`)でなく、かつ対象コンテナが稼働中でない**ときだけ `docker rm -f` する。そのうえで、**ブラウザ確認資産あり かつ 20 回以内 かつ エラー文言がポート競合(`port is already allocated` / `address already in use` / `bind for … failed`)** のときだけ、別のポートを取り直して再試行する。**エラー文言が名前衝突のときは何も削除せず、再試行もせず**、同名のコンテナが稼働中である旨を stderr へ出して**終了コード 1**。**管理ラベル `claude-dev.project-dir` が読めた場合は、可能性ではなく「どのディレクトリで起動されたか」という事実を出す**。それ以外の失敗と上限超過もエラーを表示して**終了コード 1** | `claude-dev:1397`〜`:1467`(Linux), `claude-dev-mac` の同一箇所 |
-| 常駐セッションの待ち | `tmux has-session -t main` を 1 秒間隔で最大 **30 回**(VM モードは **420 回**)試す。時間内に上がらなければ状況を案内して**終了コード 0** で戻る(コンテナは残す) | `claude-dev:1471`〜`:1497` |
-| 認証の受け渡し | 一時コンテナで共有ボリューム(ro)から `${PROJECT_DIR}/.claude/`(`.credentials.json` / `.claude.json`)と `${PROJECT_DIR}/.codex/auth.json` へコピーし、ホストの UID/GID へ `chown` する。**無い鍵は黙って飛ばす**(未ログインでも起動できる)。**この区間は共有資源単位のロックの中にある**(取得は `:1240`、解放はコンテナ作成の確定後 `:1468`) | `claude-dev:1247`〜`:1260` |
+| マウント(常に。**マウント先の絶対パス**) | `<カレントディレクトリ>` → `/workspace`(rw)/ `claude-dev-history` → `${CHOME}/.command_history`(rw)/ `claude-dev-auth` → `${CHOME}/.claude-shared`(rw)/ `claude-dev-config` → `${CHOME}/.config-shared`(rw)/ キット同梱の `scripts/tmux.conf` → `${CHOME}/.tmux.conf`(ro)/ キット同梱の `CLAUDE.md` → `${CHOME}/CLAUDE.md`(ro) | `claude-dev:1467`〜`:1472` |
+| マウント(条件付き。**マウント先の絶対パス**) | `~/.gitconfig` → `${CHOME}/.gitconfig`(ro。**ファイルとして存在するとき**)/ `~/.config/gh` → `${CHOME}/.config/gh`(ro。**ディレクトリとして存在するとき**)/ agent ソケット → `/tmp/ssh-agent.sock`(ro。`${CHOME}` 配下ではない)/ `~/.ssh/known_hosts` → `${CHOME}/.ssh/known_hosts`(ro)/ 加工済み `~/.ssh/config` の一時コピー → `${CHOME}/.ssh/config`(ro)/ ブラウザ確認時のプロファイル用ボリューム `claude-dev-chrome-<NAME>` → `${CHOME}/.chrome-profile`/ VM モードの `claude-dev-vm-<NAME>` → `${CHOME}/.claude-dev-vm` | `claude-dev:1353`〜`:1362`, `:1384`, `:1388`, `:1394`〜`:1397`, `:1404`, `:1436`, `:1467`〜`:1477` |
+| `~/.ssh/config` の加工 | `sed -E '/^[[:space:]]*(IdentityFile\|IdentitiesOnly\|IdentityAgent)/d'` で3種の行を落とした一時コピーを作り、それを ro マウントする(**ホストの設定は変更しない**) | `claude-dev:1390`〜`:1399` |
+| 公開ポート | ブラウザ確認資産を使うときだけ `-p <空きポート>:6080`。空きポートは専用の探索関数が選ぶ | `claude-dev:1401`〜`:1405` |
+| デバイス | `--kvm` / `--vm` / `--vm-fresh` 指定時に `/dev/kvm` `/dev/vhost-net` `/dev/net/tun` のうち**実在するものだけ**を渡す。`/dev/kvm` が**無いとき**の扱いは指定の仕方で分かれる: **`--kvm` だけなら警告して続行**、**`--vm` または `--vm-fresh`(どちらも `USE_VM=1` にする)なら中止して終了コード 1**(TCG では実用にならないため)。`--vm` 系はデバイス判定より前、フラグ解析の直後に判定する | `claude-dev:1240`〜`:1248`(フラグ解析), `:1249`〜`:1253`(中止), `:1412`〜`:1427`(警告と付与) |
+| 起動の再試行 | `docker run` が失敗したときの後片付けは、**エラー文言が名前衝突(`Conflict.` / `already in use by container`)でなく、かつ対象コンテナが稼働中でない**ときだけ `docker rm -f` する。そのうえで、**ブラウザ確認資産あり かつ 20 回以内 かつ エラー文言がポート競合(`port is already allocated` / `address already in use` / `bind for … failed`)** のときだけ、別のポートを取り直して再試行する。**エラー文言が名前衝突のときは何も削除せず、再試行もせず**、同名のコンテナが稼働中である旨を stderr へ出して**終了コード 1**。**管理ラベル `claude-dev.project-dir` が読めた場合は、可能性ではなく「どのディレクトリで起動されたか」という事実を出す**。それ以外の失敗と上限超過もエラーを表示して**終了コード 1** | `claude-dev:1455`〜`:1525`(Linux), `claude-dev-mac` の同一箇所 |
+| 常駐セッションの待ち | `tmux has-session -t main` を 1 秒間隔で最大 **30 回**(VM モードは **420 回**)試す。時間内に上がらなければ状況を案内して**終了コード 0** で戻る(コンテナは残す) | `claude-dev:1529`〜`:1555` |
+| 認証の受け渡し | 一時コンテナで共有ボリューム(ro)から `${PROJECT_DIR}/.claude/`(`.credentials.json` / `.claude.json`)と `${PROJECT_DIR}/.codex/auth.json` へコピーし、ホストの UID/GID へ `chown` する。**無い鍵は黙って飛ばす**(未ログインでも起動できる)。**この区間は共有資源単位のロックの中にある**(取得は `:1298`、解放はコンテナ作成の確定後 `:1526`) | `claude-dev:1305`〜`:1318` |
 | 認証の書き戻し | コンテナ内で 30 秒間隔のバックグラウンドループ | `scripts/entrypoint-claude.sh:449` |
 | **排他ロックの実体** | `${HOME}/.claude-dev/locks/` 配下の**シンボリックリンク**。向き先の文字列 `<PID> <操作名>` が保持者の記録を兼ねる(`ln -s` は同名パスがあると失敗するので、生成と所有者の記録が1回の原子的操作で成立する)。**ファイル名は種別で名前空間を分ける**: プロジェクト単位 `proj-<キー>.lock` / 共有資源単位 `shared.lock`(分けないとプロジェクト名が `shared` のとき2つのキーが同じファイルを指す)。ディレクトリは `mkdir -p` + `chmod 700` | `claude-dev:388`(置き場所), `:396`〜`:404`(パス), `:407`〜`:409`(生成), `:434`〜`:510`(取得), `:514`〜`:532`(解放) |
-| **ロックを取る操作と区間** | `start`(プロジェクト単位 = 全区間 `:1168`〜`:1502` / 共有資源単位 = 認証コピー〜コンテナ作成の確定 `:1240`〜`:1468`)、`stop`(プロジェクト単位 = 全区間 `:1665`〜`:1799` / 共有資源単位 = 遊休判定〜proxy 削除 `:1793`〜`:1795`)、`logout`(`:960`)、`reset`(`:2034`)、`login`(`:826`)、`login-codex`(`:902`)。**取得順はプロジェクト単位 → 共有資源単位で固定**。**待たない** | `claude-dev` の各分岐 |
+| **ロックを取る操作と区間** | `start`(プロジェクト単位 = 全区間 `:1226`〜`:1560` / 共有資源単位 = 認証コピー〜コンテナ作成の確定 `:1298`〜`:1526`)、`stop`(プロジェクト単位 = 全区間 `:1723`〜`:1857` / 共有資源単位 = 遊休判定〜proxy 削除 `:1851`〜`:1853`)、`logout`(`:960`)、`reset`(`:2092`)、`login`(`:826`)、`login-codex`(`:902`)。**取得順はプロジェクト単位 → 共有資源単位で固定**。**待たない** | `claude-dev` の各分岐 |
 | **ロック残骸の回収** | 向き先の PID を `kill -0` で見て、存在しなければ `mv` で引き取る。**引き取った中身を `readlink` で検証し、観測した残骸と違ってその PID が生きているなら `ln -s` で元に戻して取得失敗にする**(`mv` は「そのパスの rename に成功するのは1プロセスだけ」を保証するだけで、中身が観測時と同じであることは保証しないため)。**時間による判定は一切しない** | `claude-dev:472`〜`:509` |
 | **ロックの解放** | `trap '_release_all_locks' EXIT` と `trap '_release_all_locks; exit 130' INT TERM`。**取得より前に仕掛ける**。**向き先の PID が自分と一致するときだけ**削除し、明示解放したパスは trap 用の配列から外す | `claude-dev:424`〜`:430`(一括解放), `:451`〜`:452`(仕掛け), `:514`〜`:527`(所有者確認) |
 | **遊休判定** | `docker network inspect claude-dev-net` の接続コンテナと `docker ps` の稼働集合の**積**から、固定名 `claude-dev-docker-proxy` と接頭辞 `fwd-` を除いた集合。**空のときだけ** docker-proxy(と `reset` では `claude-dev-net` も)を削除する。**`--filter ancestor` も管理ラベルも使わない**。問い合わせに失敗したら非0を返し、呼び出し元は「遊休でない」と判定する | `claude-dev:600`〜`:612`(集合), `:614`〜`:630`(`stop` の削除) |
 | **破壊的操作の削除結果の記録** | 削除予定・削除済み・削除失敗の3つの配列で1件ずつ記録する。**削除コマンドは `( trap '' INT TERM; ... )` のサブシェルで起動する**(非対話シェルでは子プロセスがシェルと同じプロセスグループに入り、端末の `Ctrl-C` が `docker` にも直接届くため。`SIG_IGN` は `exec` した子へ継承される) | `claude-dev:635`〜`:653`(記録), `:661`〜`:669`(サブシェル) |
-| **共有ボリュームの消去の成否判定** | 一時コンテナで `rm -rf /auth/* /auth/.*` した後、**印 `__CLAUDE_DEV_AUTH_LISTED__` を出してから** `/auth` を列挙する。**印が無ければ一時コンテナが起動できていない**ので失敗に数える。**`rm -rf` の終了コードは見ない** | `claude-dev:1076`〜`:1088` |
+| **共有ボリュームの中身の列挙(2箇所とも印を使う)** | `logout` は `/auth` の中身を2回列挙し、**どちらも列挙の直前に印 `__CLAUDE_DEV_AUTH_LISTED__` を出す**。(a) **手順6 の0件判定**: **印が出ている・一時コンテナの終了ステータスが 0・印以外の行が無い**の3つがそろったときだけ「空」とする(消去を伴わないので終了ステータスが「列挙できたか」をそのまま表す)。**1つでも欠ければ「空」と判定せず**、削除対象0件の経路に入らずに確認へ進む。(b) **手順10 の消去後の判定**: 印が無ければ一時コンテナが起動できていないので失敗に数える。**`rm -rf` の終了コードはどちらでも見ない**(`.` と `..` に当たって非0を返しうるため「消えたか」を表さない)。**列挙の終了ステータスは手順6 だけが見る**(手順6 の一時コンテナは列挙しか行わないので、終了ステータスが「列挙できたか」をそのまま表す。手順10 の一時コンテナは消去も行うため、その終了ステータスは列挙の成否を表さない)。**印を使う箇所を1つにしないのは、判定の対象が「消す前の中身」と「消した後の中身」で別だからである** | `claude-dev` の `logout` 分岐(手順6 の判定と手順10 の判定), `claude-dev-mac` の同一箇所 |
 | ファイアウォールの起動 | `/usr/local/bin/init-firewall.sh 2>/dev/null \|\| true` | `scripts/entrypoint-claude.sh:471` |
 
 **環境変数の判定はすべて厳密一致**だが、比較する値は変数ごとに違う: `CLAUDE_DEV_VM` と

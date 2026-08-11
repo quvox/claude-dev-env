@@ -16,6 +16,7 @@ requirements: FR-env-01, FR-env-03
 tests: なし(未実装。シェル実装のため自動テストランナーが無く実機確認で代替する)
 updated: 2026-08-11
 summary: セッション由来の資源を種別とラベルフィルタ式から名前で列挙する
+reflected: 2026-08-11
 ---
 
 # MODULE-cli-common-spawned-resources セッション由来の資源の列挙

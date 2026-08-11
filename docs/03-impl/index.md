@@ -1,18 +1,12 @@
 ---
 id: index
-version: 1.22.1
+version: 1.23.0
 updated: 2026-08-11
 source:
   - docs/02-design/system.md
   - docs/02-design/relations.md
 summary: 03-impl 層の目次。機能間連携仕様書群の代表として層全体の版と合格証を持つ
 keywords: [目次]
-verified:
-  at: 2026-08-11
-  version: 1.22.0
-  against:
-    - {doc: docs/02-design/system.md, version: 2.10.0}
-    - {doc: docs/02-design/relations.md, version: 1.9.0}
 ---
 
 # 03-impl 目次
@@ -34,9 +28,10 @@ verified:
 |---|---|---|---|
 | なし | — | — | — |
 
-**差分なし**(2026-08-11 の `task-promote-shared-helpers` 反映後に確認。`PLAN-*` と `MODULE-*` は 61 対 61 で、
-`呼び出し元` / `呼び出す先` / `契約` の食い違いは無い — `check-changeset.py` の CS9 と
-`callgraph-check.py` の CG3/CG4 で確認した)。
+**差分なし**(2026-08-11 の `task-fix-logout-zero-target-path` 反映後に再確認。`PLAN-*` と `MODULE-*` は
+61 対 61 で、`呼び出し元` / `呼び出す先` / `契約` の食い違いは無い — `check-changeset.py` の CS9 と
+`callgraph-check.py` の CG3/CG4 で確認した。同タスクが増やした辺
+`PLAN-cli-logout` → `PLAN-cli-common-spawned-resources` は 02・03 の両方に入っている)。
 
 **02(設計)との差分は 0 件である。** **`DSN-env-04`(セッション由来の資源の識別)は
 2026-08-07 に実装され、「設計済み・未実装」の行は1件も無い**(`MODULE-cli-stop` / `MODULE-cli-reset` /

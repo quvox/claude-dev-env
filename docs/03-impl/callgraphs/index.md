@@ -19,7 +19,7 @@ languages: 6
 | [infra](infra.md) | 2 | infra (CFN/SAM/OpenAPI/Terraform) | 0 | 0 | 0 | 0 | 0 | - |
 | [make](make.md) | 3 | make-regex | 16 | 21 | 16 | 0 | 39 | 正規表現のみ(レシピ本文は shell と同じ限界を持つ) |
 | [python](python.md) | 2 | python-ast (stdlib) | 0 | 0 | 0 | 0 | 0 | - |
-| [shell](shell.md) | 3 | shell-regex | 170 | 261 | 46 | 3 | 2407 | 正規表現のみ(shell は変数展開・eval で静的解決が原理的に不完全) |
+| [shell](shell.md) | 3 | shell-regex | 170 | 263 | 46 | 3 | 2423 | 正規表現のみ(shell は変数展開・eval で静的解決が原理的に不完全) |
 | [typescript](typescript.md) | 2 | tree-sitter-typescript | 0 | 0 | 0 | 0 | 0 | - |
 
 ## Tier の意味

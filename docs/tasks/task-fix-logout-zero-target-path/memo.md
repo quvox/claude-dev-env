@@ -149,14 +149,14 @@ summary: logout の削除対象0件の経路で、ラベル無しコンテナの
 - [x] 2. **確かめられなかったときは0件の経路に入らない**ようにし、その旨を表示して手順7 の確認へ落とす _要件:_ FR-env-03-19 _Boundary:_ 同上 _Depends:_ 1
 - [x] 3. **0件の経路の直前で、ラベル無しコンテナの名前・書き戻しの警告・問い合わせ失敗の旨を表示する**(手順11 と同じ出力ブロックを使う) _要件:_ FR-env-03-19 _Boundary:_ `claude-dev:999`〜`:1002` と `:1108`〜`:1117` _Depends:_ 1
 - [x] 4. **手順4 の `_unmanaged` から `claude-dev.role=spawned` を除外する**(`spawned_resources` を `reset` と同じ引数で呼び、`:2091` と同型の突き合わせを置く) _要件:_ FR-env-03-17 _Boundary:_ `claude-dev:972`〜`:983` / `claude-dev-mac:1040`〜`:1051` _Depends:_ - (P)
-- [~] 5. **E2E-01 手順8-5 (セッション由来の除外) / 8-8 の (e) / 8-18 を実機で流す**(macOS 側も。実行できない場合は未実施を記録する) **→ 2026-08-11: 実機 E2E は未実施(論点4 で人間の判断待ち)。隔離ハーネスで代替確認済み — 下の DoD 表と進捗メモを参照** _要件:_ FR-env-03-17・19 _Boundary:_ `docs/03-impl/tests/e2e.md` の手順 _Depends:_ 1,2,3,4
+- [x] 5. **E2E-01 手順8 の確認**: 隔離ハーネス(実機 Docker。資源名を `cdx-e2e-*` へ書き換えた `claude-dev` の複製)で S1〜S5 と手順11 の回帰を修正前後の差分として確認した。**実機の E2E-01 手順8 と macOS 版は流していない** — 2026-08-11 に人間が `sheet.md` 論点4 = 案A で「隔離ハーネスの結果を根拠に進め、実機分は残務へ回す」と裁定したため、`docs/pendings.md` の残務へ1行起票して閉じた _要件:_ FR-env-03-17・19 _Boundary:_ `docs/03-impl/tests/e2e.md` の手順 _Depends:_ 1,2,3,4
 
 ## Definition of Done
 
 - [x] lint が通る: `go vet ./...`(`docker-proxy/` で実行。**本タスクは Go を触らないので回帰確認のみ**)
 - [x] 単体・結合テストが通る: `cd docker-proxy && go test ./...`(同上)
 - [x] 受入基準のテストが全て存在し通る(未検証行を残さない) — **`FR-env-03` は自動テストを持たない**(memo-1.md 調査メモ 13)。`03-impl/tests/cli-logout.md` の該当行が E2E-01 手順8-8 (d)(e) と 8-18 を指すことを確認した
-- [ ] 影響する E2E シナリオが通る: E2E-01(手順8-8 の (e) と、053 用の新設手順8-18)**→ 実機は未実施。隔離ハーネスで代替確認済み(進捗メモの表)。誰が流すかは sheet.md 論点4**
+- [x] 影響する E2E シナリオ: 隔離ハーネスで S1〜S5 + 手順11 の回帰を確認(進捗メモの表)。**実機 E2E-01 手順8(手順8-8 の (e) / 新設手順8-18)と macOS 版は未実施** — `sheet.md` 論点4 = 案A の人間の裁定により `docs/pendings.md` の残務へ回した
 - [x] `CG_OUT=$(python3 .claude/scripts/resolve-callgraph-out.py task-fix-logout-zero-target-path) && python3 .claude/scripts/build-callgraphs.py --out "$CG_OUT"` でコールグラフを再生成し、`callgraph-check.py --to-be task-fix-logout-zero-target-path` の重大度「高」が0
 - [x] `check-relations.py` が合格
 - [ ] `new-features/` の全変更指示を SSOT へ反映済み
@@ -274,6 +274,13 @@ summary: logout の削除対象0件の経路で、ラベル無しコンテナの
   `phase: 反映` へ進めて `/task-close` を実行する。**回答は反映・検証済み記録より前に適用済み**
   (`/implement` C-2 の順序)。回答が変えたのは「誰がいつ実機 E2E を流すか」だけで、
   変更指示・実装・受入基準には差分が生じない(論点1〜3 は1回目の既定承認と同じ帰結)。
+
+- 2026-08-11 **フェーズ4 §1 の事前検査**: 作業ツリー clean(`git status --porcelain` 空)/
+  `go vet ./...` 終了コード 0 / `go test ./...` = `ok  	github.com/quvox/claude-dev-env/docker-proxy	(cached)`。
+  **DoD 表の測定時点 `56a65ba` と現 HEAD `4d72137` が一致しないので §1-3 の短縮条件は使わなかった**が、
+  `git diff 56a65ba HEAD -- claude-dev claude-dev-mac docker-proxy scripts .devcontainer Makefile` が
+  **空**でコードは動いていない(差分は docs のみ)。実機 E2E は論点4 = 案A の裁定により残務へ回す。
+  タスクリスト5 と DoD の E2E 行は、その裁定の形(隔離ハーネスで確認 + 実機分は残務)で閉じた。
 
 ## 申し送り事項
 

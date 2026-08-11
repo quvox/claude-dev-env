@@ -1,8 +1,8 @@
 ---
 id: feature-graph
 features: 61
-edges: 87
-confirmed_edges: 87
+edges: 88
+confirmed_edges: 88
 candidate_edges: 0
 shared: 0
 unreached: 8
@@ -60,6 +60,7 @@ unlinked_pairs: 0
 | MODULE-cli-logout | MODULE-cli-common-lock | 確定 | `claude-dev-mac::main#logout` → `claude-dev-mac::acquire_lock`, `claude-dev-mac::main#logout` → `claude-dev-mac::release_lock`, `claude-dev::main#logout` → `claude-dev::acquire_lock` ほか 1 件 |
 | MODULE-cli-logout | MODULE-cli-common-net-other-running-containers | 確定 | `claude-dev-mac::main#logout` → `claude-dev-mac::net_other_running_containers`, `claude-dev::main#logout` → `claude-dev::net_other_running_containers` |
 | MODULE-cli-logout | MODULE-cli-common-require-setup | 確定 | `claude-dev-mac::main#logout` → `claude-dev-mac::require_setup`, `claude-dev::main#logout` → `claude-dev::require_setup` |
+| MODULE-cli-logout | MODULE-cli-common-spawned-resources | 確定 | `claude-dev-mac::main#logout` → `claude-dev-mac::spawned_resources`, `claude-dev::main#logout` → `claude-dev::spawned_resources` |
 | MODULE-cli-ports | MODULE-cli-common-container-name | 確定 | `claude-dev-mac::main#ports` → `claude-dev-mac::container_name`, `claude-dev::main#ports` → `claude-dev::container_name` |
 | MODULE-cli-ports | MODULE-cli-common-get-novnc-url | 確定 | `claude-dev-mac::main#ports` → `claude-dev-mac::get_novnc_url`, `claude-dev::main#ports` → `claude-dev::get_novnc_url` |
 | MODULE-cli-ports | MODULE-cli-common-is-running | 確定 | `claude-dev-mac::main#ports` → `claude-dev-mac::is_running`, `claude-dev::main#ports` → `claude-dev::is_running` |

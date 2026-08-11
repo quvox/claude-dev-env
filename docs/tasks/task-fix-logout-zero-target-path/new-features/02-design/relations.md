@@ -6,6 +6,7 @@ sections:
   - "## 一覧"
 deletes: []
 reason: '`PLAN-cli-logout` の「呼び出す先」へ `PLAN-cli-common-spawned-resources` を足す。`logout` が「管理ラベルを持たないコンテナ」の表示集合から `claude-dev.role=spawned` を除くために、`reset` と同じ引き方でこの共有基盤を呼ぶようになるため(`CTR-cli-container`「残したものをどう列挙するか」が4つの除外を `logout` と `reset` の双方に課している / `docs/issues/089`)。あわせて `PLAN-cli-common-spawned-resources` の「呼び出し元」へ `PLAN-cli-logout` を足す(この表は両方向を持つため片側だけでは CS9 と check E が落ちる)。**`logout` は規則 D を使わない**(セッション由来の資源を削除対象にしない — `D0-env-05` 項2)という設計は変えない: この一覧は**表示から除くため**にだけ引く。他の `PLAN-*` 行は変更しない'
+reflected: 2026-08-11
 ---
 
 ## 一覧
