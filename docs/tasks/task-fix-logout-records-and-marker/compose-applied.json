@@ -1,0 +1,16 @@
+{
+  "task": "task-fix-logout-records-and-marker",
+  "date": "2026-08-11",
+  "base_hash": "dc51875f675257e2549404fe8f2bd3c6c4f2b9748ccb93cac2008a74101866b6",
+  "result_hash": "6697d60711d73d6ff4b70aaa381ba00479a9b752b81adbec35647ade00d95166",
+  "targets": [
+    "docs/01-requirements/functional.md",
+    "docs/02-design/contracts/cli-container.md",
+    "docs/02-design/logging.md",
+    "docs/03-impl/contracts/cli-container.md",
+    "docs/03-impl/relations/MODULE-cli-logout.md",
+    "docs/03-impl/tests/cli-logout.md",
+    "docs/03-impl/tests/e2e.md",
+    "docs/03-impl/index.md"
+  ]
+}
