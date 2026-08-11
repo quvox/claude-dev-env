@@ -1030,10 +1030,16 @@ logout)
     # --- 削除対象の列挙（CTR-cli-container 規則A）---
     # Claude コンテナは管理ラベルを持つものだけ。イメージからの逆引きは使わない
     # （イメージ更新前に起動したコンテナを取りこぼし、他人の資源を巻き込むため）。
+    # **問い合わせの成否を捨てない**: 引けなかったことと0件は別である（FR-env-03 受入基準19）。
+    # `while ... done < <(cmd)` はプロセス置換の終了ステータスを取れないので、下の
+    # spawned_resources / net_other_running_containers と同じ `if _q=$(cmd)` の形で受ける。
     _targets=()
-    while IFS= read -r _c; do
-        [ -n "$_c" ] && _targets+=("$_c")
-    done < <(docker ps -a --filter "label=claude-dev.managed=1" --format '{{.Names}}' 2>/dev/null || true)
+    _targets_query_ok=1
+    if _q=$(docker ps -a --filter "label=claude-dev.managed=1" --format '{{.Names}}' 2>/dev/null); then
+        while IFS= read -r _c; do [ -n "$_c" ] && _targets+=("$_c"); done <<< "$_q"
+    else
+        _targets_query_ok=0
+    fi
 
     # セッション由来のコンテナ（claude-dev.role=spawned）。管理ラベルを持つので
     # 「管理ラベルを持たないコンテナ」ではなく、下の表示集合から除く
@@ -1120,13 +1126,15 @@ logout)
     fi
 
     # 削除対象が0件なら確認を求めない（消すものが無いのに確認を求めると誤解させる）。
-    # 共有ボリュームは「空であることを確認できた」ときだけ0件に数える（受入基準19）。
-    if [ ${#_targets[@]} -eq 0 ] && [ ${#_authfiles[@]} -eq 0 ] && [ "$_auth_empty" = "1" ]; then
+    # 共有ボリュームは「空であることを確認できた」ときだけ、コンテナは「引けた結果が0件だった」
+    # ときだけ0件に数える（受入基準19。引けなかったことは0件ではない）。
+    if [ ${#_targets[@]} -eq 0 ] && [ "$_targets_query_ok" = "1" ] \
+        && [ ${#_authfiles[@]} -eq 0 ] && [ "$_auth_empty" = "1" ]; then
         echo "ℹ️  削除対象がありません（管理ラベルを持つコンテナ・共有ボリュームの認証・"
         echo "   カレントディレクトリの認証コピーのいずれも見つかりませんでした）"
         # 何も消していないので削除結果の枠と成功の文言は出さない。ラベル無しコンテナの
-        # 列挙と書き戻しの警告だけを出す（FR-env-03 受入基準19。この経路こそ logout の
-        # 効果が戻る理由に到達する唯一の機会である）
+        # 列挙と書き戻しの警告だけを出す（FR-env-03 受入基準19。この経路は何も削除しないので
+        # 他に警告を出す機会が無い）
         printf '%s' "$_unmanaged_notice"
         exit 0
     fi
@@ -1136,6 +1144,14 @@ logout)
     if [ "$_auth_probe_ok" = "0" ]; then
         echo "⚠️  共有ボリューム ${VOL_AUTH} が空かどうかを確認できませんでした（中身を読む一時コンテナを起動できなかったか、列挙そのものが失敗しました）。"
         echo "   「空だった」とは判定しません。削除対象を列挙して確認を求めます。"
+    fi
+
+    # 削除対象のコンテナの集合を引けなかったときも「0件だった」と読み替えない。
+    # 引けなかったこと自体を手順11 で「消えなかった資源」として列挙し、終了コード 1 で終わる
+    # （FR-env-03 受入基準19・18 / D0-env-08 項5。reset の同じ状況と同じ倒し方）。
+    if [ "$_targets_query_ok" = "0" ]; then
+        echo "⚠️  削除対象の Claude コンテナの一覧を引けませんでした（Docker への問い合わせに失敗）。"
+        echo "   「0件だった」とは判定しません。引けていないコンテナは削除されません。"
     fi
 
     # --- 確認 ---
@@ -1149,6 +1165,9 @@ logout)
         for _t in "${_targets[@]}"; do echo "   - コンテナ: ${_t}"; done
         for _f in "${_authfiles[@]}"; do echo "   - ファイル: ${_f}"; done
         echo "   - 共有ボリューム ${VOL_AUTH} の認証情報（Claude Code と Codex CLI の両方が消えます）"
+        if [ "$_targets_query_ok" = "0" ]; then
+            echo "   （管理ラベルを持つコンテナの一覧は引けていません。引けていないコンテナは削除されません）"
+        fi
         if [ ${#_unmanaged[@]} -gt 0 ]; then
             echo "   （管理ラベルを持たない次のコンテナは削除しません: ${_unmanaged[*]}）"
         fi
@@ -1167,6 +1186,12 @@ logout)
     for _f in "${_authfiles[@]}"; do destructive_plan "ファイル: ${_f}"; done
     destructive_plan "Docker Socket Proxy コンテナ"
     destructive_plan "共有ボリューム ${VOL_AUTH} の認証情報"
+    # 引けなかった問い合わせも「消えなかった資源」として記録する（reset の :2109 と同じ形）。
+    # 引けなかった集合の中に削除対象が残っている可能性を、成功と同じ終了コードで隠さない。
+    if [ "$_targets_query_ok" = "0" ]; then
+        destructive_plan "削除対象の Claude コンテナの列挙（Docker への問い合わせに失敗）"
+        destructive_failed "削除対象の Claude コンテナの列挙（Docker への問い合わせに失敗）"
+    fi
     # ここから先は INT / TERM を遅延させる（1件の削除を途中で切ると、より中途半端になる）
     destructive_arm_interrupt
 
