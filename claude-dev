@@ -997,6 +997,29 @@ logout)
         _idle_query_ok=0
     fi
 
+    # 残したラベル無しコンテナについての表示を1度だけ組む。手順6 の削除対象0件の経路と
+    # 手順11 の結果表示の両方がこれを出す（FR-env-03 受入基準19・17）。同じ事実を2箇所の
+    # 文言で持つと片方だけが古くなるため、文言はここにしか置かない。出す行が無ければ空文字列。
+    # 文言の正は 02-design/logging.md の3行（ラベル無しコンテナ / 認証の巻き戻り /
+    # 列挙に必要な問い合わせの失敗）である。
+    _unmanaged_notice=""
+    if [ ${#_unmanaged[@]} -gt 0 ]; then
+        _unmanaged_notice="ℹ️  管理ラベルを持たないため削除しなかったコンテナ（本変更より前に起動した可能性があります）:"$'\n'
+        for _c in "${_unmanaged[@]}"; do
+            _unmanaged_notice="${_unmanaged_notice}     - ${_c}"$'\n'
+        done
+        _unmanaged_notice="${_unmanaged_notice}   1件ずつ止めるには 'claude-dev stop <name>' を使ってください。"$'\n'
+        _unmanaged_notice="${_unmanaged_notice}   停止中のものは列挙していません（ネットワークの接続情報からは稼働中しか分かりません）。"$'\n'
+        if [ "$_spawned_query_ok" = "0" ]; then
+            _unmanaged_notice="${_unmanaged_notice}   セッション由来のコンテナの一覧を引けなかったため除外していません。上の一覧にセッション由来のコンテナが混じっている可能性があります。"$'\n'
+        fi
+        _unmanaged_notice="${_unmanaged_notice}⚠️  これらのコンテナは 30 秒ごとに認証を共有ボリュームへ書き戻すため、"$'\n'
+        _unmanaged_notice="${_unmanaged_notice}   稼働したままだと共有ボリュームの認証が復活します。完全に消すには、"$'\n'
+        _unmanaged_notice="${_unmanaged_notice}   'claude-dev stop <name>' で止めてから 'claude-dev logout' を実行し直してください。"$'\n'
+    elif [ "$_idle_query_ok" = "0" ]; then
+        _unmanaged_notice="ℹ️  ${NETWORK} への問い合わせに失敗したため、管理ラベルを持たないコンテナの列挙はできませんでした。"$'\n'
+    fi
+
     # カレントディレクトリのプロジェクト配下にコピーされた認証（3ファイルだけ）。
     # ディレクトリと settings.json / host-hooks.json は認証ではないので消さない。
     _authfiles=()
@@ -1033,6 +1056,10 @@ logout)
     if [ ${#_targets[@]} -eq 0 ] && [ ${#_authfiles[@]} -eq 0 ] && [ "$_auth_empty" = "1" ]; then
         echo "ℹ️  削除対象がありません（管理ラベルを持つコンテナ・共有ボリュームの認証・"
         echo "   カレントディレクトリの認証コピーのいずれも見つかりませんでした）"
+        # 何も消していないので削除結果の枠と成功の文言は出さない。ラベル無しコンテナの
+        # 列挙と書き戻しの警告だけを出す（FR-env-03 受入基準19。この経路こそ logout の
+        # 効果が戻る理由に到達する唯一の機会である）
+        printf '%s' "$_unmanaged_notice"
         exit 0
     fi
 
@@ -1146,20 +1173,7 @@ logout)
     fi
     echo "✅ 認証情報を削除しました"
     destructive_report
-    if [ ${#_unmanaged[@]} -gt 0 ]; then
-        echo "ℹ️  管理ラベルを持たないため削除しなかったコンテナ（本変更より前に起動した可能性があります）:"
-        for _c in "${_unmanaged[@]}"; do echo "     - ${_c}"; done
-        echo "   1件ずつ止めるには 'claude-dev stop <name>' を使ってください。"
-        echo "   停止中のものは列挙していません（ネットワークの接続情報からは稼働中しか分かりません）。"
-        if [ "$_spawned_query_ok" = "0" ]; then
-            echo "   セッション由来のコンテナの一覧を引けなかったため除外していません。上の一覧にセッション由来のコンテナが混じっている可能性があります。"
-        fi
-        echo "⚠️  これらのコンテナは 30 秒ごとに認証を共有ボリュームへ書き戻すため、"
-        echo "   稼働したままだと共有ボリュームの認証が復活します。完全に消すには、"
-        echo "   'claude-dev stop <name>' で止めてから 'claude-dev logout' を実行し直してください。"
-    elif [ "$_idle_query_ok" = "0" ]; then
-        echo "ℹ️  ${NETWORK} への問い合わせに失敗したため、管理ラベルを持たないコンテナの列挙はできませんでした。"
-    fi
+    printf '%s' "$_unmanaged_notice"
     if [ ${#_authfiles[@]} -gt 0 ]; then
         echo "ℹ️  他のディレクトリにコピーされた認証には触れていません（本システムはその場所を記録していません）。"
     fi
