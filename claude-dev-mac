@@ -1035,6 +1035,20 @@ logout)
         [ -n "$_c" ] && _targets+=("$_c")
     done < <(docker ps -a --filter "label=claude-dev.managed=1" --format '{{.Names}}' 2>/dev/null || true)
 
+    # セッション由来のコンテナ（claude-dev.role=spawned）。管理ラベルを持つので
+    # 「管理ラベルを持たないコンテナ」ではなく、下の表示集合から除く
+    # （CTR-cli-container「残したものをどう列挙するか」が定める4つ目の除外。reset と同じ引き方）。
+    # **削除には使わない** —— logout は規則D を使わない（D0-env-05 項2）。
+    # 引けなかったときは除外せずに表示へ進む（0件と同一視しない）。削除に影響しないので
+    # 失敗には数えない（CTR-cli-container のエラーケース）。
+    _spawned_c=()
+    _spawned_query_ok=1
+    if _q=$(spawned_resources container "claude-dev.role=spawned"); then
+        while IFS= read -r _c; do [ -n "$_c" ] && _spawned_c+=("$_c"); done <<< "$_q"
+    else
+        _spawned_query_ok=0
+    fi
+
     # 管理ラベルを持たない Claude コンテナ（削除しない。名前を表示して残す）。
     # ラベルが無いのでラベルでは引けない。遊休判定と同じ集合の求め方を使う。
     _unmanaged=()
@@ -1044,6 +1058,7 @@ logout)
             [ -n "$_c" ] || continue
             _known=0
             for _t in "${_targets[@]}"; do [ "$_t" = "$_c" ] && _known=1; done
+            for _t in "${_spawned_c[@]}"; do [ "$_t" = "$_c" ] && _known=1; done
             [ "$_known" = "0" ] && _unmanaged+=("$_c")
         done <<< "$_others"
     else
@@ -1204,6 +1219,9 @@ logout)
         for _c in "${_unmanaged[@]}"; do echo "     - ${_c}"; done
         echo "   1件ずつ止めるには 'claude-dev stop <name>' を使ってください。"
         echo "   停止中のものは列挙していません（ネットワークの接続情報からは稼働中しか分かりません）。"
+        if [ "$_spawned_query_ok" = "0" ]; then
+            echo "   セッション由来のコンテナの一覧を引けなかったため除外していません。上の一覧にセッション由来のコンテナが混じっている可能性があります。"
+        fi
         echo "⚠️  これらのコンテナは 30 秒ごとに認証を共有ボリュームへ書き戻すため、"
         echo "   稼働したままだと共有ボリュームの認証が復活します。完全に消すには、"
         echo "   'claude-dev stop <name>' で止めてから 'claude-dev logout' を実行し直してください。"
