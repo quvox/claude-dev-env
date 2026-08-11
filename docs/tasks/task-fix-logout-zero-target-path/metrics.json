@@ -1,0 +1,15 @@
+{
+  "started_at": 1786432207,
+  "events": [
+    {
+      "at": 1786432207,
+      "kind": "start",
+      "value": "intake"
+    },
+    {
+      "at": 1786442376,
+      "kind": "phase",
+      "value": "ドキュメント"
+    }
+  ]
+}

@@ -1,6 +1,7 @@
 ---
 id: 053-bug-logout-treats-unlistable-auth-volume-as-empty
 type: bug
+origin_layer: 01
 severity: 中
 found: 2026-08-05
 found_in: /doc-check ssot task-fix-destructive-scope の独立監査(Codex / relations モード)

@@ -150,6 +150,9 @@
 
 ## 残務(文書整合ほか)
 
+- 2026-08-11 コード引用の行番号のずれ: `task-fix-logout-zero-target-path` の実装で `claude-dev` / `claude-dev-mac` の `logout` 分岐が **+58 行**になったため、旧 1119 行目以降を指す `path:line` 引用が **closure 外の 03-impl ドキュメント9件**で古くなった — `MODULE-cli-start` / `-stop` / `-reset` / `-common-net-other-running-containers` / `-common-container-project-dir` / `-common-compose-project-name` / `features.md` / `contracts/entrypoint-firewall.md` / `index.md`(いずれも `+58` で直る。ただし `MODULE-cli-common-destructive` の `claude-dev-mac:1133` だけは 変更範囲の内側なので個別に取り直す必要がある)。closure 内の3件(`contracts/cli-container.md` / `MODULE-cli-logout` / `MODULE-cli-common-spawned-resources`)は 本タスクの変更指示で取り直した。`.claude/directions/03-impl.md` は「行番号は編集ごとに腐る」ことを前提に安定なアンカーを勧めており機械検査も無いので、バグではなく残務として記録する。**次にこれらのドキュメントを触るタスクが同じ降下で直すこと。**
+- 2026-08-11 `docs/03-impl/tests/e2e.md` E2E-01 手順8-3:「出力に `SSH 鍵が未設定` の行が現れたら、**すぐに**」に許容時間も同期条件も無く、競合窓を再現できたかが実施速度に依存する(独立レビュー Codex が `task-fix-logout-zero-target-path` の `/doc-check` で検出。本タスクの変更範囲外の既存記述なので直さずに記録する)。
+- 2026-08-11 `.claude/directions/change-set.md` 例外2 と `check-changeset.py` CS1 の食い違い:CS1 は `change: replace` の relations 変更指示にも `version_bump` を要求するが、例外2 の記述例は `version_bump` を持たない。relations は `03-impl/index.md` が層代表として版を持つので(原則6)、どちらが正かを決めて片方へ揃える。**キットは CLAUDE.md §3 により製品 DoD 未達の間は凍結**なので、実施はリリース後。
 - 2026-08-10 `INDEX.md`:全体 4層構成へ移行する前のパス(`docs/00-requests/decisions.md` / `glossary.md` / `acceptance.md` / `docs/01-requirements/core.md` / `docs/03-impl/cli.md` ほか)と `docs/_steering/` / `docs/knowledge/` / `docs/feedback/log.md` を指したままで、実在するファイルとほとんど対応していない。
 - 2026-08-10 `README.md`:「ドキュメント」表 `docs/01_getting-started.md`〜`docs/10_ghcr-images.md` と `docs/impl/INDEX.md` を指したままで、いずれも 4層構成への移行で実在しない。
 - 2026-08-10 `.claude/scripts/`:2026-08-10 のキット書き換えでプロジェクト固有の `*.local.json` が失われた。`callgraph-config.local.json` は task-remove-orchestrator で作り直したが、`entrypoint-patterns.local.json` / `changeset-invariants.local.json` の有無は未確認。

@@ -1,6 +1,7 @@
 ---
 id: 052-bug-logout-skips-unmanaged-warning-when-nothing-to-delete
 type: bug
+origin_layer: 01
 severity: 中
 found: 2026-08-04
 found_in: /doc-check ssot task-fix-destructive-scope の独立監査(Codex / relations モード)
