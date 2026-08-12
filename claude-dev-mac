@@ -265,30 +265,32 @@ ensure_ssh_bridge() {
         return 1
     fi
     mkdir -p "$DEV_AGENT_DIR"
-    # 既存ブリッジ（このプロジェクト用）が生きていればその port を再利用
-    if [ -f "$bpid" ] && [ -f "$bport" ] \
-       && kill -0 "$(cat "$bpid" 2>/dev/null)" 2>/dev/null; then
-        cat "$bport"
-        return 0
-    fi
+    # ホストの環境変数から採った値を無検証で使わない（FR-env-04-8）。
+    #   **検証は既存ブリッジの再利用より前に行う**: 後ろに置くと、このプロジェクト用の
+    #   ブリッジが既に生きている場合に検証へ到達せず、受理できない値を指定しても
+    #   保存済みのポートで「SSH agent 転送: 有効」と表示してしまう（独立レビュー Codex が検出）。
+    #   受理できない値は**採用せず**、SSH 転送なしで続行する（起動は止めない。
+    #   CTR-cli-container「渡す環境変数」の「値の検証で起動を止めることはしない」）。
+    #   別のポートへ勝手に振り替えないのは、利用者が指定したポートで転送が
+    #   効いていると誤解させないためである。
+    #   桁数を 5 桁までに絞ってから数値比較するのは、極端に長い数字列で
+    #   [ ] の算術評価がエラーになるのを避けるためである。
     local port="${CLAUDE_DEV_SSH_BRIDGE_PORT:-}"
     if [ -n "$port" ]; then
-        # ホストの環境変数から採った値を無検証で使わない（FR-env-04-8）。
-        #   受理できない値は**採用せず**、SSH 転送なしで続行する（起動は止めない。
-        #   CTR-cli-container「渡す環境変数」の「値の検証で起動を止めることはしない」）。
-        #   別のポートへ勝手に振り替えないのは、利用者が指定したポートで転送が
-        #   効いていると誤解させないためである。
-        #   桁数を 5 桁までに絞ってから数値比較するのは、極端に長い数字列で
-        #   [ ] の算術評価がエラーになるのを避けるためである。
         if ! printf '%s' "$port" | grep -Eq '^[0-9]{1,5}$' \
            || [ "$port" -lt 1 ] || [ "$port" -gt 65535 ]; then
             echo "⚠️  CLAUDE_DEV_SSH_BRIDGE_PORT の値 '${port}' は受理できません（1〜65535 の整数を指定してください）。" >&2
             echo "    今回は SSH agent 転送なしで続行します。" >&2
             return 1
         fi
-    else
-        port=$(find_free_local_port)
     fi
+    # 既存ブリッジ（このプロジェクト用）が生きていればその port を再利用
+    if [ -f "$bpid" ] && [ -f "$bport" ] \
+       && kill -0 "$(cat "$bpid" 2>/dev/null)" 2>/dev/null; then
+        cat "$bport"
+        return 0
+    fi
+    [ -n "$port" ] || port=$(find_free_local_port)
     nohup socat "TCP-LISTEN:${port},bind=127.0.0.1,fork,reuseaddr" "UNIX-CONNECT:${sock}" >/dev/null 2>&1 &
     echo $! > "$bpid"
     echo "$port" > "$bport"
