@@ -7,6 +7,7 @@ sections:
   - "## 既知の制限"
 deletes: []
 reason: 'issue 054 と issue 023 の 03 契約層。**(1) issue 054**: 「設計との差異」が根拠として指す `docs/issues/024` は 2026-08-04 の `task-fix-destructive-scope` が解消して削除済みで参照先が実在しない(CS11)。`docs/histories/2026-08-04-fix-destructive-scope.md` へ付け替える。**(2) issue 023**: 「既知の制限」の「`CLAUDE_DEV_SSH_BRIDGE_PORT` を検証しない」行は、本タスクで検証する形へ改めるので**制限ではなくなる**(`FR-env-04-8` / 02 契約の「渡す環境変数」)。行を削除する'
+reflected: 2026-08-12
 ---
 
 ## 設計との差異

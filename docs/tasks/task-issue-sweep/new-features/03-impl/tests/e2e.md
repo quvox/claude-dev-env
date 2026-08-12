@@ -7,6 +7,7 @@ sections:
   - "## テスト設計の判断"
 deletes: []
 reason: 'issue 047・101・023・056・054 の実機確認手順。**(1) issue 047**: `reset` が `claude-dev-vm-*` を削除対象に含めるようになるので、手順8-15 に確認を足す(`/dev/kvm` が要るので実施できない環境があることも書く)。**(2) issue 101**: 削除に失敗して終了コード 1 で終わる実行でもラベル無しコンテナの表示が出ることを、手順8-12 の期待と不合格の条件に足す。**(3) issue 023**: `FR-env-04-8` の確認手順として手順8-20 を新設する(macOS 版だけの経路であることを明記する)。**(4) issue 056**: 手順8-5 が確認する表示文言を「管理ラベルが付く前に起動した可能性がある」へ揃える。**(5) issue 054**: 削除済みの `docs/issues/045` を `docs/histories/2026-08-04-fix-destructive-scope.md` へ付け替える。**既存の手順1〜19 の他の部分は1文字も変えない**'
+reflected: 2026-08-12
 ---
 
 ### E2E-01
@@ -49,6 +50,360 @@ reason: 'issue 047・101・023・056・054 の実機確認手順。**(1) issue 0
       `docker ps --filter name=claude-dev-docker-proxy` で共有 docker-proxy が**残っている**ことを
       確認する(遊休判定が `claude-dev-net` への接続で行われるため、稼働中のコンテナがあれば
       消えないのが正しい。消えていたら `FR-env-01` 受入基準9 違反であり不合格)。
+   - macOS(`claude-dev-mac`)でも同じ手順を実行する。実行できない場合は
+     **未実施であることを記録する**(手順を省いたことを黙って残さない)。
+8. **破壊的操作が自分が作った資源にだけ効くこと**(`FR-env-01` 受入基準 9・14〜27 /
+   `FR-env-03` 受入基準 14〜23)を確認する。**専用の空ディレクトリを2つ**(例: `/tmp/e2e-y/aaa` と
+   `/tmp/e2e-y/bbb`)使い、他に作業中のセッションが無い時間帯に行う。
+   1. **管理ラベルの付与**(`FR-env-01` 受入基準14): `aaa` で
+      `CLAUDE_DEV_NO_ATTACH=1 claude-dev start` を実行し、
+      `docker inspect -f '{{json .Config.Labels}}' aaa` に `claude-dev.managed=1` /
+      `claude-dev.role=claude` / `claude-dev.project-dir=/tmp/e2e-y/aaa` の3つが含まれることを
+      確認する。`docker inspect -f '{{json .Config.Labels}}' claude-dev-docker-proxy` に
+      `claude-dev.` で始まるラベルが**含まれない**ことも確認する(`DSN-env-01`: 固定名を持つ資源にはラベルを付けない)。
+   2. **遊休判定がイメージに依存しないこと**(受入基準9。`docs/histories/2026-08-04-fix-destructive-scope.md` が解消した欠陥の再現):
+      `bbb` でも `start` する。`make upgrade`(またはイメージの再ビルド)を行い、`latest` が
+      別のイメージ ID を指す状態を作る(`docker inspect -f '{{.Image}}' aaa` と
+      `docker images -q claude-dev-claude-vnc` が食い違うことで確認できる)。そのうえで
+      `claude-dev stop bbb` を実行し、**`claude-dev-docker-proxy` が残っている**ことと、
+      出力に docker-proxy を残した理由として `aaa` の名前が出ることを確認する。
+      **不合格の条件**: docker-proxy が消える / 「Claude コンテナなし」と表示される。
+   3. **排他**(受入基準16。**6コマンドすべてについて確認する**):
+      `sleep 600 &` で生きているプロセスを作り、その PID を控える(`$LIVE`)。
+      **ロックは「向き先に `<PID> <操作名>` を入れたシンボリックリンク」である**ので、
+      `ln -s "$LIVE stop" ~/.claude-dev/locks/proj-aaa.lock` で保持中の状態を作れる
+      (`readlink ~/.claude-dev/locks/proj-aaa.lock` で確認できる)。
+      **ファイル名はプロジェクト単位が `proj-<キー>.lock`、共有資源単位が `shared.lock`** である
+      (種別で名前空間を分けている。理由は `MODULE-cli-common-lock` 判断13)。
+      - **プロジェクト単位のキー**: 上の状態で `aaa` のディレクトリで `claude-dev start` を
+        実行する。**期待する結果**: 待たずに終了コード 1、出力に保持している操作名(`stop`)と
+        PID と再実行の方法が出る、生成物が増えない。同じ状態で `claude-dev stop aaa` も
+        同じ結果になることを確認する(プロジェクト単位のキーを取るのは `start` と `stop` の2つ)。
+      - **共有資源単位のキー**: `rm -f ~/.claude-dev/locks/proj-aaa.lock` してから
+        `ln -s "$LIVE logout" ~/.claude-dev/locks/shared.lock` を作る。この状態で
+        **`start` / `logout` / `reset` / `login` / `login-codex` の5つをそれぞれ実行**し、
+        **いずれも待たずに終了コード 1 で終わり、保持者(`logout` と PID)と再実行の方法が
+        表示される**ことを確認する。`start` については**認証コピーの手前で**止まること
+        (**認証が空のコンテナが起動したら不合格**)、`logout` / `reset` については
+        **何も削除されていない**こと、`login` / `login-codex` については
+        **共有ボリュームに何も書かれていない**ことをあわせて確認する。
+      - **プロジェクト名が `shared` のとき**: `/tmp/e2e-y/shared` を作って
+        `CLAUDE_DEV_NO_ATTACH=1 claude-dev start --no-vnc` を実行する。**期待する結果**:
+        起動が成功する(`proj-shared.lock` と `shared.lock` は別のファイルなので衝突しない)。
+        **不合格の条件**: 「排他ロックを取得できませんでした(キー: shared)」で終了コード 1 になる
+        (プロジェクト単位のキーと共有資源単位の固定キーが同じファイルを指している)。
+      - 後片付け: `rm -f ~/.claude-dev/locks/shared.lock` と `kill $LIVE`。
+      **不合格の条件**: どれかが待つ(固まる)/ 終了コードが 0 になる /
+      ロックを取れないまま削除・作成が行われる。
+   4. **ロック残骸の引き継ぎ**(受入基準17): `ln -s "999999 stop" ~/.claude-dev/locks/proj-aaa.lock`
+      で**存在しない PID** を保持者とするロックを作ってから `claude-dev stop aaa` を
+      実行する。**期待する結果**: 残骸を引き継いだ旨が表示され、処理が完了する(終了コード 0)。
+      **`~/.claude-dev/locks/` に `proj-aaa.lock.stale.*` が残っていない**ことも確認する
+      (引き取った側が消す)。
+   5. **ラベルを持たない既存コンテナを巻き込まないこと**(`FR-env-03` 受入基準17):
+      `docker run -d --name legacy-claude --network claude-dev-net busybox sleep 600` で
+      ラベル無しのコンテナを立てる。`claude-dev logout` を実行し、**確認プロンプトの一覧に
+      `legacy-claude` が削除対象として出ないこと**、削除されずに残ること、
+      「管理ラベルが付く前に起動した可能性がある」旨が表示されることを確認する。
+      **さらに `logout` の遊休判定**(`FR-env-01` 受入基準9 の `logout` 側)を確認する:
+      `legacy-claude` が `claude-dev-net` に接続したまま稼働しているので、`claude-dev logout` の
+      あとに **`claude-dev-docker-proxy` が残っている**ことと、**残した理由として
+      `legacy-claude` の名前が表示される**ことを確認する。
+      **不合格の条件**: docker-proxy が消える(残したコンテナの中から Docker が使えなくなる)。
+      **さらにセッション由来のコンテナが混じらないこと**(`docs/02-design/contracts/cli-container.md`
+      「残したものをどう列挙するか」の4つ目の除外)を確認する。**この確認は Claude コンテナの
+      中から資源を作る必要があるが、`aaa` は部分手順4 の `claude-dev stop aaa` で既に消えている**
+      ので、まず `/tmp/e2e-y/aaa` で `CLAUDE_DEV_NO_ATTACH=1 claude-dev start` して立て直す。
+      その `aaa` のコンテナ内で
+      `docker run -d --name spawn-unmanaged --network claude-dev-net busybox sleep 600` を実行して
+      所有者ラベル付きのコンテナを作り(docker-proxy が `claude-dev.role=spawned` を付ける)、
+      ホスト側で `claude-dev logout` を実行する。**期待する結果**: `spawn-unmanaged` が
+      「管理ラベルを持たない次のコンテナは削除しません」の列に**現れない**
+      (`legacy-claude` はこの列に現れる)。
+      **不合格の条件**: `spawn-unmanaged` がその列に現れる(**本変更より後に作られた資源なので
+      事実に反する表示である**)。**後片付け**: `docker rm -f spawn-unmanaged`
+      (`aaa` の Claude コンテナは `logout` が削除済みである)。
+      あわせて `claude-dev stop legacy-claude`(名前指定)では**削除される**こと、
+      その際に管理ラベルを持たないことが表示されること(`FR-env-01` 受入基準15)を確認する。
+   6. **compose 資源が別プロジェクトを巻き込まないこと**(`FR-env-01` 受入基準 19・20):
+      `/tmp/e2e-y/My.App` と `/tmp/e2e-y/my-app` の2ディレクトリを作る(正規化すると**どちらも
+      `my-app`** になる)。両方で `CLAUDE_DEV_NO_ATTACH=1 claude-dev start` し、それぞれの
+      コンテナ内で `docker compose up -d`(最小の compose ファイルでよい)を実行する。
+      `docker ps --format '{{.Names}}\t{{.Label "com.docker.compose.project"}}'` で、
+      **2つの compose プロジェクト名が異なる**(`my-app-<ハッシュA>` と `my-app-<ハッシュB>`)ことを
+      確認する。次に `/tmp/e2e-y/my-app` 側で `claude-dev stop` を実行し、
+      **`My.App` 側の compose コンテナが残っている**ことを確認する。
+      **不合格の条件**: 2つのプロジェクト名が同じ / `My.App` 側の compose コンテナが消える。
+      あわせて `docker run -d --label com.docker.compose.project=my-app --name legacy-compose
+      busybox sleep 600` で**旧い名前の資源**を作り、`claude-dev stop my-app` が
+      **それを削除せず**、残っている可能性と手動削除の方法を表示することを確認する(受入基準20)。
+   7. **`stop` が受理しない名前**(`FR-env-01` 受入基準18):
+      `claude-dev stop '../../etc'` を実行し、**何も削除されず**、受理できない文字を含む旨が
+      表示されて終了コード 1 になることを確認する。`~/.claude-dev/locks/` に新しいロックが
+      作られていないことも確認する。
+   8. **`logout` がプロジェクト配下の認証コピーを消すこと**(`FR-env-03` 受入基準 20・21):
+      `claude-dev login` 後に `aaa` で `start` し、`/tmp/e2e-y/aaa/.claude/.credentials.json` が
+      できていることを確認する。`bbb` でも `start` して同じファイルを作る。
+      `/tmp/e2e-y/aaa` へ移動して `claude-dev logout --yes` を実行し、
+      **(a)** `aaa` 側の `.claude/.credentials.json` / `.claude/.claude.json` /
+      `.codex/auth.json` が消え、削除したパスが表示される、
+      **(b)** `.claude/` ディレクトリ自体と `.claude/settings.json` / `host-hooks.json` は**残る**、
+      **(c)** **`bbb` 側のコピーは残っている**(他ディレクトリに触らない)、
+      **(d)** 認証コピーが1つも無い状態で再度 `claude-dev logout` を実行すると、対象が無い旨を
+      表示して終了コード 0 になる(受入基準19・21)ことを確認する。
+      **(e)** **(d) の状態で、ラベル無しの稼働中コンテナがあるときの表示**(受入基準19)を確認する:
+      **部分手順5 の `legacy-claude` はその手順の末尾で `claude-dev stop legacy-claude` により
+      消えている**ので、`docker run -d --name legacy-claude --network claude-dev-net busybox sleep 600`
+      で立て直す。稼働させたまま (d) を再実行し、
+      **`legacy-claude` の名前と、稼働している限り認証が共有ボリュームへ書き戻される旨の警告が
+      表示される**ことを確認する(終了コードは 0 のまま)。
+      **不合格の条件**: 「削除対象がありません」だけが表示され、`legacy-claude` の名前も
+      書き戻しの警告も出ない(**利用者が `logout` の効果が戻る理由に到達できない**)。
+      続けて `claude-dev reset --yes` が **`bbb` 側の `.claude/` を消さない**ことを確認する
+      (`FR-env-03` 受入基準22。非対称の根拠は `D0-env-08` 項4)。
+   9. **確認と非対話時の中止**(`FR-env-03` 受入基準 14〜16): `claude-dev logout` で `n` を
+      入力すると何も削除されず終了コード 0 になること、`claude-dev logout < /dev/null` が
+      **何も削除せず終了コード 1** で終わり `--yes` の指定方法を表示すること、
+      `claude-dev logout --yes` が確認なしで実行されることを確認する。`claude-dev reset` でも
+      同じ3つを確認する(**`reset` は非 TTY で 0 ではなく 1 を返すのが正しい**。確認の免除は `--yes` で行う)。
+   10. **削除失敗の列挙**(`FR-env-03` 受入基準18): 共有ボリュームを使用中のコンテナを1つ残した
+      状態(`aaa` を稼働させたまま)で `claude-dev reset --yes` を実行し、**消えなかった資源が
+      1件ずつ列挙され、終了コード 1 になる**ことを確認する。
+      **不合格の条件**: 「全リセット完了」と表示される / 終了コード 0 になる。
+      あわせて **`logout` が削除に失敗した実行でもラベル無しコンテナの表示を出すこと**
+      (`FR-env-03` 受入基準17。決定シート 論点1)を確認する:
+      `docker run -d --name legacy-fail --network claude-dev-net busybox sleep 600` でラベル無しの
+      稼働中コンテナを立て、共有ボリュームを使用中のコンテナを残したまま `claude-dev logout --yes` を
+      実行する。**期待する結果**: 消えなかった資源が列挙されて終了コード 1 になり、**かつ
+      `legacy-fail` の名前と認証の書き戻しの警告も表示される**。
+      **不合格の条件**: 失敗の列挙だけが出てラベル無しコンテナの名前と警告が出ない
+      (**まさに認証が書き戻される状況で警告が消える**)。後片付けは `docker rm -f legacy-fail`。
+   11. **`stop` を別ディレクトリから実行しても compose を取り違えないこと**(`FR-env-01` 受入基準 19・21):
+      `/tmp/e2e-y/aaa` で `start` し、コンテナ内で `docker compose up -d` する。
+      **`/tmp` など無関係なディレクトリへ移動してから** `claude-dev stop aaa` を実行し、
+      **`aaa` の compose コンテナが消える**ことを確認する(カレントディレクトリに依存しない。理由は `MODULE-cli-stop` の実装上の判断)。
+      次に、ラベルを持たないコンテナで同じことを試す:
+      `docker run -d --name nolabel --network claude-dev-net busybox sleep 600` を立て、
+      `claude-dev stop nolabel` を実行し、**compose の削除を試みず**、compose 資源が残っている
+      可能性と手動手順が表示されることを確認する。
+      **不合格の条件**: 別ディレクトリからの `stop` で compose コンテナが残る / ラベル無しの対象で
+      推測したハッシュ名の削除が走る。
+   12. **`reset` も遊休判定を通すこと**(`FR-env-01` 受入基準9 の `reset` 側):
+      `docker run -d --name legacy2 --network claude-dev-net busybox sleep 600` で
+      ラベル無しの稼働中コンテナを立て、`claude-dev reset --yes` を実行する。
+      **期待する結果**: (a) `legacy2` が削除されない、(b) **`claude-dev-docker-proxy` が残る**、
+      (c) **ネットワーク `claude-dev-net` が残る**、(d) 残した理由(`legacy2` の名前)と
+      **「完全な初期化になっていない」旨**が表示される、(e) ボリューム・イメージの削除は続行され、
+      使用中で消せなかったものが列挙されて終了コード 1 になる。
+      **さらに (f)**: **終了コード 1 で終わるこの実行でも、`legacy2` の名前と
+      「停止中のものは列挙していない」限界が表示される**ことを確認する
+      (`FR-env-03` 受入基準17 は表示を削除の成否で条件づけていない)。
+      **不合格の条件**: docker-proxy または `claude-dev-net` が消える(残した `legacy2` の中から
+      Docker が使えなくなる)/ 「全リセット完了」と表示される /
+      **削除に失敗して終了コード 1 になった実行で `legacy2` の名前が表示されない**。
+   13. **中断時の終了コードと部分削除の報告**(`FR-env-03` 受入基準23):
+      稼働中コンテナを複数用意して `claude-dev logout --yes` を実行し、削除が始まった直後に
+      `Ctrl-C`(または別端末から `kill -INT <PID>`)を送る。**期待する結果**: 進行中の1件が
+      終わってから中断し、**そこまでに削除した資源と未削除の資源が1件ずつ列挙**され、
+      **終了コード 130** で終わる。`~/.claude-dev/locks/` にロックが残っていないことも確認する
+      (`trap` が解放する)。`claude-dev reset --yes` でも同じ3点を確認する。
+      **不合格の条件**: 「削除しました」「完了」と表示される / 終了コードが 0 になる /
+      ロックが残る。
+   14. **セッション由来の資源が `stop` で消えること**(`FR-env-01` 受入基準 22〜24・26・27):
+      `aaa` と `bbb` の両方で `CLAUDE_DEV_NO_ATTACH=1 claude-dev start` する。
+      1. **`aaa` のコンテナ内で** `docker run -d --name spawn-a busybox sleep 600` と
+         `docker network create spawn-net-a` を実行する。
+         **`bbb` のコンテナ内で** `docker run -d --name spawn-b busybox sleep 600` を実行する。
+      2. ホスト側で
+         `docker inspect -f '{{json .Config.Labels}}' spawn-a` に
+         **`claude-dev.role=spawned` と `claude-dev.owner-project-dir=/tmp/e2e-y/aaa`** が
+         含まれることを確認する。`docker network inspect -f '{{json .Labels}}' spawn-net-a` にも
+         同じ2つが含まれることを確認する(`FR-env-07` 受入基準11)。
+      3. `claude-dev stop aaa` を実行する。**期待する結果**:
+         (a) `spawn-a` と `spawn-net-a` が**消えている**、
+         (b) 出力に**削除した資源の名前が種別(コンテナ / ネットワーク)つきで1行ずつ**出る、
+         (c) **`spawn-b` は消えていない**(別セッションの資源に触らない)、
+         (d) 確認プロンプトは出ない(`stop` は確認を求めない)。
+      4. **0件のときに表示が出ないこと**(受入基準27): `bbb` のコンテナ内で何も作らない状態で
+         別の空ディレクトリ `/tmp/e2e-y/ccc` を `start` → `claude-dev stop ccc` を実行し、
+         **セッション由来の資源に関する行が1行も出ない**ことを確認する。
+      5. **所有者ラベルを持たない資源が消えないこと**: ホスト側で
+         `docker run -d --name nospawn busybox sleep 600` を立て(docker-proxy を通らないので
+         ラベルが付かない)、`claude-dev stop bbb` の後も**残っている**ことを確認する。
+      6. **ラベルを読めない対象では片付けを試みないこと**(受入基準23):
+         **この手順は対象を自分で用意する**(手順8-11 の `nolabel` は、その手順の中で
+         `claude-dev stop nolabel` により既に削除されている)。
+         `docker run -d --name nolabel2 --network claude-dev-net busybox sleep 600` で
+         管理ラベルを持たないコンテナを立て、`claude-dev stop nolabel2` を実行する。
+         **期待する結果**: `nolabel2` 自身は削除される(規則B)一方、
+         **セッション由来の資源の削除を試みず**、片付けを行わなかった旨と
+         `docker ps --filter label=claude-dev.role=spawned` で確認できることが表示される。
+         **不合格の条件**: 推測した所有者の値で `docker rm -f` が走る /
+         片付けを行わなかったことが表示されない。
+      7. **削除に失敗しても続行すること**(受入基準24): `bbb` で `start` し、**`bbb` の
+         コンテナ内で** `docker network create spawn-net-b` と
+         `docker run -d --name spawn-b3 --network spawn-net-b busybox sleep 600` を実行する。
+         次にホスト側で `docker run -d --name netholder busybox sleep 600` を立て、
+         `docker network connect spawn-net-b netholder` を実行して
+         **そのネットワークを `bbb` の外からも使用中にする**
+         (`aaa` は部分手順3 の `claude-dev stop aaa` で既に消えているので使えない)。
+         `claude-dev stop bbb` を実行する。**期待する結果**: `spawn-b3` は削除され、
+         `spawn-net-b` の `docker network rm` は失敗するが**処理は続行し、終了コード 0 で終わる**。
+         失敗した名前が stderr に出る。
+         **不合格の条件**: 終了コードが非0になる / 失敗した名前が出ない /
+         後続の手順(macOS のブリッジ停止・遊休判定)が実行されない。
+      **手順8-14 全体の不合格の条件**: **部分手順3 の時点で** `spawn-b` が消える
+      (他セッションを巻き込む。部分手順5 の `claude-dev stop bbb` で消えるのは正しい)/
+      部分手順5 の後に `nospawn` が消える / 削除した名前が表示されない / 0件でも行が出る。
+   15. **`reset` が所有者を問わず消すこと**(`FR-env-01` 受入基準25):
+      `aaa` と `bbb` の両方で `start` し、それぞれのコンテナ内で
+      `docker run -d --name spawn-a2 busybox sleep 600` / `docker run -d --name spawn-b2 busybox sleep 600`
+      を実行する。`claude-dev reset` を実行し、**確認プロンプトの削除対象の一覧に
+      `spawn-a2` と `spawn-b2` の両方が出る**ことを確認してから `y` で進める。
+      **期待する結果**: 両方が削除され、削除した名前が種別つきで表示される。
+      **不合格の条件**: 一覧に出ない(消える前に知る手段が無い)/ 片方しか消えない。
+      **あわせて VM モードのゲストディスクが削除対象に入ること**(`02-design/logging.md`
+      「破壊的操作の削除対象の確認」)を確認する: `/dev/kvm` が使える環境で `aaa` を
+      `claude-dev start --vm` で起動してから `claude-dev stop aaa` し、`docker volume ls` に
+      `claude-dev-vm-aaa` が在ることを確かめたうえで `claude-dev reset` を実行する。
+      **期待する結果**: 確認プロンプトの一覧に `claude-dev-vm-aaa` が現れ、`y` で進めると削除され、
+      `docker volume ls` から消える。**不合格の条件**: 一覧に出ない / `reset` の後も残る。
+      **`/dev/kvm` が使えない環境ではこの部分手順を実施できない**(実施できなかったことを記録して
+      次の機会に回す。macOS 版は VM モードを提供しないので対象外である)。
+   16. **`logout` の後にセッション由来の資源が `stop` で回収できないこと**
+      (`FR-env-03` 受入基準24)。**前提**: 手順8-15 の `reset` を実行した場合は、
+      イメージと共有資源が消えているので**先に `claude-dev setup`(またはイメージの再取得)で
+      環境を戻してから始める**。`aaa` / `bbb` のセッションはこの時点でどちらも残っていないため、
+      この部分手順は**自分で対象を用意する**。
+      `/tmp/e2e-y/aaa` で `claude-dev start` し、**`aaa` のコンテナ内で**
+      `docker run -d --name spawn-a3 busybox sleep 600` を実行して所有者ラベル付きの資源を作る。
+      ホスト側の同じディレクトリで `claude-dev logout --yes` を実行し、
+      **`aaa` の Claude コンテナが削除される**ことを確認する(`FR-env-03` 受入基準5)。
+      続けて同じディレクトリで `claude-dev stop aaa` を実行する。
+      **期待する結果**: `spawn-a3` は**削除されずに残る**(所有者を照合する値の在り処である
+      `claude-dev.project-dir` ラベルが、削除された Claude コンテナと一緒に失われているため。
+      `CTR-cli-container`「削除対象の決め方(4つの規則)」)。かつ **`spawn-a3` を
+      「削除できなかった資源」として表示しない**(受入基準18 の対象ではない)。
+      その後 `claude-dev reset` を実行すると `spawn-a3` が削除対象の一覧に現れ、削除される。
+      **不合格の条件**: `stop` が `spawn-a3` を削除する(所有者を推測している)/
+      `stop` が `spawn-a3` を「削除できなかった資源」として列挙して非0で終わる /
+      `reset` の一覧に `spawn-a3` が出ない。
+      **後片付け**: 上の `reset` を実行しない場合は `docker rm -f spawn-a3` を実行する。
+   17. 後片付け。**手順10・12・15・16 の `reset` を実行したかどうかで分かれる**:
+      - **実行した場合**: `reset` が Claude コンテナ・`claude-dev-chrome-*`・セッション由来の資源・
+        イメージを既に消しているので、**残っているのは所有者ラベルを持たない資源だけ**である
+        (`docker rm -f nolabel nolabel2 nospawn` / `docker network rm` の残り)。そのうえで
+        `claude-dev setup`(またはイメージの再取得)で環境を戻し、`rm -rf ~/.claude-dev/locks` と
+        一時ディレクトリを削除する。**`claude-dev stop` は対象が無いので実行しない**。
+      - **実行していない場合**: `docker rm -f legacy-claude legacy-compose legacy2 nolabel nolabel2
+        nospawn spawn-a spawn-b spawn-a2 spawn-b2 spawn-b3 netholder` /
+        `docker network rm spawn-net-a spawn-net-b` / `claude-dev stop aaa` / `claude-dev stop bbb` /
+        `claude-dev stop ccc` /
+        `docker volume rm claude-dev-chrome-aaa claude-dev-chrome-bbb claude-dev-chrome-ccc` /
+        `rm -rf ~/.claude-dev/locks` / 一時ディレクトリの削除。
+   18. **共有ボリュームが空かを確かめられない状態では0件の経路に入らないこと**
+      (`FR-env-03` 受入基準19)。**この部分手順は Docker 側を意図的に壊した状態を要し、
+      その状態では他のどの部分手順も実行できないため、後片付け(手順8-17)より後に置く。
+      自分が作った状態は自分で元に戻す。**
+      **前提**: 手順8-17 で環境を戻した状態から始める。`claude-dev login` で共有ボリューム
+      `claude-dev-auth` に認証を置き、**管理ラベルを持つコンテナを1つも動かさず、カレント
+      ディレクトリに認証コピーも置かない**(= 削除対象が0件になる状態)。
+      **本体**: **`require_setup` を通り抜けたうえで一時コンテナだけが起動できない**状態を作る。
+      **イメージを削除する方法は使えない**: `require_setup` は `claude-dev-claude` と
+      `claude-dev-claude-vnc` の**それぞれの有無を独立に検査して、無ければその場でビルドし直す**
+      ので、消しても再ビルドされて起動できてしまう(`claude-dev` の `require_setup`)。
+      代わりに**名前はそのままで中身を差し替える**:
+      `docker tag claude-dev-claude claude-dev-claude.e2e-backup` で退避し、
+      `docker pull busybox && docker tag busybox claude-dev-claude` を実行する。
+      **イメージ名は実在するので `require_setup` は何もせず素通りし**、
+      `docker run --entrypoint bash …` は busybox に `bash` が無いので**起動に失敗する** —
+      これが「中身を読む手段が起動できなかった」状態である。
+      (確かめたいのは「中身を読めないときにこの経路へ入らないこと」であって壊し方そのものでは
+      ないので、同じ状態を作れる別の手段でもよい。**満たすべき条件は
+      「`require_setup` が通る」かつ「一時コンテナが起動できない」の2つ**である。)
+      この状態で `claude-dev logout < /dev/null` を実行する。
+      **期待する結果 (a)**: **「削除対象がありません」を表示して 0 で終わらない。**
+      共有ボリュームの状態を確かめられなかった旨が表示され、削除対象の列挙と確認へ進む
+      (標準入力が TTY でないので `--yes` が無ければ**終了コード 1 で中止**する —
+      受入基準15)。続けて `claude-dev logout --yes` を実行した場合は削除を試み、
+      **消去を確認できないので消えなかった資源として列挙し終了コード 1 で終わる**(受入基準18)。
+      **このとき共有ボリュームが「削除した資源」の一覧に現れないこと**も確認する
+      (消えたことを確認できていない資源を削除済みと表示しないことの確認。経緯は `docs/histories/2026-08-11-fix-logout-records-and-marker.md`)。
+      **不合格の条件**: 「削除対象がありません」と表示して**終了コード 0** で終わる
+      (共有ボリュームに認証が残っているのに、利用者は消えたと解釈する)。
+      **(b) 印は出るが列挙そのものが失敗する状態**(受入基準19 の「空であることを確認できた」の
+      3条件のうち、**一時コンテナの終了ステータスが 0** だけが欠ける場合。(a) では印も出ないので
+      この条件は確かめられない)。**一時コンテナが起動でき、印を出したうえで `ls` が非0で終わる**
+      イメージへ差し替える:
+      ```
+      docker tag claude-dev-claude claude-dev-claude.e2e-backup
+      printf 'FROM claude-dev-claude.e2e-backup\nUSER root\nRUN mv /bin/ls /bin/ls.orig \
+        && printf "#!/bin/sh\\nexit 2\\n" > /bin/ls && chmod +x /bin/ls\n' \
+        | docker build -t claude-dev-claude -f - .
+      ```
+      (`/auth` の権限を落とす方法は使えない — このイメージの既定ユーザは `root` なので
+      `chmod 000` でも `ls` が成功する。実測で確認済み。**満たすべき条件は「`require_setup` が通る」
+      「印が出る」「列挙が非0で終わる」の3つ**であり、同じ状態を作れる別の手段でもよい。)
+      この状態で、共有ボリュームに認証を置いたまま `claude-dev logout < /dev/null` を実行する。
+      **期待する結果 (b)**: (a) と同じ — **「削除対象がありません」を表示して 0 で終わらず**、
+      確かめられなかった旨を表示して確認へ進み、非 TTY なので終了コード 1 で中止する。
+      **不合格の条件**: 終了コード 0 で「削除対象がありません」と表示する
+      (= 印だけを見て終了ステータスを見ていない。`MODULE-cli-logout` 判断15 が委任 DS-02 のもとで
+      閉じたはずの経路である)。
+      続けて**同じ壊れた状態で `claude-dev logout --yes`** を実行する(手順10 の側の確認)。
+      **期待する結果**: 消去のあとの列挙も非0で終わるので、**共有ボリュームを「消えなかった資源」として
+      列挙し、「削除した資源」には出さず、終了コード 1** で終わる。
+      **不合格の条件**: 「認証情報を削除しました」と表示する / 共有ボリュームが「削除した資源」に
+      現れる(= 印が出た直後に列挙が失敗した場合を、消去に成功して空になった場合と読み替えている)。
+      **(c) 管理ラベル付きコンテナの集合を引けない状態**(`FR-env-03` 受入基準19・18 /
+      経緯は `docs/histories/2026-08-11-fix-logout-records-and-marker.md`)。**イメージは元に戻してから**((a)(b) の後片付けを先に済ませる)、
+      `docker ps` の問い合わせだけが失敗する状態を作る。**満たすべき条件は
+      「共有ボリュームの検査は成功する」かつ「管理ラベル付きコンテナの列挙が非0で終わる」の2つ**である
+      (前者が失敗すると (a) の経路で止まり、(c) を確かめられない。**daemon を止める方法は使えない** —
+      両方が失敗する)。**`docker` を包む実行ファイルを PATH の先頭に置いて、その1つの問い合わせだけを
+      失敗させる**:
+      ```
+      mkdir -p /tmp/e2e-shim
+      cat > /tmp/e2e-shim/docker <<'SH'
+      #!/bin/sh
+      # 管理ラベル付きコンテナの列挙だけを失敗させ、それ以外は本物へ渡す
+      for a in "$@"; do
+        case "$a" in label=claude-dev.managed=1) exit 1 ;; esac
+      done
+      exec /usr/bin/docker "$@"
+      SH
+      chmod +x /tmp/e2e-shim/docker
+      PATH=/tmp/e2e-shim:$PATH claude-dev logout --yes
+      ```
+      (`/usr/bin/docker` は `command -v docker` で確かめた実体のパスに置き換える。
+      同じ状態を作れる別の手段でもよい。)
+      この状態で `claude-dev logout --yes` を実行する。
+      **期待する結果 (c)**: **「削除対象がありません」を表示して 0 で終わらない。**
+      集合を引けなかった旨が表示され、**引けなかったことが「消えなかった資源」として列挙されて
+      終了コード 1** で終わる。**不合格の条件**: 終了コード 0 で終わる / 引けなかったことが
+      どこにも出ない(= 0件と同一視している)。
+      **後片付け**: (a) と (b) と (c) のいずれを実行した場合も
+      `docker tag claude-dev-claude.e2e-backup claude-dev-claude` で元へ戻し、
+      `docker rmi claude-dev-claude.e2e-backup` と `docker rmi busybox`(他の手順で使っていなければ)
+      を実行する。そのうえで `claude-dev logout --yes` を実行して共有ボリュームを実際に空にする。
+   19. **`/auth` に印と同名のファイルがあっても「空」と判定しないこと**
+      (`FR-env-03` 受入基準19・18。経緯は `docs/histories/2026-08-11-fix-logout-records-and-marker.md`)。**この手順は壊れていない環境で行う**
+      (一時コンテナが正常に起動し、印を出し、列挙も成功したうえで、中身の1件が印と同名であることを見る。
+      手順8-18 の後片付けが済んだ状態から始める)。
+      **前提**: 管理ラベルを持つコンテナを1つも動かさず、カレントディレクトリに認証コピーも置かない。
+      共有ボリュームに**印と同名のファイルだけ**を置く:
+      `docker run --rm -v claude-dev-auth:/auth --entrypoint bash claude-dev-claude
+      -c 'rm -rf /auth/* /auth/.[!.]*; touch /auth/__CLAUDE_DEV_AUTH_LISTED__'`。
+      この状態で `claude-dev logout < /dev/null` を実行する。
+      **期待する結果**: **「削除対象がありません」を表示して 0 で終わらない**
+      (共有ボリュームは空ではないので削除対象があり、非 TTY で `--yes` が無いため終了コード 1 で中止する
+      — 受入基準15)。続けて `claude-dev logout --yes` を実行すると、そのファイルが削除され、
+      削除結果に共有ボリュームが「削除した資源」として現れて終了コード 0 で終わる。
+      **不合格の条件**: 「削除対象がありません」と表示して**終了コード 0** で終わる
+      (= 印と同名の行を印と読み替えている。**認証が残っていても同じことが起きる**)。
+      **後片付け**: 上の `--yes` を実行しない場合は
+      `docker run --rm -v claude-dev-auth:/auth --entrypoint bash claude-dev-claude
+      -c 'rm -f /auth/__CLAUDE_DEV_AUTH_LISTED__'` を実行する。
    20. **ホスト側から指定された SSH agent 中継ポートが受理できない値のとき**(`FR-env-04-8`。
       **macOS 版だけの経路**): macOS の実行機で、空のディレクトリに移動し
       `CLAUDE_DEV_SSH_BRIDGE_PORT=0 claude-dev start` を実行する(`70000` / `abc` でも同じ)。

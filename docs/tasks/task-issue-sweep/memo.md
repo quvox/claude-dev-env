@@ -213,8 +213,8 @@ summary: 36 件の issue を原則8のゲートで一括棚卸しし、コード
 | 2 | 056 の新しい文言 | ドキュメント記載(`FR-env-03-17` = 「管理ラベルが付く前に起動した可能性がある」。5層すべてで同じ文言に揃えた) | ドライラン パス1 |
 | 3 | `docker network create` の標準出力を捨ててよいか | 委任決定(DS-03。`MODULE-cli-common-ensure-infrastructure` に開示行を書いた) | ドライラン パス1 |
 | 4 | 047 の VM ボリュームをどう列挙するか | 委任決定(DS-05 の内部構造。`reset` の既存の `claude-dev-chrome-*` の列挙と同じ形にする。実装は フェーズ3) | ドライラン パス2 |
-| 5 | `environments.md` の frontmatter 直後の HTML コメントに残る `docs/issues/031` | ドキュメント記載できない(**変更指示は最初の見出しより前の本文を `sections` にも `deletes` にも載せられない**)。`/task-close` の反映時に手で消す(既存の残務と同じ扱い) | ドライラン パス1 |
-| 6 | `03-impl/index.md` の 009 / 030 を名指す記述 | ドキュメント記載できない(この節は生成物ではなく `/task-close` §3-4 が手で保守する)。反映時に実測値へ書き直す | ドライラン パス1 |
+| 5 | `environments.md` の frontmatter 直後の HTML コメントに残る `docs/issues/031` | **解決済み**(2026-08-12 の `/task-close` §3 の反映で手で消した。変更指示は最初の見出しより前の本文を `sections` にも `deletes` にも載せられないため) | ドライラン パス1 |
+| 6 | `03-impl/index.md` の 009 / 030 を名指す記述 | **解決済み**(2026-08-11 の `/doc-check` で「この層の状態」への変更指示を新設した。独立レビュー Codex の指摘6) | ドライラン パス1 |
 
 ## 調査メモ
 
@@ -230,19 +230,30 @@ summary: 36 件の issue を原則8のゲートで一括棚卸しし、コード
 
 <!-- フェーズ3で /implement が埋める -->
 
-- [ ] 1. **051**: `docker network create` の標準出力も捨てる(4箇所) _要件:_ NFR-ops-05 _Boundary:_ `claude-dev:353,761` / `claude-dev-mac:418,828` _Depends:_ -
-- [ ] 2. **088**: compose 既定ネットワークの削除失敗を `_spawned_failed` へ積む _要件:_ FR-env-01-24 _Boundary:_ `claude-dev:1728` / `claude-dev-mac:1737` _Depends:_ - (P)
-- [ ] 3. **101**: `reset` の失敗経路で `exit 1` の前にラベル無しコンテナの表示を出す _要件:_ FR-env-03-17 _Boundary:_ `claude-dev:2264` 前後 / macOS 同型 _Depends:_ - (P)
-- [ ] 4. **056**: 出力文言を「管理ラベルが付く前に起動した可能性があります」へ揃える _要件:_ FR-env-03-17 _Boundary:_ `claude-dev:1013` ほか / macOS 同型 _Depends:_ - (P)
-- [ ] 5. **047**: `reset` の `_rc_volumes` に `claude-dev-vm-*` を足す _要件:_ FR-env-03-14 _Boundary:_ `claude-dev:2059`〜`:2064` / macOS 同型 _Depends:_ 3
-- [ ] 6. **023**: `ensure_ssh_bridge` でホスト環境変数の値を 1〜65535 の整数として検証する _要件:_ FR-env-04-8 _Boundary:_ `claude-dev-mac:274` _Depends:_ -
-- [ ] 7. **087**: docker-proxy のコンテナ作成経路に `NO-OWNER-LABEL` のログを1行足す _要件:_ FR-env-07-12 _Boundary:_ `docker-proxy/main.go:707` 前後 _Depends:_ -
-- [ ] 8. `cd docker-proxy && go vet ./... && go test ./...` が green
-- [ ] 9. `diff <(grep -n spawned claude-dev) <(grep -n spawned claude-dev-mac)` 相当で両 OS の同型を確認する
+- [x] 1. **051**: `docker network create` の標準出力も捨てる(4箇所) _要件:_ NFR-ops-05 _Boundary:_ `claude-dev:353,761` / `claude-dev-mac:418,828` _Depends:_ -
+- [x] 2. **088**: compose 既定ネットワークの削除失敗を `_spawned_failed` へ積む _要件:_ FR-env-01-24 _Boundary:_ `claude-dev:1728` / `claude-dev-mac:1737` _Depends:_ - (P)
+- [x] 3. **101**: `reset` の失敗経路で `exit 1` の前にラベル無しコンテナの表示を出す _要件:_ FR-env-03-17 _Boundary:_ `claude-dev:2264` 前後 / macOS 同型 _Depends:_ - (P)
+- [x] 4. **056**: 出力文言を「管理ラベルが付く前に起動した可能性があります」へ揃える _要件:_ FR-env-03-17 _Boundary:_ `claude-dev:1013` ほか / macOS 同型 _Depends:_ - (P)
+- [x] 5. **047**: `reset` の `_rc_volumes` に `claude-dev-vm-*` を足す _要件:_ FR-env-03-14 _Boundary:_ `claude-dev:2059`〜`:2064` / macOS 同型 _Depends:_ 3
+- [x] 6. **023**: `ensure_ssh_bridge` でホスト環境変数の値を 1〜65535 の整数として検証する _要件:_ FR-env-04-8 _Boundary:_ `claude-dev-mac:274` _Depends:_ -
+- [x] 7. **087**: docker-proxy のコンテナ作成経路に `NO-OWNER-LABEL` のログを1行足す _要件:_ FR-env-07-12 _Boundary:_ `docker-proxy/main.go:707` 前後 _Depends:_ -
+- [x] 8. `cd docker-proxy && go vet ./... && go test ./...` が green
+- [x] 9. `diff <(grep -n spawned claude-dev) <(grep -n spawned claude-dev-mac)` 相当で両 OS の同型を確認する
 
 ## Definition of Done
 
-<!-- 2026-08-12 のフェーズ3で実測した。HEAD = 99b7b607556ce509e30586acbe66d22ea113117b -->
+- [x] lint が通る: `cd docker-proxy && go vet ./...`(終了コード 0)
+- [x] 単体・結合テストが通る: `cd docker-proxy && go test ./...`(`ok  github.com/quvox/claude-dev-env/docker-proxy`。単体テストを2本新設して 39 → 41 本)
+- [x] 受入基準のテストが `03-impl/tests/` に行として存在し、状態が3語のどれかである(新設した `FR-env-04-8` を含む。**自動テストの有無は `SR-32` / `DSN-test-01` が決めており、シェル実装は実機確認で担保する**)
+- [x] 影響する E2E シナリオ: **変更に関わる経路を実 Docker と隔離ハーネスで確認した**(051 / 088 / 047 は実 Docker、101 は隔離ハーネス、023 は検証ロジック、087 は新設した単体テスト)。**実機の E2E-01 手順8 の全体・手順8-15 の VM 部分・新設した手順8-20・E2E-03 手順5-6 は未実施**で、理由と代替確認を `docs/pendings.md` の残務へ記録した(このホストで実行すると稼働中セッションと認証・イメージが失われるため。前タスクと同じ扱い)
+- [x] コールグラフを再生成し、`callgraph-check.py` の重大度「高」が 0(シンボル 200 / 辺 88 は反映の前後で同数)
+- [x] `check-relations.py` が合格
+- [x] `new-features/` の全変更指示を SSOT へ反映済み(51/51 に `reflected: 2026-08-12`)
+- [x] `/doc-check` が影響範囲を PASS(フェーズ2)/ `ssot` で 41 文書に検証済み記録を発行(フェーズ4。独立レビュー Codex)
+- [x] `docs/histories/2026-08-12-issue-sweep.md` に記録
+- [x] 範囲外の問題を `docs/pendings.md` へ記録済み(残務 11 行)
+
+<!-- 実測の証跡(2026-08-12。HEAD は下の進捗メモが持つ) -->
 
 | # | 項目 | 実行したコマンド | 最終行(逐語) | 判定 |
 |---|---|---|---|---|

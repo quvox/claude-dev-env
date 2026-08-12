@@ -1,14 +1,14 @@
 ---
 id: sec
-version: 1.3.0
-updated: 2026-08-10
+version: 1.3.1
+updated: 2026-08-12
 source:
   - docs/00-requests/request.md
 summary: 隔離境界と権限制限に関する決定事項(D0-sec-*)
 keywords: [セキュリティ, 隔離, 決定事項]
 verified:
-  at: 2026-08-10
-  version: 1.3.0
+  at: 2026-08-12
+  version: 1.3.1
   against:
     - {doc: docs/00-requests/request.md, version: 1.4.0}
 ---
@@ -96,6 +96,7 @@ verified:
 - 却下した案: microVM 等によるプロセス単位の個別隔離 — 実装・運用コストに見合わない。
   個別隔離が要る用途は別構成(Docker Sandboxes 等)で検討する。
 - 関連: RQ-env-01 / NFR-sec-01 / request.md「やらないこと」1
+
 ## D0-sec-07 Docker アクセスは生ソケットではなく検査プロキシ経由にする
 
 - 区分: 決定
@@ -142,7 +143,7 @@ verified:
   中止して終了コード 1 で終わる**(ソフトウェアエミュレーションでは実用的な速度が出ないため、
   VM 無しで続行させるのではなく利用者に VM モードでない起動を選ばせる)。`--kvm` 単独指定の「警告して続行」は
   上のとおり変わらない。**`CTR-cli-container` のエラーケースが正**である
-  (`docs/issues/018`)。
+  (この追記の経緯は `docs/histories/2026-08-04-impl-depth.md`)。
 - 理由: ブラウザでの確認はコンテナ内 Chrome で足り、CPU 仮想化デバイスを要さない。過剰な特権付与を避ける。
 - 却下した案: 常時渡す — 必要のない利用者にまで特権を与える。
 - 関連: RQ-env-05 / FR-env-08

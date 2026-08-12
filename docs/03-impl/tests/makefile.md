@@ -1,7 +1,7 @@
 ---
 id: makefile
-version: 1.2.0
-updated: 2026-08-10
+version: 1.2.1
+updated: 2026-08-12
 scope: MOD-makefile
 source:
   - docs/01-requirements/functional.md
@@ -9,11 +9,11 @@ source:
 summary: MOD-makefile(ビルド・導入・運用ターゲット)の受入基準⇄テスト対応
 keywords: [テスト]
 verified:
-  at: 2026-08-10
-  version: 1.2.0
+  at: 2026-08-12
+  version: 1.2.1
   against:
-    - {doc: docs/01-requirements/functional.md, version: 1.13.1}
-    - {doc: docs/02-design/system.md, version: 2.9.1}
+    - {doc: docs/01-requirements/functional.md, version: 1.16.0}
+    - {doc: docs/02-design/system.md, version: 2.12.0}
 ---
 
 # MOD-makefile のテスト対応
@@ -57,7 +57,7 @@ verified:
 
 | # | 対象 | なぜ未実装か | 解消の条件 |
 |---|---|---|---|
-| 1 | FR-env-10 — 受入基準 1(正常系) | 自動テストランナーを設けない方針(`DSN-test-01` / `SR-32`)。実機確認で代替する | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |
+| 1 | FR-env-10-1(正常系) | 自動テストランナーを設けない方針(`DSN-test-01` / `SR-32`)。実機確認で代替する | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |
 | 2 | NFR-ops-03 — 操作の一覧性 | 自動テストランナーを設けない方針(`DSN-test-01` / `SR-32`)。実機確認で代替する | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |
 | 3 | MODULE-makefile-build — 機能全体 | Makefile のため自動テストランナーが無く実機確認で代替する | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |
 | 4 | MODULE-makefile-build-claude — 機能全体 | Makefile のため自動テストランナーが無く実機確認で代替する | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |

@@ -16,8 +16,8 @@ design: DSN-mod-01, DSN-mod-02, DSN-auth-01, DSN-env-01, DSN-env-02, DSN-env-04
 requirements: FR-env-03
 tests: なし(未実装。シェル実装のため自動テストランナーが無く実機確認で代替する)
 summary: Claude と Codex の認証情報を共有ボリュームごと削除する
+reflected: 2026-08-12
 ---
-
 
 # MODULE-cli-logout 認証の削除
 

@@ -1,7 +1,7 @@
 ---
 id: e2e
-version: 1.9.0
-updated: 2026-08-11
+version: 1.10.0
+updated: 2026-08-12
 scope: E2E
 source:
   - docs/02-design/system.md
@@ -9,10 +9,10 @@ source:
 summary: E2Eシナリオ E2E-01〜E2E-03 と E2E-06 ⇄ テスト対応
 keywords: [テスト, E2E]
 verified:
-  at: 2026-08-11
-  version: 1.9.0
+  at: 2026-08-12
+  version: 1.10.0
   against:
-    - {doc: docs/02-design/system.md, version: 2.11.0}
+    - {doc: docs/02-design/system.md, version: 2.12.0}
     - {doc: docs/01-requirements/usecases.md, version: 1.5.0}
 ---
 
@@ -103,7 +103,7 @@ verified:
       `claude-dev.role=claude` / `claude-dev.project-dir=/tmp/e2e-y/aaa` の3つが含まれることを
       確認する。`docker inspect -f '{{json .Config.Labels}}' claude-dev-docker-proxy` に
       `claude-dev.` で始まるラベルが**含まれない**ことも確認する(`DSN-env-01`: 固定名を持つ資源にはラベルを付けない)。
-   2. **遊休判定がイメージに依存しないこと**(受入基準9。`docs/issues/045` の再現):
+   2. **遊休判定がイメージに依存しないこと**(受入基準9。`docs/histories/2026-08-04-fix-destructive-scope.md` が解消した欠陥の再現):
       `bbb` でも `start` する。`make upgrade`(またはイメージの再ビルド)を行い、`latest` が
       別のイメージ ID を指す状態を作る(`docker inspect -f '{{.Image}}' aaa` と
       `docker images -q claude-dev-claude-vnc` が食い違うことで確認できる)。そのうえで
@@ -146,7 +146,7 @@ verified:
       `docker run -d --name legacy-claude --network claude-dev-net busybox sleep 600` で
       ラベル無しのコンテナを立てる。`claude-dev logout` を実行し、**確認プロンプトの一覧に
       `legacy-claude` が削除対象として出ないこと**、削除されずに残ること、
-      「本変更より前に起動した可能性がある」旨が表示されることを確認する。
+      「管理ラベルが付く前に起動した可能性がある」旨が表示されることを確認する。
       **さらに `logout` の遊休判定**(`FR-env-01` 受入基準9 の `logout` 側)を確認する:
       `legacy-claude` が `claude-dev-net` に接続したまま稼働しているので、`claude-dev logout` の
       あとに **`claude-dev-docker-proxy` が残っている**ことと、**残した理由として
@@ -237,8 +237,12 @@ verified:
       (c) **ネットワーク `claude-dev-net` が残る**、(d) 残した理由(`legacy2` の名前)と
       **「完全な初期化になっていない」旨**が表示される、(e) ボリューム・イメージの削除は続行され、
       使用中で消せなかったものが列挙されて終了コード 1 になる。
+      **さらに (f)**: **終了コード 1 で終わるこの実行でも、`legacy2` の名前と
+      「停止中のものは列挙していない」限界が表示される**ことを確認する
+      (`FR-env-03` 受入基準17 は表示を削除の成否で条件づけていない)。
       **不合格の条件**: docker-proxy または `claude-dev-net` が消える(残した `legacy2` の中から
-      Docker が使えなくなる)/ 「全リセット完了」と表示される。
+      Docker が使えなくなる)/ 「全リセット完了」と表示される /
+      **削除に失敗して終了コード 1 になった実行で `legacy2` の名前が表示されない**。
    13. **中断時の終了コードと部分削除の報告**(`FR-env-03` 受入基準23):
       稼働中コンテナを複数用意して `claude-dev logout --yes` を実行し、削除が始まった直後に
       `Ctrl-C`(または別端末から `kill -INT <PID>`)を送る。**期待する結果**: 進行中の1件が
@@ -300,6 +304,13 @@ verified:
       `spawn-a2` と `spawn-b2` の両方が出る**ことを確認してから `y` で進める。
       **期待する結果**: 両方が削除され、削除した名前が種別つきで表示される。
       **不合格の条件**: 一覧に出ない(消える前に知る手段が無い)/ 片方しか消えない。
+      **あわせて VM モードのゲストディスクが削除対象に入ること**(`02-design/logging.md`
+      「破壊的操作の削除対象の確認」)を確認する: **`docker volume create claude-dev-vm-aaa` で
+      ゲストディスクと同じ名前のボリュームを作り**、`claude-dev reset` を実行する。
+      **VM の起動は要らない** — `reset` は名前の接頭辞 `claude-dev-vm-` で列挙するので、
+      空のボリュームでも同じ経路に入る。
+      **期待する結果**: 確認プロンプトの一覧に `claude-dev-vm-aaa` が現れ、`y` で進めると削除され、
+      `docker volume ls` から消える。**不合格の条件**: 一覧に出ない / `reset` の後も残る。
    16. **`logout` の後にセッション由来の資源が `stop` で回収できないこと**
       (`FR-env-03` 受入基準24)。**前提**: 手順8-15 の `reset` を実行した場合は、
       イメージと共有資源が消えているので**先に `claude-dev setup`(またはイメージの再取得)で
@@ -434,9 +445,17 @@ verified:
       **後片付け**: 上の `--yes` を実行しない場合は
       `docker run --rm -v claude-dev-auth:/auth --entrypoint bash claude-dev-claude
       -c 'rm -f /auth/__CLAUDE_DEV_AUTH_LISTED__'` を実行する。
+   20. **ホスト側から指定された SSH agent 中継ポートが受理できない値のとき**(`FR-env-04-8`。
+      **macOS 版だけの経路**): macOS の実行機で、空のディレクトリに移動し
+      `CLAUDE_DEV_SSH_BRIDGE_PORT=0 claude-dev start` を実行する(`70000` / `abc` でも同じ)。
+      **期待する結果**: (a) 受理できない値であることと受理する範囲(1〜65535)が表示される、
+      (b) **「SSH agent 転送」が有効であるかのような表示が出ない**、(c) コンテナは起動する
+      (終了コードは成功した起動と同じ)、(d) コンテナ内で `ssh-add -l` が鍵を返さない。
+      **不合格の条件**: 転送が有効であるかのように表示される / 起動が中止される。
+      後片付け: `claude-dev stop` と `docker volume rm claude-dev-chrome-<name>`。
+      **Linux 版にはこの経路が無い**(agent の転送はソケットのマウントで行う)ので実施しない。
    - macOS(`claude-dev-mac`)でも同じ手順を実行する。実行できない場合は
      **未実施であることを記録する**(手順を省いたことを黙って残さない)。
-
 
 ### E2E-02
 

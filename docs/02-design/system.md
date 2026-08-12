@@ -1,7 +1,7 @@
 ---
 id: 02-system
-version: 2.11.0
-updated: 2026-08-11
+version: 2.12.0
+updated: 2026-08-12
 source:
   - docs/01-requirements/functional.md
   - docs/01-requirements/non-functional.md
@@ -12,10 +12,10 @@ summary: >
   E2Eシナリオ一覧、UI設計を定める。アーキテクチャと契約と設計判断は architecture.md / contracts/ が持つ。
 keywords: [モジュール分割, DSN-mod, テスト戦略, E2E, UI設計, 要件カバレッジ]
 verified:
-  at: 2026-08-11
-  version: 2.11.0
+  at: 2026-08-12
+  version: 2.12.0
   against:
-    - {doc: docs/01-requirements/functional.md, version: 1.14.0}
+    - {doc: docs/01-requirements/functional.md, version: 1.16.0}
     - {doc: docs/01-requirements/non-functional.md, version: 1.7.0}
     - {doc: docs/01-requirements/usecases.md, version: 1.5.0}
     - {doc: docs/02-design/architecture.md, version: 1.5.0}
@@ -236,6 +236,7 @@ verified:
 | FR-env-04-5 | MOD-cli-start | 完全 | -(設計判断を要さない) |
 | FR-env-04-6 | MOD-cli-start | 完全 | -(設計判断を要さない) |
 | FR-env-04-7 | MOD-cli-start | 完全 | -(設計判断を要さない) |
+| FR-env-04-8 | MOD-cli-start | 完全 | -(設計判断を要さない)。受理できない値を採用せずに SSH 転送なしで続行する倒し方は `FR-env-04-5` と同型で、`CTR-cli-container`「渡す環境変数」の「値の検証で起動を止めることはしない」に従う |
 | FR-env-05-1 | MOD-entrypoint | 完全 | -(設計判断を要さない) |
 | FR-env-05-2 | MOD-cli-common | 完全 | -(設計判断を要さない) |
 | FR-env-05-3 | MOD-firewall | 完全 | -(設計判断を要さない) |
@@ -348,7 +349,7 @@ verified:
 (空欄を作らないための規約)。
 
 **要件を持たないモジュールは無い**(全 25 モジュールが「モジュール分割定義」の対応要件と上表の
-いずれかに現れる)。**割り当て先の無い条項も無い**(機能要件の全 140 条項・NFR 10 件・SR 19 件が
+いずれかに現れる)。**割り当て先の無い条項も無い**(機能要件の全 141 条項・NFR 10 件・SR 19 件が
 すべて上表に現れる)。
 
 ## テスト戦略

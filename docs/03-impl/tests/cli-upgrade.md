@@ -1,21 +1,19 @@
 ---
 id: cli-upgrade
+version: 1.1.1
+updated: 2026-08-12
 scope: MOD-cli-upgrade
-version: 1.1.0
-updated: 2026-08-07
 source:
   - docs/01-requirements/functional.md
   - docs/02-design/system.md
 summary: MOD-cli-upgrade(CLI とイメージの更新)の受入基準⇄テスト対応
 keywords: [テスト]
 verified:
-  at: 2026-08-08
-  version: 1.1.0
+  at: 2026-08-12
+  version: 1.1.1
   against:
-    - doc: docs/01-requirements/functional.md
-      version: 1.12.0
-    - doc: docs/02-design/system.md
-      version: 2.8.0
+    - {doc: docs/01-requirements/functional.md, version: 1.16.0}
+    - {doc: docs/02-design/system.md, version: 2.12.0}
 ---
 
 # MOD-cli-upgrade のテスト対応
@@ -38,6 +36,10 @@ verified:
 | MODULE-ID | テスト識別子 | 状態 |
 |---|---|---|
 | MODULE-cli-upgrade | - | 未検証(テスト未実装) |
+
+## テスト設計の判断
+
+- 判断なし: **このモジュールについて AI が決めたテスト設計の判断は無い。** 自動テストを置かない範囲は `SR-32`(Bash 実装に自動テストランナーを設けない)と 02 のテスト戦略 `DSN-test-01` が既に決めており、**「テストを書かない」「手動テストで代替する」は 標準委任 `DS-01` の対象外**である(`.claude/directions/delegation.md` §2)。何を検証するかは受入基準が正で、確認は E2E の実機確認手順(`tests/e2e.md`)が持つ。
 
 ## 未検証(テスト未実装)の全件
 

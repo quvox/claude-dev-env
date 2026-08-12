@@ -16,8 +16,8 @@ requirements: FR-env-06
 tests: なし(未実装。シェル実装のため自動テストランナーが無く実機確認で代替する)
 updated: 2026-08-11
 summary: 指定ポートのフォワードを解除する
+reflected: 2026-08-12
 ---
-
 
 # MODULE-cli-unforward ポートフォワードの解除
 

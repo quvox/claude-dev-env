@@ -71,4 +71,4 @@ while port < FWD_PORT_BASE + 900:
 
 ## 関連
 
-- `docs/issues/004-modify-03-impl-lacks-reimplementation-depth.md` の観点「並行性と順序」
+- 03-impl の再実装深度の残件(2026-08-12 に `docs/pendings.md` の残務へ降格した) の観点「並行性と順序」

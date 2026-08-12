@@ -1,17 +1,16 @@
 ---
 id: scope
-version: 1.2.0
-updated: 2026-08-05
+version: 1.2.1
+updated: 2026-08-12
 source:
   - docs/00-requests/request.md
 summary: 記述粒度と実装範囲に関する決定事項(D0-scope-*)
 keywords: [スコープ, 粒度, 決定事項]
 verified:
-  at: 2026-08-07
-  version: 1.2.0
+  at: 2026-08-12
+  version: 1.2.1
   against:
-    - doc: docs/00-requests/request.md
-      version: 1.3.0
+    - {doc: docs/00-requests/request.md, version: 1.4.0}
 ---
 
 # スコープ・実装粒度の決定事項
@@ -137,4 +136,8 @@ verified:
 - 報告義務: 掘り下げた各ドキュメントの「実装上の判断」表に `D0-scope-07` と共に記録する。
   **起票の閾値で「留める」と判定したものは、03 の「既知の制限」に理由も書く**(黙って落とさない)。
   起票した issue はタスクの histories に一覧する。
-- 関連: `docs/issues/004-modify-03-impl-lacks-reimplementation-depth.md`(**閉じずに残る**。残件は同 issue の「経緯」)/ `D0-scope-01` / `D0-scope-06`(起点のもう1つは issue 008。**同 issue は本決定の反映と同時に解消・削除**するため、経緯は `docs/histories/` を参照)
+- 関連: `D0-scope-01` / `D0-scope-06`(起点のもう1つは issue 008。**同 issue は本決定の反映と同時に
+  解消・削除**するため、経緯は `docs/histories/` を参照)/
+  **本決定を起点に掘り下げた残件は `docs/pendings.md` の残務が持つ**(2026-08-11 に、
+  どの `AC-nn` も塞いでいないため原則8のゲート行4に当たるものとして残務へ移した。
+  経緯は `docs/histories/` を参照)

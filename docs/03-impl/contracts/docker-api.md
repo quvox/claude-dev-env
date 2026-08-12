@@ -1,7 +1,7 @@
 ---
 id: docker-api
-version: 1.2.0
-updated: 2026-08-07
+version: 1.3.0
+updated: 2026-08-12
 source:
   - docs/02-design/contracts/docker-api.md
 kind: other
@@ -9,11 +9,10 @@ impl: docker-proxy/main.go::validateContainerCreate
 summary: コンテナからの Docker Engine API 要求を docker-proxy が検査・書き換え・拒否する取り決め(実装側)
 keywords: [契約, CTR, 実装]
 verified:
-  at: 2026-08-07
-  version: 1.2.0
+  at: 2026-08-12
+  version: 1.3.0
   against:
-    - doc: docs/02-design/contracts/docker-api.md
-      version: 1.1.0
+    - {doc: docs/02-design/contracts/docker-api.md, version: 1.1.0}
 ---
 
 <!-- 2026-08-04 /doc-check ssot task-impl-depth(新しい実行): **合格証を再発行した(1.0.0)。**
@@ -37,7 +36,7 @@ verified:
 | 遮断するパス | 版接頭辞を除いた `cleanPath` が `/swarm` / `/plugins` / `/configs` / `/secrets` に前方一致すれば、**メソッドを問わずボディを見ずに** `403`(本文 `blocked: <path> is not allowed`) | `docker-proxy/main.go:388`〜`393`(`blockedPathPrefixes`), `:449`〜`455` |
 | 判定の順序 | 上記のパス遮断 → (POST の create / exec create だけ)Privileged → PidMode=host → NetworkMode=host → UsernsMode=host → bind の書き換え/拒否 → 危険なケーパビリティ → デバイス割り当て | `docker-proxy/main.go:437`〜`480`, `:637`〜`682` |
 | **所有者ラベルの注入** | **拒否判定をすべて通過したあと**、トップレベル `Labels` へ `claude-dev.role=spawned` と `claude-dev.owner-project-dir=<呼び出し元コンテナの claude-dev.project-dir>` を書く。**利用者が同じキーを指定していたら上書きする**。対象は `POST /containers/create` と `POST /networks/create` の2経路(版接頭辞の有無を問わない)。**ボディの再構成は要求あたり1回**で、`r.Body` / `ContentLength` / `Content-Length` を同時に更新する | `docker-proxy/main.go:309`(注入), `:341`(書き戻し), `:350`(ネットワーク経路), `:401`(経路の正規表現), `:469`(分岐) |
-| **付与できないとき** | 呼び出し元を特定できない・`claude-dev.project-dir` が空・ボディが JSON として読めない・注入に失敗した、のいずれでも**元のボディのまま中継し、拒否しない**。**付与しなかった理由は `NO-OWNER-LABEL` としてログへ出す**(ネットワーク経路は「呼び出し元を特定できない」と「ボディを書き換えられない」の2つ、コンテナ経路は「呼び出し元を特定できない」のみ)。**コンテナ経路で所有者は解決できたが注入に失敗した場合だけログが1行も出ない**(分岐が `labelled` と `owner == ""` の2つしかないため。`docs/issues/087` が追跡する) | `docker-proxy/main.go:309`〜`:336`(所有者が空なら no-op), `:350`〜`:367` |
+| **付与できないとき** | 呼び出し元を特定できない・`claude-dev.project-dir` が空・ボディが JSON として読めない・注入に失敗した、のいずれでも**元のボディのまま中継し、拒否しない**。**付与しなかった理由をログへ1行出す**。**行の形は経路と理由で分かれる**: ネットワーク経路は `NO-OWNER-LABEL network:` を「呼び出し元を特定できない」と「ボディを書き換えられない」の2つで出す。コンテナ経路は `NO-OWNER-LABEL container:` を同じ2つで出す。**ただしボディ全体が JSON として読めない場合だけは、手前の `WARN: could not parse container create body` で早期 return するため、この行ではなく WARN 側に理由が出る**(`docker-proxy/main.go:619`) | `docker-proxy/main.go:309`〜`:336`(所有者が空なら no-op), `:350`〜`:367` |
 | Privileged | `true` なら拒否(`privileged containers are not allowed`) | `docker-proxy/main.go:637` |
 | PidMode | `host` なら拒否 | `docker-proxy/main.go:642` |
 | NetworkMode | `host` なら拒否 | `docker-proxy/main.go:645` |

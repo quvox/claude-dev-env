@@ -1,5 +1,6 @@
 ---
 id: MODULE-cli-login-codex
+updated: 2026-08-12
 module: MOD-cli-login-codex
 kind: tool
 sync: sync
@@ -10,9 +11,9 @@ contracts: CTR-cli-container
 design: DSN-mod-01, DSN-mod-02, DSN-auth-01, DSN-dist-02, DSN-env-02
 requirements: FR-env-03, FR-env-12
 tests: なし(未実装。シェル実装のため自動テストランナーが無く実機確認で代替する)
-updated: 2026-08-04
 summary: Codex のデバイス認証を実行し認証情報を共有ボリュームの codex/ へ置く
 ---
+
 # MODULE-cli-login-codex Codex 認証の取得
 
 ## 目的
@@ -26,7 +27,7 @@ summary: Codex のデバイス認証を実行し認証情報を共有ボリュ�
 1. `MODULE-cli-common-require-setup` → `MODULE-cli-common-ensure-infrastructure`。
 2. `MODULE-cli-common-lock` で**共有資源単位**のロック(キー `shared`、操作名 `login-codex`)を取る。
    取得できなければ**共有ボリュームに一切書かずに**非0で終わる(`FR-env-01` 受入基準16)。
-   `logout` / `reset` / `login` と重なるのを防ぐ(`docs/issues/020`)。
+   `logout` / `reset` / `login` と重なるのを防ぐ(`docs/histories/2026-08-04-fix-destructive-scope.md`)。
    **ロックは手順8 が終わるまで保持する**(デバイス認証の間ずっと保持する)。
 3. `login` と同型の一時コンテナ(`--rm -it --entrypoint bash`、`claude-dev-auth` を
    `~/.claude-shared` へ)を起動する。
@@ -57,7 +58,7 @@ summary: Codex のデバイス認証を実行し認証情報を共有ボリュ�
 ### MODULE-cli-common-lock
 
 - 何のために呼ぶか: 共有ボリュームの `codex/` へ認証を書く経路であり、`logout` / `reset` が同時に
-  走ると書いた直後に消える、または `start` の認証コピーが空を読む(`docs/issues/020`)。
+  走ると書いた直後に消える、または `start` の認証コピーが空を読む(`docs/histories/2026-08-04-fix-destructive-scope.md`)。
   `login` と同じキーを使うので、2つのログインが同時に走ることも防ぐ。
 - 何を渡すか: キー `shared` と操作名 `login-codex`。 / 何を受け取るか: 終了ステータス。
 - **失敗したときどうなるか**: **共有ボリュームに一切書かずに**非0で終わる。保持している操作名と
@@ -90,7 +91,7 @@ summary: Codex のデバイス認証を実行し認証情報を共有ボリュ�
 
 | 条件 | 実際の振る舞い | 呼び出し元への影響 |
 |---|---|---|
-| **共有資源単位のロックを取得できない** | 保持している操作名と PID、再実行の方法を stderr へ出し、**共有ボリュームに一切書かずに** `exit 1` | `logout` / `reset` / `login` と重なって**書いた直後に消える**ことを防ぐ(`docs/issues/020`) |
+| **共有資源単位のロックを取得できない** | 保持している操作名と PID、再実行の方法を stderr へ出し、**共有ボリュームに一切書かずに** `exit 1` | `logout` / `reset` / `login` と重なって**書いた直後に消える**ことを防ぐ(`docs/histories/2026-08-04-fix-destructive-scope.md`) |
 | **ロックが存在しないプロセスに保持されたまま残っている** | 引き継いだ旨を stderr へ出して処理を続行する | 永久に取得できない状態にならない |
 | デバイス認証を完了せず終了 | 書き戻す `auth.json` が無く、共有ボリュームは変化しない。**ロックは `trap` が解放する** | 未ログインのまま。`start` は codex 認証をコピーせずに起動する |
 | 共有側 `codex/` が root 所有のまま | 手順4の `chown -R` で修復してから進む | なし |

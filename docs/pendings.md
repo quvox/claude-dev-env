@@ -41,7 +41,9 @@
   CDP 探索を必須にする変更範囲 の8項目。
 - なぜ今は OK か: QA レーンをまだ運用していない(`02-design/environments.md`「QA(E2E + CDP探索)」=
   無効)。使っていない機能の設定値であり、決めても検証できない。独立監査(`docs` / `readiness`)は
-  有効で、そちらに必要な設定は確定している。
+  有効である。**その モデル・reasoning の行は「未定(いつ決めるか)」のままで、
+  未記入なのでキットの既定が効く**(2026-08-12 に `task-issue-sweep` が実態へ揃えた。
+  「確定している」という以前の記述は事実と違っていた)。
 - どうなったら解消が必要か: QA レーンを開始するとき。開始前に上記8項目をすべて決め、
   `02-design/environments.md` の該当行を実値へ置き換える(MINOR 変更)。とくに**ブラウザ排他ロック**は
   同時実行で相互に壊すため、運用開始の前提条件である。
@@ -160,14 +162,11 @@
 - 2026-08-10 `INDEX.md`:全体 4層構成へ移行する前のパス(`docs/00-requests/decisions.md` / `glossary.md` / `acceptance.md` / `docs/01-requirements/core.md` / `docs/03-impl/cli.md` ほか)と `docs/_steering/` / `docs/knowledge/` / `docs/feedback/log.md` を指したままで、実在するファイルとほとんど対応していない。
 - 2026-08-10 `README.md`:「ドキュメント」表 `docs/01_getting-started.md`〜`docs/10_ghcr-images.md` と `docs/impl/INDEX.md` を指したままで、いずれも 4層構成への移行で実在しない。
 - 2026-08-10 `.claude/scripts/`:2026-08-10 のキット書き換えでプロジェクト固有の `*.local.json` が失われた。`callgraph-config.local.json` は task-remove-orchestrator で作り直したが、`entrypoint-patterns.local.json` / `changeset-invariants.local.json` の有無は未確認。
-- 2026-08-10 `docs/issues/030`:`03-impl/index.md` の乖離件数の記述を問題にしているが、根拠に挙げる issue のうち `013` / `014` は task-remove-orchestrator で削除された。index.md の実測値を書き直したあとに閉じられるか再判定する。
 - 2026-08-10 `docs/03-impl/tests/*.md`:状態列が「対象外(理由: …)」を使っているが、2026-08-10 のキット書き換え後の `build-index.py` は「テスト対象外」だけを数えるため、`tests/index.md` の第3列が全て 0 になる差分が出る(本タスクの範囲外なので `git checkout` で戻した)。語彙をどちらへ揃えるか決めて一括で直す。
 - 2026-08-10 `.claude/directions/change-set.md` §2:「親の本文が変わり、かつ子見出しを改名する」を一つの変更指示で表せない(親を `sections` に載せると `merge_existing` が改名した子を拒否し、親を外すと `CS19` が「判断の節が `sections` に無い」で落ちる)。task-remove-orchestrator では改名する子を指示本文の冒頭へ出して回避した。
 - 2026-08-10 `.claude/scripts/compose-changeset.py`:`docs/03-impl/features.md` の変更指示は `## 機能一覧` の差分表しか適用されず、`sections` に挙げた他の節(統合した機能 / 昇格させた共通基盤機能 / 到達しない関数についての判断)と frontmatter の `keywords` に届かない。`.claude/directions/change-set.md` 例外1 の「§2 frontmatter still applies」と食い違う。
 - 2026-08-10 `.claude/scripts/`(git 追跡外):task-remove-orchestrator が CLAUDE.md §3 の例外として `compose-changeset.py` に 8 箇所、`close-task.py` に 1 箇所の修正を入れ、回帰フィクスチャを現実の形へ直して `test-close-task.py` を新設した。**内容と適用手順は `kit-patches/2026-08-10-compose-changeset-and-close-task.patch`(git 追跡下)にある** — キットを配り直す前にこれを本流へ戻すこと。経緯は `docs/feedbacks/026`。
 - 2026-08-10 `.claude/directions/change-set.md` §2:最初の見出しより前の本文(frontmatter 直後の HTML コメント)を `sections` にも `deletes` にも載せられないため、陳腐化した検証記録の削除が反映時の手作業として残る。task-remove-orchestrator では `01-requirements/functional.md` / `non-functional.md` / `03-impl/index.md` の 5 件を手で消した。
-- 2026-08-10 `docs/issues/009`:指摘の実体(約27件のシグネチャ不一致)は orchestrator の relations ごと消えたため 0 件になった。残るのは「省略記法を許容するかの規約が無い」という規約側の欠落だけで、`related` は実在しない ID を指したままである。
-- 2026-08-10 `docs/issues/` の `related` の陳腐化:orchestrator の削除で消えた ID / パスを指したままの issue が **9 件**ある — `004`(MODULE-orchestrator-controller ほか 4)/ `009`(MODULE-orchestrator-* 10)/ `030`(同 5)/ `054`(decisions/orch.md ほか 3)/ `056`(issues/038)/ `066`(NFR-perf-03 / tests/orchestrator.md ほか)/ `072`(contracts/cli-orchestrator.md ほか)/ `094`(FR-orch-03-3 / CTR-cli-orchestrator)/ `095`(contracts/orchestrator-prompt.md)。あわせて `095` の `pattern_survey` の実測値は「24 箇所」だが `check-changeset.py --ssot` の現在値は 6 箇所である。**9 件まとめて1回で棚卸しする**(1件ずつ直すと同じ走査を9回することになる)。
 - 2026-08-10 frontmatter `id` の重複:`docs/03-impl/tests/images.md` と `docs/03-impl/environments/images.md` がどちらも `id: images` で、CLAUDE.md §7「`id` は `docs/` 全体で一意」に反する(契約の共有 id と `index.md` の例外には当たらない)。テンプレート `03-tests-module.md`(`id: <module-slug>`)と `03-environment.md`(`id: <topic>`)がどちらも `images` を導くため、直すにはキット側の命名規約を決める必要がある(キットは CLAUDE.md §3 により製品 DoD 未達の間は凍結)。
 - 2026-08-10 規範案(キット凍結中のため実施は製品リリース後):変更指示の語彙が SSOT へ漏れても、どの機械検査も落ちない。`| FR-env-12-12 | delete | 廃止する… |` の行はフェーズ2 の `/doc-check`(タスクモード)PASS・`compose-changeset.py` のドライラン・反映のすべてを通り抜け、`/doc-check ssot` の目視で初めて見つかった。SSOT 側で `種別` 列が `正常系` / `境界値` / `異常系` 以外の値を持つ受入基準行と、frontmatter の `change:` / `sections:` / `version_bump:` を落とす `CS` 検査を足す。
 - 2026-08-10 `MOD-makefile` の本数:`relations-query.py --health` が 16 本(目安の 15 本超)として 02 の分割定義の見直しを提案している。orchestrator 削除で 19 本 → 16 本に減ったが目安は超えたままである。
@@ -175,3 +174,14 @@
 - 2026-08-11 `.claude/scripts/check-changeset.py` CS19 と `.claude/directions/change-set.md` §2 が両立しない:`02-design/system.md` は CS19 が `sections` に「分割の根拠」を要求するので、その下に**新しい子見出しを1つ足すだけ**でも親を全文差し替えるしかない。一方 §2 は「親の本文から新しい子を足してはならない(子だけを `sections` + `anchors` に載せよ)」と定める。`task-promote-shared-helpers` は `DSN-mod-07` の新設で当たり、CS19 を優先して親を全文差し替えた。2026-08-10 の「親の本文が変わり、かつ子見出しを改名する」の行と同じ系統(キットは製品 DoD 未達の間は凍結)。
 - 2026-08-11 シェル抽出器の決定 D がラベル全体を落とす:`help|*)` のように**名前付きラベルと catch-all が同じラベルに同居する**と、`*` を含むという理由でラベル全体が入口から外れ、`help` の側も巻き添えで落ちる(`.claude/scripts/cgx/shell_regex.py:169`)。`docs/issues/097` が実測込みで追跡しており、直すならキットの凍結が解けてから(`|` で分割して `*` の要素だけを落とす形にする)。
 - 2026-08-11 01 層に終了コード 130 の記述が無い:`acquire_lock` がロック取得より前に `trap '_release_all_locks; exit 130' INT TERM` を仕掛ける(`claude-dev:452` / `claude-dev-mac:517`)ため、`start` / `stop` / `login` / `login-codex` もロック取得後の `INT`・`TERM` で 130 を返す。`01-requirements/functional.md` が 130 に触れるのは `FR-env-03-23`(`logout` / `reset` の**削除の途中**)だけで、それ以外の経路の 130 はどの受入基準にも無い。03-impl 側は 2026-08-11 の `/relations all --apply` で `MODULE-cli-start` / `-stop` / `-logout` / `-reset` の戻り値欄に記載済み。**利用者から見える値なので、01 へ上げるかは要件側の判断**(上げるなら `/task-new`)。
+- 2026-08-12 **issue 004 の残件4項目**(`task-issue-sweep` が原則8のゲート行4として降格): 03-impl が「ドキュメントだけから再実装・再試験できる」深度に達していない領域が4つ残る — 永続データモデルの記述 / モデル・effort ポリシー / 観点6(テストデータの準備と後始末)/ 02 契約の復号レベルのエラーケース。どの `AC-nn` も塞いでいない。起点は `D0-scope-07`。
+- 2026-08-12 **issue 006 の残件**(同上): E2E シナリオの実施手順に固定入力・観測点・合否判定の根拠・後始末が揃っておらず、実施者によって結果が変わりうる。`docs/03-impl/tests/e2e.md` を次に触るタスクが揃える。
+- 2026-08-12 **issue 066 の残件**(同上): `NFR-perf-01` / `NFR-avail-03` / `NFR-sec-01` / `NFR-scale-01` / `NFR-ops-02` の5件で、「要件」列が述べる内容の一部しか「目標値」「測定方法」列が測っていない(起票時の6件のうち `NFR-perf-03` は 2026-08-08 に廃止済み)。
+- 2026-08-12 **issue 071 の残件**(同上): `docs/00-requests/terminology.md` の用語 23 語のうち 17 語で「含む例」「含まない例」が両方とも空。00 層の本文は人間の言葉であり、`/doc-check` A0 の full モード限定の検査でしか見ない。
+- 2026-08-12 **issue 072 の残件**(同上): 仕様ドキュメントのどこにも書かれておらず実装者が値か方針を発明するしかない箇所が5件(2026-08-06 に人間が案C=据え置きを裁定した分)。
+- 2026-08-12 **issue 080 の残件**(同上): 破壊的操作(`stop` / `logout` / `reset`)の条項がどの UC のフローにも現れず、`docs/01-requirements/usecases.md` の「シナリオ外要件」表にも `FR-env-01` / `FR-env-03` の行が無い。E2E-01 手順8 が上流の UC を持たない検証になっている。
+- 2026-08-12 **旧表記「受入基準 N」の残り 61 箇所**(`task-issue-sweep` が 127 箇所を直した残り。追跡していた issue は同タスクで削除したので、以後はこの行が持つ): 条項ID へ機械変換できた 127 箇所(18 ファイル)は直したが、`docs/03-impl/tests/e2e.md`(43)と `cli-logout.md`(8)ほかの**散文中の参照**は `FR-env-01` 受入基準 14〜27 のような**範囲表記**を含み、条項ID の記法では表せない。範囲を条項ID で書く規約を決めてから直す。
+- 2026-08-12 **実機 E2E の残務(`task-issue-sweep` 分)**: E2E-01 手順8 の全体は未実施(`logout` / `reset` を実機で流すとホストの稼働中セッションと認証・イメージが失われる。前タスクと同じ扱い)。加えて **手順8-15 の VM 部分**(`/dev/kvm` が要る)と **新設した手順8-20**(macOS 実行機が要る)、**E2E-03 手順5・6** が未実施である。代替として確認したもの: 051 / 088 / 047 は実 Docker、101 は隔離ハーネス、023 は検証ロジックの切り出し、087 は新設した単体テスト2本。
+- 2026-08-12 **残る issue 12 件のうち 9 件に `origin_layer` が無く、11 件に `closes_when` が無い**(`002` / `005` / `010` / `028` / `046` / `055` / `076` / `079` / `081` は両方欠落、`092` / `094` は `closes_when` のみ欠落)。`.claude/directions/issues-pendings.md` §3 はどちらも必須としており、`check-changeset.py --ssot` の CS20 が 9 件を報告し続ける。いずれも `task-issue-sweep` より前から在る欠落で、それぞれの issue を次に扱うタスクが埋める(独立レビュー Codex が検出)。
+- 2026-08-12 `docs/01-requirements/functional.md` の `FR-env-12-12` の廃止コメントが、実在しない `D0-orch-17` を ID 形式で引用している(2026-08-08 のオーケストレーター削除で消えた決定)。コメント内なので CS11 は見ないが、引用としては解決できない。次に `functional.md` を触るタスクが履歴のパスへ書き換える(独立レビュー Codex が検出)。
+- 2026-08-12 `docs/03-impl/contracts/docker-api.md` の `validateExecCreate` の行引用(`docker-proxy/main.go:721`〜`:733`)が実際の位置(`:730`〜`:747`)とずれている。既存の「コード引用の行番号のずれ」と同じ型で、次に同ファイルを触るタスクが取り直す(独立レビュー Codex が検出)。

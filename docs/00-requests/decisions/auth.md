@@ -1,17 +1,16 @@
 ---
 id: auth
-version: 1.3.0
-updated: 2026-08-08
+version: 1.3.1
+updated: 2026-08-12
 source:
   - docs/00-requests/request.md
 summary: 認証情報の保管・共有・破棄に関する決定事項(D0-auth-*)
 keywords: [認証, 決定事項]
 verified:
-  at: 2026-08-08
-  version: 1.3.0
+  at: 2026-08-12
+  version: 1.3.1
   against:
-    - doc: docs/00-requests/request.md
-      version: 1.3.0
+    - {doc: docs/00-requests/request.md, version: 1.4.0}
 ---
 
 <!-- 2026-08-04 /doc-check ssot task-impl-depth(新しい実行): **合格証を再発行した(1.2.0)。**
@@ -63,7 +62,7 @@ verified:
   コンテナ間で共有する。**起動時にプロジェクトディレクトリ配下へコピーし、定期的な
   バックグラウンド同期で共有ボリュームへ書き戻す**(周期は 02 が定める)。セッション・設定は
   コンテナ固有に保つ。
-- **★2026-08-04 改め(実装が正。`docs/issues/040`)**: 「コンテナローカルへコピー」「symlink は
+- **★2026-08-04 改め(実装が正。経緯は `docs/histories/2026-08-04-impl-depth.md`)**: 「コンテナローカルへコピー」「symlink は
   使わない」という当初の表現を撤回する。実装は次の形である。
   - コピー先は **`<プロジェクトディレクトリ>/.claude/` と `<同>/.codex/`**、つまり
     **`/workspace` にバインドマウントされたホスト側のプロジェクトディレクトリ**である。

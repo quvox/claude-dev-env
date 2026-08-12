@@ -1,21 +1,19 @@
 ---
 id: cli-reset
+version: 1.4.1
+updated: 2026-08-12
 scope: MOD-cli-reset
-version: 1.4.0
-updated: 2026-08-07
 source:
   - docs/01-requirements/functional.md
   - docs/02-design/system.md
 summary: MOD-cli-reset(環境の初期化)の受入基準⇄テスト対応
 keywords: [テスト]
 verified:
-  at: 2026-08-08
-  version: 1.4.0
+  at: 2026-08-12
+  version: 1.4.1
   against:
-    - doc: docs/01-requirements/functional.md
-      version: 1.12.0
-    - doc: docs/02-design/system.md
-      version: 2.8.0
+    - {doc: docs/01-requirements/functional.md, version: 1.16.0}
+    - {doc: docs/02-design/system.md, version: 2.12.0}
 ---
 
 # MOD-cli-reset のテスト対応
@@ -44,6 +42,7 @@ verified:
 - [DS-01] `FR-env-01-25` の検証を**確認プロンプトの列挙と削除後の状態の2点**で見る形にする(削除の結果だけを見ない) — 理由: この条項は「所有者を問わず消す」ことと「消える前に列挙で見られる」ことの両方を含み、`FR-env-03-14` が後者を要求している。削除結果だけを見ると、列挙を経ずに消える実装(手順3の集合を使わず引き直す実装)を素通りさせる / 見直す条件: `reset` の確認プロンプトが廃止され、列挙が利用者に見えなくなったとき
 - [DS-01] `reset` 側の実機確認を `stop` 側(手順8-14)と**別の手順(手順8-15)に分ける** — 理由: `reset` は所有者を問わず消すので、`stop` の確認で用意した「別セッションの資源」を巻き込む。同じ手順に同居させると、`stop` が消さないことの確認と `reset` が消すことの確認が同じ資源を奪い合う / 見直す条件: `reset` の削除範囲が所有者付きに変わり、`stop` と同じ前提で流せるようになったとき
 - 判断なし: 自動テストを持たないことは 02 の `DSN-test-01` / `SR-32` の適用であって、この層の判断ではない(`DS-01` の委任は「テストを書かない」判断を対象外としている)
+- [DS-01] **`reset` が VM モードのゲストディスク `claude-dev-vm-*` を削除すること**と、**削除に失敗した実行でもラベル無しコンテナの表示が出ること**を、E2E-01 手順8-15 と手順8-12 に載せる — 理由: どちらも実 Docker 資源(前者は `claude-dev-vm-<name>` という名前のボリューム、後者は削除を失敗させる状態)を作らないと再現できず、単体で切り出せる境界が無い / **ゲストディスクの確認に VM の起動は要らない** — `reset` は名前の接頭辞で列挙するので `docker volume create claude-dev-vm-<name>` で作った空のボリュームでも同じ経路に入る(独立レビュー Codex の指摘で訂正した)/ 見直す条件: `reset` がボリュームを名前の接頭辞以外の手段で引くようになったとき
 
 ## 未検証(テスト未実装)の全件
 

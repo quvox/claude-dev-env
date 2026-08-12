@@ -63,7 +63,7 @@ summary: docker-proxy は解釈できないボディを検査せず中継する�
 
 ## 関連
 
-- `docs/issues/004-modify-03-impl-lacks-reimplementation-depth.md`
+- 03-impl の再実装深度の残件(2026-08-12 に `docs/pendings.md` の残務へ降格した)
 - `00-requests/decisions/sec.md` の `D0-sec-05`
 
 ## 経緯(追記)

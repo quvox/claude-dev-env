@@ -16,8 +16,8 @@ design: DSN-mod-02, DSN-mod-03, DSN-mod-07
 requirements: FR-env-01, FR-env-03
 tests: なし(未実装。シェル実装のため自動テストランナーが無く実機確認で代替する)
 summary: 削除の計画・実行・結果の記録と、中断要求の遅延を扱う共通手順
+reflected: 2026-08-12
 ---
-
 
 # MODULE-cli-common-destructive 削除結果の記録と中断の遅延
 

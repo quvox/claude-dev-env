@@ -1,7 +1,7 @@
 ---
 id: strategy
-version: 1.5.0
-updated: 2026-08-10
+version: 1.6.0
+updated: 2026-08-12
 scope: 全体
 source:
   - docs/02-design/system.md
@@ -9,11 +9,11 @@ source:
 summary: テストのレベル別実行方法・状態列の語彙・受入基準の配分規約
 keywords: [テスト, 方針]
 verified:
-  at: 2026-08-10
-  version: 1.5.0
+  at: 2026-08-12
+  version: 1.6.0
   against:
-    - {doc: docs/02-design/system.md, version: 2.9.1}
-    - {doc: docs/02-design/environments.md, version: 1.4.0}
+    - {doc: docs/02-design/system.md, version: 2.12.0}
+    - {doc: docs/02-design/environments.md, version: 1.5.0}
 ---
 
 # テスト実装仕様 — 実行方法と共通の流儀
@@ -99,7 +99,7 @@ verified:
 | 指標 | 目標 | 現状 | 測定コマンド |
 |---|---|---|---|
 | 行カバレッジ(Go) | **目標値なし**(01 の非機能要件にカバレッジの目標は無い) | 測定していない | `docs/02-design/environments.md`「lint・テストコマンド」の**カバレッジ計測(docker-proxy)**の行 |
-| 受入基準のカバレッジ | すべての受入基準が対応表に行を持つこと(状態は問わない) | 機能要件の全 140 条項に行がある(非機能要件の 10 行を合わせて対応表は 152 行 = 条項 150 件 + `FR-env-01-9` が主担当行を3つ持つ重複2行。重複は `docs/issues/074` が追跡する) | `python3 .claude/scripts/build-index.py --check` で集計を再生成して確認する |
+| 受入基準のカバレッジ | すべての受入基準が対応表に行を持つこと(状態は問わない) | 機能要件の全 141 条項に行がある(非機能要件の 10 行を合わせて対応表は 151 行 = 機能要件の条項 141 件 + 非機能要件 10 件。**主担当行はどの条項もちょうど1つである**) | `python3 .claude/scripts/build-index.py --check` で集計を再生成して確認する |
 
 **カバレッジ率ではなく「受入基準に行があるか」を指標にする。** 自動テストを持てない領域が大きい
 (Bash と Makefile)ため、行カバレッジは実態を表さない。

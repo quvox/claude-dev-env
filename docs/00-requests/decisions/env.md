@@ -1,14 +1,14 @@
 ---
 id: env
-version: 1.5.0
-updated: 2026-08-10
+version: 1.5.1
+updated: 2026-08-12
 source:
   - docs/00-requests/request.md
 summary: 開発環境・実行環境の構成に関する決定事項(D0-env-*)
 keywords: [開発環境, 決定事項]
 verified:
-  at: 2026-08-10
-  version: 1.5.0
+  at: 2026-08-12
+  version: 1.5.1
   against:
     - {doc: docs/00-requests/request.md, version: 1.4.0}
 ---
@@ -147,6 +147,7 @@ verified:
 - 却下した案: 起動時に `-e container=docker` を付ける — `docker run` 以外の経路(一時コンテナ等)で
   漏れる。独自の変数名を使う — 外部ツールとの互換を失う。
 - 関連: FR-env-01
+
 ## D0-env-07 MCP ツールの本格導入
 
 - 区分: 要確認
@@ -283,7 +284,8 @@ verified:
     あり、対象を絞ると「全体をログアウトする」という意味が変わる(`FR-env-03` 受入基準5)。
     対象は全プロジェクトのままとし、項3の確認で守る。
   - **項4 で `logout` がプロジェクト配下を触らず、案内だけ出す** — 「消したつもりで残る」状態が
-    続き、`logout` 後の `start` が認証済みで起動する(`docs/issues/025` の事象そのもの)。
+    続き、`logout` 後の `start` が認証済みで起動する(**2026-08-04 の `task-fix-destructive-scope`
+    が解消した欠陥そのもの**。経緯は `docs/histories/2026-08-04-fix-destructive-scope.md`)。
   - **項7 で compose 資源の片付けをやめ、利用者に `docker compose down` を委ねる** —
     `FR-env-01` 受入基準6 が定める片付けを撤回することになり、compose コンテナが孤児として
     残り続ける(`D0-env-05` のライフサイクルの決定に反する)。
@@ -335,7 +337,10 @@ verified:
     (冪等に作られる共有資源で、どの操作から作っても結果が同じであるため。`FR-env-01` 受入基準16 が
     観測可能な振る舞いとして同じ限定を置いている)。
 - 報告義務: 決めた内容を該当機能の「実装上の判断」表に `D0-env-09` と共に記録する。
-- 関連: `D0-env-08` / `D0-scope-03` / `docs/issues/020`
+- 関連: `D0-env-08` / `D0-scope-03` /
+  **本委任の起点だった欠陥(排他が無く認証が空のままコンテナが起動する)は 2026-08-04 の
+  `task-fix-destructive-scope` が解消したため、経緯は
+  `docs/histories/2026-08-04-fix-destructive-scope.md` が持つ**
 
 ## D0-env-10 管理ラベルの名前と値の形式
 

@@ -16,8 +16,8 @@ design: DSN-mod-01, DSN-mod-02, DSN-arch-01, DSN-auth-01, DSN-dist-02, DSN-env-0
 requirements: FR-env-01, FR-env-02, FR-env-03, FR-env-04, FR-env-05, FR-env-06, FR-env-07, FR-env-08, FR-env-11, FR-env-12
 tests: なし(未実装。シェル実装のため自動テストランナーが無く実機確認で代替する)
 summary: カレントディレクトリで開発コンテナを起動する(VNC+Chrome が既定)
+reflected: 2026-08-12
 ---
-
 
 # MODULE-cli-start 開発コンテナの起動
 

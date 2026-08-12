@@ -1,5 +1,6 @@
 ---
 id: MODULE-cli-login
+updated: 2026-08-12
 module: MOD-cli-login
 kind: tool
 sync: sync
@@ -10,9 +11,9 @@ contracts: CTR-cli-container
 design: DSN-mod-01, DSN-mod-02, DSN-auth-01, DSN-env-02
 requirements: FR-env-03
 tests: なし(未実装。シェル実装のため自動テストランナーが無く実機確認で代替する)
-updated: 2026-08-04
 summary: Claude の OAuth ログインをコンテナ内で実行し共有ボリュームへ保存する
 ---
+
 # MODULE-cli-login Claude 認証の取得
 
 ## 目的
@@ -27,7 +28,7 @@ summary: Claude の OAuth ログインをコンテナ内で実行し共有ボリ
 2. `MODULE-cli-common-ensure-infrastructure` でネットワークと共有ボリュームを用意する。
 3. `MODULE-cli-common-lock` で**共有資源単位**のロック(キー `shared`、操作名 `login`)を取る。
    取得できなければ**共有ボリュームに一切書かずに**非0で終わる(`FR-env-01` 受入基準16)。
-   `logout` / `reset` / 他の `login` と重なるのを防ぐ(`docs/issues/020`)。
+   `logout` / `reset` / 他の `login` と重なるのを防ぐ(`docs/histories/2026-08-04-fix-destructive-scope.md`)。
    **ロックは手順7 が終わるまで保持する**(対話認証の間ずっと保持する)。
 4. `docker run --rm -it --entrypoint bash` で一時コンテナを起動し、`claude-dev-auth` を
    `~/.claude-shared` へマウントする(`TERM` / `LANG` も渡す)。
@@ -57,7 +58,7 @@ summary: Claude の OAuth ログインをコンテナ内で実行し共有ボリ
 ### MODULE-cli-common-lock
 
 - 何のために呼ぶか: 共有ボリュームへ認証を**書く**唯一の経路であり、`logout` / `reset` が同時に
-  走ると書いた直後に消える、または `start` の認証コピーが空を読む(`docs/issues/020`)。
+  走ると書いた直後に消える、または `start` の認証コピーが空を読む(`docs/histories/2026-08-04-fix-destructive-scope.md`)。
 - 何を渡すか: キー `shared` と操作名 `login`。 / 何を受け取るか: 終了ステータス。
 - **失敗したときどうなるか**: **共有ボリュームに一切書かずに**非0で終わる。保持している操作名と
   再実行の方法を表示する。
@@ -89,7 +90,7 @@ summary: Claude の OAuth ログインをコンテナ内で実行し共有ボリ
 
 | 条件 | 実際の振る舞い | 呼び出し元への影響 |
 |---|---|---|
-| **共有資源単位のロックを取得できない** | 保持している操作名と PID、再実行の方法を stderr へ出し、**共有ボリュームに一切書かずに** `exit 1` | `logout` / `reset` / 他の `login` と重なって**書いた直後に消える**ことを防ぐ(`docs/issues/020`) |
+| **共有資源単位のロックを取得できない** | 保持している操作名と PID、再実行の方法を stderr へ出し、**共有ボリュームに一切書かずに** `exit 1` | `logout` / `reset` / 他の `login` と重なって**書いた直後に消える**ことを防ぐ(`docs/histories/2026-08-04-fix-destructive-scope.md`) |
 | **ロックが存在しないプロセスに保持されたまま残っている** | 引き継いだ旨を stderr へ出して処理を続行する | 永久に取得できない状態にならない |
 | OAuth を完了せず終了 | 書き戻す認証が無く、共有ボリュームは変化しない。**ロックは `trap` が解放する** | 次回の `start` は未ログイン状態で起動する |
 | 非 TTY で実行 | `docker run -it` が「the input device is not a TTY」で失敗し非0終了する。**ロックは `trap` が解放する** | ログインできない |

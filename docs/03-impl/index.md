@@ -1,18 +1,18 @@
 ---
 id: index
-version: 1.24.0
-updated: 2026-08-11
+version: 1.25.0
+updated: 2026-08-12
 source:
   - docs/02-design/system.md
   - docs/02-design/relations.md
 summary: 03-impl 層の目次。機能間連携仕様書群の代表として層全体の版と合格証を持つ
 keywords: [目次]
 verified:
-  at: 2026-08-11
-  version: 1.24.0
+  at: 2026-08-12
+  version: 1.25.0
   against:
-    - {doc: docs/02-design/system.md, version: 2.11.0}
-    - {doc: docs/02-design/relations.md, version: 1.10.0}
+    - {doc: docs/02-design/system.md, version: 2.12.0}
+    - {doc: docs/02-design/relations.md, version: 1.10.1}
 ---
 
 # 03-impl 目次
@@ -24,8 +24,8 @@ verified:
 | 機能間連携仕様書の本数 | 61 |
 | 網羅しているモジュール | MOD-cli-common, MOD-cli-setup, MOD-cli-start, MOD-cli-stop, MOD-cli-attach, MOD-cli-code, MOD-cli-list, MOD-cli-login, MOD-cli-login-codex, MOD-cli-logout, MOD-cli-forward, MOD-cli-unforward, MOD-cli-ports, MOD-cli-ssh-keys, MOD-cli-firewall, MOD-cli-pull, MOD-cli-upgrade, MOD-cli-reset, MOD-makefile, MOD-entrypoint, MOD-firewall, MOD-docker-proxy, MOD-portsync, MOD-vm-mode, MOD-container-tools(25モジュール) |
 | `check-relations.py` 最終結果 | 合格(2026-08-11 の `task-promote-shared-helpers` 反映後に再実行。61 ファイル / 61 ID。対称性・参照実在・impl パス・必須項目・機能表との 1:1 すべて問題なし) |
-| コードとの乖離として未解決のもの | **1 件** — `docs/issues/097`(CLI の `help\|*)` 分岐が実在するのに機能表にも relations にも無い。`claude-dev:2183` / `claude-dev-mac:2207`)。**2026-08-11 に原因を実測した**: シェル抽出器の決定 D「catch-all(`*` を含むラベル)は入口にしない」が**ラベル全体を落とす**ため、`help` の側も巻き添えで入口から外れる(`.claude/scripts/cgx/shell_regex.py:169`)。したがって機能表に行を足すと FT1 が重大度「高」で落ちる。解消にはコード側で `help)` と `*)` を分けるか抽出器を直すかが要り、どちらも `task-promote-shared-helpers` の範囲外だった。**戻り値の記述の食い違い4件は 2026-08-11 に修正して 0 件になった**(`MODULE-cli-logout` / `-reset` / `-start` / `-stop` の終了コード 130 の区間)。機能の欠落として数えていた 1 件(macOS のコントローラ生存判定が無い。issue `003`。対象ごと消えたため issue も削除した)は、`orchestrate` サブコマンドごと消えた。本文の叙述レベルの食い違いとして数えていた 17 件(`docs/issues/009` の (a))も、対象が `MODULE-orchestrator-*` の relations だけだったため対象ごと消えた。**`docs/issues/009` 自体は「本文で `ctx` 等の定型引数を省略してよいかの規約が無い」という規約側の欠落として残る**(指摘の実体は 0 件)。集計の維持そのものは `docs/issues/030` で追跡する |
-| 実装の欠陥として起票済み(コードは未修正) | **9件**。数え方は「`03-impl` のいずれかの `## 既知の制限` から参照されている `type: modify` / `type: bug` の issue」のうち、**本システムが未修正のもの**とする: `docs/issues/002`(`.claude-dev.yaml` が全面上書きされる)/ `005`(docker-proxy が解釈できないボディを検査せず中継する)/ `010`(forward のホストポート選択の競合)/ `023`(`CLAUDE_DEV_SSH_BRIDGE_PORT` を無検証で採る)/ `028`(名前の一意性が `NFR-scale-01` を満たさない)/ `047`(`reset` が `claude-dev-vm-*` ボリュームを消さない)/ `055`(受入基準17 が停止中のラベル無しコンテナの列挙まで求めるが 02 は稼働中しか列挙できないとする。`MODULE-cli-reset.md` の「既知の制限」から参照。**コードの欠陥ではなく 01 ⇄ 02 の食い違いだが、数え方の定義を満たすためこの数に含める** — 2026-08-11 に数え漏れを是正した)/ `087`(所有者ラベルの注入失敗がコンテナ経路でログに出ない)/ `088`(`stop` が compose 既定ネットワークの削除失敗を表示しない)/ `101`(`reset` が削除に失敗した実行でラベル無しコンテナの表示を出さない)。**2026-08-08 のオーケストレーター削除で 10 件(`001` / `011` / `012` / `013` / `015` / `021` / `022` / `026` / `057` / `058`)が対象の実装ごと消え、21 件から 11 件になった(2026-08-11 に `055` の数え漏れを加えて 12 件)。**2026-08-11 の `task-fix-logout-zero-target-path` で `052` / `053` / `089` の3件を修正して外し、同タスクが検出した `098` / `099` / `100` の3件を加えたので 11 件になった。続く `task-fix-logout-records-and-marker` でその3件を修正して外し、同タスクが検出した `101` を加えたので **9件** である。** `014` / `046` / `051` / `054` は、どの「既知の制限」からも参照されていないためこの数に含めない(いずれもコードは未修正である。集計の対象は「既知の制限」から参照されているものに限る、という数え方の定義による)。集計の維持そのものは `docs/issues/030` で追跡する |
+| コードとの乖離として未解決のもの | **1 件** — `docs/issues/097`(CLI の `help\|*)` 分岐が実在するのに機能表にも relations にも無い。`claude-dev:2183` / `claude-dev-mac:2207`)。**2026-08-11 に原因を実測した**: シェル抽出器の決定 D「catch-all(`*` を含むラベル)は入口にしない」が**ラベル全体を落とす**ため、`help` の側も巻き添えで入口から外れる(`.claude/scripts/cgx/shell_regex.py:169`)。したがって機能表に行を足すと FT1 が重大度「高」で落ちる。解消にはコード側で `help)` と `*)` を分けるか抽出器を直すかが要り、どちらも `task-promote-shared-helpers` の範囲外だった。**戻り値の記述の食い違い4件は 2026-08-11 に修正して 0 件になった**(`MODULE-cli-logout` / `-reset` / `-start` / `-stop` の終了コード 130 の区間)。機能の欠落として数えていた 1 件(macOS のコントローラ生存判定が無い。issue `003`。対象ごと消えたため issue も削除した)は、`orchestrate` サブコマンドごと消えた。本文の叙述レベルの食い違いとして数えていた 17 件も、対象が `MODULE-orchestrator-*` の relations だけだったため対象ごと消えた(**2026-08-11 に実測して 0 件であることを確認し、これを追跡していた issue を閉じた**。「本文で `ctx` 等の定型引数を省略してよいかの規約が無い」という規約側の欠落だけが残るので、`docs/pendings.md` の残務が持つ)。**この集計そのものを維持する責任は本節にある**(以前は別の issue が追跡していたが、追跡先を本節へ一本化した) |
+| 実装の欠陥として起票済み(コードは未修正) | **5件**(2026-08-11 の `task-issue-sweep` 反映後)。数え方は「`03-impl` のいずれかの `## 既知の制限` から参照されている `type: modify` / `type: bug` の issue」のうち、**本システムが未修正のもの**とする: `docs/issues/002`(`.claude-dev.yaml` が全面上書きされる)/ `005`(docker-proxy が解釈できないボディを検査せず中継する)/ `010`(forward のホストポート選択の競合)/ `028`(名前の一意性が `NFR-scale-01` を満たさない)/ `055`(受入基準17 が停止中のラベル無しコンテナの列挙まで求めるが 02 は稼働中しか列挙できないとする。`MODULE-cli-reset.md` の「既知の制限」から参照。**コードの欠陥ではなく 01 ⇄ 02 の食い違いだが、数え方の定義を満たすためこの数に含める** — 2026-08-11 に数え漏れを是正した)。**2026-08-08 のオーケストレーター削除で 10 件(`001` / `011` / `012` / `013` / `015` / `021` / `022` / `026` / `057` / `058`)が対象の実装ごと消え、21 件から 11 件になった(2026-08-11 に `055` の数え漏れを加えて 12 件)。**2026-08-11 の `task-fix-logout-zero-target-path` で `052` / `053` / `089` の3件を修正して外し、同タスクが検出した `098` / `099` / `100` の3件を加えたので 11 件になった。続く `task-fix-logout-records-and-marker` でその3件を修正して外し、同タスクが検出した `101` を加えたので 9 件になった。**続く `task-issue-sweep` が `023` / `047` / `087` / `088` / `101` の5件を修正して外したので **5件** である。** `014` / `046` は、どの「既知の制限」からも参照されていないためこの数に含めない(いずれもコードは未修正である。集計の対象は「既知の制限」から参照されているものに限る、という数え方の定義による)。**この集計そのものを維持する責任は本節にある** |
 | `relations-coverage.py` 最終結果 | 合格(2026-08-11 の `task-promote-shared-helpers` 反映後に再実行。機能間連携仕様書 61 本 / エントリポイント候補 0 件 / 未記載 0 件)。**あわせて「要確認 66 件(impl のファイルにエントリポイント候補が無い)」を出す** — これは合否とは独立の出力で、パターンが覆っていない領域の申告である(スクリプトはこれを不合格に数えない)。**2026-08-07 に検出していた未記載 30 件は、その全件が `scan-entrypoints.py` の Go `switch` 誤検出(orchestrator の設定キー・TUI のキー入力・JSON の型識別子・git のサブコマンド文字列)であり、対象の実装ごと消えた。** 残る Go は `docker-proxy/` だけで、コードとの一致は `callgraph-check.py` と `check-relations.py` が担保する。**ただし「未記載 0 件」は機械が拾える入口に限った主張である**: 2026-08-11 の独立レビューが `claude-dev:2183` / `claude-dev-mac:2207` の `help|*)` 分岐を検出し、これは shell 抽出器(Tier 3)が入口として取り出さないため FT2 にも本検査にも現れない(`docs/issues/097`) |
 
 ## 02 との差分(未解消のもの)
@@ -34,7 +34,7 @@ verified:
 |---|---|---|---|
 | なし | — | — | — |
 
-**差分なし**(2026-08-11 の `task-fix-logout-records-and-marker` 反映後に再確認。`PLAN-*` と `MODULE-*` は
+**差分なし**(2026-08-12 の `task-issue-sweep` 反映後に再確認。この反映は `PLAN-*` の辺を1本も増減させていない(機能 61 / 機械が出した辺 88 は反映の前後で同数)。`PLAN-*` と `MODULE-*` は
 61 対 61 で、`呼び出し元` / `呼び出す先` / `契約` の食い違いは無い — `check-changeset.py` の CS9 と
 `callgraph-check.py` の CG3/CG4 で確認した。同タスクが増やした辺
 `PLAN-cli-logout` → `PLAN-cli-common-spawned-resources` は 02・03 の両方に入っている)。

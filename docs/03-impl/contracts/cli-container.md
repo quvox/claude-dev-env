@@ -1,7 +1,7 @@
 ---
 id: cli-container
-version: 1.9.0
-updated: 2026-08-11
+version: 1.10.0
+updated: 2026-08-12
 source:
   - docs/02-design/contracts/cli-container.md
 kind: other
@@ -9,10 +9,10 @@ impl: claude-dev::main#start, claude-dev-mac::main#start
 summary: ホスト CLI がコンテナへ渡す環境変数・マウント・起動オプションの取り決め(実装側)
 keywords: [契約, CTR, 実装]
 verified:
-  at: 2026-08-11
-  version: 1.9.0
+  at: 2026-08-12
+  version: 1.10.0
   against:
-    - {doc: docs/02-design/contracts/cli-container.md, version: 1.10.0}
+    - {doc: docs/02-design/contracts/cli-container.md, version: 1.11.0}
 ---
 
 # CTR-cli-container ホスト CLI → コンテナ/entrypoint(実装)
@@ -68,7 +68,7 @@ verified:
 
 | 種別 | 設計(02)の期待 | 実装 | 対処 |
 |---|---|---|---|
-| 名前の一意性 | 「名前・ポート・プロファイルの**一意化で衝突を避ける**」(`02-design/contracts/cli-container.md` の「順序性・冪等性・並行性の背景」/ `NFR-scale-01`「衝突 0 件」) | **compose プロジェクト名は起動ディレクトリの絶対パスのハッシュを含めて一意化した**(`DSN-env-03`)。**コンテナ名は依然ディレクトリ名だけから決まり一意でない** | **設計が正**と裁定済み(2026-08-04)。**compose 側は解消**(`docs/issues/024` を閉じた)。**コンテナ名の一意化は未解決**で、`docs/issues/028-modify-name-uniqueness-does-not-satisfy-nfr-scale-01.md` で追跡する。ただし管理ラベル `claude-dev.project-dir` により、衝突時にどのディレクトリのものかを事実として示せるようになった |
+| 名前の一意性 | 「名前・ポート・プロファイルの**一意化で衝突を避ける**」(`02-design/contracts/cli-container.md` の「順序性・冪等性・並行性の背景」/ `NFR-scale-01`「衝突 0 件」) | **compose プロジェクト名は起動ディレクトリの絶対パスのハッシュを含めて一意化した**(`DSN-env-03`)。**コンテナ名は依然ディレクトリ名だけから決まり一意でない** | **設計が正**と裁定済み(2026-08-04)。**compose 側は解消**(経緯は `docs/histories/2026-08-04-fix-destructive-scope.md`)。**コンテナ名の一意化は未解決**で、`docs/issues/028-modify-name-uniqueness-does-not-satisfy-nfr-scale-01.md` で追跡する。ただし管理ラベル `claude-dev.project-dir` により、衝突時にどのディレクトリのものかを事実として示せるようになった |
 
 ## 既知の制限
 
@@ -82,5 +82,4 @@ verified:
 | **遊休判定の集合に利用者の compose コンテナが入る** | Claude コンテナ内から `docker compose` で起動した資源も `claude-dev-net` に接続するため「稼働中」に数える。docker-proxy が回収されにくく、`reset` が「完全な初期化になっていない」になりやすい。**過剰に数える=消さない側**なので `FR-env-01` 受入基準9 は破らない | なし(2026-08-04 の決定シート #1 で人間が「現状のまま」と裁定) |
 | **排他ロックはホスト CLI のプロセス間・同一ユーザのみ** | 利用者が直接 `docker rm -f` する経路、別ユーザ、別ホストからの操作は保護されない。**コンテナ内の認証書き戻しループ(30 秒周期)にも効かない**ため、ラベルを持たないコンテナを残したまま `logout` すると最大 30 秒で認証が復活する(警告を出す) | なし(契約の「ロックが守れない範囲」が明示) |
 | **残骸の引き取りに2システムコール分の窓が残る** | 引き取りで生きているロックを奪い元に戻すまでの2システムコールの間に第三のプロセスが取得すると、2つが同時に臨界区間に入る。**この場合は「ロックを元に戻せませんでした」を出して知らせる** | なし(閾値の外: 成立に3プロセスの同時競合が要る。黙って進まない) |
-| `CLAUDE_DEV_SSH_BRIDGE_PORT` を検証しない | **ホストの環境変数から読むため利用者が任意の値を与えられる**(`claude-dev-mac:274` の `${CLAUDE_DEV_SSH_BRIDGE_PORT:-}`)。不正な値でも socat の起動を試み、失敗しても成功時と同じ表示で起動が続く | `docs/issues/023-bug-ssh-bridge-port-accepts-unvalidated-host-env.md` |
 | 起動途中の失敗で `${PROJECT_DIR}/.claude` / `.codex` が残る | 認証コピー以降の失敗ではコンテナが無いのに作業用ディレクトリだけが残る。**再実行で回復する**(いずれの手順も再入可能) | なし(閾値の外: 失敗は非0終了で**その場で気づける**。再実行で回復する) |

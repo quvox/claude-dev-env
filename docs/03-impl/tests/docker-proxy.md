@@ -1,21 +1,19 @@
 ---
 id: docker-proxy
+version: 1.3.1
+updated: 2026-08-12
 scope: MOD-docker-proxy
-version: 1.3.0
-updated: 2026-08-07
 source:
   - docs/01-requirements/functional.md
   - docs/02-design/system.md
 summary: MOD-docker-proxy(Docker API の検査と中継)の受入基準⇄テスト対応
 keywords: [テスト]
 verified:
-  at: 2026-08-08
-  version: 1.3.0
+  at: 2026-08-12
+  version: 1.3.1
   against:
-    - doc: docs/01-requirements/functional.md
-      version: 1.12.0
-    - doc: docs/02-design/system.md
-      version: 2.8.0
+    - {doc: docs/01-requirements/functional.md, version: 1.16.0}
+    - {doc: docs/02-design/system.md, version: 2.12.0}
 ---
 
 # MOD-docker-proxy のテスト対応
@@ -33,7 +31,7 @@ verified:
 | FR-env-07-9 | 異常系 | E2E | E2E-03(実機確認手順) | 未検証(テスト未実装) |
 | FR-env-07-10 | 異常系 | E2E | E2E-03(実機確認手順) | 未検証(テスト未実装) |
 | FR-env-07-11 | 正常系 | 単体 | `docker-proxy/labels_test.go::TestValidateContainerCreate_InjectsOwnerLabels`, `::TestValidateContainerCreate_InjectsOwnerLabelsWithoutHostConfig`, `::TestValidateContainerCreate_InjectionLeavesOtherFieldsIntact`, `::TestValidateContainerCreate_OverwritesUserSuppliedOwnerLabel`, `::TestValidateContainerCreate_RejectedRequestIsNotLabelled`, `::TestValidateContainerCreate_BindRewriteAndLabelShareOneReconstruction`, `::TestValidateContainerCreate_LabelsIndependentOfBindSwitch`, `::TestLabelNetworkCreate_InjectsOwnerLabels`, `::TestNetworkCreateRe` | 実装済み |
-| FR-env-07-12 | 境界値 | 単体 | `docker-proxy/labels_test.go::TestValidateContainerCreate_NoOwnerLabelWhenCallerUnknown`, `::TestValidateContainerCreate_NoOwnerLabelWhenProjectDirEmpty`, `::TestValidateContainerCreate_UnparseableBodyRelayedUnchanged`, `::TestLabelNetworkCreate_NoOwnerLeavesBodyUntouched`, `::TestInjectOwnerLabels_EmptyOwnerIsNoop` | 実装済み |
+| FR-env-07-12 | 境界値 | 単体 | `docker-proxy/labels_test.go::TestValidateContainerCreate_NoOwnerLabelWhenCallerUnknown`, `::TestValidateContainerCreate_NoOwnerLabelWhenProjectDirEmpty`, `::TestValidateContainerCreate_UnparseableBodyRelayedUnchanged`, `::TestLabelNetworkCreate_NoOwnerLeavesBodyUntouched`, `::TestInjectOwnerLabels_EmptyOwnerIsNoop`, `::TestValidateContainerCreate_LogsReasonWhenNotLabelled`, `::TestValidateContainerCreate_NoReasonLogWhenLabelled` | 実装済み |
 | NFR-sec-01 | 非機能 | 単体 | `docker-proxy/main_test.go::TestValidateContainerCreate_BlocksDangerousCaps`, `::TestValidateContainerCreate_BlocksDevices`, `::TestValidateExecCreate_BlocksPrivileged`, `::TestValidateContainerCreate_AllowsSafeCaps` | 実装済み |
 
 ## 契約の結合テスト
@@ -46,7 +44,7 @@ verified:
 
 | MODULE-ID | テスト識別子 | 状態 |
 |---|---|---|
-| MODULE-docker-proxy-serve | `docker-proxy/labels_test.go::TestValidateContainerCreate_InjectsOwnerLabels`, `docker-proxy/labels_test.go::TestValidateContainerCreate_InjectsOwnerLabelsWithoutHostConfig`, `docker-proxy/labels_test.go::TestValidateContainerCreate_InjectionLeavesOtherFieldsIntact`, `docker-proxy/labels_test.go::TestValidateContainerCreate_OverwritesUserSuppliedOwnerLabel`, `docker-proxy/labels_test.go::TestValidateContainerCreate_NoOwnerLabelWhenCallerUnknown`, `docker-proxy/labels_test.go::TestValidateContainerCreate_NoOwnerLabelWhenProjectDirEmpty`, `docker-proxy/labels_test.go::TestValidateContainerCreate_UnparseableBodyRelayedUnchanged`, `docker-proxy/labels_test.go::TestValidateContainerCreate_RejectedRequestIsNotLabelled`, `docker-proxy/labels_test.go::TestValidateContainerCreate_BindRewriteAndLabelShareOneReconstruction`, `docker-proxy/labels_test.go::TestValidateContainerCreate_LabelsIndependentOfBindSwitch`, `docker-proxy/labels_test.go::TestLabelNetworkCreate_InjectsOwnerLabels`, `docker-proxy/labels_test.go::TestLabelNetworkCreate_NoOwnerLeavesBodyUntouched`, `docker-proxy/labels_test.go::TestNetworkCreateRe`, `docker-proxy/labels_test.go::TestInjectOwnerLabels_EmptyOwnerIsNoop`, `docker-proxy/main_test.go::TestValidateContainerCreate_BlocksPrivileged`, `docker-proxy/main_test.go::TestValidateContainerCreate_BlocksPidHost`, `docker-proxy/main_test.go::TestValidateContainerCreate_BlocksNetworkHost`, `docker-proxy/main_test.go::TestValidateContainerCreate_BlocksUsernsHost`, `docker-proxy/main_test.go::TestValidateContainerCreate_BlocksDangerousCaps`, `docker-proxy/main_test.go::TestValidateContainerCreate_BlocksDevices`, `docker-proxy/main_test.go::TestValidateExecCreate_BlocksPrivileged`, `docker-proxy/main_test.go::TestContainerCreateRe`, `docker-proxy/main_test.go::TestHijackEndpointRe`, `docker-proxy/binds_test.go::TestContainWorkspacePath`, `docker-proxy/binds_test.go::TestContainWorkspacePath_LexicalOnly`, `docker-proxy/binds_test.go::TestRewriteBinds_RewritesUnderWorkspace`, `docker-proxy/binds_test.go::TestRewriteBinds_RejectsOutsideWorkspace`, `docker-proxy/binds_test.go::TestRewriteBinds_MountsBindOutsideRejected`, `docker-proxy/binds_test.go::TestValidateContainerCreate_RewritesWorkspaceBind`, `docker-proxy/main_test.go::TestValidateContainerCreate_BlocksHostBind`, `docker-proxy/main_test.go::TestValidateContainerCreate_BlocksBindMount`, `docker-proxy/main_test.go::TestValidateContainerCreate_AllowsSafeCaps`, `docker-proxy/main_test.go::TestValidateContainerCreate_AllowsEmptyBody`, `docker-proxy/main_test.go::TestValidateContainerCreate_AllowsNoHostConfig`, `docker-proxy/main_test.go::TestValidateContainerCreate_AllowsCleanRequest`, `docker-proxy/main_test.go::TestValidateContainerCreate_AllowsNamedVolume`, `docker-proxy/main_test.go::TestValidateExecCreate_AllowsNormal`, `docker-proxy/binds_test.go::TestRewriteBinds_MountsBind`, `docker-proxy/binds_test.go::TestRewriteBinds_EmptyProjectRejectsAbsolute` | 実装済み |
+| MODULE-docker-proxy-serve | `docker-proxy/labels_test.go::TestValidateContainerCreate_InjectsOwnerLabels`, `docker-proxy/labels_test.go::TestValidateContainerCreate_InjectsOwnerLabelsWithoutHostConfig`, `docker-proxy/labels_test.go::TestValidateContainerCreate_InjectionLeavesOtherFieldsIntact`, `docker-proxy/labels_test.go::TestValidateContainerCreate_OverwritesUserSuppliedOwnerLabel`, `docker-proxy/labels_test.go::TestValidateContainerCreate_NoOwnerLabelWhenCallerUnknown`, `docker-proxy/labels_test.go::TestValidateContainerCreate_NoOwnerLabelWhenProjectDirEmpty`, `docker-proxy/labels_test.go::TestValidateContainerCreate_UnparseableBodyRelayedUnchanged`, `docker-proxy/labels_test.go::TestValidateContainerCreate_RejectedRequestIsNotLabelled`, `docker-proxy/labels_test.go::TestValidateContainerCreate_BindRewriteAndLabelShareOneReconstruction`, `docker-proxy/labels_test.go::TestValidateContainerCreate_LabelsIndependentOfBindSwitch`, `docker-proxy/labels_test.go::TestLabelNetworkCreate_InjectsOwnerLabels`, `docker-proxy/labels_test.go::TestLabelNetworkCreate_NoOwnerLeavesBodyUntouched`, `docker-proxy/labels_test.go::TestNetworkCreateRe`, `docker-proxy/labels_test.go::TestInjectOwnerLabels_EmptyOwnerIsNoop`, `docker-proxy/main_test.go::TestValidateContainerCreate_BlocksPrivileged`, `docker-proxy/main_test.go::TestValidateContainerCreate_BlocksPidHost`, `docker-proxy/main_test.go::TestValidateContainerCreate_BlocksNetworkHost`, `docker-proxy/main_test.go::TestValidateContainerCreate_BlocksUsernsHost`, `docker-proxy/main_test.go::TestValidateContainerCreate_BlocksDangerousCaps`, `docker-proxy/main_test.go::TestValidateContainerCreate_BlocksDevices`, `docker-proxy/main_test.go::TestValidateExecCreate_BlocksPrivileged`, `docker-proxy/main_test.go::TestContainerCreateRe`, `docker-proxy/main_test.go::TestHijackEndpointRe`, `docker-proxy/binds_test.go::TestContainWorkspacePath`, `docker-proxy/binds_test.go::TestContainWorkspacePath_LexicalOnly`, `docker-proxy/binds_test.go::TestRewriteBinds_RewritesUnderWorkspace`, `docker-proxy/binds_test.go::TestRewriteBinds_RejectsOutsideWorkspace`, `docker-proxy/binds_test.go::TestRewriteBinds_MountsBindOutsideRejected`, `docker-proxy/binds_test.go::TestValidateContainerCreate_RewritesWorkspaceBind`, `docker-proxy/main_test.go::TestValidateContainerCreate_BlocksHostBind`, `docker-proxy/main_test.go::TestValidateContainerCreate_BlocksBindMount`, `docker-proxy/main_test.go::TestValidateContainerCreate_AllowsSafeCaps`, `docker-proxy/main_test.go::TestValidateContainerCreate_AllowsEmptyBody`, `docker-proxy/main_test.go::TestValidateContainerCreate_AllowsNoHostConfig`, `docker-proxy/main_test.go::TestValidateContainerCreate_AllowsCleanRequest`, `docker-proxy/main_test.go::TestValidateContainerCreate_AllowsNamedVolume`, `docker-proxy/main_test.go::TestValidateExecCreate_AllowsNormal`, `docker-proxy/binds_test.go::TestRewriteBinds_MountsBind`, `docker-proxy/binds_test.go::TestRewriteBinds_EmptyProjectRejectsAbsolute`, `docker-proxy/labels_test.go::TestValidateContainerCreate_LogsReasonWhenNotLabelled`, `docker-proxy/labels_test.go::TestValidateContainerCreate_NoReasonLogWhenLabelled` | 実装済み |
 
 ## テスト設計の判断
 
@@ -61,5 +59,6 @@ verified:
 
 | # | 対象 | なぜ未実装か | 解消の条件 |
 |---|---|---|---|
-| 1 | FR-env-07 — 受入基準 9(異常系) | Go の自動テストは書ける領域だが未実装。中継の失敗と起動時の中断は実プロセスと実ソケットを要するため、現状は E2E-03 の実機確認で代替している | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |
-| 2 | FR-env-07 — 受入基準 10(異常系) | Go の自動テストは書ける領域だが未実装。中継の失敗と起動時の中断は実プロセスと実ソケットを要するため、現状は E2E-03 の実機確認で代替している | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |
+| 1 | FR-env-07-9(異常系) | Go の自動テストは書ける領域だが未実装。中継の失敗と起動時の中断は実プロセスと実ソケットを要するため、現状は E2E-03 の実機確認で代替している | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |
+| 2 | FR-env-07-10(異常系) | Go の自動テストは書ける領域だが未実装。中継の失敗と起動時の中断は実プロセスと実ソケットを要するため、現状は E2E-03 の実機確認で代替している | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |
+

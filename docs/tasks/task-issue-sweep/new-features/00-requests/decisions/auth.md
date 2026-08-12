@@ -6,6 +6,7 @@ sections:
   - "## D0-auth-03 認証はコピーと定期書き戻しで共有する(symlink 不採用)"
 deletes: []
 reason: 'issue 054(解消して削除された issue のパスが仕様ドキュメントの根拠として残る)の 00 層1箇所。`D0-auth-03` の「★2026-08-04 改め」が `docs/issues/040` を根拠として指しているが、この issue は 2026-08-04 の `task-impl-depth` で解消して削除済みであり、参照先が実在しない(`check-changeset.py --ssot` の CS11)。経緯を持つ `docs/histories/2026-08-04-impl-depth.md`(「解消した issue」欄が `040` を挙げる)へ付け替える。**決定の内容・理由・却下した案・残るリスクは1文字も変えない** — 変えるのは根拠の指し先だけである'
+reflected: 2026-08-12
 ---
 
 ## D0-auth-03 認証はコピーと定期書き戻しで共有する(symlink 不採用)

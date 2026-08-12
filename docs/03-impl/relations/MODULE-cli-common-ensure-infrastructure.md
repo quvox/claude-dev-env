@@ -1,5 +1,6 @@
 ---
 id: MODULE-cli-common-ensure-infrastructure
+updated: 2026-08-12
 module: MOD-cli-common
 kind: function-call
 sync: sync
@@ -10,7 +11,6 @@ contracts: CTR-cli-container
 design: DSN-mod-01, DSN-mod-02, DSN-auth-01
 requirements: FR-env-01, FR-env-03
 tests: なし(未実装。シェル実装のため自動テストランナーが無く実機確認で代替する)
-updated: 2026-08-02
 summary: docker network と共有 3 ボリュームを冪等に作成する
 ---
 
@@ -24,7 +24,7 @@ summary: docker network と共有 3 ボリュームを冪等に作成する
 
 ## 処理の流れ
 
-1. `docker network create claude-dev-net 2>/dev/null || true` — 既存ならエラーを握りつぶす。
+1. `docker network create claude-dev-net >/dev/null 2>&1 || true` — 既存ならエラーを握りつぶし、**標準出力も捨てる**。`docker network create` は**作成したネットワークの ID(64桁の16進)をそのまま標準出力へ出す**ため、捨てないと利用者向けの出力に生の Docker ID が1行混じる。
 2. `docker volume create claude-dev-auth` — 認証共有ボリューム(claude と codex の双方)。
 3. `docker volume create claude-dev-history` — シェル履歴の共有ボリューム。
 4. `docker volume create claude-dev-config` — 設定共有ボリューム。
@@ -71,6 +71,8 @@ summary: docker network と共有 3 ボリュームを冪等に作成する
 |---|---|---|
 | 1 | codex 認証を専用ボリュームにせず `claude-dev-auth` の `codex/` サブディレクトリへ相乗りさせる(ボリュームを増やさず `logout` / `reset` の分岐も増やさないため) | D0-auth-01 |
 | 2 | Chrome プロファイルはコンテナごとに分離し、ここでは作らない(共有すると同時起動時に SingletonLock を奪い合いプロファイルが壊れる) | D0-scope-02 |
+
+- [DS-03] `docker network create` の**標準出力も**捨てる(`>/dev/null 2>&1`)— 理由: このコマンドは作成したネットワークの ID をそのまま標準出力へ出すので、捨てないと `claude-dev start` の利用者向け出力に 64 桁の16進が1行混じる。`02-design/logging.md`「主要イベントのログ仕様」はこの行を出力内容として挙げていない / 見直す条件: 利用者がネットワーク ID を読む必要が生じたとき
 
 ## 既知の制限
 

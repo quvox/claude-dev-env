@@ -16,8 +16,8 @@ design: DSN-mod-01, DSN-mod-02, DSN-env-01, DSN-env-02, DSN-env-03, DSN-env-04
 requirements: FR-env-01, FR-env-07
 tests: なし(未実装。シェル実装のため自動テストランナーが無く実機確認で代替する)
 summary: セッションと、そのセッションが作った資源を停止・削除し、遊休なら docker-proxy も止める
+reflected: 2026-08-12
 ---
-
 
 # MODULE-cli-stop セッションの停止
 

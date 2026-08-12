@@ -1,7 +1,7 @@
 ---
 id: relations
-version: 1.10.0
-updated: 2026-08-11
+version: 1.10.1
+updated: 2026-08-12
 source:
   - docs/01-requirements/functional.md
   - docs/01-requirements/usecases.md
@@ -9,12 +9,12 @@ source:
 summary: 設計が想定する機能連携 PLAN-* の一覧。03-impl/relations との突き合わせの当事者
 keywords: [想定機能連携, PLAN]
 verified:
-  at: 2026-08-11
-  version: 1.10.0
+  at: 2026-08-12
+  version: 1.10.1
   against:
-    - {doc: docs/01-requirements/functional.md, version: 1.14.0}
+    - {doc: docs/01-requirements/functional.md, version: 1.16.0}
     - {doc: docs/01-requirements/usecases.md, version: 1.5.0}
-    - {doc: docs/02-design/system.md, version: 2.11.0}
+    - {doc: docs/02-design/system.md, version: 2.12.0}
 ---
 
 # 想定機能連携一覧
@@ -229,7 +229,6 @@ graph LR
   `PLAN-cli-common-select-ssh-keys` → `PLAN-cli-common-write-project-ssh-keys` の**2本だけ**で、
   いずれも一方向である。**循環が無いことは `environments.md`「ドキュメント整合検査コマンド」の
   構造の健全性の検査が担保する**)。
-  **この2本を「例外」とみなすか、宣言のほうを直すべきかは `docs/issues/048` で追跡する。**
   共有基盤は4種類に分かれる。**判定系**(名前・状態・存在・URL・compose 一意化名・
   管理ラベルの値・遊休判定の集合・セッション由来の資源の一覧の導出)は状態を変えない。
   **用意系**(インフラ・鍵の保存)は冪等な副作用を持つ。**排他系**(`PLAN-cli-common-lock`)は

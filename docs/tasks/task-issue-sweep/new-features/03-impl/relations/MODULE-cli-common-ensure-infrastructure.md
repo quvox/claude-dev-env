@@ -16,8 +16,8 @@ requirements: FR-env-01, FR-env-03
 tests: なし(未実装。シェル実装のため自動テストランナーが無く実機確認で代替する)
 updated: 2026-08-11
 summary: docker network と共有 3 ボリュームを冪等に作成する
+reflected: 2026-08-12
 ---
-
 
 # MODULE-cli-common-ensure-infrastructure 共有インフラの冪等作成
 
