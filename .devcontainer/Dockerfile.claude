@@ -510,6 +510,25 @@ RUN FNM_DEFAULT_BIN="${USER_HOME}/.local/share/fnm/aliases/default/bin" \
     && chmod 755 /usr/local/bin/codex \
     && /usr/local/bin/codex --version
 
+# --- 同梱外部バイナリの設置（externals/）---
+# 保守者が externals/ へ手で置いたファイルを /usr/local/bin へ設置する（FR-env-13 / D0-dist-05）。
+# **ここが配布ステージの最終レイヤーである**: 差し替えの失効を上の層（エージェント CLI・vnc-base）
+# へ波及させないため（SR-24 / DSN-dist-01）。両ステージへ同じ処理を重複して書くのは、
+# 中間ステージへ共通化するとその層が共有チェーンに入り「終端配置」の意味を失うためで、
+# エージェント CLI の導入が既に同じ扱いである（このファイルの配布ステージ直前のコメント）。
+# アーキテクチャ判定は dpkg --print-architecture（このファイルが既に5箇所で使っている値）。
+# BuildKit の自動 ARG TARGETARCH は使わない — レガシービルダーで空になるため。
+# 規約の正は docs/03-impl/environments/images.md「同梱外部バイナリの設置（externals/）」。
+COPY externals/ /tmp/externals/
+RUN set -eu; \
+    arch="$(dpkg --print-architecture)"; \
+    for d in /tmp/externals "/tmp/externals/${arch}"; do \
+      [ -d "$d" ] || continue; \
+      find "$d" -maxdepth 1 -type f ! -name 'README.md' -print0 \
+        | xargs -0 -r -I{} install -m 0755 -o root -g root {} /usr/local/bin/; \
+    done; \
+    rm -rf /tmp/externals
+
 # --- claude-vnc: VNC あり配布イメージ（claude-dev-claude-vnc）---
 FROM vnc-base AS claude-vnc
 
@@ -537,3 +556,22 @@ RUN FNM_DEFAULT_BIN="${USER_HOME}/.local/share/fnm/aliases/default/bin" \
         "$FNM_DEFAULT_BIN" "$FNM_DEFAULT_BIN" > /usr/local/bin/codex \
     && chmod 755 /usr/local/bin/codex \
     && /usr/local/bin/codex --version
+
+# --- 同梱外部バイナリの設置（externals/）---
+# 保守者が externals/ へ手で置いたファイルを /usr/local/bin へ設置する（FR-env-13 / D0-dist-05）。
+# **ここが配布ステージの最終レイヤーである**: 差し替えの失効を上の層（エージェント CLI・vnc-base）
+# へ波及させないため（SR-24 / DSN-dist-01）。両ステージへ同じ処理を重複して書くのは、
+# 中間ステージへ共通化するとその層が共有チェーンに入り「終端配置」の意味を失うためで、
+# エージェント CLI の導入が既に同じ扱いである（このファイルの配布ステージ直前のコメント）。
+# アーキテクチャ判定は dpkg --print-architecture（このファイルが既に5箇所で使っている値）。
+# BuildKit の自動 ARG TARGETARCH は使わない — レガシービルダーで空になるため。
+# 規約の正は docs/03-impl/environments/images.md「同梱外部バイナリの設置（externals/）」。
+COPY externals/ /tmp/externals/
+RUN set -eu; \
+    arch="$(dpkg --print-architecture)"; \
+    for d in /tmp/externals "/tmp/externals/${arch}"; do \
+      [ -d "$d" ] || continue; \
+      find "$d" -maxdepth 1 -type f ! -name 'README.md' -print0 \
+        | xargs -0 -r -I{} install -m 0755 -o root -g root {} /usr/local/bin/; \
+    done; \
+    rm -rf /tmp/externals
