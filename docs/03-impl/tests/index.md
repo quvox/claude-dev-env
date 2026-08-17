@@ -29,10 +29,10 @@
 | [e2e](e2e.md) | E2E | 0 / **4** / 0 | 1.10.0 | 2026-08-12 | E2Eシナリオ E2E-01〜E2E-03 と E2E-06 ⇄ テスト対応 |
 | [entrypoint](entrypoint.md) | MOD-entrypoint | 0 / **23** / 0 | 1.2.1 | 2026-08-12 | MOD-entrypoint(コンテナ起動シーケンス)の受入基準⇄テスト対応 |
 | [firewall](firewall.md) | MOD-firewall | 0 / **5** / 0 | 1.2.1 | 2026-08-12 | MOD-firewall(外向き通信のブラックリスト適用)の受入基準⇄テスト対応 |
-| [images](images.md) | (モジュール外)イメージのビルドと GHCR 配布 | 0 / **15** / 0 | 1.3.1 | 2026-08-12 | どのモジュールにも属さないイメージのビルドと GHCR 配布の受入基準⇄テスト対応 |
+| [images](images.md) | (モジュール外)イメージのビルドと GHCR 配布 | 0 / **21** / 0 | 1.4.0 | 2026-08-18 | どのモジュールにも属さないイメージのビルドと GHCR 配布の受入基準⇄テスト対応 |
 | [makefile](makefile.md) | MOD-makefile | 0 / **18** / 0 | 1.2.1 | 2026-08-12 | MOD-makefile(ビルド・導入・運用ターゲット)の受入基準⇄テスト対応 |
 | [portsync](portsync.md) | MOD-portsync | 0 / **1** / 0 | 1.1.1 | 2026-08-12 | MOD-portsync(DooD 経路のポート同期)の受入基準⇄テスト対応 |
-| [strategy](strategy.md) | 全体 | - | 1.6.0 | 2026-08-12 | テストのレベル別実行方法・状態列の語彙・受入基準の配分規約 |
+| [strategy](strategy.md) | 全体 | - | 1.6.1 | 2026-08-18 | テストのレベル別実行方法・状態列の語彙・受入基準の配分規約 |
 | [vm-mode](vm-mode.md) | MOD-vm-mode | 0 / **8** / 0 | 1.1.1 | 2026-08-12 | MOD-vm-mode(ゲスト VM 内ネイティブ Docker)の受入基準⇄テスト対応 |
 
 件数: 28

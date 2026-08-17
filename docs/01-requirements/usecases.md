@@ -1,18 +1,18 @@
 ---
 id: usecases
-version: 1.5.0
-updated: 2026-08-10
+version: 1.6.0
+updated: 2026-08-18
 source:
   - docs/00-requests/acceptances.md
   - docs/01-requirements/functional.md
 summary: ユースケース UC-01〜UC-03 と UC-06。受け入れ基準を基本フロー・代替フロー・例外フローへ形式化したもの
 keywords: [ユースケース, UC, E2Eの上流]
 verified:
-  at: 2026-08-10
-  version: 1.5.0
+  at: 2026-08-18
+  version: 1.6.0
   against:
-    - {doc: docs/00-requests/acceptances.md, version: 1.4.1}
-    - {doc: docs/01-requirements/functional.md, version: 1.13.1}
+    - {doc: docs/00-requests/acceptances.md, version: 1.5.0}
+    - {doc: docs/01-requirements/functional.md, version: 1.17.0}
 ---
 
 # ユースケース
@@ -165,6 +165,7 @@ verified:
 | 要件 ID | どの UC にも現れない理由 |
 |---|---|
 | FR-env-09(イメージ配布) | CI がイメージをビルドして GHCR へ公開する処理であり、利用者の操作フローの中に現れない(利用者側の取得操作 `claude-dev pull` は任意で、UC-01 の事前条件「初回セットアップ」を満たす手段の1つに過ぎない)。確認は CI 側の成果物検証で行う |
+| FR-env-13(同梱外部バイナリ) | **保守者**がイメージのビルドより前に行う手作業と、ビルドそのものの中で完結する処理であり、開発者の操作フローの中に現れない(開発者から見えるのは「コンテナ内でコマンドが使える」という結果だけで、そこに至る操作を開発者は行わない)。確認は `FR-env-09` と同じく CI 側の成果物検証で行う |
 | NFR-perf-01〜02 / NFR-avail-02〜03 / NFR-ops-02〜03・05 / NFR-scale-01〜02 | 非機能要件であり、特定のユーザ旅程を持たない |
 
 ## AC ⇄ UC カバレッジ
@@ -175,3 +176,4 @@ verified:
 | AC-02 | UC-02 | - |
 | AC-03 | UC-03 | - |
 | AC-06 | UC-06 | - |
+| AC-07 | なし | **成果物(イメージの中身)の検証であり、通しで実行する利用者の旅程を持たない**。操作は保守者だけで完結し(用意 → ビルド → 中身の確認)、**開発者がその同梱物を使う場面は `UC-01` の基本フローそのもの**で、この基準が新しい旅程を足すわけではない。UC を立てるとそこから E2E シナリオを導くことになるが(02 のテスト戦略は UC を E2E の唯一の上流としている)、確認すべきはビルド成果物であって操作の通し実行ではない。`FR-env-09`(イメージ配布)が同じ理由で UC を持たない先例である |

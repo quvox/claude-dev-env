@@ -1,16 +1,16 @@
 ---
 id: terminology
-version: 1.5.0
-updated: 2026-08-10
+version: 1.6.0
+updated: 2026-08-18
 source:
   - docs/00-requests/request.md
 summary: 本システムで使う語の定義・英語表記(識別子)・使ってはいけない言い方
 keywords: [用語集, 識別子, 表記ゆれ]
 verified:
-  at: 2026-08-10
-  version: 1.5.0
+  at: 2026-08-18
+  version: 1.6.0
   against:
-    - {doc: docs/00-requests/request.md, version: 1.4.0}
+    - {doc: docs/00-requests/request.md, version: 1.5.0}
 ---
 
 # 用語集
@@ -23,6 +23,7 @@ verified:
 | 破壊的操作 | **利用者の作業内容またはログイン状態を失わせうる削除**を行うサブコマンド。現時点では `claude-dev stop` / `claude-dev logout` / `claude-dev reset` の3つを指す(`D0-env-08`) | `claude-dev logout`(共有ボリュームの認証を消す)/ `claude-dev reset`(共有資源を消す)/ `claude-dev stop`(**セッション由来の資源**を消す。`D0-env-05` 項2) | `claude-dev list` / `claude-dev ports`(読み取りだけ)/ `claude-dev unforward`(中継コンテナだけを消し、作業内容もログイン状態も失わせない) | destructive command | 「危険な操作」(Docker API 側の拒否対象 = `FR-env-07` と混同する) |
 | 管理ラベル | 本システムが作る、または**本システム(docker-proxy)を通して作られる** Docker 資源に付ける **Docker ラベル**。「本システムが作った/本システムを通して作られた」ことと「どのプロジェクトのものか」を表す。名前と値の形式は契約 `CTR-cli-container` が定める(`D0-env-08` / `D0-env-10`) | プロジェクトごとの Claude コンテナに付く、所有と対象プロジェクトを表すラベル / **docker-proxy がセッション由来の資源に付ける、所有者(起動ディレクトリの絶対パス)を表すラベル**(`D0-env-08` 項8) | docker-proxy / `fwd-*` 中継コンテナ / 共有ボリューム / ネットワーク / イメージ(**固定名または固定接頭辞で所有権が読み取れる**ので、ラベルではなく名前で識別する)/ compose が付ける `com.docker.compose.*`(**Docker/compose が予約する接頭辞**であり本システムのものではない) | management label | 「タグ」(Docker のイメージタグと紛れる) |
 | セッション由来の資源 | ある Claude コンテナの中から **docker-proxy を経由して**作られた Docker 資源。対象は**コンテナとネットワーク**である(片付けの対象になる範囲は `FR-env-01` 受入基準22 が定める)(`D0-env-05` 項2 / `D0-env-08` 項8) | コンテナ内で `docker run -d nginx` として作られたコンテナ / コンテナ内で `docker compose up` として作られたコンテナと compose 既定ネットワーク | **名前付きボリューム**(利用者のデータであり片付けの対象にしない。`D0-env-05` 項2)/ **VM モードのゲスト内で作られたコンテナ**(ホストの Docker に現れない)/ 利用者がホスト側で直接 `docker run` したコンテナ(docker-proxy を通らないので所有者ラベルが付かない)/ `fwd-*` 中継コンテナ(ホスト CLI が作る) | session-spawned resource | 「子コンテナ」「compose のコンテナ」(前者は親子関係の別概念、後者は経路を compose に限る言い方になる) |
+| **同梱外部バイナリ** | **保守者がイメージのビルドより前に用意し、配布イメージへ焼き込む、コンテナ内で開発者が直接実行する単一の実行ファイル**(`D0-dist-05` / `RQ-dist-02`)。**置き場の規約とイメージ内の設置先は 02/03 が定める** | 別リポジトリで作った社内ツールのワンバイナリ / **同じツールを CPU アーキテクチャごとに別々にビルドしたもの**(amd64 用と arm64 用。どちらも同梱外部バイナリである) | **エージェント CLI**(Claude Code / Codex CLI。ビルド時に版を解決してピン留めする仕組みを持つ別物で、`D0-dist-03` / `D0-dist-04` が支配する)/ **コンテナ内で使う同梱スクリプト**(entrypoint やファイアウォール設定など。イメージの構成要素であって外部由来ではない)/ **設定ファイル・データファイル**(実行するものではないので、コマンド名で起動できる場所へ置く意味が無い) | bundled external binary | 「外部ツール」(コンテナの外で動くものと紛れる)。「同梱物」単独(エージェント CLI と区別できない) |
 | 資源逼迫 | **ゲスト VM の QEMU プロセスの CPU 使用率が、割り当て上限(`-smp` の値)に対して 60% 以上である状態が、15 秒周期で 12 回連続(合計約3分)観測された状態**。**この3つの数値は既定値であり、上書きする手段は 03 の実装仕様が定める**。この状態を検知したときに利用者へ何が見えるかは `FR-env-08` 受入基準4 が定める | 4 vCPU を割り当てた VM で QEMU の CPU 使用率が 240%(= 上限比 60%)以上を約3分続けた状態 | 同じ負荷が 1 分で収まった状態(12 回連続に達しない)/ ゲストの RAM 使用率だけが高く CPU 使用率が閾値未満の状態(**監視は CPU 使用率しか見ない**) | resource pressure | 「重い」「逼迫している」(閾値を伴わない表現)。「RAM 逼迫」(本定義は CPU 使用率だけを見るので別概念になる) |
 | claude-dev | ホスト側 CLI。コンテナのライフサイクル・認証・ポート・SSH 鍵を操作する。Linux は `claude-dev`、macOS は `claude-dev-mac`(`make install` が OS を判定して symlink を統一する) | | | `claude-dev` / `claude-dev-mac` | 「CLIツール」単独表記 |
 | Claude コンテナ | プロジェクトごとに起動する開発用コンテナ。ブラウザ確認あり(`claude-dev-claude-vnc`)/なし(`claude-dev-claude`) | | | `claude-dev-<project>` | — (「プロジェクトコンテナ」は同義。文脈で使い分ける) |
@@ -41,3 +42,4 @@ verified:
 | DooD(既定) | VM モード | DooD はホストの Docker デーモンを proxy 経由で使う軽量既定。VM モードは VM 内ネイティブ Docker(bind/compose/privileged 可)でオプトイン |
 | セッション由来の資源 | compose 資源 | 前者は**作られた経路(docker-proxy を通ったか)**で決まる集合で、`docker run` も compose も含む。後者は**compose が作ったもの**という部分集合である。**2つを識別する方法はそれぞれ違い、02 の契約が定める**(`D0-env-08` 項7・項8) |
 | Codex サンドボックス | Claude コンテナの隔離 | 前者は codex がコンテナ内で自前に張る隔離(既定は無効化。読み取り専用を要求する呼び出しのためだけに landlock を残す)。後者はコンテナ/ホスト間の隔離境界(唯一の境界であり緩めない) |
+| **同梱外部バイナリ** | **同梱エージェント CLI**(Claude Code / Codex CLI) | どちらもイメージに焼く実行ファイルだが、**版の決まり方と支配する決定が違う**。後者はビルド時に `latest` を具体バージョンへ解決してピン留めし(`D0-dist-03` / `D0-dist-04`)、その版が変わった日だけ層が失効する。前者は**保守者が置いたファイルそのもの**が中身で、版を解決する仕組みを持たない(`D0-dist-05`)。**前者に後者のバージョン解決を求めてはならない** |

@@ -1,18 +1,18 @@
 ---
 id: 01-system
-version: 1.2.1
-updated: 2026-08-10
+version: 1.3.0
+updated: 2026-08-18
 source:
   - docs/00-requests/request.md
   - docs/00-requests/decisions/sec.md
 summary: システム・環境の要件 SR-01〜SR-34(必須制約・実行環境・依存・運用の前提)
 keywords: [システム要件, SR, 技術前提]
 verified:
-  at: 2026-08-10
-  version: 1.2.1
+  at: 2026-08-18
+  version: 1.3.0
   against:
-    - {doc: docs/00-requests/request.md, version: 1.4.0}
-    - {doc: docs/00-requests/decisions/sec.md, version: 1.3.0}
+    - {doc: docs/00-requests/request.md, version: 1.5.0}
+    - {doc: docs/00-requests/decisions/sec.md, version: 1.3.1}
 ---
 
 # システム・環境の要件
@@ -44,7 +44,7 @@ verified:
 |---|---|---|
 | SR-20 | ホスト CLI と補助スクリプトは Bash で実装すること | 追加ランタイムを要求せず、Linux/macOS の標準環境で動くため |
 | SR-21 | docker-proxy は Go で実装すること。単一バイナリで配布できること | コンテナへ実行時依存を持ち込まないため |
-| SR-24 | コンテナイメージはマルチステージビルドで構成し、エージェント CLI の導入を配布ステージの終端レイヤーに置くこと | 更新時の再取得範囲を最小化するため(`NFR-perf-01`) |
+| SR-24 | コンテナイメージはマルチステージビルドで構成し、**エージェント CLI の導入と同梱外部バイナリの設置**を配布ステージの終端レイヤーに置くこと | 更新時の再取得範囲を最小化するため(`NFR-perf-01`)。どちらも中身が変わるたびに層が失効するものであり、上流のステージに置くとブラウザ確認資産の層まで巻き込んで失効する |
 
 <!-- SR-22(Go の依存の限定と TUI の例外)と SR-23(自己検証題材)は 2026-08-08 に廃止した
      (オーケストレーターの削除)。番号は再利用しない。 -->
@@ -68,6 +68,7 @@ verified:
 | GHCR(GitHub Container Registry) | 配布イメージの取得 | 取得時のみ必要 | ローカルビルド(`make build`) |
 | npm registry / Claude Code のリリース配布 | イメージビルド時のバージョン解決 | CI 実行時のみ必要 | 手動でのバージョン指定(`FR-env-09` 受け入れ基準7) |
 | GitHub Meta API | ファイアウォールの許可 IP 取得 | 起動時のみ。失敗時は名前解決へフォールバックする | フォールバックも失敗すると GitHub への SSH が不許可になる |
+
 ## 未解決事項
 
 - なし

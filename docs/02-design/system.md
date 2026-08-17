@@ -1,7 +1,7 @@
 ---
 id: 02-system
-version: 2.12.0
-updated: 2026-08-12
+version: 2.13.0
+updated: 2026-08-18
 source:
   - docs/01-requirements/functional.md
   - docs/01-requirements/non-functional.md
@@ -12,13 +12,13 @@ summary: >
   E2Eシナリオ一覧、UI設計を定める。アーキテクチャと契約と設計判断は architecture.md / contracts/ が持つ。
 keywords: [モジュール分割, DSN-mod, テスト戦略, E2E, UI設計, 要件カバレッジ]
 verified:
-  at: 2026-08-12
-  version: 2.12.0
+  at: 2026-08-18
+  version: 2.13.0
   against:
-    - {doc: docs/01-requirements/functional.md, version: 1.16.0}
-    - {doc: docs/01-requirements/non-functional.md, version: 1.7.0}
-    - {doc: docs/01-requirements/usecases.md, version: 1.5.0}
-    - {doc: docs/02-design/architecture.md, version: 1.5.0}
+    - {doc: docs/01-requirements/functional.md, version: 1.17.0}
+    - {doc: docs/01-requirements/non-functional.md, version: 1.8.0}
+    - {doc: docs/01-requirements/usecases.md, version: 1.6.0}
+    - {doc: docs/02-design/architecture.md, version: 1.6.0}
 ---
 
 # モジュール分割・テスト戦略・UI設計
@@ -60,7 +60,7 @@ verified:
 モジュールではなく、**イメージの作り方は `03-impl/environments/images.md`、GHCR への公開構成は
 `03-impl/infra/local/ghcr.md`** が持つ(理由は `DSN-mod-05`)。
 
-**どのモジュールにも属さない要件(8件)とその担い手**。上の表の「対応要件」に現れないのはこの8件
+**どのモジュールにも属さない要件(9件)とその担い手**。上の表の「対応要件」に現れないのはこの9件
 だけであり、いずれも「振る舞いを実装するモジュール」が原理的に存在しない種類の要件である
 (割り当て漏れではない)。下の「要件カバレッジ確認」にも同じ担い手を書く。
 
@@ -68,11 +68,21 @@ verified:
 |---|---|---|
 | NFR-perf-01, NFR-perf-02 | `03-impl/environments/images.md`, `03-impl/infra/local/ghcr.md` | イメージのレイヤー構成とビルド設定が決める性能であり、実行される入口を持たない(`DSN-mod-05`) |
 | SR-13(マルチアーキ), SR-24(マルチステージ), SR-33(CI 日次実行) | 同上 | 同上。ビルド・配布の構成そのもの |
+| FR-env-13(同梱外部バイナリ) | `03-impl/environments/images.md` | イメージのビルドが同梱物を設置する処理であり、実行される入口を持たない(`DSN-mod-05`)。保守者がビルド前に置いたものをビルドが設置するだけで、利用者が呼ぶコマンドもターゲットも持たない |
 | SR-05(信頼できる社内開発用途に限る) | `00-requests/request.md`「やらないこと」2 | 利用の前提条件であり、実装物を持たない |
 | SR-32(Bash に自動テストを設けない) | 本書「テスト戦略」`DSN-test-01` | 「作らない」ことの宣言であり、実装物を持たない |
 | SR-34(Codex を confinement を緩めずに実行) | `02-design/environments.md`「Codex実行設定」 | 外部エージェントの実行設定であり、製品コードのモジュールではない |
 
 ## 分割の根拠
+
+下の `DSN-mod-01`〜`DSN-mod-07` は、**この製品をどのモジュールへ割るか**の判断である。
+**2026-08-18 に `FR-env-13`(同梱外部バイナリ)の新設にあたって7件すべてを読み直し、
+いずれも継続と判断した**: 同梱外部バイナリの設置はコンテナイメージの定義(`Dockerfile.*`)の
+中で完結し、実行される関数の入口を持たない。これは `DSN-mod-05` が
+「コールグラフに入口を持たない資産はモジュールにしない」と決めた範囲の内側であり、
+**新しいモジュールを立てない**(立てると機械検査 FT1 が重大度「高」で落ちる)。
+`DSN-mod-06` / `DSN-mod-07` が扱うモジュールあたりの機能数の目安にも影響しない
+(どのモジュールにも機能を足さないため)。
 
 ### DSN-mod-01 モジュールは「利用者から見た入口」と1対1にする
 
@@ -165,7 +175,7 @@ verified:
 <!-- 受入基準の**条項ごと**に行を作る(要件ごとではない)。充足の語彙・主担当の規則の正は
      .claude/directions/02-design.md。03 のテスト対応表の「状態」列とは別の列・別の意味。 -->
 
-**`充足` はこの設計がその条項を覆っているか**を言う(4値: `完全` / `部分(P-nn)` / `対象外(理由)` / `-`)。
+**`充足` はこの設計がその条項を覆っているか**を言う(4値: `完全` / `部分(P-nn)` / `適用外(理由)` / `-`)。
 **実装の達成度・検証状態はここでは言わない** — それは `03-impl/tests/` の各対応表の「状態」列が持つ。
 1条項につき主担当モジュールはちょうど1つで、`充足` はその行にだけ書く(非機能要件は条項に分けず
 1要件1行。`SR-*` は技術前提であり充足は適用外 = `-`)。
@@ -313,6 +323,12 @@ verified:
 | FR-env-12-9 | (モジュール外)`03-impl/environments/images.md` / `03-impl/infra/local/ghcr.md` | 完全 | DSN-dist-02 |
 | FR-env-12-10 | MOD-entrypoint | 完全 | DSN-dist-02 |
 | FR-env-12-11 | MOD-entrypoint | 完全 | DSN-dist-02 |
+| FR-env-13-1 | (モジュール外)`03-impl/environments/images.md` | 完全 | DSN-dist-01(同梱物の導入を配布ステージの終端レイヤーに置く一般原則。同梱外部バイナリの設置もこの原則の適用である) |
+| FR-env-13-2 | (モジュール外)`03-impl/environments/images.md` | 完全 | -(設計判断を要さない) |
+| FR-env-13-3 | (モジュール外)`03-impl/environments/images.md` | 完全 | DSN-dist-01(アーキテクチャ別の置き分けは設置層の中で解決し、ステージ構成を増やさない) |
+| FR-env-13-4 | (モジュール外)`03-impl/environments/images.md` | 完全 | -(設計判断を要さない) |
+| FR-env-13-5 | (モジュール外)`03-impl/environments/images.md` | 完全 | -(設計判断を要さない) |
+| FR-env-13-6 | (モジュール外)`03-impl/environments/images.md` | 完全 | -(設計判断を要さない) |
 | NFR-perf-01 | (モジュール外)`03-impl/environments/images.md` / `03-impl/infra/local/ghcr.md` | 完全 | DSN-dist-01 |
 | NFR-perf-02 | (モジュール外)`03-impl/environments/images.md` / `03-impl/infra/local/ghcr.md` | 完全 | DSN-dist-01 |
 | NFR-avail-02 | MOD-cli-start, MOD-entrypoint | 完全 | -(設計判断を要さない) |
@@ -349,7 +365,7 @@ verified:
 (空欄を作らないための規約)。
 
 **要件を持たないモジュールは無い**(全 25 モジュールが「モジュール分割定義」の対応要件と上表の
-いずれかに現れる)。**割り当て先の無い条項も無い**(機能要件の全 141 条項・NFR 10 件・SR 19 件が
+いずれかに現れる)。**割り当て先の無い条項も無い**(機能要件の全 147 条項・NFR 10 件・SR 19 件が
 すべて上表に現れる)。
 
 ## テスト戦略

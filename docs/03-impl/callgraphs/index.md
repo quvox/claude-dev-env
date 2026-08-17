@@ -64,7 +64,7 @@ languages: 6
 ## 設定
 
 - internal_roots: `.`
-- excludes: `.claude/`, `.eggs/`, `.git/`, `.mypy_cache/`, `.next/`, `.nuxt/`, `.output/`, `.pnp/`, `.pytest_cache/`, `.svelte-kit/`, `.terraform/`, `.tox/`, `.turbo/`, `.venv/`, `.yarn/`, `3rdparty/`, `Godeps/`, `__pycache__/`, `__pypackages__/`, `bower_components/`, `build/`, `coverage/`, `dist-packages/`, `dist/`, `docs/`, `jspm_packages/`, `migrations/`, `node_modules/`, `scripts/e2e6-codex.sh`, `site-packages/`, `target/`, `third_party/`, `tmp/`, `vendor/`, `vendored/`, `venv/`, `workspace/`
+- excludes: `.claude/`, `.codex/`, `.eggs/`, `.git/`, `.mypy_cache/`, `.next/`, `.nuxt/`, `.output/`, `.pnp/`, `.pytest_cache/`, `.ruff_cache/`, `.svelte-kit/`, `.terraform/`, `.tox/`, `.turbo/`, `.venv/`, `.yarn/`, `3rdparty/`, `Godeps/`, `__pycache__/`, `__pypackages__/`, `blob-report/`, `bower_components/`, `build/`, `coverage/`, `dist-packages/`, `dist/`, `docs/`, `htmlcov/`, `jspm_packages/`, `migrations/`, `node_modules/`, `playwright-report/`, `scripts/e2e6-codex.sh`, `site-packages/`, `target/`, `test-results/`, `third_party/`, `tmp/`, `vendor/`, `vendored/`, `venv/`, `workspace/`
 
 ## 注記
 

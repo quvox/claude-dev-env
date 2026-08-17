@@ -1,15 +1,15 @@
 ---
 id: index
-version: 1.25.0
-updated: 2026-08-12
+version: 1.25.1
+updated: 2026-08-18
 source:
   - docs/02-design/system.md
   - docs/02-design/relations.md
 summary: 03-impl 層の目次。機能間連携仕様書群の代表として層全体の版と合格証を持つ
 keywords: [目次]
 verified:
-  at: 2026-08-12
-  version: 1.25.0
+  at: 2026-08-18
+  version: 1.25.1
   against:
     - {doc: docs/02-design/system.md, version: 2.12.0}
     - {doc: docs/02-design/relations.md, version: 1.10.1}
@@ -34,7 +34,7 @@ verified:
 |---|---|---|---|
 | なし | — | — | — |
 
-**差分なし**(2026-08-12 の `task-issue-sweep` 反映後に再確認。この反映は `PLAN-*` の辺を1本も増減させていない(機能 61 / 機械が出した辺 88 は反映の前後で同数)。`PLAN-*` と `MODULE-*` は
+**差分なし**(**2026-08-18 の `task-bundle-external-binaries` 反映後に再確認**。同タスクは `FR-env-13`(同梱外部バイナリ)を新設したが、**実体はコンテナイメージの定義であり `DSN-mod-05` によりモジュールを持たない**ので、`PLAN-*` も `MODULE-*` も1本も増減していない〈機能 61 / 機械が出した辺 88 が反映の前後で同数〉。担い手は `03-impl/environments/images.md` である。以下は 2026-08-12 の `task-issue-sweep` 反映後の確認で、いずれも今も成立する。この反映は `PLAN-*` の辺を1本も増減させていない(機能 61 / 機械が出した辺 88 は反映の前後で同数)。`PLAN-*` と `MODULE-*` は
 61 対 61 で、`呼び出し元` / `呼び出す先` / `契約` の食い違いは無い — `check-changeset.py` の CS9 と
 `callgraph-check.py` の CG3/CG4 で確認した。同タスクが増やした辺
 `PLAN-cli-logout` → `PLAN-cli-common-spawned-resources` は 02・03 の両方に入っている)。
@@ -64,9 +64,9 @@ verified:
 | ファイル | version | 更新 | 概要 |
 |---|---|---|---|
 | [features](features.md) | - | 2026-08-11 | claude-dev 開発環境の機能一覧と入口。CLI サブコマンド・Makefile ターゲット・常駐スクリプト・Go バイナリの入口を列挙する |
-| [images](environments/images.md) | 1.1.0 | 2026-08-10 | 配布イメージ(claude-cli / claude-vnc)のステージ構成・ビルド引数・キャッシュの効かせ方 |
+| [images](environments/images.md) | 1.2.0 | 2026-08-18 | 配布イメージ(claude-cli / claude-vnc)のステージ構成・ビルド引数・キャッシュの効かせ方 |
 | [local-docker-resources](infra/local/docker-resources.md) | 1.2.0 | 2026-08-07 | ホスト上に作られる Docker リソース(ネットワーク・ボリューム・コンテナ)の一覧と命名規則 |
-| [local-ghcr](infra/local/ghcr.md) | 1.1.0 | 2026-08-04 | 配布イメージの公開先 GHCR の構成(リポジトリ・タグ・マルチアーキ・認証の置き場所) |
+| [local-ghcr](infra/local/ghcr.md) | 1.2.0 | 2026-08-18 | 配布イメージの公開先 GHCR の構成(リポジトリ・タグ・マルチアーキ・認証の置き場所) |
 
 件数: 4
 
