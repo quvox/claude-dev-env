@@ -1,0 +1,20 @@
+{
+  "started_at": 1786981840,
+  "events": [
+    {
+      "at": 1786981840,
+      "kind": "start",
+      "value": "change"
+    },
+    {
+      "at": 1786981840,
+      "kind": "start",
+      "value": "intake"
+    },
+    {
+      "at": 1786981850,
+      "kind": "start",
+      "value": "change"
+    }
+  ]
+}
