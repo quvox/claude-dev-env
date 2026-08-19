@@ -209,6 +209,27 @@ CLAUDE.md §4 の「起点をまたぐなら上位に合わせて同じ降下で
 
 ## 進捗メモ
 
+- 2026-08-19 `/doc-check`(**ssot task-stop-cleanup-and-project-env**。フェーズ4 の反映後・**同日4回目の増分再実行**)
+  判定: **PASS(ブロッキング0件)**。レビュー: **あり(`lens: subagent`。読み取り専用サブエージェント。
+  Codex は同じ依頼で 900 秒の時間切れ = EXIT 124 になり結果を返さなかったため §0.5 の代替へ回した)**。
+  実行形態: 呼び出し元スキルから起動した新しい文脈のサブエージェント。**反復 1/2**(2周目は不要)。
+  増分の根拠: 3回目の検証以降に動いたのはコミット `0b26b56` の `claude-dev` / `claude-dev-mac` の
+  2ハンクと `docs/03-impl/index.md` / `MODULE-cli-start.md` / `docs/issues/106` / `docs/issues/index.md` /
+  `docs/03-impl/callgraphs/index.md` だけ。00・01・02 と `03-impl/tests/*.md` は無変更で合格証有効(原則6)。
+  **直したもの(すべて PATCH)**: コード引用 **76 トークン / 6 文書**(`MODULE-cli-start` 29 /
+  `-common-spawned-resources` 16 / `-reset` 11 / `-common-write-project-ssh-keys` 8 / `-stop` 7 /
+  `03-impl/index.md` 4)。`0b26b56` が `claude-dev` の 165 行目より下を +3、1521 行目より下を +6
+  ずらしたのに、同コミットの 03 側の引用が「コミット直前の値」で書かれていたためすべて偽になっていた。
+  `docs/pendings.md` の程度語の行の引用 `:264` → `:266`。
+  **版**: `docs/03-impl/index.md` 1.29.0 → **1.29.1**(合格証も 1.29.1 で再発行)。
+  **記録**: `docs/histories/2026-08-19-doc-check-ssot-stop-cleanup-and-project-env-fourth-recheck.md`。
+  **新規 issue なし・新規残務行なし**(closure 外に残る引用ずれ **10 文書 190 トークン**は
+  `docs/pendings.md` の既存の残務行が持つ型なので重複記録せず、その行の在庫を実測値へ直した。
+  残務 38 行 → 37 行)。**人間の裁定が要るもの**: `P-006` の3つ目の発火条件(1回目の検証が発火と
+  判定したまま未裁定)。機械検査: `build-callgraphs --check` / `cluster-features --check` 最新、
+  `callgraph-check.py` 指摘 24 件で**重大度「高」ゼロ**、`check-contracts` / `check-relations` 合格、
+  `check-changeset --ssot` は CS20 の 9 件のみ(既存の残務行が持つ)。
+
 - 2026-08-19 `/doc-check`(**ssot task-stop-cleanup-and-project-env**。フェーズ4 の反映後・**同日3回目の増分再実行**)
   判定: **PASS(ブロッキング0件)。ただし製品側に severity 中の実装欠陥2件を起票した**。
   レビュー: **あり(Codex `gpt-5.6-sol` / reasoning high)**。実行形態: 呼び出し元スキルから
