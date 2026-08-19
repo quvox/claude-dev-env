@@ -358,3 +358,78 @@ func TestValidateContainerCreate_NoReasonLogWhenLabelled(t *testing.T) {
 		t.Errorf("付与できたのに未付与のログが出ている: %q", buf.String())
 	}
 }
+
+// --- ボリューム作成要求への所有者ラベルの注入(2026-08-19 追加) ---
+//
+// 注入の本体(injectOwnerLabels)はネットワーク経路と共通なので、ここで確かめるのは
+// 「この経路が注入を呼ぶか」だけである(MODULE-docker-proxy-serve の [DS-01])。
+// 型はネットワーク経路の4本と同じにしてある。
+
+func TestLabelVolumeCreate_InjectsOwnerLabels(t *testing.T) {
+	stubCaller(t, "", testOwner)
+
+	req := newRequest("POST", "/volumes/create", `{"Name":"spawn-vol","Driver":"local"}`)
+	req.RemoteAddr = "172.20.0.9:5000"
+	labelVolumeCreate(req, log.New(io.Discard, "", 0))
+
+	got, _ := io.ReadAll(req.Body)
+	labels := bodyLabels(t, got)
+	if labels[roleLabel] != roleSpawned || labels[ownerLabel] != testOwner {
+		t.Errorf("ボリュームに所有者ラベルが付いていない: %v", labels)
+	}
+	var top struct {
+		Name   string `json:"Name"`
+		Driver string `json:"Driver"`
+	}
+	if err := json.Unmarshal(got, &top); err != nil {
+		t.Fatal(err)
+	}
+	if top.Name != "spawn-vol" || top.Driver != "local" {
+		t.Errorf("他のフィールドが変わっている: %+v", top)
+	}
+}
+
+func TestLabelVolumeCreate_NoOwnerLeavesBodyUntouched(t *testing.T) {
+	stubCaller(t, "", "")
+
+	const raw = `{"Name":"spawn-vol"}`
+	req := newRequest("POST", "/volumes/create", raw)
+	req.RemoteAddr = "172.20.0.9:5000"
+	labelVolumeCreate(req, log.New(io.Discard, "", 0))
+
+	got, _ := io.ReadAll(req.Body)
+	if string(got) != raw {
+		t.Errorf("所有者を特定できないのにボディが書き換わっている: %s", got)
+	}
+}
+
+func TestLabelVolumeCreate_OverwritesUserSuppliedOwnerLabel(t *testing.T) {
+	stubCaller(t, "", testOwner)
+
+	req := newRequest("POST", "/volumes/create",
+		`{"Name":"spawn-vol","Labels":{"claude-dev.owner-project-dir":"/etc","claude-dev.role":"claude","keep":"me"}}`)
+	req.RemoteAddr = "172.20.0.9:5000"
+	labelVolumeCreate(req, log.New(io.Discard, "", 0))
+
+	got, _ := io.ReadAll(req.Body)
+	labels := bodyLabels(t, got)
+	if labels[ownerLabel] != testOwner || labels[roleLabel] != roleSpawned {
+		t.Errorf("利用者が指定した同名ラベルを上書きしていない: %v", labels)
+	}
+	if labels["keep"] != "me" {
+		t.Errorf("無関係なラベルが失われている: %v", labels)
+	}
+}
+
+func TestVolumeCreateRe(t *testing.T) {
+	for _, p := range []string{"/volumes/create", "/v1.45/volumes/create", "/v1.51/volumes/create"} {
+		if !volumeCreateRe.MatchString(p) {
+			t.Errorf("一致すべきパスに一致しない: %s", p)
+		}
+	}
+	for _, p := range []string{"/volumes", "/volumes/prune", "/networks/create", "/containers/create"} {
+		if volumeCreateRe.MatchString(p) {
+			t.Errorf("一致すべきでないパスに一致した: %s", p)
+		}
+	}
+}

@@ -344,27 +344,44 @@ func writeBackBody(r *http.Request, body []byte) {
 	r.Header.Set("Content-Length", strconv.Itoa(len(body)))
 }
 
-// labelNetworkCreate marks a network create request with the caller's owner
-// labels. Network creation carries nothing that can endanger the host, so it
-// has no rejection checks — only the marking.
-func labelNetworkCreate(r *http.Request, logger *log.Logger) {
+// labelCreateRequest marks a create request with the caller's owner labels.
+// Network and volume creation carry nothing that can endanger the host, so they
+// have no rejection checks — only the marking. `kind` names the resource in the
+// log lines; it is passed in rather than derived from the path because each
+// route matches its own regexp, so the caller already knows which one fired.
+//
+// Volume creation joined this route on 2026-08-19: named volumes became part of
+// the cleanup set (CTR-cli-container の規則 D). Anonymous volumes never reach
+// here — they have no create request of their own; the daemon makes them while
+// creating a container — so they are cleaned up by `docker rm -v` on the owning
+// container instead.
+func labelCreateRequest(r *http.Request, logger *log.Logger, kind string) {
 	body, err := readAndRestoreBody(r)
 	if err != nil {
-		logger.Printf("WARN: could not read network create body: %v", err)
+		logger.Printf("WARN: could not read %s create body: %v", kind, err)
 		return
 	}
 	_, owner := resolveProjectDir(clientIP(r.RemoteAddr))
 	if owner == "" {
-		logger.Printf("NO-OWNER-LABEL network: caller not identified; relaying unlabelled")
+		logger.Printf("NO-OWNER-LABEL %s: caller not identified; relaying unlabelled", kind)
 		return
 	}
 	nbody, changed := injectOwnerLabels(body, owner)
 	if !changed {
-		logger.Printf("NO-OWNER-LABEL network: body not rewritable; relaying unlabelled")
+		logger.Printf("NO-OWNER-LABEL %s: body not rewritable; relaying unlabelled", kind)
 		return
 	}
 	writeBackBody(r, nbody)
-	logger.Printf("OWNER-LABEL network: owner=%s", owner)
+	logger.Printf("OWNER-LABEL %s: owner=%s", kind, owner)
+}
+
+// labelNetworkCreate / labelVolumeCreate are the two routes' entry points.
+func labelNetworkCreate(r *http.Request, logger *log.Logger) {
+	labelCreateRequest(r, logger, "network")
+}
+
+func labelVolumeCreate(r *http.Request, logger *log.Logger) {
+	labelCreateRequest(r, logger, "volume")
 }
 
 // clientIP extracts the source IP from an http.Request's RemoteAddr.
@@ -399,6 +416,12 @@ var containerCreateRe = regexp.MustCompile(`^(/v[\d.]+)?/containers/create`)
 // version prefix — the same shape as containerCreateRe, because clients send
 // both /networks/create and /v1.45/networks/create (判断9).
 var networkCreateRe = regexp.MustCompile(`^(/v[\d.]+)?/networks/create`)
+
+// volumeCreateRe matches POST /volumes/create, with or without the API version
+// prefix. It is kept separate from networkCreateRe rather than folded into one
+// alternation so that whichever regexp matches IS the resource kind for the log
+// line — an alternation would mean re-deriving the kind from the path.
+var volumeCreateRe = regexp.MustCompile(`^(/v[\d.]+)?/volumes/create`)
 
 // containerExecCreateRe matches POST /containers/{id}/exec (exec create).
 var containerExecCreateRe = regexp.MustCompile(`^(/v[\d.]+)?/containers/[^/]+/exec`)
@@ -468,6 +491,13 @@ func main() {
 		// `stop` / `reset` can clean them up later (DSN-env-04).
 		if r.Method == http.MethodPost && networkCreateRe.MatchString(path) {
 			labelNetworkCreate(r, logger)
+		}
+
+		// Volume create requests are the same shape: no rejection checks, only
+		// the marking, so that `stop --volumes` / `reset --volumes` can find
+		// them later (DSN-env-04).
+		if r.Method == http.MethodPost && volumeCreateRe.MatchString(path) {
+			labelVolumeCreate(r, logger)
 		}
 
 		// Inspect exec create requests (for privileged exec).

@@ -97,6 +97,122 @@ dev_agent_path() {
     esac
 }
 
+
+# =============================================================================
+# プロジェクト環境ファイル（RQ-env-07 / FR-env-14 / DSN-env-05）
+# =============================================================================
+# .claude-dev.yaml には **env ファイルの場所だけ**を書き、値の実体はその env ファイルに置く。
+# 設定ファイルは版管理に入る前提、env ファイルは入らない前提である（D0-sec-11）。
+
+# 本システムが使う環境変数名（プロジェクト環境ファイルからは採用しない）。
+# 集合の正は CTR-cli-container「予約する環境変数名」。判定は**大文字小文字を区別する**
+# 完全一致（接頭辞は前方一致）——環境変数名は大文字小文字を区別するので、docker_host は
+# DOCKER_HOST とは別の変数であり、採用してよい。
+_env_name_is_reserved() {
+    case "$1" in
+        CLAUDE_DEV_*) return 0 ;;
+        DOCKER_HOST|COMPOSE_PROJECT_NAME|SSH_AUTH_SOCK|NODE_OPTIONS|container) return 0 ;;
+    esac
+    return 1
+}
+
+# .claude-dev.yaml の `env_file:` の値を返す（無ければ空）。簡易パース。
+_parse_env_file_key() {
+    local config="$1" line val
+    [ -f "$config" ] || return 0
+    while IFS= read -r line || [ -n "$line" ]; do
+        case "$line" in
+            env_file:*)
+                val="${line#env_file:}"
+                val="${val%%#*}"
+                val="$(echo "$val" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+                # 値を囲む引用符は取り除く（パスの表記ゆれを吸収する。値の展開はしない）
+                val="${val%\"}"; val="${val#\"}"
+                val="${val%\'}"; val="${val#\'}"
+                printf '%s' "$val"
+                return 0
+                ;;
+        esac
+    done < "$config"
+}
+
+# プロジェクト環境ファイルを読み、採用した組を PROJECT_ENV_OPTS へ組み立てる。
+# **どの失敗でも起動は止めない**（FR-env-14-5〜-10）。値そのものは表示もログもしない。
+# 呼び出し元は start だけなので共有基盤の機能へは上げない（PLAN-cli-start / DSN-env-05）。
+load_project_env_file() {
+    local project_dir="$1"
+    PROJECT_ENV_OPTS=()
+    PROJECT_ENV_FILE_REL=""
+
+    local rel; rel="$(_parse_env_file_key "${project_dir}/${PROJECT_CONFIG_NAME}")"
+    # 指定が無いことは正常な省略である。**何も表示しない**（FR-env-14-5）
+    [ -n "$rel" ] || return 0
+
+    # 受理するのはプロジェクトディレクトリの中だけ（FR-env-14-9）。判定は字句的に行う
+    # （実体解決を挟むと利用者の symlink 構成を壊す。DSN-dp-02 と同じ考え方）。
+    case "$rel" in
+        /*) echo "⚠️  env ファイルの指定はプロジェクトディレクトリからの相対パスだけを受理します（絶対パスは採用しません）: ${rel}"; return 0 ;;
+    esac
+    local abs; abs="$(cd "$project_dir" 2>/dev/null && printf '%s/%s' "$PWD" "$rel")"
+    local norm; norm="$(printf '%s' "$abs" | awk -F/ '{n=0; for(i=1;i<=NF;i++){ if($i==""||$i==".") continue; if($i==".."){ if(n>0) n--; continue } n++; p[n]=$i } s=""; for(i=1;i<=n;i++) s=s"/"p[i]; print s}')"
+    case "$norm" in
+        "$project_dir"/*) : ;;
+        *) echo "⚠️  env ファイルの指定がプロジェクトディレクトリの外を指しています。採用しません（受理するのは ${project_dir} 配下だけです）: ${rel}"; return 0 ;;
+    esac
+
+    PROJECT_ENV_FILE_REL="$rel"
+    if [ ! -f "$norm" ]; then
+        echo "⚠️  env ファイルを読めませんでした（環境変数を渡さずに起動を続けます）: ${rel}"
+        return 0
+    fi
+
+    local line n=0 name value skipped_reserved="" skipped_lines="" dup=""
+    local -a names=() values=()
+    while IFS= read -r line || [ -n "$line" ]; do
+        n=$((n + 1))
+        case "$line" in
+            ""|\#*) continue ;;
+        esac
+        case "$line" in
+            *=*) : ;;
+            *) skipped_lines="${skipped_lines} ${n}"; continue ;;
+        esac
+        # 最初の = で名前と値に割る。**値の中の = はそのまま値に含める。**
+        # 値を囲む引用符は取り除かない（引用符そのものを値にしたい場合を表せなくなるため）。
+        name="${line%%=*}"
+        value="${line#*=}"
+        case "$name" in
+            ''|*[!A-Za-z0-9_]*) skipped_lines="${skipped_lines} ${n}"; continue ;;
+        esac
+        if _env_name_is_reserved "$name"; then
+            skipped_reserved="${skipped_reserved} ${name}"
+            continue
+        fi
+        # 同じ名前が2回以上あれば**後に書かれたほう**を採用する（FR-env-14-10）
+        local i found=-1
+        for i in "${!names[@]}"; do
+            [ "${names[$i]}" = "$name" ] && found=$i && break
+        done
+        if [ "$found" -ge 0 ]; then
+            values[$found]="$value"
+            dup="${dup} ${name}"
+        else
+            names+=("$name"); values+=("$value")
+        fi
+    done < "$norm"
+
+    local i
+    for i in "${!names[@]}"; do
+        PROJECT_ENV_OPTS+=("-e" "${names[$i]}=${values[$i]}")
+    done
+
+    # 採用しなかったものは**名前と行番号だけ**を出す。値は出さない（FR-env-14-3 / logging.md）
+    [ -n "$skipped_lines" ]     && echo "⚠️  env ファイルの次の行は「名前=値」として読めないため採用しませんでした（${rel}）:${skipped_lines} 行目"
+    [ -n "$skipped_reserved" ]  && echo "⚠️  次の環境変数名は本システムが使うため採用しませんでした:${skipped_reserved}"
+    [ -n "$dup" ]               && echo "ℹ️  env ファイルで重複していた次の名前は、後に書かれたほうを採用しました:${dup}"
+    return 0
+}
+
 # ~/.ssh/id_*（.pub 除く）を DISCOVERED_KEYS に列挙
 discover_ssh_keys() {
     DISCOVERED_KEYS=()
@@ -136,16 +252,47 @@ resolve_ssh_keys_for_start() {
     _parse_ssh_keys_yaml "$project_config"
 }
 
-# 選択鍵をプロジェクト直下の .claude-dev.yaml に書き出す（引数=ファイルパス, 鍵パス群）
+# 指定した YAML ファイルから `ssh_keys` 節だけを取り除いた内容を標準出力へ出す。
+# 節の範囲は「`ssh_keys:` の行から、次に現れる**字下げの無い行**の直前まで」とする。
+# **節の外にある行は、他のキー（env_file）も利用者が書いたコメントも1行も落とさない**
+# （docs/issues/002 が記録していた「`- ` で始まる行がすべて消える」欠陥の解消）。
+# 書式を1階層のリストに限っているので、この判定で必要十分である（CTR-cli-container）。
+_strip_ssh_keys_section() {
+    local file="$1" line in_section=0
+    while IFS= read -r line || [ -n "$line" ]; do
+        if [ "$in_section" -eq 1 ]; then
+            # 字下げの無い行に当たったら節は終わり（空行は節の中とみなして落とす）
+            case "$line" in
+                ""|[[:space:]]*) continue ;;
+                *) in_section=0 ;;
+            esac
+        fi
+        case "$line" in
+            ssh_keys:*) in_section=1; continue ;;
+        esac
+        printf '%s\n' "$line"
+    done < "$file"
+}
+
+# 選択鍵をプロジェクト直下の .claude-dev.yaml へ書き出す（引数=ファイルパス, 鍵パス群）。
+# **`ssh_keys` 節だけを差し替え、他のキーとその配下の行・コメントは保存する。**
+# 一時ファイルへ書いてから差し替えるので、途中で落ちても半分になったファイルは残らない。
 write_project_ssh_keys() {
     local file="$1"; shift
+    local tmp="${file}.tmp.$$"
     {
-        echo "# claude-dev プロジェクト設定（このプロジェクトで使う SSH 鍵。claude-dev が管理します）"
-        echo "# 再選択は 'claude-dev ssh-keys'、初期化は 'claude-dev ssh-keys reset'"
+        if [ -f "$file" ]; then
+            _strip_ssh_keys_section "$file"
+        else
+            echo "# claude-dev プロジェクト設定（claude-dev が ssh_keys 節を管理します）"
+            echo "# 再選択は 'claude-dev ssh-keys'、初期化は 'claude-dev ssh-keys reset'"
+            echo "# 環境変数を渡すときは env_file: <このディレクトリからの相対パス> を書く"
+        fi
         echo "ssh_keys:"
         local k
         for k in "$@"; do echo "  - $k"; done
-    } > "$file"
+    } > "$tmp"
+    mv "$tmp" "$file"
 }
 
 # ~/.ssh の鍵を対話選択し、カレントプロジェクトの .claude-dev.yaml に保存。SSH_KEY_LIST にも反映
@@ -658,7 +805,7 @@ container_is_managed() {
 
 # セッション由来の資源（docker-proxy が所有者ラベルを付けたコンテナ・ネットワーク）を
 # 名前で列挙する（DSN-env-04 の規則D）。
-#   spawned_resources <container|network> <ラベルフィルタ式>
+#   spawned_resources <container|network|volume> <ラベルフィルタ式>
 #   例: spawned_resources container "claude-dev.owner-project-dir=/home/u/app"
 #       spawned_resources network   "claude-dev.role=spawned"
 #
@@ -670,6 +817,8 @@ spawned_resources() {
     case "$1" in
         container) docker ps -a --filter "label=$2" --format '{{.Names}}' 2>/dev/null ;;
         network)   docker network ls --filter "label=$2" --format '{{.Name}}' 2>/dev/null ;;
+        # ボリュームには稼働・停止の区別が無いので -a に相当する指定は要らない。
+        volume)    docker volume ls --filter "label=$2" --format '{{.Name}}' 2>/dev/null ;;
         *)         return 2 ;;
     esac
 }
@@ -707,7 +856,10 @@ stop_proxy_if_idle() {
     fi
     if is_running "$DOCKER_PROXY_CONTAINER"; then
         docker rm -f "$DOCKER_PROXY_CONTAINER" >/dev/null
-        echo "🐳 Docker Socket Proxy コンテナを停止しました（Claude コンテナなし）"
+        # 「停止」ではなく削除である（DSN-arch-05 / FR-env-01 受入基準6）。
+        # 停止済みコンテナは固定名を占有して作り直しと衝突するので、削除して docker ps -a
+        # にも残らない状態にする。次に必要になれば ensure_docker_proxy_container が作り直す。
+        echo "🐳 Docker Socket Proxy コンテナを削除しました（稼働中の Claude コンテナが無いため。次の start で作り直します）"
     fi
 }
 
@@ -1036,9 +1188,20 @@ login-codex)
 # ログイン情報削除
 # -----------------------------------------------------------------------------
 logout)
-    # 引数解析（--yes のみ。それ以外は無視する）
+    # 引数解析（--yes と --volumes。それ以外は無視する）。
+    # --volumes は stop と同じ意味である（FR-env-01 受入基準32）: 既定で消さないという判断は
+    # **資源の種類**についてのものなので、操作ごとに変えると「どの操作なら消えるか」を
+    # 利用者が覚えることになる。
     _yes=0
-    for _a in "$@"; do [ "$_a" = "--yes" ] && _yes=1; done
+    _reset_with_volumes=0
+    for _a in "$@"; do
+        [ "$_a" = "--yes" ] && _yes=1
+        [ "$_a" = "--volumes" ] && _reset_with_volumes=1
+    done
+    # --volumes のときだけ docker rm へ -v を添える（匿名ボリュームは所有者ラベルを
+    # 持てないので、紐づくコンテナを消す時点が唯一それを特定できる瞬間である）。
+    _rm_v_opt=""
+    [ "$_reset_with_volumes" = "1" ] && _rm_v_opt="-v" 
 
     require_setup
     # 共有ボリュームを空にする操作なので共有資源単位のロックを取る。取れなければ
@@ -1456,14 +1619,27 @@ start)
     fi
 
     # .gitignore に .claude / .codex が含まれていなければ追加
+    # プロジェクト環境ファイルを読む（FR-env-14）。読めなくても起動は止めない。
+    load_project_env_file "$PROJECT_DIR"
+
     if [ -f "${PROJECT_DIR}/.gitignore" ]; then
-        for _ig in .claude .codex; do
+        _ig_list=(.claude .codex)
+        [ -n "$PROJECT_ENV_FILE_REL" ] && _ig_list+=("$PROJECT_ENV_FILE_REL")
+        for _ig in "${_ig_list[@]}"; do
             if ! grep -qxF "$_ig" "${PROJECT_DIR}/.gitignore" && ! grep -qxF "${_ig}/" "${PROJECT_DIR}/.gitignore"; then
                 echo "$_ig" >> "${PROJECT_DIR}/.gitignore"
             fi
         done
     elif [ -d "${PROJECT_DIR}/.git" ]; then
         printf '%s\n%s\n' '.claude' '.codex' > "${PROJECT_DIR}/.gitignore"
+        [ -n "$PROJECT_ENV_FILE_REL" ] && printf '%s\n' "$PROJECT_ENV_FILE_REL" >> "${PROJECT_DIR}/.gitignore"
+    fi
+    # 追跡から外せたかを確かめる。外せなくても起動は止めない（FR-env-14-4）。
+    if [ -n "$PROJECT_ENV_FILE_REL" ] && [ -d "${PROJECT_DIR}/.git" ]; then
+        if ! (cd "$PROJECT_DIR" && git check-ignore -q "$PROJECT_ENV_FILE_REL" 2>/dev/null); then
+            echo "⚠️  env ファイルを版管理の追跡から外せませんでした（既に追跡されている可能性があります）: ${PROJECT_ENV_FILE_REL}"
+            echo "   'git rm --cached ${PROJECT_ENV_FILE_REL}' で追跡から外してください。"
+        fi
     fi
 
     # ~/.gitconfig があればマウント（読み取り専用）
@@ -1572,6 +1748,7 @@ start)
             $COMPOSE_OPTS \
             $NOVNC_PORT_OPT \
             -e NODE_OPTIONS=--max-old-space-size=4096 \
+            "${PROJECT_ENV_OPTS[@]}" \
             -t \
             "$RUN_IMAGE" 2>&1 >/dev/null); then
             break
@@ -1684,7 +1861,21 @@ attach)
 # プロジェクト停止
 # -----------------------------------------------------------------------------
 stop)
-    if [ -n "$2" ]; then
+    # --volumes は「そのセッションが作ったボリュームも消す」という明示（FR-env-01 受入基準28）。
+    # **コンテナ名の検証より前に取り除く**: 受理文字の制限はコンテナ名にだけ掛かる規則なので、
+    # フラグを名前として検証すると --volumes 自体が受理できない文字を含むものとして弾かれる。
+    _stop_with_volumes=0
+    _stop_args=()
+    shift   # $1 = "stop" を落とす
+    for _a in "$@"; do
+        case "$_a" in
+            --volumes) _stop_with_volumes=1 ;;
+            *) _stop_args+=("$_a") ;;
+        esac
+    done
+    set -- "stop" "${_stop_args[@]}"
+
+    if [ -n "${2:-}" ]; then
         NAME="${2}"
         # ロックキー（= パス要素）になるので、受理する文字を限る（FR-env-01 受入基準18）。
         # / や .. を含む名前を通すと、ロックのパスが意図したディレクトリの外を指す。
@@ -1741,18 +1932,29 @@ stop)
     # 表示を分けると、利用者から見て同じ種類のものが 2 箇所に散る（FR-env-01 受入基準26）。
     _spawned_deleted=()
     _spawned_failed=()
+    _spawned_kept_volumes=()
+    # --volumes のときだけ docker rm へ -v を添える。-v はそのコンテナが抱えていた
+    # **名前無しのボリューム（匿名ボリューム）だけ**を消し、名前付きには触れない。
+    _rm_v_opt=""
+    [ "$_stop_with_volumes" = "1" ] && _rm_v_opt="-v" 
     _cproj_legacy_hint="$(compose_project_name_legacy "$NAME")-<ハッシュ6桁>"
     if [ -n "$_stop_proj_dir" ]; then
         _cproj=$(compose_project_name "$NAME" "$_stop_proj_dir")
         while IFS= read -r _cc; do
             [ -n "$_cc" ] || continue
-            if docker rm -f "$_cc" >/dev/null 2>&1; then
+            if docker rm -f $_rm_v_opt "$_cc" >/dev/null 2>&1; then
                 _spawned_deleted+=("コンテナ: ${_cc}")
             else
                 _spawned_failed+=("コンテナ: ${_cc}")
             fi
         done < <(docker ps -a --filter "label=com.docker.compose.project=${_cproj}" --format '{{.Names}}' 2>/dev/null || true)
-        if docker network rm "${_cproj}_default" >/dev/null 2>&1; then
+        # そもそも存在しなかったものを「削除できなかった」として表示してはならない
+        # （FR-env-01 受入基準34）。docker network rm は存在しない名前にも非0を返すので、
+        # 終了コードだけでは「使用中で消せなかった」と「最初から無かった」を区別できない。
+        # compose ファイルが既定ネットワークを使わない構成では、この名前は最初から作られない。
+        if ! docker network ls --format '{{.Name}}' 2>/dev/null | grep -qxF "${_cproj}_default"; then
+            :   # 存在しない = 削除対象ではない。成功にも失敗にも数えない
+        elif docker network rm "${_cproj}_default" >/dev/null 2>&1; then
             _spawned_deleted+=("ネットワーク: ${_cproj}_default")
         else
             # 削除に失敗した compose 既定ネットワークも、所有者ラベル経由のネットワークと
@@ -1775,7 +1977,7 @@ stop)
         if _spawned_c=$(spawned_resources container "$_owner_filter"); then
             while IFS= read -r _sc; do
                 [ -n "$_sc" ] || continue
-                if docker rm -f "$_sc" >/dev/null 2>&1; then
+                if docker rm -f $_rm_v_opt "$_sc" >/dev/null 2>&1; then
                     _spawned_deleted+=("コンテナ: ${_sc}")
                 else
                     _spawned_failed+=("コンテナ: ${_sc}")
@@ -1793,6 +1995,28 @@ stop)
                 done <<< "$_spawned_n"
             else
                 echo "⚠️  セッション由来のネットワークを引けませんでした（Docker への問い合わせに失敗）。削除を行わずに続行します。" >&2
+            fi
+
+            # 手順8-3: 名前付きボリューム（FR-env-01 受入基準28〜30）。
+            #   **既定では消さない**。--volumes を明示したときだけ消し、無ければ
+            #   残っている名前と削除する方法を表示する（消えては困るデータが在りうるため）。
+            #   匿名ボリュームはここに現れない（所有者ラベルを持てないので、上の
+            #   docker rm -f -v がコンテナに紐づけて消している）。
+            if _spawned_v=$(spawned_resources volume "$_owner_filter"); then
+                while IFS= read -r _sv; do
+                    [ -n "$_sv" ] || continue
+                    if [ "$_stop_with_volumes" = "1" ]; then
+                        if docker volume rm "$_sv" >/dev/null 2>&1; then
+                            _spawned_deleted+=("ボリューム: ${_sv}")
+                        else
+                            _spawned_failed+=("ボリューム: ${_sv}")
+                        fi
+                    else
+                        _spawned_kept_volumes+=("$_sv")
+                    fi
+                done <<< "$_spawned_v"
+            else
+                echo "⚠️  セッション由来のボリュームを引けませんでした（Docker への問い合わせに失敗）。削除を行わずに続行します。" >&2
             fi
         else
             # 0 件ではなく「引けなかった」。推測で削除しない（安全側へ倒す）。
@@ -1821,6 +2045,13 @@ stop)
     if [ ${#_spawned_failed[@]} -gt 0 ]; then
         echo "⚠️  次のセッション由来の資源は削除できませんでした（処理は続行しました。次回の stop が回収します）:" >&2
         for _t in "${_spawned_failed[@]}"; do echo "   - ${_t}" >&2; done
+    fi
+    # 削除しないと決めたものは「削除できなかった資源」ではない（FR-env-01 受入基準29）。
+    # 0 件なら何も表示しない（同30）。
+    if [ ${#_spawned_kept_volumes[@]} -gt 0 ]; then
+        echo "📦 このセッションが作ったボリュームは残しました（データを失わないため、既定では削除しません）:"
+        for _t in "${_spawned_kept_volumes[@]}"; do echo "   - ボリューム: ${_t}"; done
+        echo "   消すときは 'claude-dev stop ${NAME} --volumes' を実行してください。"
     fi
 
     # 本要件の一意化より前に起動された compose 資源は旧い名前（ハッシュ無し）を持つ。
@@ -1861,8 +2092,12 @@ ssh-keys)
             _proj_config="$(pwd)/${PROJECT_CONFIG_NAME}"
             if [ -f "$_proj_config" ]; then
                 _tmp=$(mktemp)
-                grep -vE '^ssh_keys:|^[[:space:]]*-[[:space:]]|^# claude-dev プロジェクト設定|^# 再選択は' "$_proj_config" > "$_tmp" 2>/dev/null || true
-                if grep -qE '[^[:space:]]' "$_tmp" 2>/dev/null; then mv "$_tmp" "$_proj_config"; else rm -f "$_tmp" "$_proj_config"; fi
+                # ssh_keys 節だけを取り除く。書く側（write_project_ssh_keys）と同じ判定を使う
+                # ——片方だけ直すと「書けるが消せない/消せるが書けない」状態になる。
+                _strip_ssh_keys_section "$_proj_config" > "$_tmp" 2>/dev/null || true
+                # 残りに**字下げの無いキー行**が 1つでも在ればファイルを残す。案内のコメントだけが
+                # 残ったファイルを置き去りにしないため、非空白文字の有無では判定しない。
+                if grep -qE '^[A-Za-z_][A-Za-z0-9_-]*:' "$_tmp" 2>/dev/null; then mv "$_tmp" "$_proj_config"; else rm -f "$_tmp" "$_proj_config"; fi
             fi
             # このプロジェクトの専用 agent／ブリッジを停止・削除
             for _kind in bpid pid; do
@@ -2129,10 +2364,13 @@ reset)
     # セッション由来の資源（規則D）: claude-dev.role=spawned を持つコンテナとネットワークを
     # **所有者を問わず**すべて挙げる（FR-env-01 受入基準25）。reset は対象を絞る引数を持たない
     # 「ホスト全体」の操作なので、所有者で絞ると stop と同じ意味になってしまう。
-    # 名前付きボリュームは対象にしない（D0-env-05 項2）。
+    # 名前付きボリュームは **--volumes を明示したときだけ**対象にする（同32）。
+    # 指定が無ければ列挙もしない: 手順3 の一覧は「これから消すもの」を見せる場であり、
+    # 消さないものを混ぜると FR-env-03 受入基準14 の意味が失われる。
     # **問い合わせに失敗したら握らない**（reset は D0-env-08 項5 の対象。0 件と区別する）。
     _rc_spawned_c=()
     _rc_spawned_n=()
+    _rc_spawned_v=()
     _rc_spawned_query_failed=()
     if _q=$(spawned_resources container "claude-dev.role=spawned"); then
         while IFS= read -r _c; do [ -n "$_c" ] && _rc_spawned_c+=("$_c"); done <<< "$_q"
@@ -2143,6 +2381,13 @@ reset)
         while IFS= read -r _c; do [ -n "$_c" ] && _rc_spawned_n+=("$_c"); done <<< "$_q"
     else
         _rc_spawned_query_failed+=("セッション由来のネットワークの列挙（Docker への問い合わせに失敗）")
+    fi
+    if [ "$_reset_with_volumes" = "1" ]; then
+        if _q=$(spawned_resources volume "claude-dev.role=spawned"); then
+            while IFS= read -r _c; do [ -n "$_c" ] && _rc_spawned_v+=("$_c"); done <<< "$_q"
+        else
+            _rc_spawned_query_failed+=("セッション由来のボリュームの列挙（Docker への問い合わせに失敗）")
+        fi
     fi
 
     # 管理ラベルを持たない Claude コンテナ（削除しない。名前を表示して残す）。
@@ -2171,6 +2416,7 @@ reset)
     for _t in "${_rc_fwd[@]}";        do echo "   - 中継コンテナ: ${_t}"; done
     for _t in "${_rc_spawned_c[@]}";  do echo "   - セッション由来のコンテナ: ${_t}"; done
     for _t in "${_rc_spawned_n[@]}";  do echo "   - セッション由来のネットワーク: ${_t}"; done
+    for _t in "${_rc_spawned_v[@]}";  do echo "   - セッション由来のボリューム: ${_t}"; done
     echo "   - Docker Socket Proxy コンテナ（遊休のときだけ）"
     echo "   - 共有ネットワーク ${NETWORK}（遊休のときだけ）"
     for _t in "${_rc_volumes[@]}"; do echo "   - ボリューム: ${_t}"; done
@@ -2206,6 +2452,7 @@ reset)
     for _t in "${_rc_fwd[@]}";        do destructive_plan "中継コンテナ: ${_t}"; done
     for _t in "${_rc_spawned_c[@]}";  do destructive_plan "セッション由来のコンテナ: ${_t}"; done
     for _t in "${_rc_spawned_n[@]}";  do destructive_plan "セッション由来のネットワーク: ${_t}"; done
+    for _t in "${_rc_spawned_v[@]}";  do destructive_plan "セッション由来のボリューム: ${_t}"; done
     # 列挙に失敗したものは「消えなかった資源」として最後に列挙し、終了コード 1 で終わる
     # （reset は D0-env-08 項5 の対象。握って「完了」と表示してはならない）。
     for _t in "${_rc_spawned_query_failed[@]}"; do destructive_plan "$_t"; destructive_failed "$_t"; done
@@ -2245,7 +2492,11 @@ reset)
             # destructive_rm は成否によらず 0 を返す（set -e で落とさないため）。
             # 成功したかは _DESTRUCTIVE_DELETED が伸びたかで見る。
             _n_before=${#_DESTRUCTIVE_DELETED[@]}
-            destructive_rm "セッション由来のコンテナ: ${_t}" docker rm -f "$_t"
+            if [ -n "$_rm_v_opt" ]; then
+                destructive_rm "セッション由来のコンテナ: ${_t}" docker rm -f "$_rm_v_opt" "$_t"
+            else
+                destructive_rm "セッション由来のコンテナ: ${_t}" docker rm -f "$_t"
+            fi
             [ ${#_DESTRUCTIVE_DELETED[@]} -gt "$_n_before" ] && _spawned_reset_deleted+=("コンテナ: ${_t}")
         else
             destructive_skipped "セッション由来のコンテナ: ${_t}"
@@ -2261,10 +2512,34 @@ reset)
             destructive_skipped "セッション由来のネットワーク: ${_t}"
         fi
     done
+    # ボリュームはコンテナ・ネットワークを消したあとに消す（使用中は削除できない）。
+    for _t in "${_rc_spawned_v[@]}"; do
+        destructive_abort_if_interrupted
+        if docker volume inspect "$_t" >/dev/null 2>&1; then
+            _n_before=${#_DESTRUCTIVE_DELETED[@]}
+            destructive_rm "セッション由来のボリューム: ${_t}" docker volume rm "$_t"
+            [ ${#_DESTRUCTIVE_DELETED[@]} -gt "$_n_before" ] && _spawned_reset_deleted+=("ボリューム: ${_t}")
+        else
+            destructive_skipped "セッション由来のボリューム: ${_t}"
+        fi
+    done
     # 削除できた分を種別つきで 1 行ずつ表示する（FR-env-01 受入基準26）。0 件なら出さない（同27）。
     if [ ${#_spawned_reset_deleted[@]} -gt 0 ]; then
         echo "🧹 セッション由来の資源を削除しました（所有者は問いません）:"
         for _t in "${_spawned_reset_deleted[@]}"; do echo "   - ${_t}"; done
+    fi
+    # --volumes が無いときは、残したことと「完全な初期化になっていない」旨を出す
+    # （FR-env-01 受入基準33。共有資源について既に出しているのと同じ形）。0 件なら出さない。
+    if [ "$_reset_with_volumes" != "1" ]; then
+        if _q=$(spawned_resources volume "claude-dev.role=spawned"); then
+            _kept_v=()
+            while IFS= read -r _c; do [ -n "$_c" ] && _kept_v+=("$_c"); done <<< "$_q"
+            if [ ${#_kept_v[@]} -gt 0 ]; then
+                echo "📦 セッション由来のボリュームは残しました（データを失わないため、既定では削除しません）:"
+                for _t in "${_kept_v[@]}"; do echo "   - ボリューム: ${_t}"; done
+                echo "   ⚠️  したがって完全な初期化にはなっていません。消すときは 'claude-dev reset --volumes' を実行してください。"
+            fi
+        fi
     fi
     destructive_abort_if_interrupted
     destructive_abort_if_interrupted

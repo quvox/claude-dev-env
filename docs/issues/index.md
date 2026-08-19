@@ -18,7 +18,8 @@
 | [092-modify-01-says-stop-halts-docker-proxy-while-the-code-deletes-it](092-modify-01-says-stop-halts-docker-proxy-while-the-code-deletes-it.md) | modify | 中 | 00 | 2026-08-07 | FR-env-01, D0-env-08, docs/02-design/contracts/cli-container.md, MODULE-cli-stop, MODULE-cli-logout, MODULE-cli-reset, claude-dev, claude-dev-mac | docker-proxy について 00・01 は「停止」、02・03・実装は「削除」(`docker rm -f`)と書いており、利用者向け出力も「停止しました」なのでコンテナが残らないことが伝わらない |
 | [094-modify-user-visible-values-are-stated-verbatim-in-two-layers](094-modify-user-visible-values-are-stated-verbatim-in-two-layers.md) | modify | 中 | 02 | 2026-08-08 | FR-env-12-5, FR-orch-03-3, FR-env-01-18, FR-env-01-16, D0-dist-04, D0-env-06, DSN-dist-02, CTR-cli-orchestrator, CTR-cli-container, docs/02-design/logging.md | 既定値・受理する文字集合・設定の鍵と値の組が 2 つ以上の層に逐語で書かれており、どちらを直せば正になるかが決まらない |
 | [097-modify-cli-help-dispatch-branch-is-absent-from-the-feature-table](097-modify-cli-help-dispatch-branch-is-absent-from-the-feature-table.md) | modify | 中 | 02 | 2026-08-11 | docs/03-impl/features.md, MODULE-makefile-help, docs/01-requirements/usecases.md | CLI の `help\|*)` ディスパッチ分岐(ヘルプ表示と未知サブコマンドの受け皿)が機能表に無く、対応する MODULE-*.md も存在しない |
+| [102-bug-colabtmux-refuses-to-launch-codex-on-a-nonzero-bwrap-probe](102-bug-colabtmux-refuses-to-launch-codex-on-a-nonzero-bwrap-probe.md) | bug | 中 | 02 | 2026-08-19 | FR-env-12, AC-06, D0-dist-04, DSN-dist-02, MODULE-entrypoint-claude, docs/02-design/environments.md | 同梱外部バイナリ colabtmux が codex を起こす前に bwrap の可否を見ており、コンテナ内では既知かつ正常な非ゼロを故障と読んで起動を拒む |
 
-件数: 12
+件数: 13
 
 <!-- END GENERATED: build-index.py -->
