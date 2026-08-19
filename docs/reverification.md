@@ -100,12 +100,12 @@
 | issue | 094-modify-user-visible-values-are-stated-verbatim-in-two-layers | 2026-08-08 | - | FR-env-12-5, FR-orch-03-3, FR-env-01-18, FR-env-01-16, D0-dist-04, D0-env-06, DSN-dist-02, CTR-cli-orchestrator, CTR-cli-container, docs/02-design/logging.md | 判定不能: closes_whenが空 |
 | issue | 097-modify-cli-help-dispatch-branch-is-absent-from-the-feature-table | 2026-08-11 | 人間が `MODULE-cli-help` を機能表に加えるか加えないかを回答し、その回答が docs/03-impl/features.md に反映されたとき(加える場合は docs/03-impl/relations/MODULE-cli-help.md と 02-design/relations.md の PLAN-* まで反映されたとき) | docs/03-impl/features.md, MODULE-makefile-help, docs/01-requirements/usecases.md | - |
 | issue | 102-bug-colabtmux-refuses-to-launch-codex-on-a-nonzero-bwrap-probe | 2026-08-19 | claude-dev コンテナ内の colabtmux から codex を起動でき、「bwrap が非ゼロのため codex を起こせず」の報告が出ないこと。あわせて、同じコンテナで `codex sandbox --enable use_legacy_landlock -- /bin/true` が終了コード 0 を返し、`codex exec` が起こすシェルコマンドが成功することを実機で確認できること | FR-env-12, AC-06, D0-dist-04, DSN-dist-02, MODULE-entrypoint-claude, docs/02-design/environments.md | - |
-| issue | 103-bug-reset-does-not-parse-the-volumes-flag | 2026-08-19 | `claude-dev reset --volumes` と `claude-dev-mac reset --volumes` がセッション由来の名前付きボリュームを削除し、`MODULE-cli-reset` の「既知の制限」から本 issue の行が消える | FR-env-01-32, FR-env-01-33, MODULE-cli-reset, CTR-cli-container, E2E-01 | - |
-| issue | 104-bug-gitignore-append-failure-aborts-start | 2026-08-19 | `.gitignore` へ書き込めない状態で `claude-dev start` を実行しても、外せなかったことを表示して起動が続く | FR-env-14-4, MODULE-cli-start, CTR-cli-container | - |
+| issue | 106-bug-an-unreadable-project-env-file-halts-start | 2026-08-19 | 読み取り権限の無い通常ファイルを `env_file` に指定した状態で `claude-dev start --no-vnc` を実行し、読めなかったことを表示したうえでコンテナが起動すること(Linux 版・macOS 版の両方)。あわせて `MODULE-cli-start` 手順5-2 の3が実装の事実と一致すること | FR-env-14-6, NFR-avail-03, MODULE-cli-start, claude-dev, claude-dev-mac | - |
+| issue | 107-bug-a-malformed-host-settings-json-halts-start | 2026-08-19 | 壊れた JSON を `~/.claude/settings.json` に置いた状態で `claude-dev start --no-vnc` を実行し、`host-hooks.json` を書かないままコンテナが起動すること(Linux 版・macOS 版の両方)。あわせて `MODULE-cli-start` の異常系の行が実装の事実と一致すること | NFR-avail-03, MODULE-cli-start, claude-dev, claude-dev-mac | - |
 
 ### 集計
 
 - 棚上げ: 7(最古の記録日 2026-08-02)
 - issue: 15(最古の記録日 2026-08-02)
 - 条件が読めない(判定不能): 11
-- 残務: 39 行(最古 2026-08-10)
+- 残務: 38 行(最古 2026-08-10)

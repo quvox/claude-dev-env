@@ -209,6 +209,44 @@ CLAUDE.md §4 の「起点をまたぐなら上位に合わせて同じ降下で
 
 ## 進捗メモ
 
+- 2026-08-19 `/doc-check`(**ssot task-stop-cleanup-and-project-env**。フェーズ4 の反映後・**同日3回目の増分再実行**)
+  判定: **PASS(ブロッキング0件)。ただし製品側に severity 中の実装欠陥2件を起票した**。
+  レビュー: **あり(Codex `gpt-5.6-sol` / reasoning high)**。実行形態: 呼び出し元スキルから
+  起動した新しい文脈のサブエージェント。**反復 1/2**(2周目は不要)。
+  記録は `docs/histories/2026-08-19-doc-check-ssot-stop-cleanup-and-project-env-third-recheck.md`。
+  **2回目の記録は `…-recheck-after-code-fix.md`**(この進捗メモには入っていない)。
+  - **増分の根拠**: 直前の検証以降に動いたのはコミット `faa4b3d` だけで、その中身は
+    `claude-dev` / `claude-dev-mac` の `.gitignore` まわり(`claude-dev:1549` の1ハンク。
+    8行 → 17行 = **以降を一律 +9**)と `MODULE-cli-start.md`・`03-impl/index.md` である。
+    A〜E をこの差分と下流(03-impl の closure 文書)に絞った。**00・01・02 は再検証していない**
+    (版と `verified.version` が一致したまま有効。原則6)。
+  - **新規 issue: `docs/issues/106`(重大度 中 / 起点層 03)** — `load_project_env_file` が
+    `[ ! -f ]` しか見ず読み取りが握られていないので、**読めない env ファイルで `start` が止まる**
+    (`claude-dev:165`・`:203` / `claude-dev-mac:164`・`:202`)。`NFR-avail-03` 違反。
+  - **新規 issue: `docs/issues/107`(重大度 中 / 起点層 03)** — `_overlay=$(jq … 2>/dev/null)` が
+    終了ステータスを握らないので、**壊れた `~/.claude/settings.json` で `start` が止まる**
+    (`claude-dev:1521` / `claude-dev-mac:1596`)。`NFR-avail-03` は「ホスト設定の取り込み」を名指し。
+    **どちらも同型の最小スクリプトで実測。`/task-close` へ進む前にコードを直すこと**
+    (`106` は `[ ! -r ]` を足すか `done < "$norm"` を握る / `107` は `|| _overlay=""` を添える。
+    どちらも Linux 版・macOS 版の両方。`D0-scope-03`)。
+  - **自動修正**: コード引用 **40 トークン / 15 箇所**の取り直し(PATCH)+ `MODULE-cli-start` の
+    **偽になっていた4箇所**の書き直しと副作用の順序表の整理(MINOR)。
+    `03-impl/index.md` は **1.28.0 → 1.29.0**(起票済み欠陥 4件 → 6件)。
+    **`MODULE-cli-start` の `:1670` は2回目が取り直さずに残していたもの**である。
+  - **記録した残務1行**: `MODULE-cli-start` の程度語2箇所(「数分」「即座に」)。
+  - **恒久受容として落とした残務: 0行**(`doc-health.py --as-of=2026-08-19 --sweep`。残務 38 行 / 上限 50)。
+  - **鮮度(A2)**: `P-005` は**未発火**。**`P-006` の3つ目の発火条件は2回目の記録が発火と判定したまま、
+    人間の裁定を得ていない**(専有ホストが無く E2E-01 手順8-15 / 8-16 / 手順10・12 を実行できない)。
+    新しい issue にも残務にもしない(`issues-pendings.md` §8)。
+  - **機械検査**: `check-changeset.py --ssot` = CS20 のみ違反9件(既存・2026-08-12 の残務が持つ)/
+    `check-relations.py` 合格 / `check-contracts.py` 合格 / `build-callgraphs.py --check` 最新 /
+    `cluster-features.py --check` 最新 / `callgraph-check.py` 重大度「高」**0**(中3・低9・参考12 は既存)/
+    `check-lane.py` 合格(lane=critical)/ `check-sheet.py` は SH8 のみ(本タスク自身の反映で
+    closure の版が上がったため。フェーズ2 の入場ゲートは通過済み)。
+  - **決定シートへの追記: なし**(問う基準を満たす論点は無い。`106` / `107` は「直す」以外の選択が無い)。
+  - **最弱点**: 2回目の再実行が `MODULE-cli-start` を書き直しながら同じ文書の `:1670` を取り直して
+    いなかったこと。**取り直しの単位は「変わった文書」ではなく「ずれた区間より下の全引用」である。**
+
 - 2026-08-19 `/doc-check`(**ssot task-stop-cleanup-and-project-env**。フェーズ4 の反映後)
   判定: **PASS(ブロッキング0件)。ただし製品側に severity 中の実装欠陥2件を起票した**。
   レビュー: **あり(Codex `gpt-5.6-sol` / reasoning high)**。実行形態: 呼び出し元スキルから

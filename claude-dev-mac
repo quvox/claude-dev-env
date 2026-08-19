@@ -161,7 +161,10 @@ load_project_env_file() {
     esac
 
     PROJECT_ENV_FILE_REL="$rel"
-    if [ ! -f "$norm" ]; then
+    # **存在と読み取り可否の両方を見る**。`-f` だけだと、読めないファイルで下の
+    # `done < "$norm"` が失敗し、set -e により start がその場で止まる（FR-env-14-6 が
+    # 課す「表示して起動を続ける」に入らない）。
+    if [ ! -r "$norm" ]; then
         echo "⚠️  env ファイルを読めませんでした（環境変数を渡さずに起動を続けます）: ${rel}"
         return 0
     fi
@@ -1593,7 +1596,10 @@ start)
     # （ファイル名は歴史的経緯で host-hooks.json のままだが env も含む）
     HOST_SETTINGS="${HOME}/.claude/settings.json"
     if [ -f "$HOST_SETTINGS" ]; then
-        _overlay=$(jq -c '{hooks: .hooks, env: .env} | with_entries(select(.value != null))' "$HOST_SETTINGS" 2>/dev/null)
+        # jq が失敗しても起動は止めない（NFR-avail-03 が「ホスト設定の取り込み」を
+        # 補助機能に名指ししている）。set -e 下では代入の失敗がそのまま終了になる。
+        _overlay=$(jq -c '{hooks: .hooks, env: .env} | with_entries(select(.value != null))' "$HOST_SETTINGS" 2>/dev/null) || _overlay=""
+        [ -n "$_overlay" ] || echo "⚠️  ホストの Claude 設定を読めませんでした（起動は続けます）: ${HOST_SETTINGS}"
         if [ -n "$_overlay" ] && [ "$_overlay" != "{}" ]; then
             echo "$_overlay" > "${PROJECT_DIR}/.claude/host-hooks.json"
         fi
