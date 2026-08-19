@@ -2,8 +2,8 @@
 id: go
 language: go
 tier: 2
-symbols: 14
-edges: 17
+symbols: 16
+edges: 20
 endpoints: 1
 unresolved: 0
 ---
@@ -27,19 +27,21 @@ unresolved: 0
 | シンボル | 種別 | 可視性 | 呼び出す先 | 呼び出し元 |
 |---|---|---|---|---|
 | `docker-proxy/main.go::cachedResolveProjectDir` | function | private | `docker-proxy/main.go::lookupProjectDir` | - |
-| `docker-proxy/main.go::clientIP` | function | private | - | `docker-proxy/main.go::labelNetworkCreate`, `docker-proxy/main.go::validateContainerCreate` |
+| `docker-proxy/main.go::clientIP` | function | private | - | `docker-proxy/main.go::labelCreateRequest`, `docker-proxy/main.go::validateContainerCreate` |
 | `docker-proxy/main.go::closeWrite` | function | private | - | `docker-proxy/main.go::handleHijack` |
 | `docker-proxy/main.go::containWorkspacePath` | function | private | - | `docker-proxy/main.go::rewriteBinds` |
 | `docker-proxy/main.go::handleHijack` | function | private | `docker-proxy/main.go::closeWrite` | `docker-proxy/main.go::main` |
-| `docker-proxy/main.go::injectOwnerLabels` | function | private | - | `docker-proxy/main.go::labelNetworkCreate`, `docker-proxy/main.go::validateContainerCreate` |
-| `docker-proxy/main.go::labelNetworkCreate` | function | private | `docker-proxy/main.go::clientIP`, `docker-proxy/main.go::injectOwnerLabels`, `docker-proxy/main.go::readAndRestoreBody`, `docker-proxy/main.go::writeBackBody` | `docker-proxy/main.go::main` |
+| `docker-proxy/main.go::injectOwnerLabels` | function | private | - | `docker-proxy/main.go::labelCreateRequest`, `docker-proxy/main.go::validateContainerCreate` |
+| `docker-proxy/main.go::labelCreateRequest` | function | private | `docker-proxy/main.go::clientIP`, `docker-proxy/main.go::injectOwnerLabels`, `docker-proxy/main.go::readAndRestoreBody`, `docker-proxy/main.go::writeBackBody` | `docker-proxy/main.go::labelNetworkCreate`, `docker-proxy/main.go::labelVolumeCreate` |
+| `docker-proxy/main.go::labelNetworkCreate` | function | private | `docker-proxy/main.go::labelCreateRequest` | `docker-proxy/main.go::main` |
+| `docker-proxy/main.go::labelVolumeCreate` | function | private | `docker-proxy/main.go::labelCreateRequest` | `docker-proxy/main.go::main` |
 | `docker-proxy/main.go::lookupProjectDir` | function | private | - | `docker-proxy/main.go::cachedResolveProjectDir` |
-| `docker-proxy/main.go::main` | function | private | `docker-proxy/main.go::handleHijack`, `docker-proxy/main.go::labelNetworkCreate`, `docker-proxy/main.go::validateContainerCreate`, `docker-proxy/main.go::validateExecCreate` | (エントリポイント) |
-| `docker-proxy/main.go::readAndRestoreBody` | function | private | - | `docker-proxy/main.go::labelNetworkCreate`, `docker-proxy/main.go::validateContainerCreate`, `docker-proxy/main.go::validateExecCreate` |
+| `docker-proxy/main.go::main` | function | private | `docker-proxy/main.go::handleHijack`, `docker-proxy/main.go::labelNetworkCreate`, `docker-proxy/main.go::labelVolumeCreate`, `docker-proxy/main.go::validateContainerCreate`, `docker-proxy/main.go::validateExecCreate` | (エントリポイント) |
+| `docker-proxy/main.go::readAndRestoreBody` | function | private | - | `docker-proxy/main.go::labelCreateRequest`, `docker-proxy/main.go::validateContainerCreate`, `docker-proxy/main.go::validateExecCreate` |
 | `docker-proxy/main.go::rewriteBinds` | function | private | `docker-proxy/main.go::containWorkspacePath` | `docker-proxy/main.go::validateContainerCreate` |
 | `docker-proxy/main.go::validateContainerCreate` | function | private | `docker-proxy/main.go::clientIP`, `docker-proxy/main.go::injectOwnerLabels`, `docker-proxy/main.go::readAndRestoreBody`, `docker-proxy/main.go::rewriteBinds`, `docker-proxy/main.go::writeBackBody` | `docker-proxy/main.go::main` |
 | `docker-proxy/main.go::validateExecCreate` | function | private | `docker-proxy/main.go::readAndRestoreBody` | `docker-proxy/main.go::main` |
-| `docker-proxy/main.go::writeBackBody` | function | private | - | `docker-proxy/main.go::labelNetworkCreate`, `docker-proxy/main.go::validateContainerCreate` |
+| `docker-proxy/main.go::writeBackBody` | function | private | - | `docker-proxy/main.go::labelCreateRequest`, `docker-proxy/main.go::validateContainerCreate` |
 
 ## 解決できなかった呼び出し
 

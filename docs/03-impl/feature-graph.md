@@ -4,7 +4,7 @@ features: 61
 edges: 88
 confirmed_edges: 88
 candidate_edges: 0
-shared: 0
+shared: 2
 unreached: 8
 coupled_resources: 0
 unlinked_pairs: 0
@@ -129,7 +129,8 @@ unlinked_pairs: 0
 
 | シンボル | ファンイン | 到達元の機能 |
 |---|---|---|
-| (なし) | - | - |
+| `claude-dev-mac::_strip_ssh_keys_section` | 2 | MODULE-cli-common-write-project-ssh-keys, MODULE-cli-ssh-keys-reset |
+| `claude-dev::_strip_ssh_keys_section` | 2 | MODULE-cli-common-write-project-ssh-keys, MODULE-cli-ssh-keys-reset |
 
 ## どの入口からも到達しない関数
 

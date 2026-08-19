@@ -17,16 +17,16 @@
 | [cli-logout](cli-logout.md) | MOD-cli-logout | 0 / **14** / 0 | 1.8.0 | 2026-08-12 | MOD-cli-logout(認証情報の破棄)の受入基準⇄テスト対応 |
 | [cli-ports](cli-ports.md) | MOD-cli-ports | 0 / **2** / 0 | 1.1.1 | 2026-08-12 | MOD-cli-ports(公開ポートの一覧)の受入基準⇄テスト対応 |
 | [cli-pull](cli-pull.md) | MOD-cli-pull | 0 / **5** / 0 | 1.2.1 | 2026-08-12 | MOD-cli-pull(GHCR からのイメージ取得)の受入基準⇄テスト対応 |
-| [cli-reset](cli-reset.md) | MOD-cli-reset | 0 / **3** / 0 | 1.4.1 | 2026-08-12 | MOD-cli-reset(環境の初期化)の受入基準⇄テスト対応 |
+| [cli-reset](cli-reset.md) | MOD-cli-reset | 0 / **5** / 0 | 1.5.0 | 2026-08-19 | MOD-cli-reset(環境の初期化)の受入基準⇄テスト対応 |
 | [cli-setup](cli-setup.md) | MOD-cli-setup | 0 / **1** / 0 | 1.1.1 | 2026-08-12 | MOD-cli-setup(初回セットアップ)の受入基準⇄テスト対応 |
 | [cli-ssh-keys](cli-ssh-keys.md) | MOD-cli-ssh-keys | 0 / **5** / 0 | 1.1.1 | 2026-08-12 | MOD-cli-ssh-keys(転送する SSH 鍵の選択と解除)の受入基準⇄テスト対応 |
-| [cli-start](cli-start.md) | MOD-cli-start | 2 / **36** / 0 | 1.4.0 | 2026-08-12 | MOD-cli-start(開発コンテナの起動)の受入基準⇄テスト対応 |
-| [cli-stop](cli-stop.md) | MOD-cli-stop | 0 / **16** / 0 | 1.7.0 | 2026-08-12 | MOD-cli-stop(コンテナの停止)の受入基準⇄テスト対応 |
+| [cli-start](cli-start.md) | MOD-cli-start | 2 / **46** / 0 | 1.5.1 | 2026-08-19 | MOD-cli-start(開発コンテナの起動)の受入基準⇄テスト対応 |
+| [cli-stop](cli-stop.md) | MOD-cli-stop | 0 / **21** / 0 | 1.8.1 | 2026-08-19 | MOD-cli-stop(コンテナの停止)の受入基準⇄テスト対応 |
 | [cli-unforward](cli-unforward.md) | MOD-cli-unforward | 0 / **3** / 0 | 1.2.1 | 2026-08-12 | MOD-cli-unforward(ポートフォワードの解除)の受入基準⇄テスト対応 |
 | [cli-upgrade](cli-upgrade.md) | MOD-cli-upgrade | 0 / **1** / 0 | 1.1.1 | 2026-08-12 | MOD-cli-upgrade(CLI とイメージの更新)の受入基準⇄テスト対応 |
 | [container-tools](container-tools.md) | MOD-container-tools | 0 / **1** / 0 | 1.1.1 | 2026-08-12 | MOD-container-tools(コンテナ内補助ツール)の受入基準⇄テスト対応 |
-| [docker-proxy](docker-proxy.md) | MOD-docker-proxy | 10 / **2** / 0 | 1.3.1 | 2026-08-12 | MOD-docker-proxy(Docker API の検査と中継)の受入基準⇄テスト対応 |
-| [e2e](e2e.md) | E2E | 0 / **4** / 0 | 1.10.0 | 2026-08-12 | E2Eシナリオ E2E-01〜E2E-03 と E2E-06 ⇄ テスト対応 |
+| [docker-proxy](docker-proxy.md) | MOD-docker-proxy | 10 / **2** / 0 | 1.4.1 | 2026-08-19 | MOD-docker-proxy(Docker API の検査と中継)の受入基準⇄テスト対応 |
+| [e2e](e2e.md) | E2E | 0 / **4** / 0 | 1.11.0 | 2026-08-19 | E2Eシナリオ E2E-01〜E2E-03 と E2E-06 ⇄ テスト対応 |
 | [entrypoint](entrypoint.md) | MOD-entrypoint | 0 / **23** / 0 | 1.2.1 | 2026-08-12 | MOD-entrypoint(コンテナ起動シーケンス)の受入基準⇄テスト対応 |
 | [firewall](firewall.md) | MOD-firewall | 0 / **5** / 0 | 1.2.1 | 2026-08-12 | MOD-firewall(外向き通信のブラックリスト適用)の受入基準⇄テスト対応 |
 | [images](images.md) | (モジュール外)イメージのビルドと GHCR 配布 | 0 / **21** / 0 | 1.4.0 | 2026-08-18 | どのモジュールにも属さないイメージのビルドと GHCR 配布の受入基準⇄テスト対応 |

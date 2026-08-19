@@ -16,6 +16,7 @@ requirements: FR-env-04
 tests: なし(未実装。シェル実装のため自動テストランナーが無く実機確認で代替する)
 updated: 2026-08-19
 summary: このプロジェクトの SSH 鍵選択を初期化する(他のキーは保存する)
+reflected: 2026-08-19
 ---
 
 # MODULE-cli-ssh-keys-reset SSH 鍵選択の初期化

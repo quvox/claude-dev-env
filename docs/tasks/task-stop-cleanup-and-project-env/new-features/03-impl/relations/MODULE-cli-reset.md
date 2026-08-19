@@ -16,6 +16,7 @@ requirements: FR-env-01, FR-env-03
 tests: なし(未実装。シェル実装のため自動テストランナーが無く実機確認で代替する)
 updated: 2026-08-19
 summary: 管理ラベルを持つコンテナ・セッション由来の資源・固定名の共有資源を削除して初期状態へ戻す
+reflected: 2026-08-19
 ---
 
 # MODULE-cli-reset 全リセット

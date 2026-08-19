@@ -1,6 +1,6 @@
 ---
 id: MODULE-cli-start
-updated: 2026-08-12
+updated: 2026-08-19
 module: MOD-cli-start
 kind: tool
 sync: sync
@@ -8,8 +8,8 @@ impl: claude-dev::main#start, claude-dev-mac::main#start
 callers: なし
 callees: MODULE-entrypoint-claude, MODULE-cli-common-compose-project-name, MODULE-cli-common-container-exists, MODULE-cli-common-container-name, MODULE-cli-common-container-project-dir, MODULE-cli-common-dev-agent-path, MODULE-cli-common-ensure-infrastructure, MODULE-cli-common-get-novnc-url, MODULE-cli-common-image-exists, MODULE-cli-common-is-running, MODULE-cli-common-lock, MODULE-cli-common-require-setup, MODULE-cli-common-resolve-container-user, MODULE-cli-common-select-ssh-keys, MODULE-cli-common-write-project-ssh-keys
 contracts: CTR-cli-container
-design: DSN-mod-01, DSN-mod-02, DSN-arch-01, DSN-auth-01, DSN-dist-02, DSN-env-01, DSN-env-02, DSN-env-03
-requirements: FR-env-01, FR-env-02, FR-env-03, FR-env-04, FR-env-05, FR-env-06, FR-env-07, FR-env-08, FR-env-11, FR-env-12
+design: DSN-mod-01, DSN-mod-02, DSN-arch-01, DSN-auth-01, DSN-dist-02, DSN-env-01, DSN-env-02, DSN-env-03, DSN-env-05
+requirements: FR-env-01, FR-env-02, FR-env-03, FR-env-04, FR-env-05, FR-env-06, FR-env-07, FR-env-08, FR-env-11, FR-env-12, FR-env-14
 tests: なし(未実装。シェル実装のため自動テストランナーが無く実機確認で代替する)
 summary: カレントディレクトリで開発コンテナを起動する(VNC+Chrome が既定)
 ---
@@ -46,6 +46,39 @@ docker-proxy 経由の Docker アクセス(FR-env-07)、VM モード(FR-env-08)�
 5. `ensure_project_config`(畳み込み)で `.claude-dev.yaml` が無ければ用意する。TTY なら
    `MODULE-cli-common-select-ssh-keys` を呼び、非 TTY なら
    `MODULE-cli-common-write-project-ssh-keys` で空の `ssh_keys:` を書く。
+5-2. **プロジェクト環境ファイルを読む**(`FR-env-14`。`DSN-env-05`)。`load_project_env_file`
+   (本機能に畳み込み。**共有基盤の機能へは上げない** — 呼び出す側がこの機能1つだけであり、
+   共有基盤へ上げる条件〈2つ以上から呼ばれること〉を満たさないため。`PLAN-cli-start`)。
+   **番号は設定の読み取りと並べて読めるように 5-2 としているが、実装上の呼び出し位置は
+   手順12(`.gitignore` 追記)のブロックの中である**(`claude-dev:1548` /
+   `claude-dev-mac:1623`)。したがって表示は認証コピー(手順9)より後に出る。
+   マウント/オプション組立(手順13)より前なので、`PROJECT_ENV_OPTS` の組み立てには間に合う。
+   1. `.claude-dev.yaml` の `env_file` の値を読む。**無ければ何もせず、何も表示しない**
+      (指定していないことは正常な省略である。`FR-env-14-5`)。
+   2. 値を `PROJECT_DIR` からの相対として解決し、**正規化した結果が `PROJECT_DIR` の配下に
+      収まることを字句的に確かめる**(`MODULE-docker-proxy-serve` の bind の封じ込めと同じ考え方)。
+      外を指すなら**採用せず**、受理しないことと受理する範囲を表示して続行する(`FR-env-14-9`)。
+   3. ファイルを読む。**読めなければ**、読めなかったことを表示して**環境変数を渡さずに続行する**
+      (`FR-env-14-6`)。
+   4. 1行ずつ `名前=値` として解釈する。**空行と `#` で始まる行は読み飛ばす。** 組として
+      読めない行は**その行だけ**採用せず、何行目かを表示する(`FR-env-14-7`)。
+      **値は展開しない**(`DSN-env-05` の却下した案)。
+   5. **予約した名前**(接頭辞 `CLAUDE_DEV_` と、固定名 `DOCKER_HOST` / `COMPOSE_PROJECT_NAME` /
+      `SSH_AUTH_SOCK` / `NODE_OPTIONS` / `container`。集合の正は契約
+      `CTR-cli-container`「予約する環境変数名」)に当たる行は**その1件だけ**採用せず、
+      採用しなかった名前を表示する(`FR-env-14-8`)。
+   6. **同じ名前が2回以上あれば後に書かれたほうを採用**し、採用しなかった名前を表示する
+      (`FR-env-14-10`)。
+   7. 採用した組を `PROJECT_ENV_OPTS` として組み立てる(手順13 で使う)。
+      **値そのものは表示もログもしない**(`FR-env-14-3` / `02-design/logging.md`)。
+   8. **`.gitignore` へその env ファイルのパスを追記する**(未記載のときだけ。`FR-env-14-4`)。
+      追記の後に `git check-ignore -q` で**追跡から外せたかを確かめ**、外れていなければ
+      外せなかったことと `git rm --cached` の手順を表示して起動を続ける
+      (`claude-dev:1563`-`:1568` / `claude-dev-mac:1638`-`:1643`)。
+      **追記そのものが失敗しても起動は止めない** — 両スクリプトは冒頭で `set -e` を
+      有効にしているので、追記は `if ! echo … >> …; then` の形で明示的に握り、
+      追記できなかったことを表示して続ける(`FR-env-14-4` / `NFR-avail-03`)。
+      手順12 の `.claude` / `.codex` の追記と**同じ1つの処理に載せる**(判断は手順12 と共通)。
 6. フラグを解析する(`--no-vnc` / `--kvm` / `--vm` / `--vm-fresh`。`--vm` 系は `--kvm` を含意し、
    `/dev/kvm` が無ければ `exit 1`)。**macOS 版は `--kvm` / `--vm` / `--vm-fresh` を
    `require_setup` より前に早期拒否して `exit 1` する**。
@@ -96,7 +129,13 @@ docker-proxy 経由の Docker アクセス(FR-env-07)、VM モード(FR-env-08)�
     (`FR-env-04-8`。**「SSH agent 転送」が有効であるかのような表示を出さない**)。いずれも `known_hosts` RO、`~/.ssh/config` は
     `IdentityFile` / `IdentitiesOnly` / `IdentityAgent` 行を `sed` 除去した一時コピーを RO)、
     `NOVNC_PORT_OPT`(VNC 時のみ空きポートで `-p <port>:6080` とコンテナ別 Chrome ボリューム)、
-    `KVM_OPTS` / `VM_OPTS`(Linux の `--kvm` / `--vm` 時のみ)。
+    `KVM_OPTS` / `VM_OPTS`(Linux の `--kvm` / `--vm` 時のみ)、
+    **`PROJECT_ENV_OPTS`**(手順5-2 で採用した組を `-e <名前>=<値>` の並びにしたもの。
+    **本システムが付与する変数より後ろに置く** — 契約 `CTR-cli-container`「予約する環境変数名」の
+    適用順。予約名は既に除外されているので、この順序が効くのは `VM_*` のように
+    本システムが条件付きで転送するだけの変数に限られる。**他のオプションと違い変数にまとめず、
+    `docker run` の引数として引用付きで直接渡す** — 値は利用者が書いた任意の文字列であり、
+    `$VAR` で展開すると語分割で壊れるため。管理ラベルと同じ理由である)。
 14. **起動**: イメージ名とバージョンを表示し、`docker run -d --cap-add NET_ADMIN,NET_RAW
     --restart unless-stopped` に `/workspace`・各ボリューム・`tmux.conf` / `CLAUDE.md` の RO マウント・
     **管理ラベル3つ**・上記オプション・`NODE_OPTIONS=--max-old-space-size=4096`・`-t` を付けて実行する。
@@ -172,7 +211,7 @@ docker-proxy 経由の Docker アクセス(FR-env-07)、VM モード(FR-env-08)�
 - 何のために呼ぶか: コンテナ内の初期化(UID/GID 追従・認証コピー・ファイアウォール適用・
   VNC/Chrome・tmux・同期ループ・ポート同期)を行わせるため。`docker run` でコンテナを作ると
   イメージの `ENTRYPOINT` として起動する(主コンテナの `docker run -d` は
-  `claude-dev:1399` / `claude-dev-mac:1432`。手順15 の再試行ループの中にある)。
+  `claude-dev:1677` / `claude-dev-mac:1728`。手順15 の再試行ループの中にある)。
 - 何を渡すか: 契約 `CTR-cli-container` が定める環境変数一式とマウント、`NET_ADMIN` / `NET_RAW`。
 - 何を受け取るか: 直接の戻り値は無い。tmux が立ち上がった状態のコンテナ。
   **プロジェクトディレクトリ配下への書き込みがこの経路で起きる**(`start` 自身の副作用ではないが、
@@ -278,8 +317,8 @@ docker-proxy 経由の Docker アクセス(FR-env-07)、VM モード(FR-env-08)�
 
 | 種別 | 内容 |
 |---|---|
-| 戻り値 | 0(tmux 待ちタイムアウトでも 0)。前提不足・KVM 不在・リトライ上限超過・**同名コンテナとの衝突**・**ロックを取得できない**場合は 1。**130**: 手順4 の `acquire_lock` を**呼んだ後**に `INT` / `TERM` を受けた。`trap '_release_all_locks; exit 130' INT TERM` は**取得を試みる前**に張られる(`claude-dev:452` / `claude-dev-mac:517`)ので、**取得に失敗して 1 で終わる経路も、終わるまでは 130 の区間**である |
-| 永続化 | コンテナ `<name>`(**管理ラベル `claude-dev.managed=1` / `claude-dev.role=claude` / `claude-dev.project-dir=<起動ディレクトリの絶対パス>` 付き**)。`${PROJECT_DIR}/.claude/`(認証・`host-hooks.json`・`host-local-bin/`)、`${PROJECT_DIR}/.codex/auth.json`、`${PROJECT_DIR}/.gitignore` への追記、`${PROJECT_DIR}/.claude-dev.yaml`。docker volume `claude-dev-auth` / `claude-dev-history` / `claude-dev-config` / `claude-dev-chrome-<name>` / (VM 時)`claude-dev-vm-<name>`。**ロックのシンボリックリンク `${HOME}/.claude-dev/locks/proj-<name>.lock` と `shared.lock` を作成・削除する**。macOS では `~/.claude-dev/agents/<name>.{sock,pid,bridge.pid,bridge.port}`。**docker-proxy にはラベルを付けない**。**さらに entrypoint がプロジェクト配下へ書く**: `/workspace/.codex/config.toml`(既定鍵の補完)・`/workspace/CLAUDE.md`(マーカー範囲の再生成)・VNC 時の `/workspace/.mcp.json` と `/workspace/.claude/.claude.json`(いずれも `MODULE-entrypoint-claude` の副作用。**コンテナを新規に作る経路でだけ起きる** — 既に稼働中なら再接続して `exit 0` し、`docker run` に到達しないので entrypoint は再実行されない。`claude-dev:1198`-`:1216` / `:1399`) |
+| 戻り値 | 0(tmux 待ちタイムアウトでも 0)。前提不足・KVM 不在・リトライ上限超過・**同名コンテナとの衝突**・**ロックを取得できない**場合は 1。**130**: 手順4 の `acquire_lock` を**呼んだ後**に `INT` / `TERM` を受けた。`trap '_release_all_locks; exit 130' INT TERM` は**取得を試みる前**に張られる(`claude-dev:599` / `claude-dev-mac:682`)ので、**取得に失敗して 1 で終わる経路も、終わるまでは 130 の区間**である |
+| 永続化 | コンテナ `<name>`(**管理ラベル `claude-dev.managed=1` / `claude-dev.role=claude` / `claude-dev.project-dir=<起動ディレクトリの絶対パス>` 付き**)。`${PROJECT_DIR}/.claude/`(認証・`host-hooks.json`・`host-local-bin/`)、`${PROJECT_DIR}/.codex/auth.json`、`${PROJECT_DIR}/.gitignore` への追記(**`.claude` / `.codex` に加えてプロジェクト環境ファイルのパス**)、`${PROJECT_DIR}/.claude-dev.yaml`。docker volume `claude-dev-auth` / `claude-dev-history` / `claude-dev-config` / `claude-dev-chrome-<name>` / (VM 時)`claude-dev-vm-<name>`。**ロックのシンボリックリンク `${HOME}/.claude-dev/locks/proj-<name>.lock` と `shared.lock` を作成・削除する**。macOS では `~/.claude-dev/agents/<name>.{sock,pid,bridge.pid,bridge.port}`。**docker-proxy にはラベルを付けない**。**さらに entrypoint がプロジェクト配下へ書く**: `/workspace/.codex/config.toml`(既定鍵の補完)・`/workspace/CLAUDE.md`(マーカー範囲の再生成)・VNC 時の `/workspace/.mcp.json` と `/workspace/.claude/.claude.json`(いずれも `MODULE-entrypoint-claude` の副作用。**コンテナを新規に作る経路でだけ起きる** — 既に稼働中なら再接続して `exit 0` し、`docker run` に到達しないので entrypoint は再実行されない。`claude-dev:1463`-`:1481` / `:1677`) |
 | 発火するイベント | なし |
 | ログ | 標準出力へイメージ名・バージョン・noVNC URL・進捗。失敗とロックの取得失敗・残骸の引き継ぎは stderr |
 
@@ -294,6 +333,7 @@ docker-proxy 経由の Docker アクセス(FR-env-07)、VM モード(FR-env-08)�
 | 1 | **プロジェクト単位のロックの取得**(手順3) | シンボリックリンク1本。`trap` が解放する | 取れなければ以降の副作用は1つも起きない |
 | 2 | `require_setup` によるイメージのビルド(手順4) | ビルド済みのイメージ(冪等に作られる共有資源) | 既にあれば何も起きない |
 | 3 | `.claude-dev.yaml` の作成(無いときだけ) | 作られたファイル | 既にあれば作り直さない |
+| 3-2 | `.gitignore` への env ファイルの追記 | 追記した行 | 追記できなくても起動は続く。次回の `start` が再試行する |
 | 4 | 停止中の同名コンテナの削除(**稼働中なら削除しない**) | 削除済みの状態。稼働中だった場合は何も変わらない | 影響なし |
 | 5 | ネットワーク・共有ボリュームの作成 | 作られた資源(他プロジェクトと共有) | すべて `\|\| true` で握られ、再実行しても増えない |
 | 6 | **共有資源単位のロックの取得**(手順9) | シンボリックリンク1本。`trap` が解放する | 取れなければ認証コピー以降は1つも起きない |
@@ -319,7 +359,7 @@ docker-proxy 経由の Docker アクセス(FR-env-07)、VM モード(FR-env-08)�
 | 同時に起きること | 実際の結果 |
 |---|---|
 | **同じ**ディレクトリで `start` を2つ(または basename が同じ別ディレクトリ) | **後発はプロジェクト単位のロックを取得できず、`.claude-dev.yaml` すら作らずに終了コード 1 で終わる**。ロックを取れた側だけが進む |
-| **別**のディレクトリで `start` を2つ(**basename が異なる場合だけ**。同じ basename なら上の行が適用される) | コンテナ名・compose プロジェクト名・Chrome ボリュームが別で、**ロックのキーも別**なので独立に成功する(プロジェクト単位のロックキーは**起動ディレクトリの basename を正規化した値**であり、絶対パスではない。`claude-dev:245`〜`:251` の `project_name` / `container_name` と `:396`〜`:401` の `_lock_path`)。**直列化されるのは共有資源単位のキーを取る区間(認証コピー〜コンテナ作成の確定)だけ**。もう一つの競合点は noVNC の空きポート選定で、これはポート競合の再試行(最大20回)で吸収する |
+| **別**のディレクトリで `start` を2つ(**basename が異なる場合だけ**。同じ basename なら上の行が適用される) | コンテナ名・compose プロジェクト名・Chrome ボリュームが別で、**ロックのキーも別**なので独立に成功する(プロジェクト単位のロックキーは**起動ディレクトリの basename を正規化した値**であり、絶対パスではない。`claude-dev:392`〜`:399` の `project_name` / `container_name` と `:543`〜`:549` の `_lock_path`)。**直列化されるのは共有資源単位のキーを取る区間(認証コピー〜コンテナ作成の確定)だけ**。もう一つの競合点は noVNC の空きポート選定で、これはポート競合の再試行(最大20回)で吸収する |
 | `start` と `stop` が同時 | **同じキーのロックで直列化される**。後発は取得できずに終了コード 1。**起動直後のコンテナが消える経路は閉じた** |
 | `start` と `reset` / `logout` / `login` が同時 | **共有資源単位のキーで直列化される**。`start` は認証コピーの手前で取得を試み、取れなければ**認証が空のコンテナを作らずに**終了コード 1 で終わる(`docs/histories/2026-08-04-fix-destructive-scope.md`) |
 | 別プロジェクトの `start` と共有インフラの作成が同時 | ネットワーク・ボリュームの作成はすべて `\|\| true` で握るため、どちらが作っても問題にならない(**ロックの保護対象外**) |
@@ -334,6 +374,12 @@ docker-proxy 経由の Docker アクセス(FR-env-07)、VM モード(FR-env-08)�
 | **共有資源単位のロックを取得できない**(認証コピーの直前) | `logout` / `reset` / `login` が同時に走っていることを stderr へ出して `exit 1`。**認証コピーもコンテナ作成も行わない** | **認証が空のままコンテナが起動することを防ぐ**(`docs/histories/2026-08-04-fix-destructive-scope.md`) |
 | **ロックが存在しないプロセスに保持されたまま残っている** | 引き継いだ旨を stderr へ出して処理を続行する | 永久に取得できない状態にならない(受入基準17) |
 | `.claude-dev.yaml` が無い | TTY なら鍵選択、非 TTY なら空作成。停止しない | SSH 転送なしで起動しうる |
+| **`env_file` の指定が無い** | 環境変数を渡さずに起動する。**何も表示しない** | 正常な省略(`FR-env-14-5`) |
+| **指定されたプロジェクト環境ファイルが読めない** | 読めなかったことを表示し、環境変数を渡さずに起動を続ける | 起動は成功する(`FR-env-14-6`) |
+| **組として読めない行がある** | その行だけ採用せず、何行目かを表示して続行する | 残りの組は渡る(`FR-env-14-7`) |
+| **予約した名前が書かれている** | その1件だけ採用せず、採用しなかった名前を表示して続行する | 本システムの識別と中継が壊れない(`FR-env-14-8`) |
+| **`env_file` がプロジェクトディレクトリの外を指す** | 採用せず、受理する範囲を表示して環境変数を渡さずに続行する | 起動は成功する(`FR-env-14-9`) |
+| **`.gitignore` へ追記できない** | 外せなかったことを表示して起動を続ける | 利用者が自分で追跡から外す(`FR-env-14-4`) |
 | SSH 鍵が0件、または指定鍵が存在しない | 転送なしで続行し、`ssh_keys:` の記述方法を案内する。欠落鍵は警告してスキップ | コンテナ内で SSH が使えない |
 | agent ソケットのパスがソケットでない残骸 | `rm -rf` で自己修復。消せなければ**停止せず** `sudo rm -rf` を案内し SSH 転送なしで続行する | 起動は成功する |
 | **macOS で、ホスト側から指定された SSH agent 中継ポートが 1〜65535 の整数でない** | **その指定を採用しない。** 受理できない値であることと受理する範囲を表示し、**SSH 転送なしで続行する**。「SSH agent 転送」が有効であるかのような表示は出さない | 起動は成功する(`FR-env-04-8`)。コンテナ内で SSH agent が使えないことに利用者が気づける |
@@ -361,7 +407,7 @@ docker-proxy 経由の Docker アクセス(FR-env-07)、VM モード(FR-env-08)�
 | 8 | 名前衝突時のメッセージを**対象が稼働中か停止中かで分ける**。稼働中の場合は、管理ラベル `claude-dev.project-dir` があれば**推測ではなく事実**(どのディレクトリで起動されたか)を示す。ラベルが無い既存コンテナには従来どおり可能性として示す | D0-scope-02 / D0-env-10(表示内容の要件は `FR-env-01` 受入基準12 と `02-design/logging.md` が定める) |
 | 9 | **共有資源単位のロックを「認証コピーの開始からコンテナ作成の確定まで」保持する**(手順9〜15。**手順15 の再試行ループを含む** — 途中で離すと次の試行で作られるコンテナが保護の外に出る)。認証コピーの直後に離すと、(a) `logout` の完走直後に作られたコンテナの同期ループが認証を書き戻して **`logout` が静かに巻き戻る**、(b) 手順13 の `ensure_docker_proxy_container` が `stop` の遊休判定と競合する。守るべきものは「共有ボリュームの内容」だけでなく**「それを読んで作られたコンテナ」**まで含む。**`start` の全区間で保持はしない**(手順1〜8 と手順16 以降を含めると別プロジェクトの `start` が互いに待ち `NFR-scale-01` を損なう) | D0-env-09 / 契約「排他(ロックキー)」 |
 | 10 | **プロジェクト単位のロックは `tmux attach` の前に解放する**(手順17)。アタッチ中は利用者が端末を占有しており、その間 `stop` が「ロックが取れない」で失敗すると、利用者は自分のセッションを止められなくなる | D0-env-09(制約「ロック待ちで固まらない」の趣旨) |
-| 11 | ロックの取得を**コンテナ名が確定した直後・最初の副作用より前**(手順4)に置く。キーがコンテナ名なので名前の確定より前には取れず、`.claude-dev.yaml` の生成(手順5)が最初の副作用であるため、その間が唯一の位置である。**`--vm` 指定かつ `/dev/kvm` 不在の失敗経路(手順6)はロックを取った直後に終わるが、`trap` が即座に解放する**。**macOS 版の `--kvm` / `--vm` 早期拒否はこれと異なる**: macOS 版はフラグ解析が `ensure_project_config` より後にあるため、拒否に至るまでに `acquire_lock`(`claude-dev-mac:1236`)→ `ensure_project_config`(`:1237`)→ 拒否(`:1245`-`:1250`)の順で進み、**`.claude-dev.yaml` の生成という副作用が既に起きていることがある**(Linux 版と違い「副作用ゼロで終わる」経路ではない)。ロック自体は `trap` が解放する。ロックが取れないときに `require_setup` のイメージビルドも走らない点は両 OS で共通で、受入基準16 に対して安全側である | D0-env-09 |
+| 11 | ロックの取得を**コンテナ名が確定した直後・最初の副作用より前**(手順4)に置く。キーがコンテナ名なので名前の確定より前には取れず、`.claude-dev.yaml` の生成(手順5)が最初の副作用であるため、その間が唯一の位置である。**`--vm` 指定かつ `/dev/kvm` 不在の失敗経路(手順6)はロックを取った直後に終わるが、`trap` が即座に解放する**。**macOS 版の `--kvm` / `--vm` 早期拒否はこれと異なる**: macOS 版はフラグ解析が `ensure_project_config` より後にあるため、拒否に至るまでに `acquire_lock`(`claude-dev-mac:1519`)→ `ensure_project_config`(`:1520`)→ 拒否(`:1528`-`:1533`)の順で進み、**`.claude-dev.yaml` の生成という副作用が既に起きていることがある**(Linux 版と違い「副作用ゼロで終わる」経路ではない)。ロック自体は `trap` が解放する。ロックが取れないときに `require_setup` のイメージビルドも走らない点は両 OS で共通で、受入基準16 に対して安全側である | D0-env-09 |
 
 - [DS-02] 中継ポートの検証を、**桁数を5桁までに絞ってから数値比較する**(`^[0-9]{1,5}$` を確かめてから `-lt` / `-gt`)— 理由: 桁数を絞らずに `[ "$port" -lt 1 ]` を評価すると、極端に長い数字列で算術評価そのものがエラーになり、判定が「偽」に倒れて不正値を通す。65535 は5桁なので受理する値を1つも落とさない / 見直す条件: 受理する範囲が5桁を超える値を含むようになったとき
 - [DS-05] 中継ポートの検証を**既存ブリッジの再利用より前**に置く — 理由: 後ろに置くと、生きているブリッジがある場合に検証へ到達せず、受理できない値でも保存済みのポートで「SSH agent 転送: 有効」と表示する(独立レビュー Codex が検出した実装の欠陥)。再利用そのものの条件は変えない / 見直す条件: ブリッジの再利用が指定ポートと突き合わせる形に変わったとき
@@ -371,9 +417,23 @@ docker-proxy 経由の Docker アクセス(FR-env-07)、VM モード(FR-env-08)�
 
 | 制限 | 影響 | 関連 issue |
 |---|---|---|
+| **env ファイルが既にリポジトリの追跡下にあると、追跡からは外せない** | `.gitignore` への追記は成功するが `git check-ignore` は不一致を返す。**その事実を表示して利用者へ手順(`git rm --cached <パス>`)を示す**ので、静かな失敗ではない(`FR-env-14-4`)。追跡を外すこと自体は本システムが行わない — 利用者のコミット履歴に触れる操作だからである | なし(閾値の外: **その場で気づける**。表示と手順が出る) |
+| **`env_file` の値の判定は字句的であり、プロジェクト配下に張られた symlink が外を指す場合は検出しない** | 利用者自身がそのプロジェクトに張った symlink であり、`SR-05`(信頼できる社内開発用途)の前提の内側にある。同じ割り切りを docker-proxy が bind の封じ込めについて既に採っている(`DSN-dp-02`) | なし(閾値の外: **02 が同型の判断を明示している**) |
+| **設定ファイルの書式は1階層のリストと単一行の値だけを解釈する** | `env_file` に入れ子の写像を書いても読めない。契約が書式をその範囲に限っている | なし(閾値の外: 契約が書式を限っている) |
+
+| 制限 | 影響 | 関連 issue |
+|---|---|---|
 | **コンテナ名が起動ディレクトリ名から決まるため一意でない** | 別ディレクトリの同名プロジェクトと衝突する。**管理ラベル `claude-dev.project-dir` により、衝突時にどのディレクトリのものかを事実として示せるようになった**が、名前の一意性自体は未解決 | `docs/issues/028` |
 | **compose 一意化名のハッシュ衝突を検出しない** | 異なる絶対パスの先頭6桁が一致すると、一方の `stop` が他方の compose 資源を削除しうる | `docs/pendings.md` **P-005** |
 | **ロックはホスト CLI のプロセス間でしか有効でない** | 利用者が直接 `docker run` / `docker start` する経路は防げない。そのため手順8 の「稼働中でないことの再確認」を二重の防護として残している | なし(契約 `CTR-cli-container`「ロックが守れない範囲」が明示) |
 | **プロジェクト単位のロックを `tmux attach` の前に解放する** | アタッチ中は排他が効かないので、別プロセスの `stop` が走りうる | なし(閾値の外: アタッチ中も保持すると利用者が自分のセッションを止められなくなる。`MODULE-cli-start` 判断10) |
 | **共有資源単位のロックは `start` の全区間では保持しない** | 手順1〜8 と手順16 以降は保護されない | なし(閾値の外: 全区間で保持すると別プロジェクトの `start` が互いに待ち `NFR-scale-01`(5プロジェクト同時起動)を損なう。判断9) |
 | **呼び出し先が 15 件になった**(`docs/histories/2026-08-11-promote-shared-helpers.md` の昇格で 13 → 15) | `relations-query.py --health` の「呼び出し先が多い機能(> 7)」に載る | なし(閾値の外: 分割は 02 の分割定義の見直し事項である。共有基盤側の機能数は `DSN-mod-07` が許容している) |
+
+- [DS-05] **読み取りを3つの私的ヘルパへ分ける**(`_parse_env_file_key` = 設定から場所を取る / `_env_name_is_reserved` = 予約名の判定 / `load_project_env_file` = 読み取りと組み立て) — 理由: 予約名の集合は契約が持つ一覧をそのまま写す箇所であり、独立させておくと契約が動いたときに直す場所が1つに定まる / 見直す条件: 予約名の判定が名前以外の条件を持つようになったとき
+- [DS-02] **版管理の追跡から外せたかの確認を `git check-ignore -q` で行う**(`.gitignore` の中身を読まない) — 理由: 条項が求めているのは**追跡から外れること**であって追記の書式ではない。`git check-ignore` は「既に追跡されている」場合も外れていないと判定するので、**追記は成功したのに追跡は外れていない**状態をそのまま検出できる / 見直す条件: 追跡から外す手段が `.gitignore` 以外になったとき
+- [DS-04] **env ファイルの1行の解釈を「最初の `=` で名前と値に割り、値の中の `=` はそのまま値に含める。値を囲む引用符は取り除かない」とする** — 理由: 値に `=` を含む文字列(接続文字列・トークン)は普通に現れる一方、名前に `=` は現れない。引用符を取り除くと、引用符そのものを値に含めたい場合を表せなくなり、`docker run -e` の扱い(値をそのまま渡す)とも食い違う / 見直す条件: 引用符で囲んだ値の中に改行を書きたいという要望が出たとき
+- [DS-04] **予約した名前の判定を、大文字小文字を区別する完全一致(接頭辞は前方一致)で行う** — 理由: 環境変数の名前は大文字小文字を区別するので、`docker_host` は `DOCKER_HOST` とは別の変数であり、採用してよい。区別せずに弾くと、利用者が使える名前を理由なく狭める / 見直す条件: 本システムが小文字の環境変数名を使うようになったとき
+- [DS-05] **プロジェクト環境ファイルの読み取りを `load_project_env_file` として本機能に畳み込み、共有基盤の機能へ上げない** — 理由: 呼び出す側が `start` の1つだけで、共有基盤へ上げる条件(ファンイン2以上)を満たさない。上げると機能表と `PLAN-*` が1本ずつ増え、`MOD-cli-common` の機能数が目安へ近づく代償だけが残る / 見直す条件: `start` 以外がこの読み取りを必要とするようになったとき
+- [DS-05] **env ファイルのパスの封じ込めを字句的に行う**(`realpath` による実体解決をしない) — 理由: 実体解決を挟むと、symlink を張った利用者の意図した構成が壊れる一方、防ぎたいのは「設定に書いた相対パスが `..` でプロジェクトの外を指す」ことである。同じ判断を docker-proxy が bind の封じ込めについて既に採っている(`DSN-dp-02`)/ 見直す条件: プロジェクト外の env ファイルを許す要件が出たとき
+- [DS-03] **採用しなかった行の表示に、行番号または名前だけを出し、値を出さない** — 理由: この置き場は秘密の値の置き場だと `D0-sec-11` 項1 が定めており、`logging.md`「出してはならない情報」が値の出力を禁じている。名前だけでは中身が漏れない / 見直す条件: 値の一部を出さないと利用者が原因に到達できない失敗が見つかったとき

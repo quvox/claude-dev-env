@@ -1102,20 +1102,9 @@ login-codex)
 # ログイン情報削除
 # -----------------------------------------------------------------------------
 logout)
-    # 引数解析（--yes と --volumes。それ以外は無視する）。
-    # --volumes は stop と同じ意味である（FR-env-01 受入基準32）: 既定で消さないという判断は
-    # **資源の種類**についてのものなので、操作ごとに変えると「どの操作なら消えるか」を
-    # 利用者が覚えることになる。
+    # 引数解析（--yes のみ。それ以外は無視する）
     _yes=0
-    _reset_with_volumes=0
-    for _a in "$@"; do
-        [ "$_a" = "--yes" ] && _yes=1
-        [ "$_a" = "--volumes" ] && _reset_with_volumes=1
-    done
-    # --volumes のときだけ docker rm へ -v を添える（匿名ボリュームは所有者ラベルを
-    # 持てないので、紐づくコンテナを消す時点が唯一それを特定できる瞬間である）。
-    _rm_v_opt=""
-    [ "$_reset_with_volumes" = "1" ] && _rm_v_opt="-v" 
+    for _a in "$@"; do [ "$_a" = "--yes" ] && _yes=1; done
 
     require_setup
     # 共有ボリュームを空にする操作なので共有資源単位のロックを取る。取れなければ
@@ -1552,7 +1541,11 @@ start)
         [ -n "$PROJECT_ENV_FILE_REL" ] && _ig_list+=("$PROJECT_ENV_FILE_REL")
         for _ig in "${_ig_list[@]}"; do
             if ! grep -qxF "$_ig" "${PROJECT_DIR}/.gitignore" && ! grep -qxF "${_ig}/" "${PROJECT_DIR}/.gitignore"; then
-                echo "$_ig" >> "${PROJECT_DIR}/.gitignore"
+                # 書き込めなくても起動は止めない（FR-env-14-4 / NFR-avail-03）。
+                # set -e 下では単純コマンドの失敗がそのまま終了になるので、明示的に握る。
+                if ! echo "$_ig" >> "${PROJECT_DIR}/.gitignore" 2>/dev/null; then
+                    echo "⚠️  .gitignore へ '${_ig}' を追記できませんでした（起動は続けます）。手動で追記してください。"
+                fi
             fi
         done
     elif [ -d "${PROJECT_DIR}/.git" ]; then
@@ -2278,9 +2271,20 @@ firewall)
 # 全リセット
 # -----------------------------------------------------------------------------
 reset)
-    # 引数解析（--yes のみ。それ以外は無視する）
+    # 引数解析（--yes と --volumes。それ以外は無視する）。
+    # --volumes は stop と同じ意味である（FR-env-01 受入基準32）: 既定で消さないという判断は
+    # **資源の種類**についてのものなので、操作ごとに変えると「どの操作なら消えるか」を
+    # 利用者が覚えることになる。
     _yes=0
-    for _a in "$@"; do [ "$_a" = "--yes" ] && _yes=1; done
+    _reset_with_volumes=0
+    for _a in "$@"; do
+        [ "$_a" = "--yes" ] && _yes=1
+        [ "$_a" = "--volumes" ] && _reset_with_volumes=1
+    done
+    # --volumes のときだけ docker rm へ -v を添える（匿名ボリュームは所有者ラベルを
+    # 持てないので、紐づくコンテナを消す時点が唯一それを特定できる瞬間である）。
+    _rm_v_opt=""
+    [ "$_reset_with_volumes" = "1" ] && _rm_v_opt="-v" 
 
     # 共有ボリュームとイメージまで消す操作なので共有資源単位のロックを取る。
     # 取れなければ何も削除しない（FR-env-01 受入基準16）
@@ -2599,7 +2603,7 @@ claude-dev - Claude Code 安全開発環境
   claude-dev start --kvm         KVM/QEMU デバイスを渡して起動（VM を動かす時のみ）
   claude-dev code                新しい tmux ウィンドウで Claude Code を起動
   claude-dev attach [NAME]       既存セッションに接続
-  claude-dev stop [NAME]         セッションを停止
+  claude-dev stop [NAME] [--volumes]  セッションを停止（--volumes でこのセッションが作ったボリュームも削除）
   claude-dev list                実行中セッション一覧
 
 SSH 鍵（カレントプロジェクトの .claude-dev.yaml）:
@@ -2614,7 +2618,8 @@ SSH 鍵（カレントプロジェクトの .claude-dev.yaml）:
 メンテナンス:
   claude-dev upgrade             全イメージを更新（--no-cache 再ビルド）
   claude-dev firewall            ファイアウォールルール確認
-  claude-dev reset [--yes]       全削除（コンテナ・ボリューム・イメージ。--yes で確認を省く）
+  claude-dev reset [--yes] [--volumes]  全削除（コンテナ・イメージ・共有ボリューム。--yes で確認を省く、
+                                 --volumes でセッション由来のボリュームも削除）
 
 使い方:
   cd ~/repos/my-project && claude-dev start

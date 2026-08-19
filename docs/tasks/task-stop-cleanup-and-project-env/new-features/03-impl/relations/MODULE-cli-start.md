@@ -16,6 +16,7 @@ requirements: FR-env-01, FR-env-02, FR-env-03, FR-env-04, FR-env-05, FR-env-06, 
 tests: なし(未実装。シェル実装のため自動テストランナーが無く実機確認で代替する)
 updated: 2026-08-19
 summary: カレントディレクトリで開発コンテナを起動する(VNC+Chrome が既定)
+reflected: 2026-08-19
 ---
 
 # MODULE-cli-start 開発コンテナの起動

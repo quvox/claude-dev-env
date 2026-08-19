@@ -35,7 +35,8 @@
 | [027-a-single-remaining-option-is-not-a-question](027-a-single-remaining-option-is-not-a-question.md) | 2026-08-11 | 実行できる選択肢が1つしか残らないものを決定シートに載せた。人間に押し戻され、事実の記録へ格下げした |
 | [028-an-issues-stated-rationale-is-not-verified-fact](028-an-issues-stated-rationale-is-not-verified-fact.md) | 2026-08-11 | issue の「理由」に書かれた事実が誤りだった。起票時の推測が理由欄に混じるので、着手時に現物で確かめる |
 | [029-a-verification-step-must-name-what-it-observes-not-what-it-runs](029-a-verification-step-must-name-what-it-observes-not-what-it-runs.md) | 2026-08-18 | 実機確認の手順は「何を実行するか」ではなく「何を観測できるか」で書く — 実行の形が環境の都合で無効化されていても、コマンド列だけでは気づけない |
+| [030-a-transcribed-answer-is-not-an-applied-answer](030-a-transcribed-answer-is-not-an-applied-answer.md) | - | 人間の回答を逐語で転記しても、推奨本文の一部が変更指示へ降りず黙って狭まった |
 
-件数: 29
+件数: 30
 
 <!-- END GENERATED: build-index.py -->

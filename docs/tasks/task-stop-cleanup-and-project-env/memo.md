@@ -209,6 +209,47 @@ CLAUDE.md §4 の「起点をまたぐなら上位に合わせて同じ降下で
 
 ## 進捗メモ
 
+- 2026-08-19 `/doc-check`(**ssot task-stop-cleanup-and-project-env**。フェーズ4 の反映後)
+  判定: **PASS(ブロッキング0件)。ただし製品側に severity 中の実装欠陥2件を起票した**。
+  レビュー: **あり(Codex `gpt-5.6-sol` / reasoning high)**。実行形態: 呼び出し元スキルから
+  起動した新しい文脈のサブエージェント。**反復 1/2**(2周目は不要)。
+  **検証済み記録を 20 文書へ発行した**(`close-task.py` 条件 (b) は全件 OK になった)。
+  - **新規 issue: `docs/issues/103`(重大度 中 / 起点層 03)** — `reset)` 分岐が `--volumes` を
+    解析していない(`claude-dev:2281`-`:2283` / `claude-dev-mac:2323`-`:2325`)。解析ブロックは
+    直前の `logout)` 分岐(`claude-dev:1110`-`:1118`)に置かれており、`case` は1分岐しか走らないので
+    **`claude-dev reset --volumes` は名前付きボリュームを1件も削除しない**。`FR-env-01-32` が未実装。
+    `MODULE-cli-reset` の手順1・引数表・「既知の制限」に事実を書いて 03 を実装の鏡へ戻した。
+    **`/task-close` へ進む前にコードを直すこと**(`reset)` の引数解析を `logout)` と同じ形にし、
+    `logout)` からは取り除く。`logout` の片付け範囲を広げないことは `D0-env-05` 項2 が定める)。
+  - **新規 issue: `docs/issues/104`(重大度 中 / 起点層 03)** — `.gitignore` への追記
+    (`claude-dev:1555` / `claude-dev-mac:1630`)が `set -e` の下の単純コマンドなので、
+    書き込めない `.gitignore` では `start` がそこで終了し、`FR-env-14-4` の
+    「外せなかったことを表示して起動を続ける」に入らない。`MODULE-cli-start` へ事実を書いた。
+  - **自動修正 45 件**。区分: **MINOR 5 文書 / PATCH 5 文書**(版を持たない relations 6本を含む)。
+    内訳は `docs/histories/2026-08-19-doc-check-ssot-stop-cleanup-and-project-env-recertification.md`。
+    主なもの: `FR-env-01-25` と `-33` の正面衝突(用語拡大の但し書き落ち)/ 実装で腐った
+    コード引用 **28 箇所**の取り直し / 02 の `SCR-01` に `--volumes` が無かったこと /
+    予約名の照合規則が 02 に無く 03 が発明していたこと / `03-impl/index.md` の起票済み欠陥が
+    「4件」と言いながら 002 を含む5件を列挙していたこと / `tests/cli-stop.md`・`cli-start.md` の
+    連番の二重化 / `tests/docker-proxy.md` のテスト 39件→45件。
+  - **記録した残務3行**: `FR-env-07-11`・`-12` が UC に無い / `system.md` の主担当が複数モジュールの
+    行が8つある / `--volumes` が組み込みヘルプに出ない。
+  - **恒久受容として落とした残務1行**(`doc-health.py --sweep`。上の履歴へ追記済み):
+    2026-08-10 の `docs/03-impl/tests/*.md` の状態列の語彙(パスが実在しないため)。
+  - **鮮度(A2)**: `部分(P-005)`(`FR-env-01-19` / `FR-env-07-5`)は**未発火**、`P-006` も**未発火**。
+    `docs/issues/002` と `092` は本タスクの実装で解消済み(**削除は `/task-close` の裁定**)。
+    残務「既に版管理の追跡下にある env ファイルを検出できない」は実装で解消済み(同上)。
+  - **機械検査**: `check-changeset.py --ssot` = CS20 のみ違反9件(既存・残務が持つ)/
+    `check-relations.py` 合格 / `check-contracts.py` 合格 / `build-callgraphs.py --check` 最新 /
+    `cluster-features.py --check` 最新 / `callgraph-check.py` 重大度「高」**0**(指摘 24 件は既存)/
+    `check-lane.py` 合格(lane=critical)/ `close-task.py --check` は (b) 全件 OK、残る不合格は
+    (c) DoD 3件・(g) 履歴・(h) 残務の裁定 12 件で、いずれも `/task-close` の仕事。
+  - **`check-sheet.py` の SH8(読了記録の版ずれ)は想定内**: 本タスク自身の反映で closure の版が
+    上がったために出るもので、フェーズ2 の入場ゲートは既に通過済みである。
+  - **決定シートへの追記: なし**(問う基準を満たす論点は無い。issue 103 は「直す」以外の選択が無い)。
+  - **最弱点**: 実装前に書いた `path:line` が実装の瞬間に全部腐るのに、フェーズ3 も `/task-close` も
+    取り直していなかったこと。28 箇所のうち1つでも人が信じれば誤った場所を読む。
+
 - 2026-08-19 **フェーズ3(実装)完了**。`git rev-parse HEAD` = `ecbb2d33cb87b54fa5fd416e98e51da6d822f74d`
   (**コミットはしていない** — 変更は作業ツリー上にある。ホストの規約でコミットは人間の指示があるときだけ行う)。
   DoD の検証結果:

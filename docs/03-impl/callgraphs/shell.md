@@ -2,8 +2,8 @@
 id: shell
 language: shell
 tier: 3
-symbols: 170
-edges: 263
+symbols: 178
+edges: 273
 endpoints: 46
 unresolved: 3
 ---
@@ -72,12 +72,15 @@ unresolved: 3
 | シンボル | 種別 | 可視性 | 呼び出す先 | 呼び出し元 |
 |---|---|---|---|---|
 | `claude-dev-mac::_destructive_done` | function | private | - | - |
+| `claude-dev-mac::_env_name_is_reserved` | function | private | - | `claude-dev-mac::load_project_env_file` |
 | `claude-dev-mac::_lock_busy_message` | function | private | - | `claude-dev-mac::acquire_lock` |
 | `claude-dev-mac::_lock_link` | function | private | - | `claude-dev-mac::acquire_lock` |
 | `claude-dev-mac::_lock_path` | function | private | - | `claude-dev-mac::acquire_lock`, `claude-dev-mac::release_lock` |
+| `claude-dev-mac::_parse_env_file_key` | function | private | - | `claude-dev-mac::load_project_env_file` |
 | `claude-dev-mac::_parse_ssh_keys_yaml` | function | private | - | `claude-dev-mac::resolve_ssh_keys_for_start` |
 | `claude-dev-mac::_release_all_locks` | function | private | `claude-dev-mac::_release_lock_path` | - |
 | `claude-dev-mac::_release_lock_path` | function | private | - | `claude-dev-mac::_release_all_locks`, `claude-dev-mac::release_lock` |
+| `claude-dev-mac::_strip_ssh_keys_section` | function | private | - | `claude-dev-mac::main#ssh-keys.reset`, `claude-dev-mac::write_project_ssh_keys` |
 | `claude-dev-mac::acquire_lock` | function | private | `claude-dev-mac::_lock_busy_message`, `claude-dev-mac::_lock_link`, `claude-dev-mac::_lock_path` | `claude-dev-mac::main#login`, `claude-dev-mac::main#login-codex`, `claude-dev-mac::main#logout`, `claude-dev-mac::main#reset`, `claude-dev-mac::main#start`, `claude-dev-mac::main#stop` |
 | `claude-dev-mac::check_host_deps` | function | private | - | `claude-dev-mac::main#start` |
 | `claude-dev-mac::compose_project_name` | function | private | `claude-dev-mac::compose_project_name_legacy`, `claude-dev-mac::sha256_hex` | `claude-dev-mac::main#start`, `claude-dev-mac::main#stop` |
@@ -109,6 +112,7 @@ unresolved: 3
 | `claude-dev-mac::image_exists` | function | private | - | `claude-dev-mac::ensure_docker_proxy_container`, `claude-dev-mac::main#reset`, `claude-dev-mac::require_setup` |
 | `claude-dev-mac::image_version` | function | private | - | `claude-dev-mac::main#start` |
 | `claude-dev-mac::is_running` | function | private | - | `claude-dev-mac::ensure_docker_proxy_container`, `claude-dev-mac::main#attach`, `claude-dev-mac::main#code`, `claude-dev-mac::main#firewall`, `claude-dev-mac::main#forward`, `claude-dev-mac::main#list`, `claude-dev-mac::main#ports`, `claude-dev-mac::main#start`, `claude-dev-mac::stop_proxy_if_idle` |
+| `claude-dev-mac::load_project_env_file` | function | private | `claude-dev-mac::_env_name_is_reserved`, `claude-dev-mac::_parse_env_file_key` | `claude-dev-mac::main#start` |
 | `claude-dev-mac::main` | handler | private | - | - |
 | `claude-dev-mac::main#attach` | handler | private | `claude-dev-mac::container_name`, `claude-dev-mac::is_running`, `claude-dev-mac::require_setup`, `claude-dev-mac::resolve_container_user` | (エントリポイント) |
 | `claude-dev-mac::main#code` | handler | private | `claude-dev-mac::container_name`, `claude-dev-mac::is_running`, `claude-dev-mac::require_setup`, `claude-dev-mac::resolve_container_user` | (エントリポイント) |
@@ -123,9 +127,9 @@ unresolved: 3
 | `claude-dev-mac::main#reset` | handler | private | `claude-dev-mac::acquire_lock`, `claude-dev-mac::container_exists`, `claude-dev-mac::destructive_abort_if_interrupted`, `claude-dev-mac::destructive_arm_interrupt`, `claude-dev-mac::destructive_failed`, `claude-dev-mac::destructive_plan`, `claude-dev-mac::destructive_report`, `claude-dev-mac::destructive_rm`, `claude-dev-mac::destructive_skipped`, `claude-dev-mac::image_exists`, `claude-dev-mac::net_other_running_containers`, `claude-dev-mac::release_lock`, `claude-dev-mac::spawned_resources` | (エントリポイント) |
 | `claude-dev-mac::main#setup` | handler | private | - | (エントリポイント) |
 | `claude-dev-mac::main#ssh-keys` | handler | private | - | (エントリポイント) |
-| `claude-dev-mac::main#ssh-keys.reset` | handler | private | `claude-dev-mac::container_name`, `claude-dev-mac::dev_agent_path` | (エントリポイント) |
+| `claude-dev-mac::main#ssh-keys.reset` | handler | private | `claude-dev-mac::_strip_ssh_keys_section`, `claude-dev-mac::container_name`, `claude-dev-mac::dev_agent_path` | (エントリポイント) |
 | `claude-dev-mac::main#ssh-keys.select` | handler | private | `claude-dev-mac::select_ssh_keys_interactive` | (エントリポイント) |
-| `claude-dev-mac::main#start` | handler | private | `claude-dev-mac::acquire_lock`, `claude-dev-mac::check_host_deps`, `claude-dev-mac::compose_project_name`, `claude-dev-mac::container_exists`, `claude-dev-mac::container_name`, `claude-dev-mac::container_project_dir`, `claude-dev-mac::detect_docker_sock`, `claude-dev-mac::ensure_dedicated_agent`, `claude-dev-mac::ensure_docker_proxy_container`, `claude-dev-mac::ensure_infrastructure`, `claude-dev-mac::ensure_project_config`, `claude-dev-mac::ensure_ssh_bridge`, `claude-dev-mac::find_available_novnc_port`, `claude-dev-mac::get_novnc_url`, `claude-dev-mac::image_version`, `claude-dev-mac::is_running`, `claude-dev-mac::release_lock`, `claude-dev-mac::require_setup`, `claude-dev-mac::resolve_container_user`, `claude-dev-mac::resolve_ssh_keys_for_start` | (エントリポイント) |
+| `claude-dev-mac::main#start` | handler | private | `claude-dev-mac::acquire_lock`, `claude-dev-mac::check_host_deps`, `claude-dev-mac::compose_project_name`, `claude-dev-mac::container_exists`, `claude-dev-mac::container_name`, `claude-dev-mac::container_project_dir`, `claude-dev-mac::detect_docker_sock`, `claude-dev-mac::ensure_dedicated_agent`, `claude-dev-mac::ensure_docker_proxy_container`, `claude-dev-mac::ensure_infrastructure`, `claude-dev-mac::ensure_project_config`, `claude-dev-mac::ensure_ssh_bridge`, `claude-dev-mac::find_available_novnc_port`, `claude-dev-mac::get_novnc_url`, `claude-dev-mac::image_version`, `claude-dev-mac::is_running`, `claude-dev-mac::load_project_env_file`, `claude-dev-mac::release_lock`, `claude-dev-mac::require_setup`, `claude-dev-mac::resolve_container_user`, `claude-dev-mac::resolve_ssh_keys_for_start` | (エントリポイント) |
 | `claude-dev-mac::main#stop` | handler | private | `claude-dev-mac::acquire_lock`, `claude-dev-mac::compose_project_name`, `claude-dev-mac::compose_project_name_legacy`, `claude-dev-mac::container_exists`, `claude-dev-mac::container_is_managed`, `claude-dev-mac::container_name`, `claude-dev-mac::container_project_dir`, `claude-dev-mac::release_lock`, `claude-dev-mac::spawned_resources`, `claude-dev-mac::stop_proxy_if_idle`, `claude-dev-mac::stop_ssh_bridge` | (エントリポイント) |
 | `claude-dev-mac::main#unforward` | handler | private | `claude-dev-mac::container_exists`, `claude-dev-mac::container_name` | (エントリポイント) |
 | `claude-dev-mac::main#upgrade` | handler | private | - | (エントリポイント) |
@@ -140,14 +144,17 @@ unresolved: 3
 | `claude-dev-mac::spawned_resources` | function | private | - | `claude-dev-mac::main#logout`, `claude-dev-mac::main#reset`, `claude-dev-mac::main#stop` |
 | `claude-dev-mac::stop_proxy_if_idle` | function | private | `claude-dev-mac::is_running`, `claude-dev-mac::net_other_running_containers` | `claude-dev-mac::main#stop` |
 | `claude-dev-mac::stop_ssh_bridge` | function | private | `claude-dev-mac::dev_agent_path` | `claude-dev-mac::main#stop` |
-| `claude-dev-mac::write_project_ssh_keys` | function | private | - | `claude-dev-mac::ensure_project_config`, `claude-dev-mac::select_ssh_keys_interactive` |
+| `claude-dev-mac::write_project_ssh_keys` | function | private | `claude-dev-mac::_strip_ssh_keys_section` | `claude-dev-mac::ensure_project_config`, `claude-dev-mac::select_ssh_keys_interactive` |
 | `claude-dev::_destructive_done` | function | private | - | - |
+| `claude-dev::_env_name_is_reserved` | function | private | - | `claude-dev::load_project_env_file` |
 | `claude-dev::_lock_busy_message` | function | private | - | `claude-dev::acquire_lock` |
 | `claude-dev::_lock_link` | function | private | - | `claude-dev::acquire_lock` |
 | `claude-dev::_lock_path` | function | private | - | `claude-dev::acquire_lock`, `claude-dev::release_lock` |
+| `claude-dev::_parse_env_file_key` | function | private | - | `claude-dev::load_project_env_file` |
 | `claude-dev::_parse_ssh_keys_yaml` | function | private | - | `claude-dev::load_ssh_keys_from_config` |
 | `claude-dev::_release_all_locks` | function | private | `claude-dev::_release_lock_path` | - |
 | `claude-dev::_release_lock_path` | function | private | - | `claude-dev::_release_all_locks`, `claude-dev::release_lock` |
+| `claude-dev::_strip_ssh_keys_section` | function | private | - | `claude-dev::main#ssh-keys.reset`, `claude-dev::write_project_ssh_keys` |
 | `claude-dev::acquire_lock` | function | private | `claude-dev::_lock_busy_message`, `claude-dev::_lock_link`, `claude-dev::_lock_path` | `claude-dev::main#login`, `claude-dev::main#login-codex`, `claude-dev::main#logout`, `claude-dev::main#reset`, `claude-dev::main#start`, `claude-dev::main#stop` |
 | `claude-dev::check_host_deps` | function | private | - | `claude-dev::main#start` |
 | `claude-dev::compose_project_name` | function | private | `claude-dev::compose_project_name_legacy`, `claude-dev::sha256_hex` | `claude-dev::main#start`, `claude-dev::main#stop` |
@@ -175,6 +182,7 @@ unresolved: 3
 | `claude-dev::image_exists` | function | private | - | `claude-dev::ensure_docker_proxy_container`, `claude-dev::main#reset`, `claude-dev::require_setup` |
 | `claude-dev::image_version` | function | private | - | `claude-dev::main#start` |
 | `claude-dev::is_running` | function | private | - | `claude-dev::ensure_docker_proxy_container`, `claude-dev::main#attach`, `claude-dev::main#code`, `claude-dev::main#firewall`, `claude-dev::main#forward`, `claude-dev::main#list`, `claude-dev::main#ports`, `claude-dev::main#start`, `claude-dev::stop_proxy_if_idle` |
+| `claude-dev::load_project_env_file` | function | private | `claude-dev::_env_name_is_reserved`, `claude-dev::_parse_env_file_key` | `claude-dev::main#start` |
 | `claude-dev::load_ssh_keys_from_config` | function | private | `claude-dev::_parse_ssh_keys_yaml` | `claude-dev::ensure_ssh_agent` |
 | `claude-dev::main` | handler | private | - | - |
 | `claude-dev::main#attach` | handler | private | `claude-dev::container_name`, `claude-dev::is_running`, `claude-dev::require_setup`, `claude-dev::resolve_container_user` | (エントリポイント) |
@@ -190,9 +198,9 @@ unresolved: 3
 | `claude-dev::main#reset` | handler | private | `claude-dev::acquire_lock`, `claude-dev::container_exists`, `claude-dev::destructive_abort_if_interrupted`, `claude-dev::destructive_arm_interrupt`, `claude-dev::destructive_failed`, `claude-dev::destructive_plan`, `claude-dev::destructive_report`, `claude-dev::destructive_rm`, `claude-dev::destructive_skipped`, `claude-dev::image_exists`, `claude-dev::net_other_running_containers`, `claude-dev::release_lock`, `claude-dev::spawned_resources` | (エントリポイント) |
 | `claude-dev::main#setup` | handler | private | - | (エントリポイント) |
 | `claude-dev::main#ssh-keys` | handler | private | `claude-dev::container_name` | (エントリポイント) |
-| `claude-dev::main#ssh-keys.reset` | handler | private | - | (エントリポイント) |
+| `claude-dev::main#ssh-keys.reset` | handler | private | `claude-dev::_strip_ssh_keys_section` | (エントリポイント) |
 | `claude-dev::main#ssh-keys.select` | handler | private | `claude-dev::select_ssh_keys_interactive` | (エントリポイント) |
-| `claude-dev::main#start` | handler | private | `claude-dev::acquire_lock`, `claude-dev::check_host_deps`, `claude-dev::compose_project_name`, `claude-dev::container_exists`, `claude-dev::container_name`, `claude-dev::container_project_dir`, `claude-dev::ensure_docker_proxy_container`, `claude-dev::ensure_infrastructure`, `claude-dev::ensure_project_config`, `claude-dev::ensure_ssh_agent`, `claude-dev::find_available_novnc_port`, `claude-dev::get_novnc_url`, `claude-dev::image_version`, `claude-dev::is_running`, `claude-dev::release_lock`, `claude-dev::require_setup`, `claude-dev::resolve_container_user` | (エントリポイント) |
+| `claude-dev::main#start` | handler | private | `claude-dev::acquire_lock`, `claude-dev::check_host_deps`, `claude-dev::compose_project_name`, `claude-dev::container_exists`, `claude-dev::container_name`, `claude-dev::container_project_dir`, `claude-dev::ensure_docker_proxy_container`, `claude-dev::ensure_infrastructure`, `claude-dev::ensure_project_config`, `claude-dev::ensure_ssh_agent`, `claude-dev::find_available_novnc_port`, `claude-dev::get_novnc_url`, `claude-dev::image_version`, `claude-dev::is_running`, `claude-dev::load_project_env_file`, `claude-dev::release_lock`, `claude-dev::require_setup`, `claude-dev::resolve_container_user` | (エントリポイント) |
 | `claude-dev::main#stop` | handler | private | `claude-dev::acquire_lock`, `claude-dev::compose_project_name`, `claude-dev::compose_project_name_legacy`, `claude-dev::container_exists`, `claude-dev::container_is_managed`, `claude-dev::container_name`, `claude-dev::container_project_dir`, `claude-dev::release_lock`, `claude-dev::spawned_resources`, `claude-dev::stop_proxy_if_idle` | (エントリポイント) |
 | `claude-dev::main#unforward` | handler | private | `claude-dev::container_exists`, `claude-dev::container_name` | (エントリポイント) |
 | `claude-dev::main#upgrade` | handler | private | - | (エントリポイント) |
@@ -205,7 +213,7 @@ unresolved: 3
 | `claude-dev::sha256_hex` | function | private | - | `claude-dev::compose_project_name` |
 | `claude-dev::spawned_resources` | function | private | - | `claude-dev::main#logout`, `claude-dev::main#reset`, `claude-dev::main#stop` |
 | `claude-dev::stop_proxy_if_idle` | function | private | `claude-dev::is_running`, `claude-dev::net_other_running_containers` | `claude-dev::main#stop` |
-| `claude-dev::write_project_ssh_keys` | function | private | - | `claude-dev::ensure_project_config`, `claude-dev::select_ssh_keys_interactive` |
+| `claude-dev::write_project_ssh_keys` | function | private | `claude-dev::_strip_ssh_keys_section` | `claude-dev::ensure_project_config`, `claude-dev::select_ssh_keys_interactive` |
 | `scripts/dood-portsync.sh::is_excluded` | function | private | - | `scripts/dood-portsync.sh::sync_once` |
 | `scripts/dood-portsync.sh::local_listening` | function | private | - | `scripts/dood-portsync.sh::sync_once` |
 | `scripts/dood-portsync.sh::log` | function | private | - | `scripts/dood-portsync.sh::main`, `scripts/dood-portsync.sh::main#--loop`, `scripts/dood-portsync.sh::sync_once` |

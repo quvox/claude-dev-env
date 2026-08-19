@@ -16,6 +16,7 @@ requirements: FR-env-04
 tests: なし(未実装。シェル実装のため自動テストランナーが無く実機確認で代替する)
 updated: 2026-08-19
 summary: 選択した鍵を .claude-dev.yaml の ssh_keys 節へ書き、他のキーは保存する
+reflected: 2026-08-19
 ---
 
 # MODULE-cli-common-write-project-ssh-keys プロジェクト設定の書き出し
