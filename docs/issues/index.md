@@ -18,9 +18,8 @@
 | [097-modify-cli-help-dispatch-branch-is-absent-from-the-feature-table](097-modify-cli-help-dispatch-branch-is-absent-from-the-feature-table.md) | modify | 中 | 02 | 2026-08-11 | docs/03-impl/features.md, MODULE-makefile-help, docs/01-requirements/usecases.md | CLI の `help\|*)` ディスパッチ分岐(ヘルプ表示と未知サブコマンドの受け皿)が機能表に無く、対応する MODULE-*.md も存在しない |
 | [102-bug-colabtmux-refuses-to-launch-codex-on-a-nonzero-bwrap-probe](102-bug-colabtmux-refuses-to-launch-codex-on-a-nonzero-bwrap-probe.md) | bug | 中 | 02 | 2026-08-19 | FR-env-12, AC-06, D0-dist-04, DSN-dist-02, MODULE-entrypoint-claude, docs/02-design/environments.md | 同梱外部バイナリ colabtmux が codex を起こす前に bwrap の可否を見ており、コンテナ内では既知かつ正常な非ゼロを故障と読んで起動を拒む |
 | [106-bug-two-auxiliary-host-asset-steps-halt-start-under-set-e](106-bug-two-auxiliary-host-asset-steps-halt-start-under-set-e.md) | bug | 中 | 03 | 2026-08-19 | NFR-avail-03, FR-env-02-6, FR-env-04-6, MODULE-cli-start, docs/03-impl/tests/cli-start.md | ~/.local/bin のコピーと ~/.ssh/config の加工が set -e の下で握られておらず、読めないと start が起動まで到達しない |
-| [107-bug-project-env-file-values-do-not-reach-tmux-windows](107-bug-project-env-file-values-do-not-reach-tmux-windows.md) | bug | 高 | 01 | 2026-08-19 | AC-08, FR-env-14-1, FR-env-14-2, FR-env-07-13, CTR-cli-container, MODULE-entrypoint-claude, MODULE-cli-start, docs/03-impl/tests/e2e.md | env ファイルに書いた環境変数が tmux の窓の中のプロセスから見えず、AC-08 が実機に対して不合格になる |
 | [108-bug-tmux-session-recreated-by-cli-misses-entrypoint-runtime-env](108-bug-tmux-session-recreated-by-cli-misses-entrypoint-runtime-env.md) | bug | 中 | 02 | 2026-08-19 | FR-env-07-13, FR-env-14-11, CTR-cli-container, MODULE-cli-start, MODULE-entrypoint-claude, AC-03 | ホスト CLI が作り直す tmux セッションは entrypoint が実行時に export した値(VM の DOCKER_HOST / macOS の SSH_AUTH_SOCK)を引き継がない |
 
-件数: 14
+件数: 13
 
 <!-- END GENERATED: build-index.py -->

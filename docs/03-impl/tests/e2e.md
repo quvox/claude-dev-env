@@ -1,6 +1,6 @@
 ---
 id: e2e
-version: 1.11.0
+version: 1.12.0
 updated: 2026-08-19
 scope: E2E
 source:
@@ -10,9 +10,9 @@ summary: E2Eシナリオ E2E-01〜E2E-03 と E2E-06 ⇄ テスト対応
 keywords: [テスト, E2E]
 verified:
   at: 2026-08-19
-  version: 1.11.0
+  version: 1.12.0
   against:
-    - {doc: docs/02-design/system.md, version: 2.15.0}
+    - {doc: docs/02-design/system.md, version: 2.16.0}
     - {doc: docs/01-requirements/usecases.md, version: 1.7.0}
 ---
 
@@ -22,7 +22,7 @@ verified:
 
 | E2E ID | 対応 UC | シナリオ | テスト識別子 | 状態 |
 |---|---|---|---|---|
-| E2E-01 | UC-01 | `claude-dev start`(ブラウザ確認あり / `--no-vnc`)→ `/workspace` マウント・認証・ファイアウォール・tmux → `claude` 起動 → 再実行での再接続 → **同名衝突で稼働中のコンテナを失わないこと(手順7)→ 破壊的操作が「自分が作った資源」にだけ効くこと(手順8: 管理ラベル・遊休判定・排他ロック・ラベル無しコンテナの保護・compose 資源の隔離・受理しない名前・プロジェクト配下の認証コピー・確認と非対話時の中止・削除失敗の列挙・**セッション由来の資源の片付け(手順8-14・8-15)・`logout` 後に回収できないこと(手順8-16)**)** | 手順のみ(下記「実機確認の手順」E2E-01) | 未検証(テスト未実装) |
+| E2E-01 | UC-01 | `claude-dev start`(ブラウザ確認あり / `--no-vnc`)→ `/workspace` マウント・認証・ファイアウォール・tmux → `claude` 起動 → 再実行での再接続 → **同名衝突で稼働中のコンテナを失わないこと(手順7)→ 破壊的操作が「自分が作った資源」にだけ効くこと(手順8: 管理ラベル・遊休判定・排他ロック・ラベル無しコンテナの保護・compose 資源の隔離・受理しない名前・プロジェクト配下の認証コピー・確認と非対話時の中止・削除失敗の列挙・**セッション由来の資源の片付け(手順8-14・8-15)・`logout` 後に回収できないこと(手順8-16)**) → **コンテナへ渡した環境変数が tmux の窓の中でも参照できること(手順9)**** | 手順のみ(下記「実機確認の手順」E2E-01) | 未検証(テスト未実装) |
 | E2E-02 | UC-02 | `claude-dev forward` → 8100 番台の割当と SSH トンネル → クライアントのブラウザで表示 → `claude-dev ports` で確認 | 手順のみ(同 E2E-02) | 未検証(テスト未実装) |
 | E2E-03 | UC-03 | コンテナ内で危険な `docker run` → 拒否 / `/workspace` bind の許可 / 拒否条件に当たらない要求の透過 / **作られたコンテナとネットワークに所有者ラベルが付くこと** | 手順のみ(同 E2E-03)。判定ロジックは `cd docker-proxy && go test ./...` が単体で検証済み。**条項ごとに単体でどこまで検証済みかは `03-impl/tests/docker-proxy.md` が正である** | 未検証(テスト未実装) |
 | E2E-06 | UC-06 | `claude-dev login-codex` → デバイス認証 → 別プロジェクトで `start` → 再ログイン不要で `codex` が起動し、シェルコマンドが成功して `/workspace` を読み書きできる。landlock の疎通確認が通り、読み取り専用の明示指定で読み取りが成功する | `scripts/e2e6-codex.sh`(実機で実行する検証スクリプト。自動テストランナーからは呼ばれない) | 未検証(テスト未実装) |
@@ -537,6 +537,50 @@ verified:
       10. **同じ名前が重なるとき**: env ファイルに `E2E_DUP=1` と `E2E_DUP=2` をこの順で書く。
          **期待する結果**: コンテナ内の `printenv E2E_DUP` が `2` を返し、採用しなかった名前が表示される。
       **後片付け**: `claude-dev stop <name> --volumes` と、使い捨てディレクトリの削除。
+9. **コンテナへ渡した環境変数が、tmux の窓の中でも参照できること**
+   (`FR-env-07-13` = 本システムが使う名前 / `FR-env-14-11` = 利用者が env ファイルに書いた組)。
+   使い捨てのディレクトリで行う。**この手順は `.claude-dev.yaml` に `env_file:` を書いた状態で始める**
+   (手順9-6 で使う。書き方は手順8-23 と同じ)。
+   1. `claude-dev start` して tmux にアタッチした状態から、**その窓で**
+      `env | grep -E '^(DOCKER_HOST|COMPOSE_PROJECT_NAME|NODE_OPTIONS|container|SSH_AUTH_SOCK|CLAUDE_DEV_)'`
+      を実行する。**期待する結果**: 固定名4件(`DOCKER_HOST` / `COMPOSE_PROJECT_NAME` /
+      `NODE_OPTIONS` / `container`)と、ブラウザ確認ありの構成では `CLAUDE_DEV_VNC=1` が出る。
+      ホスト側で SSH agent が動いているときは `SSH_AUTH_SOCK` も出る。
+      `COMPOSE_PROJECT_NAME` の値は `<正規化名>-<ハッシュ6桁>` であり `workspace` ではない。
+   2. **非対話シェルでも参照できること**: 同じ窓で
+      `zsh -c 'echo $DOCKER_HOST'` と `bash -c 'echo $container'` を実行する。
+      **期待する結果**: どちらも値を返す(空行ではない)。
+   3. **新しく作った窓でも参照できること**: `tmux new-window -d 'sh -c "env > /tmp/e2e-env.txt"'`
+      を実行し、`grep -E '^(DOCKER_HOST|COMPOSE_PROJECT_NAME|container)=' /tmp/e2e-env.txt` を見る。
+      **期待する結果**: 3件すべてが出る。
+   4. **docker がその窓から使えること**: 同じ窓で `docker ps` を実行する。
+      **期待する結果**: コンテナ一覧が返る。
+      **不合格の条件**: `unix:///var/run/docker.sock` を指したまま失敗する
+      (= 検査つきの中継を経由できていない。`FR-env-07-1`)。
+   5. **compose 資源が既定名に落ちないこと**: `/workspace/compose-e2e.yml` に
+      `services: {e2e: {image: alpine, command: sleep 60}}` を置き、同じ窓で
+      `docker compose -f /workspace/compose-e2e.yml up -d` を実行して
+      `docker ps --format '{{.Names}}'` を見る。
+      **期待する結果**: 名前が `<正規化名>-<ハッシュ6桁>-e2e-1` である。
+      **不合格の条件**: `workspace-e2e-1` になっている
+      (= 別プロジェクトの同名 compose 資源と衝突する状態。`FR-env-07-5`)。
+   6. **env ファイルに書いた組も同じ窓で見えること**(`FR-env-14-11` / `AC-08`)。
+      env ファイルに `E2E_PLAIN=ok` と `E2E_QUOTED=it's fine` を書いておき、**tmux の窓で**
+      `printenv E2E_PLAIN` と `printenv E2E_QUOTED` を実行する。
+      **期待する結果**: それぞれ `ok` と `it's fine` を返す。
+      **不合格の条件**: どちらかが空で返る(= `AC-08` の「書いた値がコンテナの中で見えない」に当たる)。
+      **`docker exec` で確かめて済ませないこと** — `docker exec` 経由ではコンテナの環境をそのまま継ぐので、
+      **tmux の窓が壊れていても合格に見える**(2026-08-19 に実測した誤検出の形そのものである)。
+   7. **本システムが使う名前は利用者の指定で差し替わらないこと**(`FR-env-14-8` との組み合わせ)。
+      env ファイルに `DOCKER_HOST=hijacked` を足し、`claude-dev stop <name>` してから
+      `claude-dev start` し直して、tmux の窓で
+      `printenv DOCKER_HOST` を実行する。
+      **期待する結果**: 起動時に採用しなかった名前として `DOCKER_HOST` が表示され、
+      窓の中の値は中継先(`tcp://claude-dev-docker-proxy:2375`)のままである。
+      **不合格の条件**: `hijacked` になっている。
+   **後片付け**: `docker compose -f /workspace/compose-e2e.yml down`、`/tmp/e2e-env.txt` と
+   `/workspace/compose-e2e.yml` の削除、`claude-dev stop <name> --volumes`、
+   Chrome プロファイルのボリューム(`claude-dev-chrome-<name>`)の削除、使い捨てディレクトリの削除。
    - macOS(`claude-dev-mac`)でも同じ手順を実行する。実行できない場合は
      **未実施であることを記録する**(手順を省いたことを黙って残さない)。
 
@@ -610,6 +654,7 @@ verified:
 - [DS-01] **`FR-env-03-24` の確認を手順8-15(`reset`)より後の部分手順16 に置く** — 理由: この確認は `logout` で Claude コンテナを消してから `stop` を走らせるので、**先に置くと以降の部分手順が使うセッション `aaa` が失われる**。手順8-15 までの前提を壊さない位置は末尾しかない / 見直す条件: `logout` が Claude コンテナを削除しなくなったとき(そのときは順序の制約が消える)
 - [DS-01] **`reset` 側の名前付きボリュームの確認を手順8-15 の中の部分手順(8-15-1・8-15-2)として置き、新しい番号の手順を立てない** — 理由: `reset` は他の資源と一続きに流さないと前提(所有者の違う資源が同時に在ること)を作れない。番号を分けると同じ前提を2回作ることになる / 見直す条件: `reset` の確認を専有ホスト以外でも流せるようになったとき
 - [DS-01] **手順8-21・8-22・8-23 を手順8 の末尾へ足し、既存の部分手順の番号を動かさない** — 理由: `03-impl/tests/*.md` の対応表と `docs/pendings.md` が既存の部分手順の番号を外から参照しており、番号を詰めると参照が**解決したまま別の手順を指す**(条項 ID を動かさないのと同じ理由)/ 見直す条件: 部分手順の番号を参照する外部の表が無くなったとき
+- [DS-01] **`FR-env-07-13` の確認を手順8 の部分手順にせず、新しい手順9 として末尾に足す** — 理由: 手順8 は「破壊的操作が自分が作った資源にだけ効くこと」を通しで確かめる一続きの手順で、セッション `aaa` を作って壊す前提を共有している。環境変数の到達確認はその前提を要さず、混ぜると手順8 の前提が1つ増えるだけである。**末尾に足すので既存の手順番号は1つも動かない**(`03-impl/tests/*.md` の対応表と `docs/pendings.md` が既存番号を外から参照しているため。同じ理由の判断がこの節に既に在る)/ 見直す条件: 手順8 が環境変数を前提に置くようになったとき、または手順9 が破壊的操作の検証を含むようになったとき(後片付けの `stop` は全手順が使うので該当しない)
 
 ## 未検証(テスト未実装)の全件
 

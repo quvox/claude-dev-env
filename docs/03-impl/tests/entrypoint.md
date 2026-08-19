@@ -1,7 +1,7 @@
 ---
 id: entrypoint
-version: 1.2.1
-updated: 2026-08-12
+version: 1.3.0
+updated: 2026-08-19
 scope: MOD-entrypoint
 source:
   - docs/01-requirements/functional.md
@@ -9,11 +9,11 @@ source:
 summary: MOD-entrypoint(コンテナ起動シーケンス)の受入基準⇄テスト対応
 keywords: [テスト]
 verified:
-  at: 2026-08-12
-  version: 1.2.1
+  at: 2026-08-19
+  version: 1.3.0
   against:
-    - {doc: docs/01-requirements/functional.md, version: 1.16.0}
-    - {doc: docs/02-design/system.md, version: 2.12.0}
+    - {doc: docs/01-requirements/functional.md, version: 1.20.0}
+    - {doc: docs/02-design/system.md, version: 2.16.0}
 ---
 
 # MOD-entrypoint のテスト対応
@@ -32,6 +32,7 @@ verified:
 | FR-env-03-9 | 正常系 | E2E | E2E-01(実機確認手順) | 未検証(テスト未実装) |
 | FR-env-05-1 | 正常系 | E2E | E2E-01(実機確認手順) | 未検証(テスト未実装) |
 | FR-env-05-5 | 異常系 | E2E | E2E-01(実機確認手順) | 未検証(テスト未実装) |
+| FR-env-07-13 | 正常系 | E2E | E2E-01(実機確認手順9) | 未検証(テスト未実装) |
 | FR-env-08-2 | 正常系 | E2E | E2E-01(実機確認手順) | 未検証(テスト未実装) |
 | FR-env-08-3 | 正常系 | E2E | E2E-01(実機確認手順) | 未検証(テスト未実装) |
 | FR-env-11-1 | 正常系 | E2E | E2E-01(実機確認手順) | 未検証(テスト未実装) |
@@ -42,6 +43,7 @@ verified:
 | FR-env-12-8 | 境界値 | E2E | E2E-01(実機確認手順) | 未検証(テスト未実装) |
 | FR-env-12-10 | 異常系 | E2E | E2E-01(実機確認手順) | 未検証(テスト未実装) |
 | FR-env-12-11 | 異常系 | E2E | E2E-01(実機確認手順) | 未検証(テスト未実装) |
+| FR-env-14-11 | 正常系 | E2E | E2E-01(実機確認手順9) | 未検証(テスト未実装) |
 | NFR-avail-03 | 非機能 | E2E | E2E-01(実機確認手順) | 未検証(テスト未実装) |
 
 ## 契約の結合テスト
@@ -88,3 +90,5 @@ verified:
 | 21 | MODULE-entrypoint-claude — 機能全体 | シェル実装のため自動テストランナーが無い。codex 経路は `scripts/e2e6-codex.sh` の実機検証で確認する | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |
 | 22 | CTR-cli-container — 契約の結合テスト | 自動テストランナーを設けない方針(`DSN-test-01` / `SR-32`)。`MOD-cli-start` と組み合わせた実機確認(E2E-01 手順3)で代替する | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |
 | 23 | CTR-entrypoint-firewall — 契約の結合テスト | 自動テストランナーを設けない方針(`DSN-test-01` / `SR-32`)。`MOD-firewall` と組み合わせた実機確認(E2E-01 手順4)で代替する | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |
+| 24 | FR-env-07-13(正常系) | 自動テストランナーを設けない方針(`DSN-test-01` / `SR-32`)。実機確認で代替する(E2E-01 手順9) | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |
+| 25 | FR-env-14-11(正常系) | 自動テストランナーを設けない方針(`DSN-test-01` / `SR-32`)。実機確認で代替する(E2E-01 手順9-6) | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |

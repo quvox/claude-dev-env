@@ -217,16 +217,16 @@ docker-proxy 経由の Docker アクセス(FR-env-07)、VM モード(FR-env-08)�
 - 何のために呼ぶか: コンテナ内の初期化(UID/GID 追従・認証コピー・ファイアウォール適用・
   VNC/Chrome・tmux・同期ループ・ポート同期)を行わせるため。`docker run` でコンテナを作ると
   イメージの `ENTRYPOINT` として起動する(主コンテナの `docker run -d` は
-  `claude-dev:1685` / `claude-dev-mac:1736`。手順15 の再試行ループの中にある)。
+  `claude-dev:1688` / `claude-dev-mac:1739`。手順15 の再試行ループの中にある)。
 - 何を渡すか: 契約 `CTR-cli-container` が定める環境変数一式とマウント、`NET_ADMIN` / `NET_RAW`。
 - 何を受け取るか: 直接の戻り値は無い。tmux が立ち上がった状態のコンテナ。
   **プロジェクトディレクトリ配下への書き込みがこの経路で起きる**(`start` 自身の副作用ではないが、
   `start` を実行すると必ず起こる):
-  `/workspace/.codex/config.toml` の作成と既定鍵の補完(`scripts/entrypoint-claude.sh:243`〜`:406`)/
+  `/workspace/.codex/config.toml` の作成と既定鍵の補完(`scripts/entrypoint-claude.sh:248`〜`:411`)/
   `/workspace/CLAUDE.md` のマーカー範囲(`<!-- claude-dev-auto-start -->` 〜)の削除と再生成
-  (`:517`〜`:608`。ファイルが無ければ作る)/ VNC 有効時の `/workspace/.mcp.json` への
+  (`:526`〜`:617`。ファイルが無ければ作る)/ VNC 有効時の `/workspace/.mcp.json` への
   `chrome-devtools` と `computer-use` の定義追加、`/workspace/.claude/.claude.json` の
-  `enabledMcpjsonServers` 更新(`:611`〜`:674`)。詳細は `MODULE-entrypoint-claude` の
+  `enabledMcpjsonServers` 更新(`:620`〜`:683`)。詳細は `MODULE-entrypoint-claude` の
   手順17・18 と同ファイルの `永続化` 欄が正である。
 - **失敗したときどうなるか**: `docker run` が非0なら起動失敗として扱う。entrypoint 内部の
   補助処理(ファイアウォール等)の失敗は `|| true` で握られ、起動は継続する。
@@ -271,7 +271,7 @@ docker-proxy 経由の Docker アクセス(FR-env-07)、VM モード(FR-env-08)�
 - **失敗したときどうなるか**: 4つの作成はすべて `|| true` で握る(`claude-dev:503`-`:506` /
   `claude-dev-mac:586`-`:589`)。**共有ボリュームは** `docker run` の自動作成で吸収される。
   **ネットワークは吸収されない** — 主コンテナは既存のネットワークを要求するので
-  (`--network "$NETWORK"`。`claude-dev:1688` / `claude-dev-mac:1739`)、
+  (`--network "$NETWORK"`。`claude-dev:1691` / `claude-dev-mac:1742`)、
   本当に作れなかった場合は手順15 の `docker run` が失敗して起動しない。
 
 ### MODULE-cli-common-resolve-container-user
@@ -328,7 +328,7 @@ docker-proxy 経由の Docker アクセス(FR-env-07)、VM モード(FR-env-08)�
 | 種別 | 内容 |
 |---|---|
 | 戻り値 | 0(tmux 待ちタイムアウトでも 0)。前提不足・KVM 不在・リトライ上限超過・**同名コンテナとの衝突**・**ロックを取得できない**場合は 1。**130**: 手順4 の `acquire_lock` を**呼んだ後**に `INT` / `TERM` を受けた。`trap '_release_all_locks; exit 130' INT TERM` は**取得を試みる前**に張られる(`claude-dev:602` / `claude-dev-mac:685`)ので、**取得に失敗して 1 で終わる経路も、終わるまでは 130 の区間**である |
-| 永続化 | コンテナ `<name>`(**管理ラベル `claude-dev.managed=1` / `claude-dev.role=claude` / `claude-dev.project-dir=<起動ディレクトリの絶対パス>` 付き**)。`${PROJECT_DIR}/.claude/`(認証・`host-hooks.json`・`host-local-bin/`)、`${PROJECT_DIR}/.codex/auth.json`、`${PROJECT_DIR}/.gitignore` への追記(**`.claude` / `.codex` に加えてプロジェクト環境ファイルのパス**)、`${PROJECT_DIR}/.claude-dev.yaml`。docker volume `claude-dev-auth` / `claude-dev-history` / `claude-dev-config` / `claude-dev-chrome-<name>` / (VM 時)`claude-dev-vm-<name>`。**ロックのシンボリックリンク `${HOME}/.claude-dev/locks/proj-<name>.lock` と `shared.lock` を作成・削除する**。macOS では `~/.claude-dev/agents/<name>.{sock,pid,bridge.pid,bridge.port}`。**docker-proxy にはラベルを付けない**。**さらに entrypoint がプロジェクト配下へ書く**: `/workspace/.codex/config.toml`(既定鍵の補完)・`/workspace/CLAUDE.md`(マーカー範囲の再生成)・VNC 時の `/workspace/.mcp.json` と `/workspace/.claude/.claude.json`(いずれも `MODULE-entrypoint-claude` の副作用。**コンテナを新規に作る経路でだけ起きる** — 既に稼働中なら再接続して `exit 0` し、`docker run` に到達しないので entrypoint は再実行されない。`claude-dev:1455`-`:1473` / `:1685`) |
+| 永続化 | コンテナ `<name>`(**管理ラベル `claude-dev.managed=1` / `claude-dev.role=claude` / `claude-dev.project-dir=<起動ディレクトリの絶対パス>` 付き**)。`${PROJECT_DIR}/.claude/`(認証・`host-hooks.json`・`host-local-bin/`)、`${PROJECT_DIR}/.codex/auth.json`、`${PROJECT_DIR}/.gitignore` への追記(**`.claude` / `.codex` に加えてプロジェクト環境ファイルのパス**)、`${PROJECT_DIR}/.claude-dev.yaml`。docker volume `claude-dev-auth` / `claude-dev-history` / `claude-dev-config` / `claude-dev-chrome-<name>` / (VM 時)`claude-dev-vm-<name>`。**ロックのシンボリックリンク `${HOME}/.claude-dev/locks/proj-<name>.lock` と `shared.lock` を作成・削除する**。macOS では `~/.claude-dev/agents/<name>.{sock,pid,bridge.pid,bridge.port}`。**docker-proxy にはラベルを付けない**。**さらに entrypoint がプロジェクト配下へ書く**: `/workspace/.codex/config.toml`(既定鍵の補完)・`/workspace/CLAUDE.md`(マーカー範囲の再生成)・VNC 時の `/workspace/.mcp.json` と `/workspace/.claude/.claude.json`(いずれも `MODULE-entrypoint-claude` の副作用。**コンテナを新規に作る経路でだけ起きる** — 既に稼働中なら再接続して `exit 0` し、`docker run` に到達しないので entrypoint は再実行されない。`claude-dev:1455`-`:1473` / `:1688`) |
 | 発火するイベント | なし |
 | ログ | 標準出力へイメージ名・バージョン・noVNC URL・進捗。失敗とロックの取得失敗・残骸の引き継ぎは stderr |
 
@@ -410,7 +410,7 @@ docker-proxy 経由の Docker アクセス(FR-env-07)、VM モード(FR-env-08)�
 |---|---|---|
 | 1 | `--security-opt` を付けない(Docker 既定の confinement を維持する)。この下では codex の bubblewrap サンドボックスが動かないが、対処はコンテナ側を緩めるのではなく codex 側の無効化で行う | D0-sec-01 |
 | 2 | 認証は symlink ではなくコピーで渡し、書き戻しは entrypoint のバックグラウンド同期に任せる | D0-auth-02 |
-| 3 | `COMPOSE_PROJECT_NAME` を `-e` で渡す(全プロジェクトが `/workspace` にマウントされ compose 既定名 `workspace` が衝突するのを防ぐ。`-e` なら対話・非対話シェルと `docker exec` の全てで有効)。**値に起動ディレクトリの絶対パスのハッシュ短縮値を足して一意化する**(`DSN-env-03`)。ハッシュの計算は Linux が `sha256sum`、macOS が `shasum -a 256` で同じ値になることを確かめる。**一意化名を作る関数は `MODULE-cli-common-compose-project-name` として機能に昇格させ、`stop` と共有する**(小文字化・正規化・ハッシュ短縮の規則はその機能が持つ) | D0-scope-02 / `DSN-env-03` / D0-scope-03 |
+| 3 | `COMPOSE_PROJECT_NAME` を `-e` で渡す(全プロジェクトが `/workspace` にマウントされ compose 既定名 `workspace` が衝突するのを防ぐ。**`-e` で届くのはコンテナのプロセス環境までであって、そこから先は受け側の責務である** — コンテナ内でプロセスの木を新しく起こす側が、その木へコンテナの環境を引き継がせる(`CTR-cli-container` の「渡す環境変数」/ `FR-env-07-13`)。`MODULE-entrypoint-claude` 手順20 は `su` に `-l` を付けずに tmux サーバを起こすので引き継がれる。2026-08-19 より前はここに「`-e` なら対話・非対話シェルと `docker exec` の全てで有効」と書いていたが、当時の手順20 は `su -l` で環境を作り直しており **tmux の窓の中では有効でなかったので偽であった**)。**値に起動ディレクトリの絶対パスのハッシュ短縮値を足して一意化する**(`DSN-env-03`)。ハッシュの計算は Linux が `sha256sum`、macOS が `shasum -a 256` で同じ値になることを確かめる。**一意化名を作る関数は `MODULE-cli-common-compose-project-name` として機能に昇格させ、`stop` と共有する**(小文字化・正規化・ハッシュ短縮の規則はその機能が持つ) | D0-scope-02 / `DSN-env-03` / D0-scope-03 |
 | 4 | ホストの `~/.ssh/config` はそのまま渡さず、`IdentityFile` / `IdentitiesOnly` / `IdentityAgent` を除去した一時コピーを RO マウントする | D0-sec-02 |
 | 5 | **後片付けの対象を絞る手段として管理ラベルを導入する**(`D0-env-08` の決定に従う)。付けるのは **Claude コンテナだけ**で、docker-proxy と `fwd-*` には付けない(固定名・固定接頭辞で識別できるため)。**この判断は 2026-08-04 より前の「ラベルを導入しない」という判断を撤回したものである**(当時は `FR-env-01` 受入基準12・13 を満たすのにラベルが要らなかったが、`docs/histories/2026-08-04-fix-destructive-scope.md` / `029` / `045` を閉じるには所有権の印が要る) | D0-env-10 |
 | 6 | 手順8(停止中の残骸の削除)の稼働中判定は、ロックを入れても**残す**。ロックはホスト CLI のプロセス間だけで有効で、利用者が直接 `docker run` / `docker start` する経路は防げないため、二重の防護として維持する | D0-scope-02 |

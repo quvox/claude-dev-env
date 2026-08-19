@@ -1,6 +1,6 @@
 ---
 id: 02-system
-version: 2.15.0
+version: 2.16.0
 updated: 2026-08-19
 source:
   - docs/01-requirements/functional.md
@@ -13,9 +13,9 @@ summary: >
 keywords: [モジュール分割, DSN-mod, テスト戦略, E2E, UI設計, 要件カバレッジ]
 verified:
   at: 2026-08-19
-  version: 2.15.0
+  version: 2.16.0
   against:
-    - {doc: docs/01-requirements/functional.md, version: 1.19.0}
+    - {doc: docs/01-requirements/functional.md, version: 1.20.0}
     - {doc: docs/01-requirements/non-functional.md, version: 1.8.0}
     - {doc: docs/01-requirements/usecases.md, version: 1.7.0}
     - {doc: docs/02-design/architecture.md, version: 1.7.0}
@@ -49,7 +49,7 @@ verified:
 | MOD-cli-upgrade | 全イメージをキャッシュ無しで再ビルドして更新する | FR-env-01, FR-env-09, NFR-ops-02, SR-20, NFR-ops-05 | — | なし | `MODULE-cli-upgrade` |
 | MOD-cli-reset | **管理ラベルを持つ Claude コンテナ**と、**所有者ラベル `claude-dev.role=spawned` を持つセッション由来のコンテナ・ネットワーク・名前付きボリュームと、それらのコンテナが抱えていた名前無しのボリューム(所有者を問わない。ボリュームは削除の明示があるときだけ)**と、**本システムの固定名・固定接頭辞を持つ資源**(`fwd-*` 中継コンテナ / 共有ボリューム / イメージ / docker-proxy / `claude-dev-net`)を削除して初期状態へ戻す。**どれで識別するかは資源の種類ごとに `CTR-cli-container` の規則 A(管理ラベル)/ 規則 D(所有者ラベル)/ 名前が定める**(**管理ラベルを付けるのは、名前から所有権が読み取れない Claude コンテナとセッション由来の資源の2つだけである。前者はホスト CLI が、後者は docker-proxy が付ける** — `DSN-env-01` / `DSN-env-04`)。**削除対象として何を列挙するかは `logging.md`「破壊的操作の削除対象の確認」が正である**。**共有資源(docker-proxy / `claude-dev-net`)は遊休のときだけ削除し、他が稼働中なら残して「完全な初期化になっていない」ことを表示する**(`D0-env-08` 項2 / `FR-env-01` 受入基準9) | FR-env-01, FR-env-03, NFR-ops-02, SR-20, NFR-ops-05 | MOD-cli-common | なし | `MODULE-cli-reset` |
 | MOD-makefile | ビルド・セットアップ・CLI の導入/除去・ログイン・更新といった入口 | FR-env-01, FR-env-03, FR-env-07, FR-env-09, FR-env-10, FR-env-11, FR-env-12, NFR-ops-03, SR-10, SR-20, SR-30 | — | なし | `MODULE-makefile-*` |
-| MOD-entrypoint | コンテナ起動時の初期化(UID/GID 追従・認証コピー・既定設定の生成/補完・ファイアウォール起動・MCP/VNC/Chrome・tmux・同期ループ・ポート同期の起動) | FR-env-02, FR-env-03, FR-env-05〜08, FR-env-11, FR-env-12, NFR-avail-02, NFR-avail-03, NFR-ops-02, NFR-ops-05, NFR-scale-02, SR-02, SR-20 | MOD-firewall, MOD-portsync, MOD-vm-mode | なし | `MODULE-entrypoint-claude` |
+| MOD-entrypoint | コンテナ起動時の初期化(UID/GID 追従・認証コピー・既定設定の生成/補完・ファイアウォール起動・MCP/VNC/Chrome・tmux・同期ループ・ポート同期の起動) | FR-env-02, FR-env-03, FR-env-05〜08, FR-env-11, FR-env-12, FR-env-14, NFR-avail-02, NFR-avail-03, NFR-ops-02, NFR-ops-05, NFR-scale-02, SR-02, SR-20 | MOD-firewall, MOD-portsync, MOD-vm-mode | なし | `MODULE-entrypoint-claude` |
 | MOD-firewall | コンテナ内のブラックリスト型ファイアウォールの構成 | FR-env-05, NFR-sec-01, NFR-avail-03, SR-02, SR-20 | — | なし | `MODULE-firewall-init` |
 | MOD-docker-proxy | Docker API を検査・書き換えして透過中継する常駐プロキシ。**あわせてコンテナ作成要求・ネットワーク作成要求・ボリューム作成要求へ所有者ラベルを注入し、セッション由来の資源に「誰が後で片付けてよいか」の印を付ける**(`DSN-env-04`。印を読んで削除するのは `MOD-cli-stop` / `MOD-cli-reset`) | FR-env-07, NFR-sec-01, SR-02, SR-04, SR-21, SR-31 | — | なし | `MODULE-docker-proxy-serve` |
 | MOD-portsync | DooD 環境で公開ポートを検出し転送する | FR-env-06, FR-env-07, SR-20 | — | なし | `MODULE-portsync-dood` |
@@ -83,6 +83,10 @@ verified:
 **新しいモジュールを立てない**(立てると機械検査 FT1 が重大度「高」で落ちる)。
 `DSN-mod-06` / `DSN-mod-07` が扱うモジュールあたりの機能数の目安にも影響しない
 (どのモジュールにも機能を足さないため)。
+**2026-08-19 に `FR-env-07-13`(本システムが使う環境変数は、コンテナ内で起動したどのプロセスからも
+参照できること)の新設にあたって7件すべてを読み直し、いずれも継続と判断した**: この条項の担い手は
+既存の `MOD-entrypoint`(コンテナ起動時の初期化)であり、新しい入口も新しいモジュールも増えない。
+`DSN-mod-06` / `DSN-mod-07` が扱うモジュールあたりの機能数の目安にも影響しない。
 
 ### DSN-mod-01 モジュールは「利用者から見た入口」と1対1にする
 
@@ -286,6 +290,7 @@ verified:
 | FR-env-07-10 | MOD-docker-proxy | 完全 | -(設計判断を要さない) |
 | FR-env-07-11 | MOD-docker-proxy | 完全 | DSN-env-04 |
 | FR-env-07-12 | MOD-docker-proxy | 完全 | DSN-dp-01(判定できない入力は通す。`DSN-env-04` がこの倒し方を採る) |
+| FR-env-07-13 | MOD-entrypoint | 完全 | -(設計判断を要さない。到達の義務は `CTR-cli-container` の「渡す環境変数」が定める。**主担当が `MOD-cli-start` ではなく `MOD-entrypoint` なのは、変数を渡すのはホスト CLI だが、コンテナ内でプロセスの木を起こすのは entrypoint だからである**) |
 | FR-env-08-1 | MOD-cli-start | 完全 | -(設計判断を要さない) |
 | FR-env-08-2 | MOD-entrypoint | 完全 | -(設計判断を要さない) |
 | FR-env-08-3 | MOD-entrypoint | 完全 | -(設計判断を要さない) |
@@ -346,6 +351,7 @@ verified:
 | FR-env-14-8 | MOD-cli-start | 完全 | DSN-env-05(予約する環境変数名の集合は `CTR-cli-container` が持つ) |
 | FR-env-14-9 | MOD-cli-start | 完全 | DSN-env-05 |
 | FR-env-14-10 | MOD-cli-start | 完全 | -(設計判断を要さない) |
+| FR-env-14-11 | MOD-entrypoint | 完全 | -(設計判断を要さない。到達の義務は `CTR-cli-container` の「渡す環境変数」が定める。**主担当が `MOD-cli-start` ではなく `MOD-entrypoint` なのは、組を渡すのはホスト CLI だが、コンテナ内でプロセスの木を起こすのは entrypoint だからである**) |
 | NFR-perf-01 | (モジュール外)`03-impl/environments/images.md` / `03-impl/infra/local/ghcr.md` | 完全 | DSN-dist-01 |
 | NFR-perf-02 | (モジュール外)`03-impl/environments/images.md` / `03-impl/infra/local/ghcr.md` | 完全 | DSN-dist-01 |
 | NFR-avail-02 | MOD-cli-start, MOD-entrypoint | 完全 | -(設計判断を要さない) |
@@ -382,7 +388,7 @@ verified:
 (空欄を作らないための規約)。
 
 **要件を持たないモジュールは無い**(全 25 モジュールが「モジュール分割定義」の対応要件と上表の
-いずれかに現れる)。**割り当て先の無い条項も無い**(機能要件の全 164 条項・NFR 10 件・SR 19 件が
+いずれかに現れる)。**割り当て先の無い条項も無い**(機能要件の全 166 条項・NFR 10 件・SR 19 件が
 すべて上表に現れる)。
 
 ## テスト戦略

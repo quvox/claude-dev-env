@@ -1,5 +1,6 @@
 ---
 id: MODULE-entrypoint-claude
+updated: 2026-08-19
 module: MOD-entrypoint
 kind: tool
 sync: sync
@@ -8,9 +9,8 @@ callers: MODULE-cli-start
 callees: MODULE-firewall-init, MODULE-portsync-dood, MODULE-vm-mode-up
 contracts: CTR-cli-container, CTR-entrypoint-firewall
 design: DSN-mod-01, DSN-arch-01, DSN-auth-01, DSN-dist-02
-requirements: FR-env-02, FR-env-03, FR-env-05, FR-env-06, FR-env-07, FR-env-08, FR-env-11, FR-env-12
+requirements: FR-env-02, FR-env-03, FR-env-05, FR-env-06, FR-env-07, FR-env-08, FR-env-11, FR-env-12, FR-env-14
 tests: なし(未実装。シェル実装のため自動テストランナーが無い。codex 経路は `scripts/e2e6-codex.sh` の実機検証で確認する)
-updated: 2026-08-02
 summary: コンテナ起動時に UID/GID・認証共有・VNC・firewall・portsync を整える
 ---
 
@@ -42,12 +42,17 @@ UID/GID 追従(FR-env-02)、認証共有(FR-env-03)、firewall の適用(FR-env-
    `socat UNIX-LISTEN:/tmp/ssh-agent.sock,fork,mode=600 TCP:host.docker.internal:<port>` を
    ユーザ権限で起動し、ソケットの出現を最大20回×0.2秒待つ。Linux 版はホストの `$SSH_AUTH_SOCK` を
    直接 bind してあるのでこの分岐を通らない。
-5. **`SSH_AUTH_SOCK` の永続化**: `/tmp/ssh-agent.sock` があれば
-   `export SSH_AUTH_SOCK=/tmp/ssh-agent.sock` を `/etc/zsh/zshrc` と `/etc/bash.bashrc` へ追記する
-   (`su -l` でのリセット対策)。
-6. **`DOCKER_HOST` の永続化**: 設定されていれば同様に両 rc へ追記する。
-7. **`COMPOSE_PROJECT_NAME` はここでは設定しない**: rc への追記は非対話シェル(`bash -c`)に効かない
-   ため、ホスト CLI が `docker run -e` で渡す(`MODULE-cli-start` の責務)。
+5. **`SSH_AUTH_SOCK` を確定させる**: `/tmp/ssh-agent.sock` があれば
+   `export SSH_AUTH_SOCK=/tmp/ssh-agent.sock` を `/etc/zsh/zshrc` と `/etc/bash.bashrc` へ追記し、
+   **同じ値を entrypoint 自身の環境にも `export` する**(macOS 経路では手順4 が作ったソケットであり、
+   ホストの `-e` では渡ってきていないため、ここで載せないと手順20 が引き継げない)。
+   **これが効くのは対話シェルだけである** — 初期化ファイルを読むのは対話シェルだけなので、
+   非対話シェルにも、tmux の窓の中で起動したプロセスにも届かない。**それらへ届けるのは手順20 である。**
+6. **`DOCKER_HOST` を対話シェル向けに書き出す**: 設定されていれば同様に両 rc へ追記する。
+   届く範囲は手順5 と同じで、**tmux の窓の中へ届けるのは手順20 である**。
+7. **`COMPOSE_PROJECT_NAME` は rc へ書き出さない**: 値はホスト CLI が `docker run -e` で渡す
+   (`MODULE-cli-start` の責務)。entrypoint がこの変数について負う仕事は、
+   **手順20 で tmux サーバへ引き継ぐこと**である。
 8. **`.zshrc` 共有**: `~/.config-shared/` に `.zshrc` が無ければ、`~/.zshrc.default` → 実体 `~/.zshrc` →
    空ファイル の順にコピー元を決めて作る。以後 `~/.zshrc` を共有ファイルへの symlink にする。
 9. **`~/.claude` / `~/.codex` の構成と認証共有**: `/workspace/.claude` を確保し、`~/.claude` が実
@@ -95,7 +100,11 @@ UID/GID 追従(FR-env-02)、認証共有(FR-env-03)、firewall の適用(FR-env-
 15. **VM モードの起動**(`CLAUDE_DEV_VM=1` のとき): root のうちに `install -d -o $USERNAME` で
     `~/.claude-dev-vm` と `/run/vm` を用意し、`su "$USERNAME" -c /usr/local/bin/vm-up.sh` を実行する。
     成功したときだけ `/etc/claude-dev/vm.env` に `DOCKER_HOST=tcp://127.0.0.1:2375` を書き、両 rc へ
-    source フックを追記し、`VM_DEV.md` を生成してバナーを出す。失敗したら proxy 既定のまま続行する。
+    source フックを追記し、**同じ値を entrypoint 自身の環境にも `export` して**、`VM_DEV.md` を生成して
+    バナーを出す。失敗したら proxy 既定のまま続行する。
+    **自身の環境にも載せるのは、手順20 が引き継ぐ値を「その時点で有効な値」に一致させるためである** —
+    載せないと、対話シェルはゲスト VM を指し、tmux の窓の中のプロセスは docker-proxy を指す、という
+    2つの値が同居する(02 の契約は「VM モードでは entrypoint が上書きする」と1つの値しか認めていない)。
 16. **portsync の起動**: `CLAUDE_DEV_VM != 1` かつ `CLAUDE_DEV_DOOD_PORTSYNC != 0` かつ `DOCKER_HOST` が
     `docker-proxy` を含み、`dood-portsync.sh` が実行可能なとき、`setsid ... --loop &` で常駐起動する。
 17. **CLAUDE.md への環境情報の書き込み**: マーカー `<!-- claude-dev-auto-start -->` 〜
@@ -117,8 +126,24 @@ UID/GID 追従(FR-env-02)、認証共有(FR-env-03)、firewall の適用(FR-env-
     `websockify --heartbeat 30 --web /usr/share/novnc 6080 localhost:5999`、
     Chrome の残存ロック(`SingletonLock` 等)削除の後に
     `claude-dev-chrome ... --remote-debugging-port=9222 --user-data-dir=~/.chrome-profile`。
-20. **tmux セッションの開始**: `su "$USERNAME" -s /bin/zsh -l -c "cd /workspace &&
+20. **tmux セッションの開始**: `su "$USERNAME" -s /bin/zsh -c "cd /workspace &&
     tmux -f ~/.tmux.conf new-session -d -s main 'exec zsh -l'"`。
+    **`-l` を付けない。** 付けると、ホストの `-e` で渡された変数もイメージの `ENV` で付いた変数も
+    利用者のプロジェクト環境ファイルの組も**まとめて捨てられる**。
+    **tmux サーバの環境はその配下の全ウィンドウ・全プロセスが継承する**ので、
+    捨てられた変数は tmux の中のどこからも見えなくなる(`FR-env-07-13` / `FR-env-14-11` /
+    `CTR-cli-container`「渡す環境変数」)。
+    **`-l` の有無で `PATH` と `HOME` は変わらない** — 2026-08-19 に実機で
+    `su <user> -s /bin/zsh -l -c` と `su <user> -s /bin/zsh -c` を並べて測り、どちらも
+    `PATH` は同一、`HOME` は同一だった。違うのは `PWD` だけで(`~` → `/workspace`)、
+    このコマンドは自分で `cd /workspace` するので影響しない。
+    **`exec zsh -l` が掛かるのは `new-session` が同時に作る最初の窓だけ**で、以後の窓は
+    `scripts/tmux.conf:15` の `default-command /bin/zsh`(`-l` 無し)で起こる。それでも
+    手順5・手順6 が書き出した `export` は効く — `/etc/zsh/zshrc` と `/etc/bash.bashrc` を
+    読むのはログインシェルかどうかではなく**対話シェルかどうか**だからである。
+    **`tmux` の `update-environment` を当てにしない**: 既定値の8個(`DISPLAY` / `SSH_AUTH_SOCK` ほか)は
+    クライアント接続時にセッション環境へ写されるが、それ以外は1つも含まれず、
+    しかも**最初の接続より前に作られた窓には効かない**。
 21. **常駐**: `✅ Ready (...)` を表示して `exec tail -f /dev/null` で待つ。
 
 ## 呼び出され方
@@ -199,6 +224,7 @@ UID/GID 追従(FR-env-02)、認証共有(FR-env-03)、firewall の適用(FR-env-
 | `vm-up.sh` が失敗 | 失敗バナーを出し `DOCKER_HOST` を上書きせず DooD 経路を維持する | VM は使えないが docker は使える |
 | `host-hooks.json` のマージに失敗 | 警告して続行する | ホストの hooks / env が反映されない |
 | Chrome のプロファイルロックが残っている | `SingletonLock` 等を消してから起動する | 起動できる |
+| ホストが `DOCKER_HOST` を渡していない(ホストに Docker ソケットが無い) | 変数が無いまま tmux が起動する(引き継ぎは「在るものを継ぐ」だけなので分岐しない) | tmux は立つが、その窓から `docker` は使えない(`CTR-cli-container` が「到達できなければコンテナ内から Docker が使えないだけで、起動は続く」と定める範囲) |
 
 ## 実装上の判断
 
@@ -211,6 +237,13 @@ UID/GID 追従(FR-env-02)、認証共有(FR-env-03)、firewall の適用(FR-env-
 | 5 | CLAUDE.md への書き込みをマーカー範囲の削除 + 再生成にする(`--kvm` の付け外しに追従でき、利用者の記述を壊さない) | D0-scope-02 |
 | 6 | `computer-use` MCP を `enabledMcpjsonServers` に入れない(強権限のため利用時に明示有効化させる) | D0-sec-01 |
 
+- [DS-05] tmux セッションを起こす `su` から **`-l` を外す**(名前を列挙して載せ直す形にも、`tmux.conf` の `update-environment` に足す形にもしない) — 理由: **列挙しないので、コンテナに渡っている変数がそのまま全部引き継がれる** — 利用者がプロジェクト環境ファイルに書いた組(`AC-08`)も、時刻帯や文字の並び順も同時に届く。列挙する形は、変数が増えるたびに列挙も増やす必要があり、増やし忘れが `AC-08` の不合格として現れた経路そのものである。`update-environment` はクライアント接続時にしか働かないので、**接続より前に作られる窓**(この手順は `new-session -d` で接続なしに作る)に効かない。同じ entrypoint の中で `su` を使うもう1箇所(`start-user-desktop.sh` の起動)が既に `-l` を付けておらず、この形の前例である / 見直す条件: `-l` の有無で `PATH` か `HOME` が変わる環境が現れたとき、またはコンテナに渡る変数の中に tmux の窓へ渡してはならないものが現れたとき
+
+<!-- 2026-08-19 更新(`.claude/directions/delegation.md` §3.1)。前の版はこの判断の逆(`-l` を残して
+     予約名を列挙して載せ直す)を採っており、理由に「`-l` を外すと `PATH` / `HOME` / 作業ディレクトリまで
+     変わる」と書いていた。**実機で両方を並べて測ったところ `PATH` も `HOME` も同一**で、この理由は
+     事実として誤りだった(原則2)。あわせて、列挙する形では `AC-08` を満たせないことが分かった。 -->
+
 ## 既知の制限
 
 | 制限 | 影響 | 関連 issue |
@@ -218,4 +251,5 @@ UID/GID 追従(FR-env-02)、認証共有(FR-env-03)、firewall の適用(FR-env-
 | `host-hooks.json` の名前が実態(`hooks` と `env` の両方を運ぶ)と乖離 | 読み手が誤解しうる。歴史的経緯で据え置き | なし |
 | `use_legacy_landlock` は codex 0.146.0 時点で deprecated(起動時に警告が出る) | 版更新で撤去された場合は監査を添付方式へ退避する必要がある(検知は E2E-06 の疎通確認) | なし |
 | 認証同期ループが root で走るため共有側が root 所有になる | `login-codex` 側で `chown -R` して補っている | なし |
+| **稼働中の tmux サーバの環境は後から変えられない** | コンテナを起動した後に環境変数を足しても、既に立っている tmux サーバとその配下には入らない | なし(閾値の外: `claude-dev start` でコンテナを作り直せば揃う。稼働中に足すことは `tmux set-environment -g` で人手でできるが、それは製品の経路ではない) |
 | 起動シーケンスが1本の長いスクリプト | 段階ごとの単体テストができず、検証は実機確認に依存する | なし |
