@@ -102,10 +102,13 @@ if [ -n "${CLAUDE_DEV_SSH_BRIDGE_PORT:-}" ] && command -v socat >/dev/null 2>&1;
     done
 fi
 
-# --- SSH_AUTH_SOCK をシェル初期化ファイルに設定 ---
-# Docker の -e で渡された SSH_AUTH_SOCK は su -l でリセットされるため、
-# シェル初期化ファイルに書き出して全シェルで利用可能にする
+# --- SSH_AUTH_SOCK を確定させる ---
+# 対話シェル向けにはシェル初期化ファイルへ書き出す（初期化ファイルを読むのは対話シェルだけ）。
+# tmux の窓の中のプロセスへは、下の tmux 起動が -l を付けずに環境をそのまま引き継ぐことで届く
+# （FR-env-07-13）。macOS 経路ではこのソケットを上の socat が作っており、ホストの -e では
+# 渡ってきていないので、ここで自分の環境にも export しないと tmux へ引き継がれない。
 if [ -S "/tmp/ssh-agent.sock" ]; then
+    export SSH_AUTH_SOCK=/tmp/ssh-agent.sock
     for rc in /etc/zsh/zshrc /etc/bash.bashrc; do
         if [ -f "$rc" ]; then
             echo "" >> "$rc"
@@ -116,8 +119,10 @@ if [ -S "/tmp/ssh-agent.sock" ]; then
 fi
 
 # --- Docker Socket Proxy の設定 ---
-# docker run -e で渡された DOCKER_HOST は su -l でリセットされるため、
-# シェル初期化ファイルに書き出して全シェルで利用可能にする。
+# 対話シェル向けにシェル初期化ファイルへ書き出す。読むのは対話シェルだけなので、
+# 非対話シェルには効かない。**tmux の窓の中のプロセスへは、下の tmux 起動が -l を付けずに
+# 環境をそのまま引き継ぐことで届く**（この export は対話シェルの利便のためであって、
+# 到達の義務を果たす手段ではない。CTR-cli-container「渡す環境変数」）。
 # Docker CLI の "default" コンテキストは DOCKER_HOST 環境変数を参照するため、
 # 環境変数の設定だけで十分（カスタム context は不要）。
 if [ -n "${DOCKER_HOST:-}" ]; then
@@ -130,9 +135,9 @@ if [ -n "${DOCKER_HOST:-}" ]; then
     done
 fi
 
-# docker compose プロジェクト名の一意化（COMPOSE_PROJECT_NAME）は、対話シェル rc では
-# 非対話シェル（bash -c 実行）に効かないため、ホスト CLI 側で docker run の -e として渡す
-# （cli/cli-mac が正本。DOCKER_HOST と同様に全シェル・docker exec で有効）。
+# docker compose プロジェクト名の一意化（COMPOSE_PROJECT_NAME）は、ホスト CLI 側で docker run の
+# -e として渡す（cli/cli-mac が正本）。ここで rc へ書き出さないのは、-e で渡った値が
+# コンテナのプロセス環境に在り、下の tmux 起動が -l を付けずにそれを引き継ぐためである。
 
 # --- .zshrc の共有（ボリューム経由でコンテナ間共有）---
 # ~/.config-shared/ はボリュームとしてマウントされている
@@ -482,6 +487,10 @@ if [ "${CLAUDE_DEV_VM:-}" = "1" ]; then
     if su "$USERNAME" -c '/usr/local/bin/vm-up.sh'; then
         mkdir -p /etc/claude-dev
         echo "export DOCKER_HOST='tcp://127.0.0.1:2375'" > /etc/claude-dev/vm.env
+        # 自分の環境にも載せる。載せないと、対話シェルはゲスト VM を、tmux の窓の中の
+        # プロセスは docker-proxy を指すという 2 つの値が同居する（CTR-cli-container は
+        # 「VM モードでは entrypoint が上書きする」と 1 つの値しか認めていない）。
+        export DOCKER_HOST='tcp://127.0.0.1:2375'
         for rc in /etc/zsh/zshrc /etc/bash.bashrc; do
             if [ -f "$rc" ] && ! grep -q '/etc/claude-dev/vm.env' "$rc"; then
                 {
@@ -772,7 +781,15 @@ DESKEOF
 fi
 
 # --- tmux セッション開始 ---
-su "$USERNAME" -s /bin/zsh -l -c \
+# **-l を付けない。** 付けると su がログイン用に環境を作り直し、docker run -e で渡された変数も
+# イメージの ENV で付いた変数も、利用者のプロジェクト環境ファイルの組も、まとめて捨てられる。
+# tmux サーバの環境はその配下の全ウィンドウ・全プロセスが継承するので、捨てられた変数は
+# tmux の中のどこからも見えなくなる（FR-env-07-13 / FR-env-14-11 /
+# CTR-cli-container「渡す環境変数」/ AC-08）。
+# -l の有無で PATH と HOME は変わらない（2026-08-19 に実機で両方を並べて測定。違うのは PWD だけで、
+# このコマンドは自分で cd /workspace するので影響しない）。各ウィンドウの対話シェルは
+# 'exec zsh -l' で起こすので、対話シェル向けの初期化（上で両 rc へ書き出した export を含む）は効く。
+su "$USERNAME" -s /bin/zsh -c \
     "cd /workspace && tmux -f ~/.tmux.conf new-session -d -s main 'exec zsh -l'" \
     2>/dev/null || true
 

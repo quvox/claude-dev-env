@@ -1672,8 +1672,11 @@ start)
     fi
 
     # docker compose プロジェクト名を一意化（全プロジェクトが /workspace にマウントされ
-    # 既定名が "workspace" に衝突するのを防ぐ）。DOCKER_HOST と同様に -e で渡し、対話・非対話
-    # を問わず全シェル（Claude Code の bash -c 実行含む）と docker exec で有効にする。
+    # 既定名が "workspace" に衝突するのを防ぐ）。DOCKER_HOST と同様に -e で渡す。
+    # -e で届くのはコンテナのプロセス環境までであって、コンテナ内の全プロセスではない。
+    # su -l で環境を作り直す経路（entrypoint の tmux サーバ起動）は越えられないので、
+    # 越えさせるのは受け側の責務である（scripts/entrypoint-claude.sh の tmux 起動 /
+    # CTR-cli-container「渡す環境変数」/ FR-env-07-13）。
     # 値は <正規化名>-<起動ディレクトリ絶対パスの SHA-256 先頭6桁>。正規化だけでは
     # ~/work/My.App と ~/other/my-app が同じ my-app に落ち、一方の stop が他方の compose
     # 資源を消しうる（docs/issues/024）。stop は同じ関数でこの値を再計算する（DSN-env-03）。
