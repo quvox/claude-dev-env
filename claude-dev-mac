@@ -1624,8 +1624,17 @@ start)
             fi
         done
     elif [ -d "${PROJECT_DIR}/.git" ]; then
-        printf '%s\n%s\n' '.claude' '.codex' > "${PROJECT_DIR}/.gitignore"
-        [ -n "$PROJECT_ENV_FILE_REL" ] && printf '%s\n' "$PROJECT_ENV_FILE_REL" >> "${PROJECT_DIR}/.gitignore"
+        # 新規作成も追記と同じく握る（FR-env-14-4 / NFR-avail-03）。
+        # set -e 下では単純コマンドの失敗がそのまま終了になるので、明示的に握る。
+        if printf '%s\n%s\n' '.claude' '.codex' > "${PROJECT_DIR}/.gitignore" 2>/dev/null; then
+            if [ -n "$PROJECT_ENV_FILE_REL" ]; then
+                if ! printf '%s\n' "$PROJECT_ENV_FILE_REL" >> "${PROJECT_DIR}/.gitignore" 2>/dev/null; then
+                    echo "⚠️  .gitignore へ '${PROJECT_ENV_FILE_REL}' を追記できませんでした（起動は続けます）。手動で追記してください。"
+                fi
+            fi
+        else
+            echo "⚠️  .gitignore を作成できませんでした（起動は続けます）。'.claude' / '.codex' を手動で追記してください。"
+        fi
     fi
     # 追跡から外せたかを確かめる。外せなくても起動は止めない（FR-env-14-4）。
     if [ -n "$PROJECT_ENV_FILE_REL" ] && [ -d "${PROJECT_DIR}/.git" ]; then
