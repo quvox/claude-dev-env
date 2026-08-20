@@ -2168,7 +2168,7 @@ list)
     _has_containers=0
     # 列挙は「管理ラベル claude-dev.managed=1」と「イメージ由来（--filter ancestor）」の
     # **和集合**から、固定接頭辞 fwd- の中継コンテナを除く
-    # （CTR-cli-container「稼働中セッションの一覧の列挙」/ FR-env-01 受入基準35・36）。
+    # （CTR-cli-container「稼働中セッションの一覧の列挙」/ FR-env-01-35・FR-env-01-36）。
     #   イメージだけでは latest が別のイメージ ID を指した後に、それ以前に起動した
     #   コンテナを数え落とす（docs/issues/046）。ラベルだけではラベルが付く前に
     #   起動された既存コンテナを数え落とす。docker は同じ --filter キーの複数指定を
