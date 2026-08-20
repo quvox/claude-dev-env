@@ -1,12 +1,12 @@
 ---
 slug: fix-fr-env-07-13-owner-and-codex-sandbox-defaults
-state: building
+state: awaiting-verify
 critical: true
 origin: derived
 issue: なし
 started: 2026-08-20T14:39:55+09:00
-updated: 2026-08-20T14:39:55+09:00
-commit: -
+updated: 2026-08-20T15:40:00+09:00
+commit: 3421243b5edd0318961ad3711d9151f64c0e892a
 summary: F2 の独立レビューが挙げた「高」2件(FR-env-07-13 の担当根拠と契約の正面衝突、codex サンドボックス既定と 02 の記述の不一致)を 02-design 側で直す修繕
 ---
 
