@@ -1,7 +1,7 @@
 ---
 id: e2e
-version: 1.12.0
-updated: 2026-08-19
+version: 1.13.0
+updated: 2026-08-20
 scope: E2E
 source:
   - docs/02-design/system.md
@@ -22,7 +22,7 @@ verified:
 
 | E2E ID | 対応 UC | シナリオ | テスト識別子 | 状態 |
 |---|---|---|---|---|
-| E2E-01 | UC-01 | `claude-dev start`(ブラウザ確認あり / `--no-vnc`)→ `/workspace` マウント・認証・ファイアウォール・tmux → `claude` 起動 → 再実行での再接続 → **同名衝突で稼働中のコンテナを失わないこと(手順7)→ 破壊的操作が「自分が作った資源」にだけ効くこと(手順8: 管理ラベル・遊休判定・排他ロック・ラベル無しコンテナの保護・compose 資源の隔離・受理しない名前・プロジェクト配下の認証コピー・確認と非対話時の中止・削除失敗の列挙・**セッション由来の資源の片付け(手順8-14・8-15)・`logout` 後に回収できないこと(手順8-16)**) → **コンテナへ渡した環境変数が tmux の窓の中でも参照できること(手順9)**** | 手順のみ(下記「実機確認の手順」E2E-01) | 未検証(テスト未実装) |
+| E2E-01 | UC-01 | `claude-dev start`(ブラウザ確認あり / `--no-vnc`)→ `/workspace` マウント・認証・ファイアウォール・tmux → `claude` 起動 → 再実行での再接続 → **同名衝突で稼働中のコンテナを失わないこと(手順7)→ 破壊的操作が「自分が作った資源」にだけ効くこと(手順8: 管理ラベル・遊休判定・排他ロック・ラベル無しコンテナの保護・compose 資源の隔離・受理しない名前・プロジェクト配下の認証コピー・確認と非対話時の中止・削除失敗の列挙・**セッション由来の資源の片付け(手順8-14・8-15)・`logout` 後に回収できないこと(手順8-16)**) → **コンテナへ渡した環境変数が tmux の窓の中でも参照できること(手順9)** → **稼働中セッションの一覧が、イメージを作り直したあとも数え落とされないこと・中継コンテナがセッションとして出ないこと(手順10)**** | 手順のみ(下記「実機確認の手順」E2E-01) | 未検証(テスト未実装) |
 | E2E-02 | UC-02 | `claude-dev forward` → 8100 番台の割当と SSH トンネル → クライアントのブラウザで表示 → `claude-dev ports` で確認 | 手順のみ(同 E2E-02) | 未検証(テスト未実装) |
 | E2E-03 | UC-03 | コンテナ内で危険な `docker run` → 拒否 / `/workspace` bind の許可 / 拒否条件に当たらない要求の透過 / **作られたコンテナとネットワークに所有者ラベルが付くこと** | 手順のみ(同 E2E-03)。判定ロジックは `cd docker-proxy && go test ./...` が単体で検証済み。**条項ごとに単体でどこまで検証済みかは `03-impl/tests/docker-proxy.md` が正である** | 未検証(テスト未実装) |
 | E2E-06 | UC-06 | `claude-dev login-codex` → デバイス認証 → 別プロジェクトで `start` → 再ログイン不要で `codex` が起動し、シェルコマンドが成功して `/workspace` を読み書きできる。landlock の疎通確認が通り、読み取り専用の明示指定で読み取りが成功する | `scripts/e2e6-codex.sh`(実機で実行する検証スクリプト。自動テストランナーからは呼ばれない) | 未検証(テスト未実装) |
@@ -31,7 +31,7 @@ verified:
 
 | E2E ID | 通過する MODULE-ID |
 |---|---|
-| E2E-01 | MODULE-cli-start → MODULE-cli-common-require-setup → MODULE-cli-common-container-name → **MODULE-cli-common-lock** → MODULE-cli-common-ensure-infrastructure → MODULE-cli-common-select-ssh-keys → MODULE-entrypoint-claude → MODULE-firewall-init / MODULE-portsync-dood。再接続は MODULE-cli-common-is-running → MODULE-cli-common-resolve-container-user → MODULE-cli-common-get-novnc-url。**手順8 の破壊的操作は MODULE-cli-stop / MODULE-cli-logout / MODULE-cli-reset → MODULE-cli-common-lock(排他と残骸の引き継ぎ)。手順8-14・8-15 のセッション由来の資源は、印を付ける側が MODULE-docker-proxy-serve、読んで消す側が MODULE-cli-stop / MODULE-cli-reset である** |
+| E2E-01 | MODULE-cli-start → MODULE-cli-common-require-setup → MODULE-cli-common-container-name → **MODULE-cli-common-lock** → MODULE-cli-common-ensure-infrastructure → MODULE-cli-common-select-ssh-keys → MODULE-entrypoint-claude → MODULE-firewall-init / MODULE-portsync-dood。再接続は MODULE-cli-common-is-running → MODULE-cli-common-resolve-container-user → MODULE-cli-common-get-novnc-url。**手順8 の破壊的操作は MODULE-cli-stop / MODULE-cli-logout / MODULE-cli-reset → MODULE-cli-common-lock(排他と残骸の引き継ぎ)。手順8-14・8-15 のセッション由来の資源は、印を付ける側が MODULE-docker-proxy-serve、読んで消す側が MODULE-cli-stop / MODULE-cli-reset である。手順10 の一覧は MODULE-cli-list と MODULE-makefile-status / MODULE-makefile-clean(削除対象の集合のみ)である** |
 | E2E-02 | MODULE-cli-forward → MODULE-cli-common-container-name / MODULE-cli-common-is-running。確認は MODULE-cli-ports、解除は MODULE-cli-unforward |
 | E2E-03 | MODULE-docker-proxy-serve(コンテナ内の docker クライアントから見た経路。起動は MODULE-cli-start の `ensure_docker_proxy_container`)。**手順5 の所有者ラベルの付与も同じ機能が行う** |
 | E2E-06 | MODULE-cli-login-codex → **MODULE-cli-common-lock** → MODULE-cli-start → MODULE-entrypoint-claude(codex 認証のコピーと既定設定の補完) |
@@ -584,6 +584,31 @@ verified:
    - macOS(`claude-dev-mac`)でも同じ手順を実行する。実行できない場合は
      **未実施であることを記録する**(手順を省いたことを黙って残さない)。
 
+10. **イメージを作り直したあとも稼働中のセッションが一覧に出ること、中継コンテナが
+   セッションとして出ないこと**(`FR-env-01` 受入基準35・36)を確認する。
+   **★実際のイメージを作り直す必要はない。** `ancestor` フィルタはイメージ ID で照合するので、
+   **別のイメージ ID から作ったコンテナを立てれば同じ状態になる**。
+   1. `printf 'FROM claude-dev-claude\nRUN true\n' | docker build -t cdx-test-oldimg -` で
+      別のイメージ ID を作る。
+   2. 3つの使い捨てコンテナを立てる。
+      - `docker run -d --name cdx-t-oldimg --label claude-dev.managed=1 --label claude-dev.role=claude --entrypoint sleep cdx-test-oldimg 300`
+        (管理ラベルは持つが、`claude-dev-claude` が今指しているイメージ ID からではない = 数え落としの再現)
+      - `docker run -d --name cdx-t-img --entrypoint sleep claude-dev-claude 300`(イメージ由来だけで引ける)
+      - `docker run -d --name fwd-cdx-t-9999 --entrypoint sleep claude-dev-claude 300`(中継コンテナと同じ命名)
+   3. `claude-dev list` と `make status` を実行する。
+      **期待する結果**: `cdx-t-oldimg` と `cdx-t-img` の2件が出て、`fwd-cdx-t-9999` は出ない。
+      **不合格の条件**: `cdx-t-oldimg` が出ない(受入基準35 の数え落とし。
+      `docker ps --filter ancestor=claude-dev-claude` にも現れないことと対にして確かめる)。
+      または `fwd-cdx-t-9999` がセッションの行として出る(受入基準36)。
+   4. **`make clean` の対象**は削除せずに集合だけを確かめる:
+      `{ docker ps -a --filter "label=claude-dev.managed=1" -q; docker ps -a --filter "ancestor=claude-dev-claude" --filter "ancestor=claude-dev-claude-vnc" -q; docker ps -a --filter "name=^fwd-" -q; } | awk 'NF && !seen[$1]++' | xargs docker inspect -f '{{.Name}}'`
+      **期待する結果**: 3件すべてが1回ずつ現れる(重複しない)。
+      **不合格の条件**: `cdx-t-oldimg` が現れない(削除し残す)、または同じ名前が2回現れる。
+   **後片付け**: `docker rm -f cdx-t-oldimg cdx-t-img fwd-cdx-t-9999` と
+   `docker rmi -f cdx-test-oldimg`。**`make clean` は実行しない**(手順の目的は集合の確認である)。
+   - macOS(`claude-dev-mac`)でも手順3 を実行する。実行できない場合は
+     **未実施であることを記録する**(手順を省いたことを黙って残さない)。
+
 ### E2E-02
 
 1. コンテナ内で任意の Web アプリを `0.0.0.0` で待ち受けさせる。
@@ -655,6 +680,8 @@ verified:
 - [DS-01] **`reset` 側の名前付きボリュームの確認を手順8-15 の中の部分手順(8-15-1・8-15-2)として置き、新しい番号の手順を立てない** — 理由: `reset` は他の資源と一続きに流さないと前提(所有者の違う資源が同時に在ること)を作れない。番号を分けると同じ前提を2回作ることになる / 見直す条件: `reset` の確認を専有ホスト以外でも流せるようになったとき
 - [DS-01] **手順8-21・8-22・8-23 を手順8 の末尾へ足し、既存の部分手順の番号を動かさない** — 理由: `03-impl/tests/*.md` の対応表と `docs/pendings.md` が既存の部分手順の番号を外から参照しており、番号を詰めると参照が**解決したまま別の手順を指す**(条項 ID を動かさないのと同じ理由)/ 見直す条件: 部分手順の番号を参照する外部の表が無くなったとき
 - [DS-01] **`FR-env-07-13` の確認を手順8 の部分手順にせず、新しい手順9 として末尾に足す** — 理由: 手順8 は「破壊的操作が自分が作った資源にだけ効くこと」を通しで確かめる一続きの手順で、セッション `aaa` を作って壊す前提を共有している。環境変数の到達確認はその前提を要さず、混ぜると手順8 の前提が1つ増えるだけである。**末尾に足すので既存の手順番号は1つも動かない**(`03-impl/tests/*.md` の対応表と `docs/pendings.md` が既存番号を外から参照しているため。同じ理由の判断がこの節に既に在る)/ 見直す条件: 手順8 が環境変数を前提に置くようになったとき、または手順9 が破壊的操作の検証を含むようになったとき(後片付けの `stop` は全手順が使うので該当しない)
+- [DS-01] **受入基準35・36 の確認を手順10 として末尾に足し、イメージの作り直しを `FROM claude-dev-claude` の1行ビルドで代用する** — 理由: `--filter ancestor` はイメージ ID で照合するので、**別のイメージ ID から作ったコンテナを1つ立てれば数え落としの状態は再現できる**。本物の `make upgrade` は 8GB 級のイメージを再ビルドし、実行中の全セッションに影響する(受入基準の確認にその副作用は要らない)。末尾に足すので既存の手順番号は1つも動かない(同じ理由の判断がこの節に既に在る)/ 見直す条件: `ancestor` フィルタの照合がイメージ ID からタグへ変わったとき(そのとき1行ビルドでは再現しない)
+- [DS-01] **手順10 で `make clean` を実行せず、削除対象の集合だけを同じ条件のコマンドで確かめる** — 理由: `make clean` は共有ボリューム(認証を含む)とイメージまで消すので、確認のために流すと実行者のログイン状態と 8GB 級のイメージが失われる。確かめたいのは**どのコンテナが対象に入るか**であり、それは削除を伴わずに観測できる / 見直す条件: `make clean` に対象を表示するだけの経路(dry-run)が実装されたとき(そのときはそれを使う)
 
 ## 未検証(テスト未実装)の全件
 

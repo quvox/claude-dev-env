@@ -2166,7 +2166,22 @@ ports)
 list)
     echo "=== 実行中の Claude Code セッション ==="
     _has_containers=0
-    for cid in $(docker ps --filter "ancestor=$IMG_CLAUDE" --filter "ancestor=$IMG_CLAUDE_VNC" -q 2>/dev/null); do
+    # 列挙は「管理ラベル claude-dev.managed=1」と「イメージ由来（--filter ancestor）」の
+    # **和集合**から、固定接頭辞 fwd- の中継コンテナを除く
+    # （CTR-cli-container「稼働中セッションの一覧の列挙」/ FR-env-01 受入基準35・36）。
+    #   イメージだけでは latest が別のイメージ ID を指した後に、それ以前に起動した
+    #   コンテナを数え落とす（docs/issues/046）。ラベルだけではラベルが付く前に
+    #   起動された既存コンテナを数え落とす。docker は同じ --filter キーの複数指定を
+    #   論理和にするが、キーが違うものは論理積にするため問い合わせを2回に分ける。
+    #   **問い合わせの失敗を 0 件と同一視しない**（同契約「エラーケース」）。
+    _q_failed=0
+    _by_label=$(docker ps --filter "label=claude-dev.managed=1" --format '{{.ID}} {{.Names}}' 2>/dev/null) || _q_failed=1
+    _by_image=$(docker ps --filter "ancestor=$IMG_CLAUDE" --filter "ancestor=$IMG_CLAUDE_VNC" --format '{{.ID}} {{.Names}}' 2>/dev/null) || _q_failed=1
+    if [ "$_q_failed" -eq 1 ]; then
+        echo "⚠️  Docker への問い合わせが失敗したため、この一覧は不完全である可能性があります。"
+    fi
+    for cid in $(printf '%s\n%s\n' "$_by_label" "$_by_image" \
+        | awk 'NF && $2 !~ /^fwd-/ && !seen[$1]++ { print $1 }'); do
         _has_containers=1
         cname=$(docker inspect --format '{{.Name}}' "$cid" | sed 's|^/||')
         _name="${cname}"

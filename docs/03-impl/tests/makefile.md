@@ -1,7 +1,7 @@
 ---
 id: makefile
-version: 1.2.1
-updated: 2026-08-12
+version: 1.3.0
+updated: 2026-08-20
 scope: MOD-makefile
 source:
   - docs/01-requirements/functional.md
@@ -40,14 +40,14 @@ verified:
 | MODULE-makefile-build-claude | - | 未検証(テスト未実装) |
 | MODULE-makefile-build-claude-vnc | - | 未検証(テスト未実装) |
 | MODULE-makefile-build-docker-proxy | - | 未検証(テスト未実装) |
-| MODULE-makefile-clean | - | 未検証(テスト未実装) |
+| MODULE-makefile-clean | E2E-01(実機確認手順 手順10-4。削除対象の集合の確認まで) | 実装済み |
 | MODULE-makefile-env | - | 未検証(テスト未実装) |
 | MODULE-makefile-help | - | 未検証(テスト未実装) |
 | MODULE-makefile-install | - | 未検証(テスト未実装) |
 | MODULE-makefile-login | - | 未検証(テスト未実装) |
 | MODULE-makefile-network | - | 未検証(テスト未実装) |
 | MODULE-makefile-setup | - | 未検証(テスト未実装) |
-| MODULE-makefile-status | - | 未検証(テスト未実装) |
+| MODULE-makefile-status | E2E-01(実機確認手順 手順10-3) | 実装済み |
 | MODULE-makefile-uninstall | - | 未検証(テスト未実装) |
 | MODULE-makefile-update-claude | - | 未検証(テスト未実装) |
 | MODULE-makefile-upgrade | - | 未検証(テスト未実装) |
@@ -63,21 +63,19 @@ verified:
 | 4 | MODULE-makefile-build-claude — 機能全体 | Makefile のため自動テストランナーが無く実機確認で代替する | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |
 | 5 | MODULE-makefile-build-claude-vnc — 機能全体 | Makefile のため自動テストランナーが無く実機確認で代替する | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |
 | 6 | MODULE-makefile-build-docker-proxy — 機能全体 | Makefile のため自動テストランナーが無く実機確認で代替する | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |
-| 7 | MODULE-makefile-clean — 機能全体 | Makefile のため自動テストランナーが無く実機確認で代替する | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |
-| 8 | MODULE-makefile-env — 機能全体 | Makefile のため自動テストランナーが無く実機確認で代替する | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |
-| 9 | MODULE-makefile-help — 機能全体 | Makefile のため自動テストランナーが無く実機確認で代替する | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |
-| 10 | MODULE-makefile-install — 機能全体 | Makefile のため自動テストランナーが無く実機確認で代替する | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |
-| 11 | MODULE-makefile-login — 機能全体 | Makefile のため自動テストランナーが無く実機確認で代替する | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |
-| 12 | MODULE-makefile-network — 機能全体 | Makefile のため自動テストランナーが無く実機確認で代替する | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |
-| 13 | MODULE-makefile-setup — 機能全体 | Makefile のため自動テストランナーが無く実機確認で代替する | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |
-| 14 | MODULE-makefile-status — 機能全体 | Makefile のため自動テストランナーが無く実機確認で代替する | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |
-| 15 | MODULE-makefile-uninstall — 機能全体 | Makefile のため自動テストランナーが無く実機確認で代替する | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |
-| 16 | MODULE-makefile-update-claude — 機能全体 | Makefile のため自動テストランナーが無く実機確認で代替する | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |
-| 17 | MODULE-makefile-upgrade — 機能全体 | Makefile のため自動テストランナーが無く実機確認で代替する | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |
-| 18 | MODULE-makefile-volumes — 機能全体 | Makefile のため自動テストランナーが無く実機確認で代替する | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |
+| 7 | MODULE-makefile-env — 機能全体 | Makefile のため自動テストランナーが無く実機確認で代替する | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |
+| 8 | MODULE-makefile-help — 機能全体 | Makefile のため自動テストランナーが無く実機確認で代替する | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |
+| 9 | MODULE-makefile-install — 機能全体 | Makefile のため自動テストランナーが無く実機確認で代替する | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |
+| 10 | MODULE-makefile-login — 機能全体 | Makefile のため自動テストランナーが無く実機確認で代替する | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |
+| 11 | MODULE-makefile-network — 機能全体 | Makefile のため自動テストランナーが無く実機確認で代替する | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |
+| 12 | MODULE-makefile-setup — 機能全体 | Makefile のため自動テストランナーが無く実機確認で代替する | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |
+| 13 | MODULE-makefile-uninstall — 機能全体 | Makefile のため自動テストランナーが無く実機確認で代替する | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |
+| 14 | MODULE-makefile-update-claude — 機能全体 | Makefile のため自動テストランナーが無く実機確認で代替する | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |
+| 15 | MODULE-makefile-upgrade — 機能全体 | Makefile のため自動テストランナーが無く実機確認で代替する | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |
+| 16 | MODULE-makefile-volumes — 機能全体 | Makefile のため自動テストランナーが無く実機確認で代替する | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |
 
 ## テスト設計の判断
 
 <!-- このファイルのテストの作り方(DS-01 で AI が決めた部分)の理由を置く。何を検証するかは 01 が正である。 -->
 
-- 判断なし: このファイルが持つ全 18 行はいずれも `未検証(テスト未実装)` であり、テストの作り方を選ぶ余地が生じていない。Makefile に自動テストランナーを設けないのは `DSN-test-01` / `SR-32` の既定であり、そこから動かしていない
+- 判断なし: このファイルが持つ 16 行はいずれも `未検証(テスト未実装)` であり、テストの作り方を選ぶ余地が生じていない。Makefile に自動テストランナーを設けないのは `DSN-test-01` / `SR-32` の既定であり、そこから動かしていない。**`make status` と `make clean` の2行(2026-08-20 に `実装済み` へ移した)の作り方の判断は `docs/03-impl/tests/e2e.md` の「テスト設計の判断」に在る**(手順の持ち主がそちらである)

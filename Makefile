@@ -249,8 +249,19 @@ status:
 		--filter "reference=$(IMG_CLAUDE)" --filter "reference=$(IMG_CLAUDE_VNC)" --filter "reference=$(IMG_DOCKER_PROXY)" 2>/dev/null || true
 	@echo ""
 	@echo "=== 実行中の Claude Code セッション ==="
-	@docker ps --filter "ancestor=$(IMG_CLAUDE)" --filter "ancestor=$(IMG_CLAUDE_VNC)" \
-		--format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" 2>/dev/null || true
+	@# 列挙は「管理ラベル claude-dev.managed=1」と「イメージ由来」の和集合から fwd- 中継コンテナを
+	@# 除く（CTR-cli-container「稼働中セッションの一覧の列挙」。claude-dev list と同じ集合）。
+	@# イメージだけでは latest が別のイメージ ID を指した後に、それ以前に起動したコンテナを
+	@# 数え落とす（docs/issues/046）。docker はキーの違うフィルタを論理積にするので2回に分ける。
+	@ids=$$( { docker ps --filter "label=claude-dev.managed=1" --format '{{.ID}} {{.Names}}'; \
+	           docker ps --filter "ancestor=$(IMG_CLAUDE)" --filter "ancestor=$(IMG_CLAUDE_VNC)" --format '{{.ID}} {{.Names}}'; } 2>/dev/null \
+	         | awk 'NF && $$2 !~ /^fwd-/ && !seen[$$1]++ { print $$1 }' ); \
+	  if [ -n "$$ids" ]; then \
+	      args=""; for i in $$ids; do args="$$args --filter id=$$i"; done; \
+	      docker ps $$args --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" 2>/dev/null || true; \
+	  else \
+	      echo "  (実行中のセッションはありません)"; \
+	  fi
 	@echo ""
 	@echo "=== Docker Socket Proxy コンテナ ==="
 	@docker ps --filter "name=^$(DOCKER_PROXY_CONTAINER)$$" \
@@ -268,8 +279,14 @@ clean:
 	@echo "   - Docker イメージ"
 	@echo ""
 	@read -p "実行しますか？ (y/N) " ans && [ "$$ans" = "y" ] || { echo "キャンセル"; exit 1; }
-	@# プロジェクトコンテナ停止
-	@docker ps -a --filter "ancestor=$(IMG_CLAUDE)" --filter "ancestor=$(IMG_CLAUDE_VNC)" -q | xargs -r docker rm -f 2>/dev/null || true
+	@# プロジェクトコンテナ停止。列挙は「管理ラベル」と「イメージ由来」と「固定接頭辞 fwd-」の
+	@# 和集合（停止中を含む）。CTR-cli-container「稼働中セッションの一覧の列挙」が正。
+	@# イメージだけでは latest が別のイメージ ID を指した後に削除し残す（docs/issues/046）。
+	@# claude-dev-net への接続は条件にしない（利用者が手で繋いだコンテナを消すことになる）。
+	@ids=$$( { docker ps -a --filter "label=claude-dev.managed=1" -q; \
+	           docker ps -a --filter "ancestor=$(IMG_CLAUDE)" --filter "ancestor=$(IMG_CLAUDE_VNC)" -q; \
+	           docker ps -a --filter "name=^fwd-" -q; } 2>/dev/null | awk 'NF && !seen[$$1]++' ); \
+	  if [ -n "$$ids" ]; then echo "$$ids" | xargs -r docker rm -f 2>/dev/null || true; fi
 	@# Docker Socket Proxy コンテナ停止
 	@docker rm -f $(DOCKER_PROXY_CONTAINER) 2>/dev/null || true
 	@# ボリューム削除

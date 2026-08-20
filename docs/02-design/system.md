@@ -1,7 +1,7 @@
 ---
 id: 02-system
-version: 2.16.0
-updated: 2026-08-19
+version: 2.17.0
+updated: 2026-08-20
 source:
   - docs/01-requirements/functional.md
   - docs/01-requirements/non-functional.md
@@ -220,6 +220,8 @@ verified:
 | FR-env-01-32 | MOD-cli-reset | 完全 | DSN-env-04 |
 | FR-env-01-33 | MOD-cli-reset | 完全 | -(設計判断を要さない) |
 | FR-env-01-34 | MOD-cli-stop | 完全 | -(設計判断を要さない)。**`reset` 側の担い手は `FR-env-01-26` の根拠欄と同じ** |
+| FR-env-01-35 | MOD-cli-list | 完全 | DSN-env-01 |
+| FR-env-01-36 | MOD-cli-list | 完全 | -(設計判断を要さない) |
 | FR-env-02-1 | MOD-entrypoint | 完全 | -(設計判断を要さない) |
 | FR-env-02-2 | MOD-cli-start | 完全 | -(設計判断を要さない) |
 | FR-env-02-3 | MOD-cli-start | 完全 | -(設計判断を要さない) |
