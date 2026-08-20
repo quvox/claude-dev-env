@@ -253,9 +253,18 @@ status:
 	@# 除く（CTR-cli-container「稼働中セッションの一覧の列挙」。claude-dev list と同じ集合）。
 	@# イメージだけでは latest が別のイメージ ID を指した後に、それ以前に起動したコンテナを
 	@# 数え落とす（docs/issues/046）。docker はキーの違うフィルタを論理積にするので2回に分ける。
-	@ids=$$( { docker ps --filter "label=claude-dev.managed=1" --format '{{.ID}} {{.Names}}'; \
-	           docker ps --filter "ancestor=$(IMG_CLAUDE)" --filter "ancestor=$(IMG_CLAUDE_VNC)" --format '{{.ID}} {{.Names}}'; } 2>/dev/null \
-	         | awk 'NF && $$2 !~ /^fwd-/ && !seen[$$1]++ { print $$1 }' ); \
+	@# **問い合わせの失敗を 0 件と同一視しない**（同契約「エラーケース」。経緯は
+	@# docs/histories/2026-08-20-fix-make-status-hides-docker-query-failure.md）。
+	@# パイプへ直接つなぐと代入が末尾の awk の終了状態を取り docker ps の非ゼロが消えるので、
+	@# 2回の問い合わせを別々の変数へ受けてから畳む（claude-dev list の _q_failed と同じ形）。
+	@q_failed=0; \
+	  by_label=$$(docker ps --filter "label=claude-dev.managed=1" --format '{{.ID}} {{.Names}}' 2>/dev/null) || q_failed=1; \
+	  by_image=$$(docker ps --filter "ancestor=$(IMG_CLAUDE)" --filter "ancestor=$(IMG_CLAUDE_VNC)" --format '{{.ID}} {{.Names}}' 2>/dev/null) || q_failed=1; \
+	  if [ "$$q_failed" -eq 1 ]; then \
+	      echo "⚠️  Docker への問い合わせが失敗したため、この一覧は不完全である可能性があります。"; \
+	  fi; \
+	  ids=$$(printf '%s\n%s\n' "$$by_label" "$$by_image" \
+	         | awk 'NF && $$2 !~ /^fwd-/ && !seen[$$1]++ { print $$1 }'); \
 	  if [ -n "$$ids" ]; then \
 	      args=""; for i in $$ids; do args="$$args --filter id=$$i"; done; \
 	      docker ps $$args --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" 2>/dev/null || true; \

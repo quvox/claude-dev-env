@@ -1,6 +1,6 @@
 ---
 id: makefile
-version: 1.3.0
+version: 1.4.0
 updated: 2026-08-20
 scope: MOD-makefile
 source:
@@ -47,7 +47,7 @@ verified:
 | MODULE-makefile-login | - | 未検証(テスト未実装) |
 | MODULE-makefile-network | - | 未検証(テスト未実装) |
 | MODULE-makefile-setup | - | 未検証(テスト未実装) |
-| MODULE-makefile-status | E2E-01(実機確認手順 手順10-3) | 実装済み |
+| MODULE-makefile-status | E2E-01(実機確認手順 手順10-3。Docker が答えないときの表示は手順10-5) | 実装済み |
 | MODULE-makefile-uninstall | - | 未検証(テスト未実装) |
 | MODULE-makefile-update-claude | - | 未検証(テスト未実装) |
 | MODULE-makefile-upgrade | - | 未検証(テスト未実装) |
