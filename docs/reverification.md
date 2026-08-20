@@ -112,12 +112,11 @@
 | issue | 055-modify-ac17-demands-listing-stopped-unlabeled-containers | 2026-08-05 | - | FR-env-03, D0-env-08, CTR-cli-container, MODULE-cli-logout, MODULE-cli-reset, docs/02-design/contracts/cli-container.md | 判定不能: closes_whenが空 |
 | issue | 094-modify-user-visible-values-are-stated-verbatim-in-two-layers | 2026-08-08 | - | FR-env-12-5, FR-orch-03-3, FR-env-01-18, FR-env-01-16, D0-dist-04, D0-env-06, DSN-dist-02, CTR-cli-orchestrator, CTR-cli-container, docs/02-design/logging.md | 判定不能: closes_whenが空 |
 | issue | 097-modify-cli-help-dispatch-branch-is-absent-from-the-feature-table | 2026-08-11 | 人間が `MODULE-cli-help` を機能表に加えるか加えないかを回答し、その回答が docs/03-impl/features.md に反映されたとき(加える場合は docs/03-impl/relations/MODULE-cli-help.md と 02-design/relations.md の PLAN-* まで反映されたとき) | docs/03-impl/features.md, MODULE-makefile-help, docs/01-requirements/usecases.md | - |
-| issue | 102-bug-colabtmux-refuses-to-launch-codex-on-a-nonzero-bwrap-probe | 2026-08-19 | claude-dev コンテナ内の colabtmux から codex を起動でき、「bwrap が非ゼロのため codex を起こせず」の報告が出ないこと。あわせて、同じコンテナで `codex sandbox --enable use_legacy_landlock -- /bin/true` が終了コード 0 を返し、`codex exec` が起こすシェルコマンドが成功することを実機で確認できること | FR-env-12, AC-06, D0-dist-04, DSN-dist-02, MODULE-entrypoint-claude, docs/02-design/environments.md | - |
 | issue | 109-bug-make-status-treats-a-failed-docker-query-as-zero-sessions | 2026-08-20 | Docker への2回の問い合わせのどちらかが非ゼロで終わったとき、`make status` が「一覧が不完全である可能性」を1行表示する(`claude-dev list` と同じ扱いになる)。確認は `docker` を PATH から外すか応答しない `DOCKER_HOST` を指して `make status` を実行し、「(実行中のセッションはありません)」だけが出ないことを見る | CTR-cli-container, MODULE-makefile-status, FR-env-01-35 | - |
 
 ### 集計
 
 - 棚上げ: 7(最古の記録日 2026-08-02)
-- issue: 8(最古の記録日 2026-08-03)
+- issue: 7(最古の記録日 2026-08-03)
 - 条件が読めない(判定不能): 5
 - 残務: 41 行(最古 2026-08-10)
