@@ -1,12 +1,12 @@
 ---
 slug: fix-make-status-hides-docker-query-failure
-state: building
+state: awaiting-verify
 critical: false
 origin: derived
 issue: docs/issues/109-bug-make-status-treats-a-failed-docker-query-as-zero-sessions.md
 started: 2026-08-20T12:58:59+09:00
-updated: 2026-08-20T12:58:59+09:00
-commit: -
+updated: 2026-08-20T13:12:31+09:00
+commit: 16d3b40
 summary: make status が docker への問い合わせの失敗を0件と同一視する欠陥を直し、claude-dev list と同じ警告行を出す
 ---
 
