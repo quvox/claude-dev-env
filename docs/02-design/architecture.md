@@ -1,7 +1,7 @@
 ---
 id: architecture
-version: 1.7.0
-updated: 2026-08-19
+version: 1.7.1
+updated: 2026-08-20
 source:
   - docs/01-requirements/functional.md
   - docs/01-requirements/non-functional.md
@@ -9,10 +9,10 @@ source:
 summary: 全体構成・データモデル・インフラ設計と、アーキテクチャ級の設計判断(DSN-arch / auth / dist)
 keywords: [アーキテクチャ, 全体構成, 設計判断, DSN]
 verified:
-  at: 2026-08-19
-  version: 1.7.0
+  at: 2026-08-20
+  version: 1.7.1
   against:
-    - {doc: docs/01-requirements/functional.md, version: 1.19.0}
+    - {doc: docs/01-requirements/functional.md, version: 1.22.0}
     - {doc: docs/01-requirements/non-functional.md, version: 1.8.0}
     - {doc: docs/01-requirements/system.md, version: 1.3.0}
 ---
@@ -189,7 +189,7 @@ sequenceDiagram
   1つも持たない**(状態はホストの Docker ソケットの側にある)。
   **`D0-env-08` 項2 が決めているのは「残すか残さないか」だけで、実現方式はこの層が決める** —
   この分担にした理由は、00 が動詞を持つと実装を変えるたびに 00 が古くなるからである
-  (2026-08-07 の人間の裁定。経緯は `docs/issues/092` と `docs/histories/` が持つ)。
+  (2026-08-07 の人間の裁定。経緯は `docs/histories/` が持つ)。
 - 却下した案:
   - **`docker stop` に留める** — 停止済みコンテナが固定名を占有し、次に必要になったときの
     作り直しが名前の衝突で失敗する。作り直しの側に「停止済みなら消してから作る」分岐を足せば

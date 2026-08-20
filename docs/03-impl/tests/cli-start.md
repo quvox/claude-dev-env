@@ -9,11 +9,11 @@ source:
 summary: MOD-cli-start(開発コンテナの起動)の受入基準⇄テスト対応
 keywords: [テスト]
 verified:
-  at: 2026-08-19
-  version: 1.5.1
+  at: 2026-08-20
+  version: 1.7.0
   against:
-    - {doc: docs/01-requirements/functional.md, version: 1.19.0}
-    - {doc: docs/02-design/system.md, version: 2.15.0}
+    - {doc: docs/01-requirements/functional.md, version: 1.22.0}
+    - {doc: docs/02-design/system.md, version: 2.19.0}
 ---
 
 # MOD-cli-start のテスト対応

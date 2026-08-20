@@ -22,7 +22,12 @@ summary: 既定値・受理する文字集合・設定の鍵と値の組が 2 �
 **鍵や環境変数の「名前」が複数層に現れるのは本 issue の対象ではない。** 名前は外部インターフェース
 そのものであり、01 が約束し 02 が契約として列挙するのは正しい。問題になるのは**値**である。
 
-## 同型の全件(5 件 / のべ 15 箇所)
+## 同型の全件(4 件 / のべ 13 箇所)
+
+**2026-08-20 の F2 が旧 #2(orchestrator の設定 6 キーの既定値)を落とした**: 指していた
+`docs/02-design/contracts/cli-orchestrator.md` と `FR-orch-03-3` はどちらも 2026-08-08 の
+オーケストレーター廃止で消えており、重複そのものが存在しない。**残る番号は動かさない**
+(本文が `#5` を名指しで参照しているため)。
 
 走査手順(再実行できる形で残す):
 
@@ -68,7 +73,6 @@ PY
 | # | 何が重複しているか | 層と `path:line` | 重大度 |
 |---|---|---|---|
 | 1 | **Codex サンドボックスの既定 3 鍵と値**(`sandbox_mode = "danger-full-access"` / `approval_policy = "never"` / `[features] use_legacy_landlock = true`)と「書かれていない鍵だけを追記する」規則 | **00** `docs/00-requests/decisions/dist.md:85`(`D0-dist-04` 項6)/ **01** `docs/01-requirements/functional.md:343`(`FR-env-12-5`)/ **02** `docs/02-design/architecture.md:236`(`DSN-dist-02`) | 高(**3層**) |
-| 2 | orchestrator の設定 6 キーの**既定値**(`5` / `3` / `10` / `2` / `10` / `merge`) | **01** `docs/01-requirements/functional.md:403`(`FR-orch-03-3`)/ **02** `docs/02-design/contracts/cli-orchestrator.md:42`〜`:47`(受け渡す設定の表の「既定値」欄) | 中 |
 | 3 | `stop <name>` が受理する**文字集合** `[A-Za-z0-9._-]` | **01** `docs/01-requirements/functional.md:99`(`FR-env-01-18`)/ **02** `docs/02-design/system.md:522`(SCR-01 の型欄)・`docs/02-design/logging.md:95`・`docs/02-design/contracts/cli-container.md:130`(規則 B)・同「ロックキーとして使える文字」 | 中(**5箇所**) |
 | 4 | 排他待ちで中止したときに出す**保持者の表し方**(プロセス ID) | **02 の内部で矛盾**: `docs/02-design/contracts/cli-container.md:125`(エラーケース。プロセス ID を固定)/ 同「排他(ロックキー)」の末尾(「**保持者をどう記録するかは実装手段の選択であり `D0-env-09` で AI に委任している**」と書く)/ `docs/02-design/logging.md:80`(プロセス ID を必須の出力項目にする) | 中 |
 | 5 | **コンテナ内動作の判定マーカーの値** `container` = `docker` | **00** `docs/00-requests/decisions/env.md:139`(`D0-env-06` の「内容」欄が値そのものを書く)/ **02** `docs/02-design/contracts/cli-container.md:65`(「渡す環境変数」表の `container` 行。型・値域も既定値も `docker`)。**`D0-env-06` は同じ項目の末尾で「変数の名前と値の形式は 02 の契約 `CTR-cli-container` が定める」と書いており、1 つの決定事項の中で所有者が 2 つになっている** | 中 |

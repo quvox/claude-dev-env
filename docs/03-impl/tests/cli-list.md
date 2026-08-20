@@ -9,11 +9,11 @@ source:
 summary: MOD-cli-list(セッション一覧の表示)の受入基準⇄テスト対応
 keywords: [テスト]
 verified:
-  at: 2026-08-12
-  version: 1.1.1
+  at: 2026-08-20
+  version: 1.3.0
   against:
-    - {doc: docs/01-requirements/functional.md, version: 1.16.0}
-    - {doc: docs/02-design/system.md, version: 2.12.0}
+    - {doc: docs/01-requirements/functional.md, version: 1.22.0}
+    - {doc: docs/02-design/system.md, version: 2.19.0}
 ---
 
 # MOD-cli-list のテスト対応
