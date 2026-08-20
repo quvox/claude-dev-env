@@ -1,6 +1,6 @@
 ---
 id: environments
-version: 1.6.0
+version: 1.7.0
 updated: 2026-08-20
 source:
   - docs/01-requirements/system.md
@@ -174,13 +174,18 @@ confinement を緩めずに動く。**3鍵目(`[features] use_legacy_landlock = 
 `--enable use_legacy_landlock` を明示しても同じ結果になる(旗の経路の回帰確認)。
 `codex doctor` はこの故障を検知しない。確認の実体は `scripts/e2e6-codex.sh` が持つ。
 
-**監査での禁止事項**: 監査(`docs` / `readiness` / `diff`)では承認・サンドボックスを迂回する
-フラグを使わない(read-only + landlock で足りる)。**QA レーンのみ例外**として
-`-c sandbox_mode="danger-full-access"` で走らせる(landlock 経路では書き込みが成立しないため。
+**監査と QA が走るサンドボックスの強度**: どちらも既定3鍵のまま走る。既定3鍵は
+`sandbox_mode = "danger-full-access"` / `approval_policy = "never"` を含むので、**監査も QA も
+既定でサンドボックスと承認を通らない**(`D0-dist-04` 項6 / `FR-env-12-5` / `DSN-dist-02`。
 「コンテナ自体が隔離空間であり、これ以上の隔離は不要」という `D0-sec-06` の一貫適用。
-2026-07-31 の人間判断)。QA の他の制約(専用シード・ブラウザ排他・テスト成果物ディレクトリ以外を
-書かない・終了時にリセット)はそのまま守る。git 未初期化のリポジトリでは `--skip-git-repo-check`
-を付ける(これは迂回ではない)。
+2026-07-31 の人間判断)。**QA の `-c sandbox_mode="danger-full-access"` は例外ではなく既定の
+再掲である** — 付けても付けなくても結果は変わらない。読み取り専用に閉じて走らせたいときだけ
+`-c sandbox_mode=read-only` を明示する(既定3鍵が置かれていれば landlock 経路で成立する。
+上の「サンドボックス疎通確認」がその経路の確認である)。`workspace-write` はこのコンテナでは
+成立しないので使わない(`FR-env-12-9`。下の表の該当行が実測値を持つ)。QA の他の制約
+(専用シード・ブラウザ排他・テスト成果物ディレクトリ以外を書かない・終了時にリセット)は
+そのまま守る。git 未初期化のリポジトリでは `--skip-git-repo-check` を付ける(これは
+サンドボックスの迂回ではない)。
 
 **イメージ更新時の注意**: `use_legacy_landlock` は codex 0.148.0 時点でも deprecated のままで、
 撤去されてはいない(2026-08-20 に `codex features list` で実測)。同梱バージョンはビルド時に

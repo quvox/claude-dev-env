@@ -1,6 +1,6 @@
 ---
 id: 02-system
-version: 2.18.0
+version: 2.19.0
 updated: 2026-08-20
 source:
   - docs/01-requirements/functional.md
@@ -85,7 +85,9 @@ verified:
 (どのモジュールにも機能を足さないため)。
 **2026-08-19 に `FR-env-07-13`(本システムが使う環境変数は、コンテナ内で起動したどのプロセスからも
 参照できること)の新設にあたって7件すべてを読み直し、いずれも継続と判断した**: この条項の担い手は
-既存の `MOD-entrypoint`(コンテナ起動時の初期化)であり、新しい入口も新しいモジュールも増えない。
+既存の `MOD-entrypoint`(コンテナ起動時の初期化)と既存の `MOD-cli-start`(稼働中のコンテナへ
+`docker exec` してプロセスの木を起こす再接続経路)であり、新しい入口も新しいモジュールも増えない
+(2026-08-20 に更新。`CTR-cli-container` が義務の主語を後者へ明示的に広げたため — 結論は継続)。
 `DSN-mod-06` / `DSN-mod-07` が扱うモジュールあたりの機能数の目安にも影響しない。
 
 ### DSN-mod-01 モジュールは「利用者から見た入口」と1対1にする
@@ -294,7 +296,7 @@ verified:
 | FR-env-07-10 | MOD-docker-proxy | 完全 | -(設計判断を要さない) |
 | FR-env-07-11 | MOD-docker-proxy | 完全 | DSN-env-04 |
 | FR-env-07-12 | MOD-docker-proxy | 完全 | DSN-dp-01(判定できない入力は通す。`DSN-env-04` がこの倒し方を採る) |
-| FR-env-07-13 | MOD-entrypoint | 完全 | -(設計判断を要さない。到達の義務は `CTR-cli-container` の「渡す環境変数」が定める。**主担当が `MOD-cli-start` ではなく `MOD-entrypoint` なのは、変数を渡すのはホスト CLI だが、コンテナ内でプロセスの木を起こすのは entrypoint だからである**) |
+| FR-env-07-13 | MOD-entrypoint | 完全 | -(設計判断を要さない。到達の義務は `CTR-cli-container` の「渡す環境変数」が定める。主担当を `MOD-entrypoint` に置くのは、コンテナ起動時にこの状態を作るのが entrypoint だからである。**ただし義務の主語は entrypoint に限らない** — 稼働中のコンテナへ `docker exec` してプロセスの木を起こす `MOD-cli-start` の再接続経路も同じ義務を負う(`CTR-cli-container`「コンテナ内でプロセスの木を新しく起こす側」。条項が**起動経路を問わない**と言っている以上、起こした側の一方に限れない)) |
 | FR-env-08-1 | MOD-cli-start | 完全 | -(設計判断を要さない) |
 | FR-env-08-2 | MOD-entrypoint | 完全 | -(設計判断を要さない) |
 | FR-env-08-3 | MOD-entrypoint | 完全 | -(設計判断を要さない) |
@@ -355,7 +357,7 @@ verified:
 | FR-env-14-8 | MOD-cli-start | 完全 | DSN-env-05(予約する環境変数名の集合は `CTR-cli-container` が持つ) |
 | FR-env-14-9 | MOD-cli-start | 完全 | DSN-env-05 |
 | FR-env-14-10 | MOD-cli-start | 完全 | -(設計判断を要さない) |
-| FR-env-14-11 | MOD-entrypoint | 完全 | -(設計判断を要さない。到達の義務は `CTR-cli-container` の「渡す環境変数」が定める。**主担当が `MOD-cli-start` ではなく `MOD-entrypoint` なのは、組を渡すのはホスト CLI だが、コンテナ内でプロセスの木を起こすのは entrypoint だからである**) |
+| FR-env-14-11 | MOD-entrypoint | 完全 | -(設計判断を要さない。到達の義務は `CTR-cli-container` の「渡す環境変数」が定める。主担当の置き方と、義務の主語が entrypoint に限らない理由は `FR-env-07-13` の根拠欄と同じ(利用者が書いた組も、この義務の充足に関して同じ扱いである)) |
 | NFR-perf-01 | (モジュール外)`03-impl/environments/images.md` / `03-impl/infra/local/ghcr.md` | 完全 | DSN-dist-01 |
 | NFR-perf-02 | (モジュール外)`03-impl/environments/images.md` / `03-impl/infra/local/ghcr.md` | 完全 | DSN-dist-01 |
 | NFR-avail-02 | MOD-cli-start, MOD-entrypoint | 完全 | -(設計判断を要さない) |
@@ -464,12 +466,6 @@ verified:
 | SCR-01 | cli-commands | コンテナ・認証・ポート・鍵の操作 | UC-01, UC-02, UC-03, UC-06 |
 
 **`SCR-02`〜`SCR-06`(オーケストレーターの TUI)は 2026-08-08 に廃止した。番号は再利用しない。**
-
-<!-- 改名する子見出しは、親を `sections` に載せたまま親本文へ入れ子にすると
-     `compose-changeset.py` の merge_existing が「親本文経由の新規子見出し」として拒否するため、
-     ここへ出してある。反映位置は frontmatter の anchors が決める。
-     `.claude/directions/change-set.md` §2「Renaming is an explicit old-child deletes: plus
-     that independently anchored new child」。 -->
 
 ### 画面ごとの項目と状態
 
