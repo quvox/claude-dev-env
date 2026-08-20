@@ -1,12 +1,12 @@
 ---
 slug: fix-start-auxiliary-halts-and-tmux-runtime-env
-state: building
+state: awaiting-verify
 critical: true
 origin: derived
-issue: docs/issues/106-bug-two-auxiliary-host-asset-steps-halt-start-under-set-e.md, docs/issues/108-bug-tmux-session-recreated-by-cli-misses-entrypoint-runtime-env.md
+issue: docs/issues/106-bug-two-auxiliary-host-asset-steps-halt-start-under-set-e.md, docs/issues/108-bug-tmux-session-recreated-by-cli-misses-entrypoint-runtime-env.md(どちらも解消して削除。経緯は docs/histories/2026-08-20-fix-start-auxiliary-halts-and-tmux-runtime-env.md)
 started: 2026-08-20T09:56:00+09:00
-updated: 2026-08-20T09:56:00+09:00
-commit: ->
+updated: 2026-08-20T11:20:00+09:00
+commit: 2217c844129d6164458786a00640e1fe47fd2800
 summary: start の補助処理2つを握って起動を止めないようにし、CLI が作り直す tmux の窓へ entrypoint の実行時の値を届ける
 ---
 
@@ -43,7 +43,7 @@ summary: start の補助処理2つを握って起動を止めないようにし�
 - 触ったモジュールのテスト: **自動テストは存在しない**(`MODULE-cli-start` / `MODULE-entrypoint-claude`
   はどちらも `tests: なし(未実装)`。シェル実装のため自動テストランナーが無く、実機確認で代替する
   方針 — `DSN-test-01` / `SR-32`)。代わりに**実イメージで確認した**:
-  `docker exec -u <user> <name> sh -c '[ -f /etc/claude-dev/runtime.env ] && . /etc/claude-dev/runtime.env; exec tmux new-session -d -s main'`
+  `docker exec -u t-kubo cdx-rt-test sh -c '[ -f /etc/claude-dev/runtime.env ] && . /etc/claude-dev/runtime.env; exec tmux new-session -d -s main'`
   → 受け渡しファイルが**空のとき**も `main` セッションが立ち、窓の中は
   `DOCKER_HOST=tcp://claude-dev-docker-proxy:2375` / `COMPOSE_PROJECT_NAME=cdx-rt-abc123`
   (コンテナ作成時の env がそのまま継がれている)。**VM モード相当の行を書いた状態**では同じ窓が
