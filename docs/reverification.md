@@ -86,7 +86,7 @@
 
 ## 鮮度確認の候補(棚上げ・issue)
 
-記録した時点の事実であり、今も成立しているかは機械には決められない。**ここは判定結果ではなく、AI が内容を読むべき対象の一覧である**(発火の判定は /doc-check A2 と /task-new §1-4・§2★)。
+記録した時点の事実であり、今も成立しているかは機械には決められない。**ここは判定結果ではなく、AI が内容を読むべき対象の一覧である**(発火の判定は /verify-docs A2 と /build §1)。
 記録日は起票・決定の日であって最終確認日ではない。経過は読む側が記録日から出す。
 
 | 種別 | ID | 記録日 | 解消・完了の条件 | 関連 | 解析 |
@@ -103,9 +103,6 @@
 | issue | 028-modify-name-uniqueness-does-not-satisfy-nfr-scale-01 | 2026-08-03 | - | NFR-scale-01, MODULE-cli-start, MODULE-cli-forward, MODULE-cli-stop, CTR-cli-container | 判定不能: closes_whenが空 |
 | issue | 046-bug-list-and-make-targets-undercount-containers-from-older-images | 2026-08-04 | - | MODULE-cli-list, MODULE-makefile-status, MODULE-makefile-clean, FR-env-01, docs/issues/045 | 判定不能: closes_whenが空 |
 | issue | 055-modify-ac17-demands-listing-stopped-unlabeled-containers | 2026-08-05 | - | FR-env-03, D0-env-08, CTR-cli-container, MODULE-cli-logout, MODULE-cli-reset, docs/02-design/contracts/cli-container.md | 判定不能: closes_whenが空 |
-| issue | 076-bug-check-changeset-treats-staged-callgraphs-as-change-instructions | 2026-08-07 | - | .claude/scripts/check-changeset.py, .claude/scripts/close-task.py, .claude/directions/change-set.md, .claude/directions/callgraphs.md | 判定不能: closes_whenが空 |
-| issue | 079-modify-cs6-cs7-are-permanently-unchecked-with-no-recorded-decision | 2026-08-07 | - | .claude/scripts/changeset-invariants.json, .claude/directions/change-set.md, docs/pendings.md | 判定不能: closes_whenが空 |
-| issue | 081-bug-check-changeset-aborts-on-a-non-utf8-file-in-the-task-directory | 2026-08-07 | - | .claude/scripts/check-changeset.py, .claude/directions/change-set.md, docs/issues/076 | 判定不能: closes_whenが空 |
 | issue | 094-modify-user-visible-values-are-stated-verbatim-in-two-layers | 2026-08-08 | - | FR-env-12-5, FR-orch-03-3, FR-env-01-18, FR-env-01-16, D0-dist-04, D0-env-06, DSN-dist-02, CTR-cli-orchestrator, CTR-cli-container, docs/02-design/logging.md | 判定不能: closes_whenが空 |
 | issue | 097-modify-cli-help-dispatch-branch-is-absent-from-the-feature-table | 2026-08-11 | 人間が `MODULE-cli-help` を機能表に加えるか加えないかを回答し、その回答が docs/03-impl/features.md に反映されたとき(加える場合は docs/03-impl/relations/MODULE-cli-help.md と 02-design/relations.md の PLAN-* まで反映されたとき) | docs/03-impl/features.md, MODULE-makefile-help, docs/01-requirements/usecases.md | - |
 | issue | 102-bug-colabtmux-refuses-to-launch-codex-on-a-nonzero-bwrap-probe | 2026-08-19 | claude-dev コンテナ内の colabtmux から codex を起動でき、「bwrap が非ゼロのため codex を起こせず」の報告が出ないこと。あわせて、同じコンテナで `codex sandbox --enable use_legacy_landlock -- /bin/true` が終了コード 0 を返し、`codex exec` が起こすシェルコマンドが成功することを実機で確認できること | FR-env-12, AC-06, D0-dist-04, DSN-dist-02, MODULE-entrypoint-claude, docs/02-design/environments.md | - |
@@ -115,6 +112,6 @@
 ### 集計
 
 - 棚上げ: 7(最古の記録日 2026-08-02)
-- issue: 13(最古の記録日 2026-08-03)
-- 条件が読めない(判定不能): 9
-- 残務: 42 行(最古 2026-08-10)
+- issue: 10(最古の記録日 2026-08-03)
+- 条件が読めない(判定不能): 6
+- 残務: 35 行(最古 2026-08-10)
