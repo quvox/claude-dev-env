@@ -2,8 +2,8 @@
 id: shell
 language: shell
 tier: 3
-symbols: 178
-edges: 273
+symbols: 179
+edges: 274
 endpoints: 46
 unresolved: 3
 ---
@@ -222,7 +222,8 @@ unresolved: 3
 | `scripts/dood-portsync.sh::published_ports` | function | private | - | `scripts/dood-portsync.sh::main`, `scripts/dood-portsync.sh::sync_once` |
 | `scripts/dood-portsync.sh::sync_once` | function | private | `scripts/dood-portsync.sh::is_excluded`, `scripts/dood-portsync.sh::local_listening`, `scripts/dood-portsync.sh::log`, `scripts/dood-portsync.sh::published_ports` | `scripts/dood-portsync.sh::main`, `scripts/dood-portsync.sh::main#--loop` |
 | `scripts/entrypoint-claude.sh::ensure_codex_config` | function | private | - | `scripts/entrypoint-claude.sh::main` |
-| `scripts/entrypoint-claude.sh::main` | handler | private | `scripts/entrypoint-claude.sh::ensure_codex_config` | (エントリポイント) |
+| `scripts/entrypoint-claude.sh::main` | handler | private | `scripts/entrypoint-claude.sh::ensure_codex_config`, `scripts/entrypoint-claude.sh::record_runtime_env` | (エントリポイント) |
+| `scripts/entrypoint-claude.sh::record_runtime_env` | function | private | - | `scripts/entrypoint-claude.sh::main` |
 | `scripts/init-firewall-claude.sh::main` | handler | private | - | (エントリポイント) |
 | `scripts/vm-healthd.sh::cpu_ticks` | function | private | - | `scripts/vm-healthd.sh::evaluate_once` |
 | `scripts/vm-healthd.sh::evaluate_once` | function | private | `scripts/vm-healthd.sh::cpu_ticks`, `scripts/vm-healthd.sh::log`, `scripts/vm-healthd.sh::smp_of`, `scripts/vm-healthd.sh::tmux_clear`, `scripts/vm-healthd.sh::tmux_flash`, `scripts/vm-healthd.sh::tmux_set`, `scripts/vm-healthd.sh::write_health` | `scripts/vm-healthd.sh::main`, `scripts/vm-healthd.sh::main#--loop` |

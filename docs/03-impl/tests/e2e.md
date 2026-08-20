@@ -1,6 +1,6 @@
 ---
 id: e2e
-version: 1.14.0
+version: 1.15.0
 updated: 2026-08-20
 scope: E2E
 source:
@@ -592,7 +592,7 @@ verified:
       **不合格の条件**: VM モードで `tcp://claude-dev-docker-proxy:2375`(中継先)が返る、
       または macOS で空が返る(= 窓によって値が2つ同居している状態)。
       **`docker exec` で確かめて済ませないこと** — 手順9-6 と同じ理由である。
-   9. **受け渡しファイルが無い構成でも窓が立つこと**(退行の確認)。VM モードでない Linux で
+   9. **受け渡しファイルの中身が空の構成でも窓が立つこと**(退行の確認。**ファイル自体は entrypoint が無条件に作るので「無い構成」は存在しない** — `scripts/entrypoint-claude.sh:27`)。VM モードでない Linux で
       手順9-8 の 1〜2 を行い、窓の中で `printenv DOCKER_HOST` を実行する。
       **期待する結果**: 中継先(`tcp://claude-dev-docker-proxy:2375`)が返る
       (= コンテナ作成時の env がそのまま継がれている)。

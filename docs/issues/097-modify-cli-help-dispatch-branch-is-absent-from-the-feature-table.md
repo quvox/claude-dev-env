@@ -19,8 +19,8 @@ summary: CLI の `help|*)` ディスパッチ分岐(ヘルプ表示と未知サ�
 `claude-dev` / `claude-dev-mac` の `main` の case 文に `help|*)` 分岐が実在し、
 ヘルプ本文を表示する。
 
-- `claude-dev:2183` — `help|*)` (直前のコメントは `# ヘルプ`)
-- `claude-dev-mac:2207` — 同じ分岐
+- `claude-dev:2651` — `help|*)` (直前のコメントは `# ヘルプ`)
+- `claude-dev-mac:2693` — 同じ分岐
 
 しかし `docs/03-impl/features.md` の「機能一覧」表に対応する行が無く、
 `docs/03-impl/relations/MODULE-cli-help.md` も存在しない。

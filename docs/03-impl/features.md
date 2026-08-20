@@ -131,5 +131,5 @@ keywords: [機能表, 境界, claude-dev, Makefile, docker-proxy]
 |---|---|
 | `claude-dev::main` / `claude-dev-mac::main` | ディスパッチャ本体。サブコマンドのハンドラを入口にしているので本体には辺が立たない(抽出の構造上そうなる) |
 | `docker-proxy/main.go::cachedResolveProjectDir` / `lookupProjectDir` | `var resolveProjectDir = cachedResolveProjectDir`(`docker-proxy/main.go:76`)の関数値経由。Tier 2 の静的解決の限界 |
-| `claude-dev::_destructive_done` / `claude-dev-mac::_destructive_done` | 到達する。呼び出し元 `destructive_deleted` / `destructive_failed` / `destructive_skipped`(`claude-dev:650-653`)が**1行形式の関数定義**で、Tier 3(正規表現)抽出器がその本体を走査しないため辺が立たない。`destructive_skipped` 自体は `logout` の本体(`claude-dev:1042`)から呼ばれる。削除しない |
-| `claude-dev::_release_all_locks` / `claude-dev-mac::_release_all_locks` | 到達する。呼び出しは `trap '_release_all_locks' EXIT` / `trap '_release_all_locks; exit 130' INT TERM`(`claude-dev:451-452`)の**シグナルハンドラ文字列**経由で、静的抽出では見えない。削除しない |
+| `claude-dev::_destructive_done` / `claude-dev-mac::_destructive_done` | 到達する。呼び出し元 `destructive_deleted` / `destructive_failed` / `destructive_skipped`(`claude-dev:805`-`:808`)が**1行形式の関数定義**で、Tier 3(正規表現)抽出器がその本体を走査しないため辺が立たない。`destructive_skipped` 自体は `logout` の本体(`claude-dev:1293`)から呼ばれる。削除しない |
+| `claude-dev::_release_all_locks` / `claude-dev-mac::_release_all_locks` | 到達する。呼び出しは `trap '_release_all_locks' EXIT` / `trap '_release_all_locks; exit 130' INT TERM`(`claude-dev:601`-`:602`)の**シグナルハンドラ文字列**経由で、静的抽出では見えない。削除しない |
