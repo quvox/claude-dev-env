@@ -1,12 +1,12 @@
 ---
 slug: cleanup-retired-changeset-kit-records
-state: building
+state: awaiting-verify
 critical: false
 origin: human-report
 issue: なし
 started: 2026-08-20T09:19:37+09:00
-updated: 2026-08-20T09:19:37+09:00
-commit: -
+updated: 2026-08-20T09:38:00+09:00
+commit: 1b924ba194d50490b7f2784828745990cea09f47
 summary: 規約刷新で廃止された変更指示系スクリプト・規範に紐づくキットパッチ・残務・issue を後始末する
 ---
 
