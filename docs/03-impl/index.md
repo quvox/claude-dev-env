@@ -9,9 +9,9 @@ summary: 03-impl 層の目次。機能間連携仕様書群の代表として層
 keywords: [目次]
 verified:
   at: 2026-08-20
-  version: 1.34.0
+  version: 1.35.1
   against:
-    - {doc: docs/02-design/system.md, version: 2.17.0}
+    - {doc: docs/02-design/system.md, version: 2.18.0}
     - {doc: docs/02-design/relations.md, version: 1.12.0}
 ---
 
