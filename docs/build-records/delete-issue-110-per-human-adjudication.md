@@ -1,12 +1,12 @@
 ---
 slug: delete-issue-110-per-human-adjudication
-state: building
+state: awaiting-verify
 critical: false
 origin: human-report
 issue: docs/issues/110-bug-bundled-arm64-binary-is-a-darwin-build.md
 started: 2026-08-20T14:02:52+09:00
-updated: 2026-08-20T14:02:52+09:00
-commit: -
+updated: 2026-08-20T14:22:00+09:00
+commit: 5885f32bdab263c9238a205ce214eedec9888618
 summary: 人間の裁定により issue 110 を削除し(closes_when は未充足)、110 を参照している 03 層の集計文と生成索引を整合させる
 ---
 
