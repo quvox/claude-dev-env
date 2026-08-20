@@ -1,11 +1,11 @@
 ---
 slug: delete-issue-102-per-human-adjudication
-state: awaiting-verify
+state: verified
 critical: false
 origin: human-report
 issue: docs/issues/102-bug-colabtmux-refuses-to-launch-codex-on-a-nonzero-bwrap-probe.md
 started: 2026-08-20T12:44:30+09:00
-updated: 2026-08-20T13:02:00+09:00
+updated: 2026-08-20T05:43:36+00:00
 commit: 75bd636962c2d77573ab13f6c702129cdb6ec1f7
 summary: 人間の裁定により issue 102 を削除し、102 を参照している索引・03 層の集計・残務行を整合させる
 ---

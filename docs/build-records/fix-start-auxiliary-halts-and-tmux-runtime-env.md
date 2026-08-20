@@ -1,11 +1,11 @@
 ---
 slug: fix-start-auxiliary-halts-and-tmux-runtime-env
-state: awaiting-verify
+state: verified
 critical: true
 origin: derived
 issue: docs/issues/106-bug-two-auxiliary-host-asset-steps-halt-start-under-set-e.md, docs/issues/108-bug-tmux-session-recreated-by-cli-misses-entrypoint-runtime-env.md(どちらも解消して削除。経緯は docs/histories/2026-08-20-fix-start-auxiliary-halts-and-tmux-runtime-env.md)
 started: 2026-08-20T09:56:00+09:00
-updated: 2026-08-20T11:20:00+09:00
+updated: 2026-08-20T05:43:36+00:00
 commit: 2217c844129d6164458786a00640e1fe47fd2800
 summary: start の補助処理2つを握って起動を止めないようにし、CLI が作り直す tmux の窓へ entrypoint の実行時の値を届ける
 ---

@@ -1,11 +1,11 @@
 ---
 slug: fix-session-list-undercount
-state: awaiting-verify
+state: verified
 critical: true
 origin: derived
 issue: docs/issues/046-bug-list-and-make-targets-undercount-containers-from-older-images.md
 started: 2026-08-20T09:23:05+09:00
-updated: 2026-08-20T10:05:00+09:00
+updated: 2026-08-20T05:43:36+00:00
 commit: 0761865
 summary: list / make status / make clean の Claude コンテナ列挙を、イメージ由来から「管理ラベル ∪ イメージ ∪ 固定接頭辞」へ改める
 ---

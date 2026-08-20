@@ -1,11 +1,11 @@
 ---
 slug: document-codex-sandbox-preconditions
-state: awaiting-verify
+state: verified
 critical: true
 origin: human-report
 issue: docs/issues/102-bug-colabtmux-refuses-to-launch-codex-on-a-nonzero-bwrap-probe.md
 started: 2026-08-20T10:35:08+09:00
-updated: 2026-08-20T11:12:00+09:00
+updated: 2026-08-20T05:43:36+00:00
 commit: 560846d54365cf8de834e7c49c3bacb8e505c906
 summary: コンテナで codex を起こす側が前提にしてよい環境を実測して 02 に明文化し、bwrap の非ゼロを故障と読む誤りを断つ
 ---
