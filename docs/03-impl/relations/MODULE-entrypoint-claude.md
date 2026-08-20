@@ -263,7 +263,8 @@ UID/GID 追従(FR-env-02)、認証共有(FR-env-03)、firewall の適用(FR-env-
 | 制限 | 影響 | 関連 issue |
 |---|---|---|
 | `host-hooks.json` の名前が実態(`hooks` と `env` の両方を運ぶ)と乖離 | 読み手が誤解しうる。歴史的経緯で据え置き | なし |
-| `use_legacy_landlock` は codex 0.146.0 時点で deprecated(起動時に警告が出る) | 版更新で撤去された場合は監査を添付方式へ退避する必要がある(検知は E2E-06 の疎通確認) | なし |
+| `use_legacy_landlock` は codex 0.148.0 時点でも deprecated のまま撤去されていない(2026-08-20 に `codex features list` で実測) | 撤去されるとこのコンテナでサンドボックスを張る手段が無くなる(3鍵目だけを欠いた設定では `codex sandbox -- /bin/true` も `-c sandbox_mode=read-only` も exit 1 になることを 2026-08-20 に実測した)。退避先は添付方式で、検知は E2E-06 の疎通確認 | なし |
+| **既定3鍵を置く `/workspace/.codex/config.toml` は、ホストのプロジェクトディレクトリそのものである** | 同じディレクトリでホスト側の `codex` を起こすと同じ3鍵が効く(2026-08-20 実測)。ホスト側の codex はサンドボックスと承認なしで走り、`sandbox_mode = "workspace-write"` を要求する起動は exit 101 で panic する | なし(閾値の外: 置き場所は `AC-06` と `CTR-cli-container` が定めたものであり、変えるには 00 の合意が要る。`docs/pendings.md` の残務に1行残した) |
 | 認証同期ループが root で走るため共有側が root 所有になる | `login-codex` 側で `chown -R` して補っている | なし |
 | **稼働中の tmux サーバの環境は後から変えられない** | コンテナを起動した後に環境変数を足しても、既に立っている tmux サーバとその配下には入らない | なし(閾値の外: `claude-dev start` でコンテナを作り直せば揃う。稼働中に足すことは `tmux set-environment -g` で人手でできるが、それは製品の経路ではない) |
 | 起動シーケンスが1本の長いスクリプト | 段階ごとの単体テストができず、検証は実機確認に依存する | なし |

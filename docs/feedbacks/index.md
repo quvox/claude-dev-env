@@ -37,7 +37,8 @@
 | [029-a-verification-step-must-name-what-it-observes-not-what-it-runs](029-a-verification-step-must-name-what-it-observes-not-what-it-runs.md) | 2026-08-18 | 実機確認の手順は「何を実行するか」ではなく「何を観測できるか」で書く — 実行の形が環境の都合で無効化されていても、コマンド列だけでは気づけない |
 | [030-a-transcribed-answer-is-not-an-applied-answer](030-a-transcribed-answer-is-not-an-applied-answer.md) | - | 人間の回答を逐語で転記しても、推奨本文の一部が変更指示へ降りず黙って狭まった |
 | [031-a-narrower-fix-can-certify-itself-while-the-acceptance-criterion-still-fails](031-a-narrower-fix-can-certify-itself-while-the-acceptance-criterion-still-fails.md) | 2026-08-19 | 直す対象を「本システムが使うもの」に絞ると、同じ根の残りが受入基準を落としたまま全ゲートを通る |
+| [032-a-precondition-probe-must-measure-the-path-actually-used](032-a-precondition-probe-must-measure-the-path-actually-used.md) | 2026-08-20 | 起動前の可否判定は、使わないと決めた経路の状態ではなく、実際に使う経路そのものを1コマンドで測る |
 
-件数: 31
+件数: 32
 
 <!-- END GENERATED: build-index.py -->

@@ -1,6 +1,6 @@
 ---
 id: index
-version: 1.32.0
+version: 1.33.0
 updated: 2026-08-20
 source:
   - docs/02-design/system.md

@@ -1,7 +1,7 @@
 ---
 id: environments
-version: 1.5.0
-updated: 2026-08-12
+version: 1.6.0
+updated: 2026-08-20
 source:
   - docs/01-requirements/system.md
   - docs/02-design/architecture.md
@@ -140,7 +140,7 @@ verified:
 | フロントエンド | CLI(`codex exec`)。MCP サーバは登録していない |
 | 監査の経路 | (a) scoped(スコープ渡し)。添付方式は予備 |
 | コマンド | `codex` |
-| **必須フラグ** | **監査・QA で codex を呼ぶときは常に `-c features.use_legacy_landlock=true` を付ける** |
+| **必須フラグ** | **無い。コンテナ内では entrypoint が置く既定3鍵で landlock が効く**(2026-08-20 実測: 旗を付けない `codex sandbox -- /bin/true` が exit 0)。`-c features.use_legacy_landlock=true` を足しても結果は変わらない |
 | プロファイル | 未定(いつ決めるか)— QA レーンを開始するとき。`docs-audit` / `qa` は未作成で、codex 既定設定で走らせる |
 | モデル・reasoning(増分監査) | 未定(いつ決めるか)— **独立レビューのモデルをプロジェクトで固定したくなったとき**。**未記入の行は不在として扱われ、キットの既定が効く** |
 | モデル・reasoning(full監査) | 未定(いつ決めるか)— 同上 |
@@ -160,16 +160,19 @@ verified:
 | CDP 探索を必須にする変更範囲 | 未定(いつ決めるか)— QA レーンを開始するとき(未運用のため) |
 | 段階導入フェーズ | 1 観測モード |
 
-**必須フラグの理由**: このコンテナでは codex 既定の bubblewrap サンドボックスが起動できない
-(seccomp が `CLONE_NEWUSER` を拒否し、AppArmor が `mount --make-rslave /` を拒否する。
+**既定3鍵で landlock を効かせる理由**: このコンテナでは codex 既定の bubblewrap サンドボックスが
+起動できない(seccomp が `CLONE_NEWUSER` を拒否し、AppArmor が `mount --make-rslave /` を拒否する。
 `DSN-dist-02`)。legacy landlock バックエンドはユーザー名前空間を使わないため、コンテナの
-confinement を緩めずに動く。**付け忘れると読み取りコマンドがすべて失敗するが `codex exec` の
-終了コードは 0 のまま**なので、成否は終了コードではなく最終メッセージと成果物で判定する。
+confinement を緩めずに動く。**3鍵目(`[features] use_legacy_landlock = true`)が欠けると、
+サンドボックスを張る呼び出しはすべて exit 1(bwrap)になる**(2026-08-20 実測: 3鍵目だけを欠いた
+設定では `codex sandbox -- /bin/true` も `-c sandbox_mode=read-only` も exit 1)。そのとき
+`codex exec` の終了コードは 0 のままなので、成否は終了コードではなく最終メッセージと成果物で
+判定する。
 
-**サンドボックス疎通確認**: `codex sandbox --enable use_legacy_landlock -- /bin/true` が exit 0、
-かつ `codex sandbox --enable use_legacy_landlock -- /bin/sh -c 'touch /tmp/x'` が失敗すること。
-フラグ無しの `codex sandbox -- /bin/true` は exit 1(bubblewrap)で、これは既知・正常。
-`codex doctor` はこの故障を検知しない。
+**サンドボックス疎通確認**: 既定3鍵が置かれた状態で、`codex sandbox -- /bin/true` が exit 0、
+かつ `codex sandbox -- /bin/sh -c 'touch /tmp/x'` が exit 1(`Permission denied`)であること。
+`--enable use_legacy_landlock` を明示しても同じ結果になる(旗の経路の回帰確認)。
+`codex doctor` はこの故障を検知しない。確認の実体は `scripts/e2e6-codex.sh` が持つ。
 
 **監査での禁止事項**: 監査(`docs` / `readiness` / `diff`)では承認・サンドボックスを迂回する
 フラグを使わない(read-only + landlock で足りる)。**QA レーンのみ例外**として
@@ -179,9 +182,28 @@ confinement を緩めずに動く。**付け忘れると読み取りコマンド
 書かない・終了時にリセット)はそのまま守る。git 未初期化のリポジトリでは `--skip-git-repo-check`
 を付ける(これは迂回ではない)。
 
-**イメージ更新時の注意**: `use_legacy_landlock` は codex 0.146.0 時点で deprecated(起動時に
-撤去予告が出る)。同梱バージョンはビルド時に最新へ解決されるため、イメージを更新したら上記の
-疎通確認を再実行する。撤去された場合の退避先は添付方式。
+**イメージ更新時の注意**: `use_legacy_landlock` は codex 0.148.0 時点でも deprecated のままで、
+撤去されてはいない(2026-08-20 に `codex features list` で実測)。同梱バージョンはビルド時に
+最新へ解決されるため、イメージを更新したら上記の疎通確認を再実行する。撤去されるとこのコンテナで
+サンドボックスを張る手段が無くなるので、退避先は添付方式である。
+
+**codex を起こす側が前提にしてよいこと**: コンテナの外から codex を起こす道具(艦隊の窓・
+スクリプト・人間の手)が、起動の前に何を確かめてよく、何を確かめてはいけないかを定める。
+下の値はすべて 2026-08-20 に `claude-dev-claude:latest`(codex 0.148.0)の実機で測ったものである。
+
+| 事柄 | 値 | 起こす側が取るべき扱い |
+|---|---|---|
+| `bwrap --unshare-user --unshare-net --ro-bind / / /bin/true` | exit 1(`No permissions to create new namespace`) | **既知・正常である。codex が使えるかどうかの判定に使ってはならない** — `DSN-dist-02` が「使わない」と決めた経路の状態を見ているだけである |
+| `codex sandbox -- /bin/true` | exit 0 | **可否の判定はこれで行う。** 非ゼロなら既定3鍵が届いていない |
+| `codex sandbox -- /bin/sh -c 'touch /tmp/x'` | exit 1 | 読み取り専用が成立している証拠である |
+| `sandbox_mode = "workspace-write"` を要求する起動 | exit 101 の panic(`permission profiles requiring direct runtime enforcement are incompatible with --use-legacy-landlock`) | **このコンテナでは成立しない**(`FR-env-12-9` が対象外と定めた帰結の実体)。書き込みを伴う自動化は既定3鍵のまま走らせる |
+| 既定3鍵の置き場所 | `<プロジェクト>/.codex/config.toml`(コンテナ内の `~/.codex` はここへの symlink) | **ホストから見えるパスである。** 同じディレクトリでホスト側の `codex` を起こすと同じ3鍵が効き、ホスト側でも `workspace-write` は上と同じ panic になる |
+
+**最後の行の測り方**: このリポジトリの直下と `docs/` から `codex features list` を実行すると
+`use_legacy_landlock` が true、`/tmp` から実行すると false になり、ホストの
+`~/.codex/config.toml` に `[features]` の節は無い。効く条件そのものは codex 側の解決規則であり、
+本システムが定めたものではない。**置き場所は `AC-06`(設定と履歴がプロジェクトごとに独立して
+いること)と `CTR-cli-container` が定めたものなので、ここでは変えない。**
 
 ## 将来設定(運用開始時に決めるもの・未解決事項ではない)
 
