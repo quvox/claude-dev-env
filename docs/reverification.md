@@ -106,11 +106,10 @@
 | issue | 055-modify-ac17-demands-listing-stopped-unlabeled-containers | 2026-08-05 | - | FR-env-03, D0-env-08, CTR-cli-container, MODULE-cli-logout, MODULE-cli-reset, docs/02-design/contracts/cli-container.md | 判定不能: closes_whenが空 |
 | issue | 094-modify-user-visible-values-are-stated-verbatim-in-two-layers | 2026-08-08 | - | FR-env-12-5, FR-orch-03-3, FR-env-01-18, FR-env-01-16, D0-dist-04, D0-env-06, DSN-dist-02, CTR-cli-orchestrator, CTR-cli-container, docs/02-design/logging.md | 判定不能: closes_whenが空 |
 | issue | 097-modify-cli-help-dispatch-branch-is-absent-from-the-feature-table | 2026-08-11 | 人間が `MODULE-cli-help` を機能表に加えるか加えないかを回答し、その回答が docs/03-impl/features.md に反映されたとき(加える場合は docs/03-impl/relations/MODULE-cli-help.md と 02-design/relations.md の PLAN-* まで反映されたとき) | docs/03-impl/features.md, MODULE-makefile-help, docs/01-requirements/usecases.md | - |
-| issue | 110-bug-bundled-arm64-binary-is-a-darwin-build | 2026-08-20 | 次のどれか1つが観測できたとき。(a) `file externals/arm64/colabtmux` が Linux/arm64 の ELF(`ELF 64-bit LSB ... ARM aarch64`)を返し、arm64 の配布イメージの中で `colabtmux --version` が終了コード 0 で応答する / (b) `externals/arm64/colabtmux` がリポジトリから削除されている(arm64 イメージには何も設置されない = `FR-env-13-5` の正常な状態)/ (c) 人間が「arm64 には同梱しない」と裁定し、`externals/README.md` と `docs/03-impl/environments/images.md` がその状態を述べている | AC-07, FR-env-13-1, FR-env-13-2, FR-env-13-3, RQ-dist-02 | - |
 
 ### 集計
 
 - 棚上げ: 7(最古の記録日 2026-08-02)
-- issue: 7(最古の記録日 2026-08-03)
+- issue: 6(最古の記録日 2026-08-03)
 - 条件が読めない(判定不能): 5
 - 残務: 44 行(最古 2026-08-10)
