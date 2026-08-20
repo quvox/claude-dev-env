@@ -1462,7 +1462,18 @@ start)
         [ -n "$_url" ] && echo "🖥️  noVNC: $_url"
         CUSER="$(resolve_container_user "$NAME")"   # 稼働中コンテナ側のユーザーで exec する
         if ! docker exec -u "$CUSER" "$NAME" tmux has-session -t main 2>/dev/null; then
-            docker exec -u "$CUSER" "$NAME" tmux new-session -d -s main 2>/dev/null || true
+            # docker exec が引き継ぐのはコンテナ作成時の env だけで、entrypoint が実行時に
+            # export した値（VM モードの DOCKER_HOST / 中継ポート方式の SSH_AUTH_SOCK）は
+            # 引き継がれない。tmux サーバの環境はその配下の全ウィンドウが継承するので、
+            # ここで取りこぼすと**作り直した窓の中だけ値が違う**状態になる。entrypoint が
+            # 書いた受け渡しファイルを読んでから起こす（CTR-cli-container
+            # 「実行時に決まる環境変数の受け渡し」/ FR-env-07-13 / FR-env-14-11）。
+            # ファイルが無いコンテナ（VM モードでも中継ポート方式でもない）では何も起きない。
+            # 値を CLI 側で組み立てないのは、entrypoint が VM の起動や socat の成否によって
+            # 採用しないことがあり、外側が組み立てると嘘の値を配ることになるためである。
+            docker exec -u "$CUSER" "$NAME" sh -c \
+                '[ -f /etc/claude-dev/runtime.env ] && . /etc/claude-dev/runtime.env; exec tmux new-session -d -s main' \
+                2>/dev/null || true
             sleep 0.5
         fi
         # アタッチは利用者の対話であり長時間続くので、その前にロックを解放する（手順17 と同じ理由）
@@ -1535,7 +1546,14 @@ start)
     # ここではコピー対象外。ユーザー独自スクリプトのみ ~/.local/bin/ から運ぶ。
     if [ -d "${HOME}/.local/bin" ] && [ -n "$(ls -A "${HOME}/.local/bin/" 2>/dev/null)" ]; then
         mkdir -p "${PROJECT_DIR}/.claude/host-local-bin"
-        cp -a "${HOME}/.local/bin/." "${PROJECT_DIR}/.claude/host-local-bin/"
+        # 読めないファイルが1つでも混じっていると cp -a は非0で終わる。set -e 下では
+        # それがそのまま start の終了になるので明示的に握る（FR-env-02-7 / NFR-avail-03）。
+        # 読めたファイルはコピーされた状態で残る（cp は1件の失敗で全体を止めない）。
+        # cp 自身のエラーは消さない — どのファイルが読めなかったかは利用者にしか直せない。
+        if ! cp -a "${HOME}/.local/bin/." "${PROJECT_DIR}/.claude/host-local-bin/"; then
+            echo "⚠️  ~/.local/bin の一部を取り込めませんでした（起動は続けます）: ${HOME}/.local/bin"
+            echo "   読み取り権限のあるファイルだけがコンテナへ渡ります。"
+        fi
     fi
 
     # .gitignore に .claude / .codex が含まれていなければ追加
@@ -1622,10 +1640,21 @@ start)
     # IdentityFile / IdentitiesOnly はコンテナ内に鍵ファイルがないため除去。
     # IdentityAgent はホスト固有の agent パスを指し、コンテナ内では SSH_AUTH_SOCK を
     # 上書きして agent を不通にするため必ず除去する。
+    # mktemp（/tmp に作れない）と sed（config を読めない）はどちらも失敗しうる。set -e 下では
+    # その場で start が終わるので明示的に握る（FR-env-04-9 / NFR-avail-03）。
+    # **加工前の config を代わりに渡すことはしない** — IdentityAgent が残るとコンテナ内で
+    # SSH_AUTH_SOCK を上書きして agent を不通にし、除去している理由がそのまま消える。
     if [ -f "${HOME}/.ssh/config" ]; then
-        _ssh_config_tmp=$(mktemp /tmp/claude-dev-ssh-config.XXXXXX)
-        sed -E '/^[[:space:]]*(IdentityFile|IdentitiesOnly|IdentityAgent)/d' "${HOME}/.ssh/config" > "$_ssh_config_tmp"
-        SSH_OPTS="${SSH_OPTS} -v ${_ssh_config_tmp}:${CHOME}/.ssh/config:ro"
+        _ssh_config_tmp=""
+        if _ssh_config_tmp=$(mktemp /tmp/claude-dev-ssh-config.XXXXXX 2>/dev/null) &&
+           sed -E '/^[[:space:]]*(IdentityFile|IdentitiesOnly|IdentityAgent)/d' "${HOME}/.ssh/config" > "$_ssh_config_tmp" 2>/dev/null; then
+            SSH_OPTS="${SSH_OPTS} -v ${_ssh_config_tmp}:${CHOME}/.ssh/config:ro"
+        else
+            # 空でない = mktemp は成功したが sed が失敗した。作りかけを残さない。
+            [ -n "$_ssh_config_tmp" ] && rm -f "$_ssh_config_tmp" 2>/dev/null || true
+            echo "⚠️  ~/.ssh/config を加工したコピーを作れませんでした（SSH クライアント設定なしで起動を続けます）: ${HOME}/.ssh/config"
+            echo "   コンテナ内の ~/.ssh/config は空になります。agent 転送そのものには影響しません。"
+        fi
     fi
 
     # noVNC ポート割り当て（VNC ありの場合のみ）

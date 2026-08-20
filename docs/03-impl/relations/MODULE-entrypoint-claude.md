@@ -1,6 +1,6 @@
 ---
 id: MODULE-entrypoint-claude
-updated: 2026-08-19
+updated: 2026-08-20
 module: MOD-entrypoint
 kind: tool
 sync: sync
@@ -29,6 +29,14 @@ UID/GID 追従(FR-env-02)、認証共有(FR-env-03)、firewall の適用(FR-env-
 **起動シーケンスそのものが成果物である**(この順序に意味がある)。`set -e` の下で動くが、
 失敗を許容してよい箇所には個別に `|| true` を付けて継続する。
 
+0. **実行時に決まる環境変数の受け渡し先を初期化する**: `/etc/claude-dev/runtime.env` を空にし
+   `0644`(root 所有・全ユーザー読み取り可)にする(`scripts/entrypoint-claude.sh:25`-`:33`)。
+   以降、実行時に値を**採用した地点で** `record_runtime_env <名前> <値>` が1行ずつ追記する。
+   **最初に空へ戻すのは**、`--restart unless-stopped` によるコンテナの再起動で entrypoint が
+   再実行されるため、前回採用した値が残ると今回は採用しなかった値を配ることになるからである。
+   読むのは**コンテナの外から** `docker exec` でプロセスの木を起こす側だけで(`MODULE-cli-start`
+   手順7)、entrypoint 自身は読まない — 自分の環境に `export` してから木を起こすので引き継ぎは
+   既に成立している(契約「実行時に決まる環境変数の受け渡し」)。
 1. **UID/GID 追従**: `/workspace` の所有者 UID/GID を `stat` で取り、コンテナユーザ(`$USERNAME`)と
    違えば `groupmod` / `usermod` で合わせる。他のエントリと衝突する場合は一時 GID/UID(9900〜の空き)へ
    退避してから割り当てる。変更が起きたときだけ、旧 UID または旧 GID を持つファイルに限って
@@ -48,6 +56,9 @@ UID/GID 追従(FR-env-02)、認証共有(FR-env-03)、firewall の適用(FR-env-
    ホストの `-e` では渡ってきていないため、ここで載せないと手順20 が引き継げない)。
    **これが効くのは対話シェルだけである** — 初期化ファイルを読むのは対話シェルだけなので、
    非対話シェルにも、tmux の窓の中で起動したプロセスにも届かない。**それらへ届けるのは手順20 である。**
+   **あわせて手順0 の受け渡しファイルへも記録する**(`scripts/entrypoint-claude.sh:131`)。
+   手順20 が届けるのは**この entrypoint が起こした** tmux サーバの配下だけであり、後から外の
+   ホスト CLI がサーバを作り直す経路には届かないため、そちらへの唯一の入手先になる。
 6. **`DOCKER_HOST` を対話シェル向けに書き出す**: 設定されていれば同様に両 rc へ追記する。
    届く範囲は手順5 と同じで、**tmux の窓の中へ届けるのは手順20 である**。
 7. **`COMPOSE_PROJECT_NAME` は rc へ書き出さない**: 値はホスト CLI が `docker run -e` で渡す
@@ -100,8 +111,10 @@ UID/GID 追従(FR-env-02)、認証共有(FR-env-03)、firewall の適用(FR-env-
 15. **VM モードの起動**(`CLAUDE_DEV_VM=1` のとき): root のうちに `install -d -o $USERNAME` で
     `~/.claude-dev-vm` と `/run/vm` を用意し、`su "$USERNAME" -c /usr/local/bin/vm-up.sh` を実行する。
     成功したときだけ `/etc/claude-dev/vm.env` に `DOCKER_HOST=tcp://127.0.0.1:2375` を書き、両 rc へ
-    source フックを追記し、**同じ値を entrypoint 自身の環境にも `export` して**、`VM_DEV.md` を生成して
-    バナーを出す。失敗したら proxy 既定のまま続行する。
+    source フックを追記し、**同じ値を entrypoint 自身の環境にも `export` して**、**手順0 の
+    受け渡しファイルへも記録し**(`scripts/entrypoint-claude.sh:516`)、`VM_DEV.md` を生成して
+    バナーを出す。失敗したら proxy 既定のまま続行する。**記録がこの成功分岐の中にあることが
+    重要である** — 失敗時は行が書かれないので、外から木を起こす側には中継先の既定がそのまま残る。
     **自身の環境にも載せるのは、手順20 が引き継ぐ値を「その時点で有効な値」に一致させるためである** —
     載せないと、対話シェルはゲスト VM を指し、tmux の窓の中のプロセスは docker-proxy を指す、という
     2つの値が同居する(02 の契約は「VM モードでは entrypoint が上書きする」と1つの値しか認めていない)。
@@ -205,7 +218,7 @@ UID/GID 追従(FR-env-02)、認証共有(FR-env-03)、firewall の適用(FR-env-
 | 種別 | 内容 |
 |---|---|
 | 戻り値 | 終了しない(`exec tail -f /dev/null` で常駐する) |
-| 永続化 | `/workspace/.claude/`(`settings.json`・`.claude.json`・認証)、`/workspace/.codex/`(`auth.json`・`config.toml`)、`/workspace/CLAUDE.md`(マーカー範囲)、`/workspace/.mcp.json`、`/workspace/VM_DEV.md`(VM 時)、共有ボリューム `claude-dev-auth`(30秒ごとの書き戻し)と `claude-dev-config`(`.zshrc`)、`/etc/zsh/zshrc` と `/etc/bash.bashrc`、`/etc/claude-dev/vm.env`(VM 時)、`/tmp/start-user-desktop.sh` |
+| 永続化 | `/workspace/.claude/`(`settings.json`・`.claude.json`・認証)、`/workspace/.codex/`(`auth.json`・`config.toml`)、`/workspace/CLAUDE.md`(マーカー範囲)、`/workspace/.mcp.json`、`/workspace/VM_DEV.md`(VM 時)、共有ボリューム `claude-dev-auth`(30秒ごとの書き戻し)と `claude-dev-config`(`.zshrc`)、`/etc/zsh/zshrc` と `/etc/bash.bashrc`、`/etc/claude-dev/vm.env`(VM 時)、**`/etc/claude-dev/runtime.env`(毎回。起動のたびに空へ戻し、実行時に採用した `SSH_AUTH_SOCK` / `DOCKER_HOST` だけを追記する。`0644` root 所有 — **秘密は書かない**)**、`/tmp/start-user-desktop.sh` |
 | 発火するイベント | 認証同期ループ、firewall 適用、portsync 常駐、VM 起動、VNC/Chrome/noVNC、tmux セッション `main` |
 | ログ | 標準出力へ各段の進捗と `✅ Ready (...)` |
 
@@ -237,6 +250,7 @@ UID/GID 追従(FR-env-02)、認証共有(FR-env-03)、firewall の適用(FR-env-
 | 5 | CLAUDE.md への書き込みをマーカー範囲の削除 + 再生成にする(`--kvm` の付け外しに追従でき、利用者の記述を壊さない) | D0-scope-02 |
 | 6 | `computer-use` MCP を `enabledMcpjsonServers` に入れない(強権限のため利用時に明示有効化させる) | D0-sec-01 |
 
+- [DS-05] 実行時に採用した値を**1本のファイル(`/etc/claude-dev/runtime.env`)へ、採用した地点で1行ずつ追記する**(全部を最後にまとめて書かない / 対話シェル用の `/etc/claude-dev/vm.env` に相乗りさせない) — 理由: 採用の判定は VM の起動成否と socat の成否という**別々の分岐の中**にあり、まとめて書く形にすると「採用したかどうか」をもう一度判定し直すことになって、判定が2箇所へ散る。`vm.env` は rc から source される対話シェル用で、読む相手も載る値の範囲も違う / 見直す条件: 実行時に決まる変数が増えて、採用の判定が1箇所に集まったとき
 - [DS-05] tmux セッションを起こす `su` から **`-l` を外す**(名前を列挙して載せ直す形にも、`tmux.conf` の `update-environment` に足す形にもしない) — 理由: **列挙しないので、コンテナに渡っている変数がそのまま全部引き継がれる** — 利用者がプロジェクト環境ファイルに書いた組(`AC-08`)も、時刻帯や文字の並び順も同時に届く。列挙する形は、変数が増えるたびに列挙も増やす必要があり、増やし忘れが `AC-08` の不合格として現れた経路そのものである。`update-environment` はクライアント接続時にしか働かないので、**接続より前に作られる窓**(この手順は `new-session -d` で接続なしに作る)に効かない。同じ entrypoint の中で `su` を使うもう1箇所(`start-user-desktop.sh` の起動)が既に `-l` を付けておらず、この形の前例である / 見直す条件: `-l` の有無で `PATH` か `HOME` が変わる環境が現れたとき、またはコンテナに渡る変数の中に tmux の窓へ渡してはならないものが現れたとき
 
 <!-- 2026-08-19 更新(`.claude/directions/delegation.md` §3.1)。前の版はこの判断の逆(`-l` を残して

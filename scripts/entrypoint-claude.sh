@@ -14,6 +14,24 @@ set -e
 USERNAME="${CONTAINER_USER:-devuser}"
 USER_HOME="/home/$USERNAME"
 
+# --- 実行時に決まる環境変数の受け渡し先 ---
+# コンテナ作成時には決まらず、この entrypoint が実行時に決める環境変数（VM モードの
+# DOCKER_HOST / 中継ポート方式の SSH_AUTH_SOCK）を1本のファイルに記録する。docker exec が
+# 引き継ぐのはコンテナ作成時の env だけなので、稼働中のコンテナへ外からプロセスの木を起こす側
+# （ホスト CLI が tmux サーバを作り直す経路）はこれを読んでから起こす
+# （CTR-cli-container「実行時に決まる環境変数の受け渡し」/ FR-env-07-13 / FR-env-14-11）。
+# **自分の実行の最初に空へ戻す** — コンテナの再起動で前回の値が残ると、今回は採用しなかった
+# 値を配ることになる。**秘密は書かない**（0644 で全ユーザーが読む）。
+RUNTIME_ENV_FILE=/etc/claude-dev/runtime.env
+mkdir -p /etc/claude-dev
+: > "$RUNTIME_ENV_FILE"
+chmod 0644 "$RUNTIME_ENV_FILE"
+
+# 実行時に値を採用した時点で1行ずつ追記する（採用しなかった変数の行は書かない）
+record_runtime_env() {
+    printf "export %s='%s'\n" "$1" "$2" >> "$RUNTIME_ENV_FILE"
+}
+
 # --- /workspace の所有者に UID/GID を合わせる ---
 if [ -d /workspace ]; then
     HOST_UID=$(stat -c '%u' /workspace 2>/dev/null || echo "1500")
@@ -109,6 +127,8 @@ fi
 # 渡ってきていないので、ここで自分の環境にも export しないと tmux へ引き継がれない。
 if [ -S "/tmp/ssh-agent.sock" ]; then
     export SSH_AUTH_SOCK=/tmp/ssh-agent.sock
+    # 外から木を起こす側へも同じ値を届ける（中継ポート方式ではホストの -e で渡ってきていない）
+    record_runtime_env SSH_AUTH_SOCK /tmp/ssh-agent.sock
     for rc in /etc/zsh/zshrc /etc/bash.bashrc; do
         if [ -f "$rc" ]; then
             echo "" >> "$rc"
@@ -491,6 +511,9 @@ if [ "${CLAUDE_DEV_VM:-}" = "1" ]; then
         # プロセスは docker-proxy を指すという 2 つの値が同居する（CTR-cli-container は
         # 「VM モードでは entrypoint が上書きする」と 1 つの値しか認めていない）。
         export DOCKER_HOST='tcp://127.0.0.1:2375'
+        # 外から木を起こす側へも同じ値を届ける。**ゲスト VM の起動に成功したこの分岐でだけ
+        # 記録する** — 失敗時は中継先のままが正なので、記録しなければ既定が使われる。
+        record_runtime_env DOCKER_HOST 'tcp://127.0.0.1:2375'
         for rc in /etc/zsh/zshrc /etc/bash.bashrc; do
             if [ -f "$rc" ] && ! grep -q '/etc/claude-dev/vm.env' "$rc"; then
                 {
