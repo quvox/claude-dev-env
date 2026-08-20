@@ -1,6 +1,6 @@
 ---
 id: 02-system
-version: 2.17.0
+version: 2.18.0
 updated: 2026-08-20
 source:
   - docs/01-requirements/functional.md
@@ -12,10 +12,10 @@ summary: >
   E2Eシナリオ一覧、UI設計を定める。アーキテクチャと契約と設計判断は architecture.md / contracts/ が持つ。
 keywords: [モジュール分割, DSN-mod, テスト戦略, E2E, UI設計, 要件カバレッジ]
 verified:
-  at: 2026-08-19
-  version: 2.16.0
+  at: 2026-08-20
+  version: 2.18.0
   against:
-    - {doc: docs/01-requirements/functional.md, version: 1.20.0}
+    - {doc: docs/01-requirements/functional.md, version: 1.22.0}
     - {doc: docs/01-requirements/non-functional.md, version: 1.8.0}
     - {doc: docs/01-requirements/usecases.md, version: 1.7.0}
     - {doc: docs/02-design/architecture.md, version: 1.7.0}
@@ -228,6 +228,7 @@ verified:
 | FR-env-02-4 | MOD-entrypoint | 完全 | -(設計判断を要さない) |
 | FR-env-02-5 | MOD-entrypoint | 完全 | -(設計判断を要さない) |
 | FR-env-02-6 | MOD-cli-start | 完全 | -(設計判断を要さない) |
+| FR-env-02-7 | MOD-cli-start | 完全 | -(設計判断を要さない)。読めない資産を取り込まずに起動を続ける倒し方は `CTR-cli-container`「ホストから引き継ぐ資産が、存在するのに読めない」が定める |
 | FR-env-03-1 | MOD-cli-login | 完全 | -(設計判断を要さない) |
 | FR-env-03-2 | MOD-cli-start | 完全 | DSN-auth-01 |
 | FR-env-03-3 | MOD-entrypoint | 完全 | DSN-auth-01 |
@@ -260,6 +261,7 @@ verified:
 | FR-env-04-6 | MOD-cli-start | 完全 | -(設計判断を要さない) |
 | FR-env-04-7 | MOD-cli-start | 完全 | -(設計判断を要さない) |
 | FR-env-04-8 | MOD-cli-start | 完全 | -(設計判断を要さない)。受理できない値を採用せずに SSH 転送なしで続行する倒し方は `FR-env-04-5` と同型で、`CTR-cli-container`「渡す環境変数」の「値の検証で起動を止めることはしない」に従う |
+| FR-env-04-9 | MOD-cli-start | 完全 | -(設計判断を要さない)。加工前の設定で代替せず何も渡さずに続行する倒し方は `CTR-cli-container`「`~/.ssh/config` を加工した一時コピー」が定める |
 | FR-env-05-1 | MOD-entrypoint | 完全 | -(設計判断を要さない) |
 | FR-env-05-2 | MOD-cli-common | 完全 | -(設計判断を要さない) |
 | FR-env-05-3 | MOD-firewall | 完全 | -(設計判断を要さない) |
@@ -390,7 +392,7 @@ verified:
 (空欄を作らないための規約)。
 
 **要件を持たないモジュールは無い**(全 25 モジュールが「モジュール分割定義」の対応要件と上表の
-いずれかに現れる)。**割り当て先の無い条項も無い**(機能要件の全 166 条項・NFR 10 件・SR 19 件が
+いずれかに現れる)。**割り当て先の無い条項も無い**(機能要件の全 170 条項・NFR 10 件・SR 19 件が
 すべて上表に現れる)。
 
 ## テスト戦略

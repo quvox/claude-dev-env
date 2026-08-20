@@ -8,7 +8,7 @@ source:
 summary: 端末出力と常駐プロセスログの2種類について、レベル・出力先・保持を定める
 keywords: [ログ, 可観測性]
 verified:
-  at: 2026-08-19
+  at: 2026-08-20
   version: 1.9.0
   against:
     - {doc: docs/01-requirements/non-functional.md, version: 1.8.0}

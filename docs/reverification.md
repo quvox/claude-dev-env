@@ -15,80 +15,74 @@
 | docs/01-requirements/system.md | docs/00-requests/decisions/sec.md | 1.3.1 | 1.4.0 | 再検証候補 | - |
 | docs/01-requirements/usecases.md | docs/01-requirements/functional.md | 1.19.0 | 1.22.0 | 再検証候補 | - |
 | docs/02-design/architecture.md | docs/01-requirements/functional.md | 1.19.0 | 1.22.0 | 再検証候補 | - |
-| docs/02-design/contracts/cli-container.md | docs/02-design/system.md | 2.16.0 | 2.17.0 | 再検証候補 | - |
-| docs/02-design/contracts/docker-api.md | docs/02-design/system.md | 2.15.0 | 2.17.0 | 再検証候補 | - |
-| docs/02-design/contracts/entrypoint-firewall.md | docs/02-design/system.md | 2.8.0 | 2.17.0 | 再検証候補 | - |
-| docs/02-design/environments.md | docs/01-requirements/system.md | 1.2.1 | 1.3.0 | 再検証候補 | - |
-| docs/02-design/environments.md | docs/02-design/architecture.md | 1.5.0 | 1.7.0 | 再検証候補 | - |
-| docs/02-design/relations.md | docs/01-requirements/functional.md | 1.19.0 | 1.22.0 | 再検証候補 | - |
-| docs/02-design/relations.md | docs/02-design/system.md | 2.15.0 | 2.17.0 | 再検証候補 | - |
-| docs/02-design/system.md | docs/01-requirements/functional.md | 1.20.0 | 1.22.0 | 再検証候補 | - |
+| docs/02-design/contracts/docker-api.md | docs/02-design/system.md | 2.15.0 | 2.18.0 | 再検証候補 | - |
+| docs/02-design/contracts/entrypoint-firewall.md | docs/02-design/system.md | 2.8.0 | 2.18.0 | 再検証候補 | - |
 | docs/03-impl/contracts/cli-container.md | docs/02-design/contracts/cli-container.md | 1.14.0 | 1.17.0 | 再検証候補 | - |
 | docs/03-impl/contracts/docker-api.md | docs/02-design/contracts/docker-api.md | 1.1.0 | 1.2.0 | 再検証候補 | - |
 | docs/03-impl/environments/images.md | docs/02-design/environments.md | 1.5.0 | 1.6.0 | 再検証候補 | - |
 | docs/03-impl/infra/local/docker-resources.md | docs/02-design/architecture.md | 1.4.0 | 1.7.0 | 再検証候補 | - |
 | docs/03-impl/infra/local/ghcr.md | docs/02-design/architecture.md | 1.6.0 | 1.7.0 | 再検証候補 | - |
 | docs/03-impl/tests/cli-attach.md | docs/01-requirements/functional.md | 1.16.0 | 1.22.0 | 再検証候補 | - |
-| docs/03-impl/tests/cli-attach.md | docs/02-design/system.md | 2.12.0 | 2.17.0 | 再検証候補 | - |
+| docs/03-impl/tests/cli-attach.md | docs/02-design/system.md | 2.12.0 | 2.18.0 | 再検証候補 | - |
 | docs/03-impl/tests/cli-code.md | docs/01-requirements/functional.md | 1.16.0 | 1.22.0 | 再検証候補 | - |
-| docs/03-impl/tests/cli-code.md | docs/02-design/system.md | 2.12.0 | 2.17.0 | 再検証候補 | - |
+| docs/03-impl/tests/cli-code.md | docs/02-design/system.md | 2.12.0 | 2.18.0 | 再検証候補 | - |
 | docs/03-impl/tests/cli-common.md | docs/01-requirements/functional.md | 1.16.0 | 1.22.0 | 再検証候補 | - |
-| docs/03-impl/tests/cli-common.md | docs/02-design/system.md | 2.12.0 | 2.17.0 | 再検証候補 | - |
+| docs/03-impl/tests/cli-common.md | docs/02-design/system.md | 2.12.0 | 2.18.0 | 再検証候補 | - |
 | docs/03-impl/tests/cli-firewall.md | docs/01-requirements/functional.md | 1.16.0 | 1.22.0 | 再検証候補 | - |
-| docs/03-impl/tests/cli-firewall.md | docs/02-design/system.md | 2.12.0 | 2.17.0 | 再検証候補 | - |
+| docs/03-impl/tests/cli-firewall.md | docs/02-design/system.md | 2.12.0 | 2.18.0 | 再検証候補 | - |
 | docs/03-impl/tests/cli-forward.md | docs/01-requirements/functional.md | 1.16.0 | 1.22.0 | 再検証候補 | - |
-| docs/03-impl/tests/cli-forward.md | docs/02-design/system.md | 2.12.0 | 2.17.0 | 再検証候補 | - |
+| docs/03-impl/tests/cli-forward.md | docs/02-design/system.md | 2.12.0 | 2.18.0 | 再検証候補 | - |
 | docs/03-impl/tests/cli-list.md | docs/01-requirements/functional.md | 1.16.0 | 1.22.0 | 再検証候補 | - |
-| docs/03-impl/tests/cli-list.md | docs/02-design/system.md | 2.12.0 | 2.17.0 | 再検証候補 | - |
+| docs/03-impl/tests/cli-list.md | docs/02-design/system.md | 2.12.0 | 2.18.0 | 再検証候補 | - |
 | docs/03-impl/tests/cli-login-codex.md | docs/01-requirements/functional.md | 1.16.0 | 1.22.0 | 再検証候補 | - |
-| docs/03-impl/tests/cli-login-codex.md | docs/02-design/system.md | 2.12.0 | 2.17.0 | 再検証候補 | - |
+| docs/03-impl/tests/cli-login-codex.md | docs/02-design/system.md | 2.12.0 | 2.18.0 | 再検証候補 | - |
 | docs/03-impl/tests/cli-login.md | docs/01-requirements/functional.md | 1.16.0 | 1.22.0 | 再検証候補 | - |
-| docs/03-impl/tests/cli-login.md | docs/02-design/system.md | 2.12.0 | 2.17.0 | 再検証候補 | - |
+| docs/03-impl/tests/cli-login.md | docs/02-design/system.md | 2.12.0 | 2.18.0 | 再検証候補 | - |
 | docs/03-impl/tests/cli-logout.md | docs/01-requirements/functional.md | 1.16.0 | 1.22.0 | 再検証候補 | - |
-| docs/03-impl/tests/cli-logout.md | docs/02-design/system.md | 2.12.0 | 2.17.0 | 再検証候補 | - |
+| docs/03-impl/tests/cli-logout.md | docs/02-design/system.md | 2.12.0 | 2.18.0 | 再検証候補 | - |
 | docs/03-impl/tests/cli-ports.md | docs/01-requirements/functional.md | 1.16.0 | 1.22.0 | 再検証候補 | - |
-| docs/03-impl/tests/cli-ports.md | docs/02-design/system.md | 2.12.0 | 2.17.0 | 再検証候補 | - |
+| docs/03-impl/tests/cli-ports.md | docs/02-design/system.md | 2.12.0 | 2.18.0 | 再検証候補 | - |
 | docs/03-impl/tests/cli-pull.md | docs/01-requirements/functional.md | 1.16.0 | 1.22.0 | 再検証候補 | - |
-| docs/03-impl/tests/cli-pull.md | docs/02-design/system.md | 2.12.0 | 2.17.0 | 再検証候補 | - |
+| docs/03-impl/tests/cli-pull.md | docs/02-design/system.md | 2.12.0 | 2.18.0 | 再検証候補 | - |
 | docs/03-impl/tests/cli-reset.md | docs/01-requirements/functional.md | 1.19.0 | 1.22.0 | 再検証候補 | - |
-| docs/03-impl/tests/cli-reset.md | docs/02-design/system.md | 2.15.0 | 2.17.0 | 再検証候補 | - |
+| docs/03-impl/tests/cli-reset.md | docs/02-design/system.md | 2.15.0 | 2.18.0 | 再検証候補 | - |
 | docs/03-impl/tests/cli-setup.md | docs/01-requirements/functional.md | 1.16.0 | 1.22.0 | 再検証候補 | - |
-| docs/03-impl/tests/cli-setup.md | docs/02-design/system.md | 2.12.0 | 2.17.0 | 再検証候補 | - |
+| docs/03-impl/tests/cli-setup.md | docs/02-design/system.md | 2.12.0 | 2.18.0 | 再検証候補 | - |
 | docs/03-impl/tests/cli-ssh-keys.md | docs/01-requirements/functional.md | 1.16.0 | 1.22.0 | 再検証候補 | - |
-| docs/03-impl/tests/cli-ssh-keys.md | docs/02-design/system.md | 2.12.0 | 2.17.0 | 再検証候補 | - |
+| docs/03-impl/tests/cli-ssh-keys.md | docs/02-design/system.md | 2.12.0 | 2.18.0 | 再検証候補 | - |
 | docs/03-impl/tests/cli-start.md | docs/01-requirements/functional.md | 1.19.0 | 1.22.0 | 再検証候補 | - |
-| docs/03-impl/tests/cli-start.md | docs/02-design/system.md | 2.15.0 | 2.17.0 | 再検証候補 | - |
+| docs/03-impl/tests/cli-start.md | docs/02-design/system.md | 2.15.0 | 2.18.0 | 再検証候補 | - |
 | docs/03-impl/tests/cli-stop.md | docs/01-requirements/functional.md | 1.19.0 | 1.22.0 | 再検証候補 | - |
-| docs/03-impl/tests/cli-stop.md | docs/02-design/system.md | 2.15.0 | 2.17.0 | 再検証候補 | - |
+| docs/03-impl/tests/cli-stop.md | docs/02-design/system.md | 2.15.0 | 2.18.0 | 再検証候補 | - |
 | docs/03-impl/tests/cli-unforward.md | docs/01-requirements/functional.md | 1.16.0 | 1.22.0 | 再検証候補 | - |
-| docs/03-impl/tests/cli-unforward.md | docs/02-design/system.md | 2.12.0 | 2.17.0 | 再検証候補 | - |
+| docs/03-impl/tests/cli-unforward.md | docs/02-design/system.md | 2.12.0 | 2.18.0 | 再検証候補 | - |
 | docs/03-impl/tests/cli-upgrade.md | docs/01-requirements/functional.md | 1.16.0 | 1.22.0 | 再検証候補 | - |
-| docs/03-impl/tests/cli-upgrade.md | docs/02-design/system.md | 2.12.0 | 2.17.0 | 再検証候補 | - |
+| docs/03-impl/tests/cli-upgrade.md | docs/02-design/system.md | 2.12.0 | 2.18.0 | 再検証候補 | - |
 | docs/03-impl/tests/container-tools.md | docs/01-requirements/functional.md | 1.16.0 | 1.22.0 | 再検証候補 | - |
-| docs/03-impl/tests/container-tools.md | docs/02-design/system.md | 2.12.0 | 2.17.0 | 再検証候補 | - |
+| docs/03-impl/tests/container-tools.md | docs/02-design/system.md | 2.12.0 | 2.18.0 | 再検証候補 | - |
 | docs/03-impl/tests/docker-proxy.md | docs/01-requirements/functional.md | 1.19.0 | 1.22.0 | 再検証候補 | - |
-| docs/03-impl/tests/docker-proxy.md | docs/02-design/system.md | 2.15.0 | 2.17.0 | 再検証候補 | - |
-| docs/03-impl/tests/e2e.md | docs/02-design/system.md | 2.16.0 | 2.17.0 | 再検証候補 | - |
+| docs/03-impl/tests/docker-proxy.md | docs/02-design/system.md | 2.15.0 | 2.18.0 | 再検証候補 | - |
+| docs/03-impl/tests/e2e.md | docs/02-design/system.md | 2.16.0 | 2.18.0 | 再検証候補 | - |
 | docs/03-impl/tests/entrypoint.md | docs/01-requirements/functional.md | 1.20.0 | 1.22.0 | 再検証候補 | - |
-| docs/03-impl/tests/entrypoint.md | docs/02-design/system.md | 2.16.0 | 2.17.0 | 再検証候補 | - |
+| docs/03-impl/tests/entrypoint.md | docs/02-design/system.md | 2.16.0 | 2.18.0 | 再検証候補 | - |
 | docs/03-impl/tests/firewall.md | docs/01-requirements/functional.md | 1.16.0 | 1.22.0 | 再検証候補 | - |
-| docs/03-impl/tests/firewall.md | docs/02-design/system.md | 2.12.0 | 2.17.0 | 再検証候補 | - |
+| docs/03-impl/tests/firewall.md | docs/02-design/system.md | 2.12.0 | 2.18.0 | 再検証候補 | - |
 | docs/03-impl/tests/images.md | docs/01-requirements/functional.md | 1.17.0 | 1.22.0 | 再検証候補 | - |
-| docs/03-impl/tests/images.md | docs/02-design/system.md | 2.13.0 | 2.17.0 | 再検証候補 | - |
+| docs/03-impl/tests/images.md | docs/02-design/system.md | 2.13.0 | 2.18.0 | 再検証候補 | - |
 | docs/03-impl/tests/makefile.md | docs/01-requirements/functional.md | 1.16.0 | 1.22.0 | 再検証候補 | - |
-| docs/03-impl/tests/makefile.md | docs/02-design/system.md | 2.12.0 | 2.17.0 | 再検証候補 | - |
+| docs/03-impl/tests/makefile.md | docs/02-design/system.md | 2.12.0 | 2.18.0 | 再検証候補 | - |
 | docs/03-impl/tests/portsync.md | docs/01-requirements/functional.md | 1.16.0 | 1.22.0 | 再検証候補 | - |
-| docs/03-impl/tests/portsync.md | docs/02-design/system.md | 2.12.0 | 2.17.0 | 再検証候補 | - |
-| docs/03-impl/tests/strategy.md | docs/02-design/system.md | 2.13.0 | 2.17.0 | 再検証候補 | - |
+| docs/03-impl/tests/portsync.md | docs/02-design/system.md | 2.12.0 | 2.18.0 | 再検証候補 | - |
+| docs/03-impl/tests/strategy.md | docs/02-design/system.md | 2.13.0 | 2.18.0 | 再検証候補 | - |
 | docs/03-impl/tests/strategy.md | docs/02-design/environments.md | 1.5.0 | 1.6.0 | 再検証候補 | - |
 | docs/03-impl/tests/vm-mode.md | docs/01-requirements/functional.md | 1.16.0 | 1.22.0 | 再検証候補 | - |
-| docs/03-impl/tests/vm-mode.md | docs/02-design/system.md | 2.12.0 | 2.17.0 | 再検証候補 | - |
+| docs/03-impl/tests/vm-mode.md | docs/02-design/system.md | 2.12.0 | 2.18.0 | 再検証候補 | - |
 
 ## 集計
 
 - 参照総数: 100
-- 最新: 23
-- 再検証候補: 77
+- 最新: 29
+- 再検証候補: 71
 - 判定不能: 0
 - 仕様文書frontmatterの解析警告: 0
 
@@ -112,11 +106,11 @@
 | issue | 055-modify-ac17-demands-listing-stopped-unlabeled-containers | 2026-08-05 | - | FR-env-03, D0-env-08, CTR-cli-container, MODULE-cli-logout, MODULE-cli-reset, docs/02-design/contracts/cli-container.md | 判定不能: closes_whenが空 |
 | issue | 094-modify-user-visible-values-are-stated-verbatim-in-two-layers | 2026-08-08 | - | FR-env-12-5, FR-orch-03-3, FR-env-01-18, FR-env-01-16, D0-dist-04, D0-env-06, DSN-dist-02, CTR-cli-orchestrator, CTR-cli-container, docs/02-design/logging.md | 判定不能: closes_whenが空 |
 | issue | 097-modify-cli-help-dispatch-branch-is-absent-from-the-feature-table | 2026-08-11 | 人間が `MODULE-cli-help` を機能表に加えるか加えないかを回答し、その回答が docs/03-impl/features.md に反映されたとき(加える場合は docs/03-impl/relations/MODULE-cli-help.md と 02-design/relations.md の PLAN-* まで反映されたとき) | docs/03-impl/features.md, MODULE-makefile-help, docs/01-requirements/usecases.md | - |
-| issue | 109-bug-make-status-treats-a-failed-docker-query-as-zero-sessions | 2026-08-20 | Docker への2回の問い合わせのどちらかが非ゼロで終わったとき、`make status` が「一覧が不完全である可能性」を1行表示する(`claude-dev list` と同じ扱いになる)。確認は `docker` を PATH から外すか応答しない `DOCKER_HOST` を指して `make status` を実行し、「(実行中のセッションはありません)」だけが出ないことを見る | CTR-cli-container, MODULE-makefile-status, FR-env-01-35 | - |
+| issue | 110-bug-bundled-arm64-binary-is-a-darwin-build | 2026-08-20 | 次のどれか1つが観測できたとき。(a) `file externals/arm64/colabtmux` が Linux/arm64 の ELF(`ELF 64-bit LSB ... ARM aarch64`)を返し、arm64 の配布イメージの中で `colabtmux --version` が終了コード 0 で応答する / (b) `externals/arm64/colabtmux` がリポジトリから削除されている(arm64 イメージには何も設置されない = `FR-env-13-5` の正常な状態)/ (c) 人間が「arm64 には同梱しない」と裁定し、`externals/README.md` と `docs/03-impl/environments/images.md` がその状態を述べている | AC-07, FR-env-13-1, FR-env-13-2, FR-env-13-3, RQ-dist-02 | - |
 
 ### 集計
 
 - 棚上げ: 7(最古の記録日 2026-08-02)
 - issue: 7(最古の記録日 2026-08-03)
 - 条件が読めない(判定不能): 5
-- 残務: 41 行(最古 2026-08-10)
+- 残務: 44 行(最古 2026-08-10)

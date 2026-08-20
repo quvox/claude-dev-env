@@ -12,8 +12,8 @@ source:
 summary: 機能要件 FR-env-01〜14。受け入れ基準は EARS で書く
 keywords: [機能要件, EARS, FR]
 verified:
-  at: 2026-08-19
-  version: 1.20.0
+  at: 2026-08-20
+  version: 1.22.0
   against:
     - {doc: docs/00-requests/request.md, version: 1.6.0}
     - {doc: docs/00-requests/acceptances.md, version: 1.6.1}
