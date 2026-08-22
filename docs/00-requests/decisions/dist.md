@@ -8,7 +8,7 @@ summary: イメージの配布と、同梱する外部 CLI・MCP サーバーに
 keywords: [配布, GHCR, 決定事項]
 verified:
   at: 2026-08-22
-  version: 1.4.0
+  version: 1.5.0
   against:
     - {doc: docs/00-requests/request.md, version: 1.6.0}
 ---
