@@ -15,7 +15,7 @@
 | fix-make-status-hides-docker-query-failure | verified | false | 2026-08-20T05:43:36+00:00 | make status が docker への問い合わせの失敗を0件と同一視する欠陥を直し、claude-dev list と同じ警告行を出す |
 | fix-session-list-undercount | verified | true | 2026-08-20T05:43:36+00:00 | list / make status / make clean の Claude コンテナ列挙を、イメージ由来から「管理ラベル ∪ イメージ ∪ 固定接頭辞」へ改める |
 | fix-start-auxiliary-halts-and-tmux-runtime-env | verified | true | 2026-08-20T05:43:36+00:00 | start の補助処理2つを握って起動を止めないようにし、CLI が作り直す tmux の窓へ entrypoint の実行時の値を届ける |
-| repair-entrypoint-config-writes | building | false | 2026-08-22T19:05:00+09:00 | 起動処理が /workspace 配下の設定を書くときの一時ファイルと chown を安全な形へ揃え、登録の有無の判定を値の真偽からキーの有無へ直す |
+| repair-entrypoint-config-writes | awaiting-verify | false | 2026-08-22T19:55:00+09:00 | 起動処理が /workspace 配下の設定を書くときの一時ファイルと chown を安全な形へ揃え、登録の有無の判定を値の真偽からキーの有無へ直す |
 
 件数: 10
 

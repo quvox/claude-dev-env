@@ -1,12 +1,12 @@
 ---
 slug: repair-entrypoint-config-writes
-state: building
+state: awaiting-verify
 critical: false
 origin: derived
 issue: docs/issues/098-modify-entrypoint-writes-user-controlled-paths-as-root.md
 started: 2026-08-22T19:05:00+09:00
-updated: 2026-08-22T19:05:00+09:00
-commit: -
+updated: 2026-08-22T19:55:00+09:00
+commit: cd32b995356837ef55eea102d7072f948a22b045
 summary: 起動処理が /workspace 配下の設定を書くときの一時ファイルと chown を安全な形へ揃え、登録の有無の判定を値の真偽からキーの有無へ直す
 ---
 
