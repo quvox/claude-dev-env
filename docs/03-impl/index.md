@@ -1,6 +1,6 @@
 ---
 id: index
-version: 1.36.0
+version: 1.37.0
 updated: 2026-08-22
 source:
   - docs/02-design/system.md
@@ -9,7 +9,7 @@ summary: 03-impl 層の目次。機能間連携仕様書群の代表として層
 keywords: [目次]
 verified:
   at: 2026-08-22
-  version: 1.36.0
+  version: 1.37.0
   against:
     - {doc: docs/02-design/system.md, version: 2.20.0}
     - {doc: docs/02-design/relations.md, version: 1.12.0}
