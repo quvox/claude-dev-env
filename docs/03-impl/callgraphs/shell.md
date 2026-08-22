@@ -2,14 +2,15 @@
 id: shell
 language: shell
 tier: 3
-symbols: 179
-edges: 274
+symbols: 180
+edges: 275
 endpoints: 46
 unresolved: 3
 ---
 
 <!-- BEGIN NOTE: build-callgraphs.py -->
-<!-- 生成物。手書き禁止。`CG_OUT=$(python3 .claude/scripts/resolve-callgraph-out.py) && python3 .claude/scripts/build-callgraphs.py --out "$CG_OUT"` で再生成する。
+<!-- 生成物。手書き禁止。`python3 .claude/scripts/build-callgraphs.py` で再生成する
+     (生成先は常に SSOT — .claude/directions/callgraphs.md §3.1)。
      辞書順に固定されており、実装が変わらなければこのファイルも変わらない。
      **これは機能間連携仕様書ではない**(.claude/directions/callgraphs.md)。 -->
 <!-- END NOTE: build-callgraphs.py -->
@@ -222,7 +223,8 @@ unresolved: 3
 | `scripts/dood-portsync.sh::published_ports` | function | private | - | `scripts/dood-portsync.sh::main`, `scripts/dood-portsync.sh::sync_once` |
 | `scripts/dood-portsync.sh::sync_once` | function | private | `scripts/dood-portsync.sh::is_excluded`, `scripts/dood-portsync.sh::local_listening`, `scripts/dood-portsync.sh::log`, `scripts/dood-portsync.sh::published_ports` | `scripts/dood-portsync.sh::main`, `scripts/dood-portsync.sh::main#--loop` |
 | `scripts/entrypoint-claude.sh::ensure_codex_config` | function | private | - | `scripts/entrypoint-claude.sh::main` |
-| `scripts/entrypoint-claude.sh::main` | handler | private | `scripts/entrypoint-claude.sh::ensure_codex_config`, `scripts/entrypoint-claude.sh::record_runtime_env` | (エントリポイント) |
+| `scripts/entrypoint-claude.sh::ensure_codex_mcp_entry` | function | private | - | `scripts/entrypoint-claude.sh::main` |
+| `scripts/entrypoint-claude.sh::main` | handler | private | `scripts/entrypoint-claude.sh::ensure_codex_config`, `scripts/entrypoint-claude.sh::ensure_codex_mcp_entry`, `scripts/entrypoint-claude.sh::record_runtime_env` | (エントリポイント) |
 | `scripts/entrypoint-claude.sh::record_runtime_env` | function | private | - | `scripts/entrypoint-claude.sh::main` |
 | `scripts/init-firewall-claude.sh::main` | handler | private | - | (エントリポイント) |
 | `scripts/vm-healthd.sh::cpu_ticks` | function | private | - | `scripts/vm-healthd.sh::evaluate_once` |

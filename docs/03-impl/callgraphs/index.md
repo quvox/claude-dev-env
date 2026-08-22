@@ -4,7 +4,8 @@ languages: 6
 ---
 
 <!-- BEGIN NOTE: build-callgraphs.py -->
-<!-- 生成物。手書き禁止。`CG_OUT=$(python3 .claude/scripts/resolve-callgraph-out.py) && python3 .claude/scripts/build-callgraphs.py --out "$CG_OUT"` で再生成する。
+<!-- 生成物。手書き禁止。`python3 .claude/scripts/build-callgraphs.py` で再生成する
+     (生成先は常に SSOT — .claude/directions/callgraphs.md §3.1)。
      辞書順に固定されており、実装が変わらなければこのファイルも変わらない。
      **これは機能間連携仕様書ではない**(.claude/directions/callgraphs.md)。 -->
 <!-- END NOTE: build-callgraphs.py -->
@@ -19,7 +20,7 @@ languages: 6
 | [infra](infra.md) | 2 | infra (CFN/SAM/OpenAPI/Terraform) | 0 | 0 | 0 | 0 | 0 | - |
 | [make](make.md) | 3 | make-regex | 16 | 21 | 16 | 0 | 58 | 正規表現のみ(レシピ本文は shell と同じ限界を持つ) |
 | [python](python.md) | 2 | python-ast (stdlib) | 0 | 0 | 0 | 0 | 0 | - |
-| [shell](shell.md) | 3 | shell-regex | 179 | 274 | 46 | 3 | 2714 | 正規表現のみ(shell は変数展開・eval で静的解決が原理的に不完全) |
+| [shell](shell.md) | 3 | shell-regex | 180 | 275 | 46 | 3 | 2726 | 正規表現のみ(shell は変数展開・eval で静的解決が原理的に不完全) |
 | [typescript](typescript.md) | 2 | tree-sitter-typescript | 0 | 0 | 0 | 0 | 0 | - |
 
 ## Tier の意味

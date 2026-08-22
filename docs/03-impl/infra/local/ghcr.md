@@ -1,6 +1,6 @@
 ---
 id: local-ghcr
-version: 1.3.0
+version: 1.3.1
 updated: 2026-08-22
 source:
   - docs/02-design/architecture.md
@@ -77,7 +77,7 @@ graph LR
 | `CLAUDE_VERSION` | `prepare` ジョブが `latest` チャネルから解決。手動実行時は入力で上書きできる | 解決値 | 必須 |
 | `CODEX_VERSION` | `prepare` ジョブが npm registry から解決。手動実行時は入力で上書きできる | 解決値 | 必須 |
 | `CHROME_DEVTOOLS_MCP_VERSION` | `prepare` ジョブが npm registry から解決。手動実行時は入力で上書きできる | 解決値 | 必須 |
-| `IMAGE_VERSION` | ビルド時刻(JST)から作るタイムスタンプ | — | 必須 |
+| `IMAGE_VERSION` | **CI は渡さない**(Dockerfile 側の既定 `local` のまま)。ビルド時刻(JST)から作るタイムスタンプは `labels` 入力でイメージのラベルへ直接付ける — build-arg にするとレイヤーチェーンが毎日失効するため(`ghcr-images.yml` の `labels:` の直上コメント) | `local`(Dockerfile の既定) | 使わない |
 
 ## デプロイ手順
 
