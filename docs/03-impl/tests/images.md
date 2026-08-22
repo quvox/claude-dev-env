@@ -1,7 +1,7 @@
 ---
 id: images
-version: 1.4.0
-updated: 2026-08-18
+version: 1.5.0
+updated: 2026-08-22
 scope: (モジュール外)イメージのビルドと GHCR 配布
 source:
   - docs/01-requirements/functional.md
@@ -36,6 +36,7 @@ verified:
 | FR-env-12-2 | 正常系 | — | - | 未検証(テスト未実装) |
 | FR-env-12-3 | 正常系 | — | - | 未検証(テスト未実装) |
 | FR-env-12-9 | 境界値 | — | - | 未検証(テスト未実装) |
+| FR-env-12-13 | 正常系 | — | - | 未検証(テスト未実装) |
 | FR-env-13-1 | 正常系 | — | - | 未検証(テスト未実装) |
 | FR-env-13-2 | 正常系 | — | - | 未検証(テスト未実装) |
 | FR-env-13-3 | 正常系 | — | - | 未検証(テスト未実装) |
@@ -74,6 +75,7 @@ verified:
 | 11 | FR-env-12-2(正常系) | 同上 | 同上 |
 | 12 | FR-env-12-3(正常系) | 同上 | 同上 |
 | 13 | FR-env-12-9(境界値) | 同上 | 同上 |
+| 13' | FR-env-12-13(正常系) | 同上 | 同上 |
 | 14 | NFR-perf-01 — 取得の増分性 | CI 成果物の検証を自動化していない。日次ビルド後に人が、前日分のイメージを持つ環境で `docker pull` を実行し `Already exists` 以外の層が出ないことを確認する | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |
 | 15 | NFR-perf-02 — ベース層の共有と追加層の限定 | CI 成果物の検証を自動化していない。日次ビルド後に人が `docker history --no-trunc` で 2 イメージの層を並べ、**(1) 共通部分の最終層のダイジェストが一致すること、(2) ブラウザ確認ありイメージだけが持つ追加層の `CREATED BY` に現れる導入物が、`NFR-perf-02` の挙げる6カテゴリ(VNC・GUI ブラウザ・日本語入力とロケール・端末/キー操作と gsettings/dconf バックエンド・フォント・computer-use MCP)のいずれかに割り当てられること**を確認する。**両イメージが等しく持つ層は対象外である** — 同梱エージェント CLI の導入層と、**同梱外部バイナリの設置層**の2つが該当する | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |
 | 16 | FR-env-13-1(正常系) | ビルド成果物の検証を自動化していない。**確認用の実行物を自分で用意する**: `#!/bin/sh` と `echo cdx-externals-probe-ok` の2行から成る `cdx-externals-probe` を `externals/` 直下へ置いて配布イメージ2種をビルドし、`docker run --rm --entrypoint /bin/sh claude-dev-claude -lc 'cdx-externals-probe'` と `docker run --rm --entrypoint /bin/sh claude-dev-claude-vnc -lc 'cdx-externals-probe'` の**両方が標準出力へ `cdx-externals-probe-ok` を出し、終了コード 0 で終わる**ことを確認する(**名前だけで解決できること**と**実際に実行できること**を1回の観測で両方見る)。**`--entrypoint /bin/sh` は必須である** — このイメージの ENTRYPOINT は初期化のあと `exec tail -f /dev/null` で待機に入り、**渡したコマンドを実行しない**(`scripts/entrypoint-claude.sh` の末尾)。**不合格の条件**: どちらか一方でも出力が一致しない、または非0で終わる | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |

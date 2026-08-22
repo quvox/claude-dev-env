@@ -1,7 +1,7 @@
 ---
 id: images
-version: 1.2.0
-updated: 2026-08-18
+version: 1.3.0
+updated: 2026-08-22
 source:
   - docs/02-design/environments.md
 summary: 配布イメージ(claude-cli / claude-vnc)のステージ構成・ビルド引数・キャッシュの効かせ方
@@ -37,11 +37,16 @@ graph LR
   (`D0-env-06`)。
 - `vnc-base` が `FROM base` で VNC・Chrome・日本語入力を積む。
 - 終端ステージ `claude-cli` と `claude-vnc` が、それぞれ `FROM base` /
-  `FROM vnc-base` で**最後にエージェント CLI と同梱外部バイナリだけを入れる**。
-  この2つが配布物である。
+  `FROM vnc-base` で**最後にエージェント CLI・ブラウザ操作用 MCP サーバー・同梱外部バイナリだけを
+  入れる**。この2つが配布物である。
+  **ブラウザ操作用 MCP サーバー(`chrome-devtools-mcp`)はエージェント CLI と同じ扱いである**
+  (`D0-dist-06` / `DSN-dist-01` 項1')— 版は CI が解決した具体値を build-arg で受け、
+  `npm install -g` で導入したうえで、`codex` と同じ形の `/usr/local/bin` ランチャーを置く。
+  **ランチャーが要る理由は `codex` と同一である**: 実体が `#!/usr/bin/env node` の JS ランチャー
+  なので、fnm の初期化が無いシェル(`bash -c` / `docker exec`)から `node` が解決できない。
 
-エージェント CLI の導入を終端に置くのは、更新のたびに失効するレイヤーを CLI のバイナリ層だけに
-限定するためである。`vnc-base` は `base` に連なるため、`base` の途中を失効させると VNC の高コスト層
+エージェント CLI とブラウザ操作用 MCP サーバーの導入を終端に置くのは、更新のたびに失効する
+レイヤーをそのバイナリ層だけに限定するためである。`vnc-base` は `base` に連なるため、`base` の途中を失効させると VNC の高コスト層
 まで巻き込んで再ビルド・再取得になる(`DSN-dist-01` / `NFR-perf-01`)。同梱外部バイナリの設置層も
 同じ理由で終端に置く(次の節)。
 
@@ -151,6 +156,7 @@ graph LR
 | `PYTHON_VERSION` | 同梱する Python | `3.13` | 任意 | `base` ステージの pyenv 導入部 |
 | `CLAUDE_VERSION` | 同梱する Claude Code。**CI が具体バージョンへ解決して渡す** | `latest` | 実質必須(CI から) | 配布ステージ `claude-cli` / `claude-vnc` の冒頭 |
 | `CODEX_VERSION` | 同梱する Codex CLI。**CI が具体バージョンへ解決して渡す** | `latest` | 実質必須(CI から) | 同上 |
+| `CHROME_DEVTOOLS_MCP_VERSION` | 同梱するブラウザ操作用 MCP サーバー(`chrome-devtools-mcp`)。**CI が具体バージョンへ解決して渡す** | `latest` | 実質必須(CI から) | 同上 |
 | `container`(ENV) | コンテナ内であることのマーカー | `docker` | 必須 | `base` ステージのコンテナ設定部 |
 
 **同梱外部バイナリの設置はビルド引数を1つも増やさない。** アーキテクチャの判定は
@@ -160,6 +166,7 @@ graph LR
 
 | 事象 | 原因 | 回避方法 |
 |---|---|---|
+| **同梱した MCP サーバーが更新されない** | `CHROME_DEVTOOLS_MCP_VERSION=latest` のまま渡すと、エージェント CLI と同じ理由で導入層が永久にヒットして中身だけ凍結する | CI の prepare ジョブで具体バージョンへ解決してから build-arg で渡す(`infra/local/ghcr.md`) |
 | 同梱エージェント CLI が更新されない | `CLAUDE_VERSION=latest` / `CODEX_VERSION=latest` のまま渡すと**文字列が変わらずキャッシュキーとして機能せず**、導入層が永久にヒットして中身だけ凍結する(2026-07 に実際に発生) | CI の prepare ジョブで具体バージョンへ解決してから build-arg で渡す(`infra/local/ghcr.md`) |
 | 取得が毎回フルダウンロードになる | 時刻由来の値をレイヤーチェーンに入れると、内容が変わらない日も全層が失効する | レイヤーチェーンに入れてよいのは**内容由来**の値だけ(`DSN-dist-01`)。時刻はラベルに置く |
 | VNC 層まで再ビルドされる | エージェント CLI の導入や同梱外部バイナリの設置を `base` の途中に置くと、`FROM base` の `vnc-base` まで失効が波及する | 導入・設置は終端ステージの最終レイヤーにのみ置く |

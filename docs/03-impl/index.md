@@ -1,7 +1,7 @@
 ---
 id: index
-version: 1.35.1
-updated: 2026-08-20
+version: 1.36.0
+updated: 2026-08-22
 source:
   - docs/02-design/system.md
   - docs/02-design/relations.md
@@ -82,9 +82,9 @@ CG3/CG4、`check-relations.py`、`check-contracts.py` で確認した。
 | ファイル | version | 更新 | 概要 |
 |---|---|---|---|
 | [features](features.md) | - | 2026-08-11 | claude-dev 開発環境の機能一覧と入口。CLI サブコマンド・Makefile ターゲット・常駐スクリプト・Go バイナリの入口を列挙する |
-| [images](environments/images.md) | 1.2.0 | 2026-08-18 | 配布イメージ(claude-cli / claude-vnc)のステージ構成・ビルド引数・キャッシュの効かせ方 |
+| [images](environments/images.md) | 1.3.0 | 2026-08-22 | 配布イメージ(claude-cli / claude-vnc)のステージ構成・ビルド引数・キャッシュの効かせ方 |
 | [local-docker-resources](infra/local/docker-resources.md) | 1.2.0 | 2026-08-07 | ホスト上に作られる Docker リソース(ネットワーク・ボリューム・コンテナ)の一覧と命名規則 |
-| [local-ghcr](infra/local/ghcr.md) | 1.2.0 | 2026-08-18 | 配布イメージの公開先 GHCR の構成(リポジトリ・タグ・マルチアーキ・認証の置き場所) |
+| [local-ghcr](infra/local/ghcr.md) | 1.3.0 | 2026-08-22 | 配布イメージの公開先 GHCR の構成(リポジトリ・タグ・マルチアーキ・認証の置き場所) |
 
 件数: 4
 

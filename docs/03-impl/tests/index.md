@@ -26,10 +26,10 @@
 | [cli-upgrade](cli-upgrade.md) | MOD-cli-upgrade | 0 / **1** / 0 | 1.1.1 | 2026-08-12 | MOD-cli-upgrade(CLI とイメージの更新)の受入基準⇄テスト対応 |
 | [container-tools](container-tools.md) | MOD-container-tools | 0 / **1** / 0 | 1.1.1 | 2026-08-12 | MOD-container-tools(コンテナ内補助ツール)の受入基準⇄テスト対応 |
 | [docker-proxy](docker-proxy.md) | MOD-docker-proxy | 10 / **2** / 0 | 1.4.1 | 2026-08-19 | MOD-docker-proxy(Docker API の検査と中継)の受入基準⇄テスト対応 |
-| [e2e](e2e.md) | E2E | 0 / **4** / 0 | 1.17.0 | 2026-08-20 | E2Eシナリオ E2E-01〜E2E-03 と E2E-06 ⇄ テスト対応 |
-| [entrypoint](entrypoint.md) | MOD-entrypoint | 0 / **25** / 0 | 1.3.1 | 2026-08-20 | MOD-entrypoint(コンテナ起動シーケンス)の受入基準⇄テスト対応 |
+| [e2e](e2e.md) | E2E | 0 / **4** / 0 | 1.18.0 | 2026-08-22 | E2Eシナリオ E2E-01〜E2E-03 と E2E-06 ⇄ テスト対応 |
+| [entrypoint](entrypoint.md) | MOD-entrypoint | 0 / **27** / 0 | 1.4.0 | 2026-08-22 | MOD-entrypoint(コンテナ起動シーケンス)の受入基準⇄テスト対応 |
 | [firewall](firewall.md) | MOD-firewall | 0 / **5** / 0 | 1.2.1 | 2026-08-12 | MOD-firewall(外向き通信のブラックリスト適用)の受入基準⇄テスト対応 |
-| [images](images.md) | (モジュール外)イメージのビルドと GHCR 配布 | 0 / **21** / 0 | 1.4.0 | 2026-08-18 | どのモジュールにも属さないイメージのビルドと GHCR 配布の受入基準⇄テスト対応 |
+| [images](images.md) | (モジュール外)イメージのビルドと GHCR 配布 | 0 / **22** / 0 | 1.5.0 | 2026-08-22 | どのモジュールにも属さないイメージのビルドと GHCR 配布の受入基準⇄テスト対応 |
 | [makefile](makefile.md) | MOD-makefile | 0 / **18** / 0 | 1.5.0 | 2026-08-20 | MOD-makefile(ビルド・導入・運用ターゲット)の受入基準⇄テスト対応 |
 | [portsync](portsync.md) | MOD-portsync | 0 / **1** / 0 | 1.1.1 | 2026-08-12 | MOD-portsync(DooD 経路のポート同期)の受入基準⇄テスト対応 |
 | [strategy](strategy.md) | 全体 | - | 1.6.1 | 2026-08-18 | テストのレベル別実行方法・状態列の語彙・受入基準の配分規約 |

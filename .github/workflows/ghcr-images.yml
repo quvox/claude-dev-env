@@ -16,6 +16,10 @@ on:
         description: '同梱する Codex CLI のバージョン（latest / 0.146.0 等）。空なら npm registry の最新版を自動解決'
         required: false
         default: ''
+      chrome_devtools_mcp_version:
+        description: '同梱する chrome-devtools MCP のバージョン（latest / 1.7.0 等）。空なら npm registry の最新版を自動解決'
+        required: false
+        default: ''
 
 permissions:
   contents: read
@@ -40,11 +44,13 @@ jobs:
       owner: ${{ steps.meta.outputs.owner }}
       claude_version: ${{ steps.meta.outputs.claude_version }}
       codex_version: ${{ steps.meta.outputs.codex_version }}
+      chrome_devtools_mcp_version: ${{ steps.meta.outputs.chrome_devtools_mcp_version }}
     steps:
       - id: meta
         env:
           CLAUDE_VERSION_INPUT: ${{ inputs.claude_version }}
           CODEX_VERSION_INPUT: ${{ inputs.codex_version }}
+          CHROME_DEVTOOLS_MCP_VERSION_INPUT: ${{ inputs.chrome_devtools_mcp_version }}
         run: |
           set -euo pipefail
           echo "tag=$(TZ=Asia/Tokyo date +%Y%m%d%H%M)" >> "$GITHUB_OUTPUT"
@@ -89,6 +95,25 @@ jobs:
           fi
           echo "codex_version=${codex_version}" >> "$GITHUB_OUTPUT"
 
+          # 同梱する chrome-devtools MCP のバージョン（D0-dist-06 項2）:
+          # codex と同じ方針。手動入力があればそれを採用し、空なら npm registry の
+          # dist-tag latest を具体バージョンへ解決する（@latest のまま渡すと文字列が
+          # 変化せずキャッシュキーとして機能しないため必ず解決してから渡す）。
+          if [ -n "${CHROME_DEVTOOLS_MCP_VERSION_INPUT}" ]; then
+            cdm_version="${CHROME_DEVTOOLS_MCP_VERSION_INPUT}"
+            echo "同梱バージョン（手動指定）: chrome-devtools-mcp ${cdm_version}"
+          else
+            cdm_version="$(curl -fsSL https://registry.npmjs.org/chrome-devtools-mcp/latest | jq -r '.version')"
+            echo "同梱バージョン（npm registry 解決）: chrome-devtools-mcp ${cdm_version}"
+            # registry 不達や JSON 不正（null 等）はここで落とす。npm install に渡してから
+            # 落ちるとビルド後半になり原因追跡が遠くなる。
+            if ! echo "${cdm_version}" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+              echo "::error::npm registry の解決結果が MAJOR.MINOR.PATCH 形式ではありません: ${cdm_version}"
+              exit 1
+            fi
+          fi
+          echo "chrome_devtools_mcp_version=${cdm_version}" >> "$GITHUB_OUTPUT"
+
   # --- 3 イメージ × 2 アーキをネイティブ runner で並行ビルドし push-by-digest ---
   build:
     needs: prepare
@@ -129,15 +154,17 @@ jobs:
           # /workspace 所有者へ追従。docs/10_ghcr-images.md「pull して使う運用」）。
           # docker-proxy はこれらの ARG を宣言しないため無視される（警告のみ）。
           #
-          # CLAUDE_VERSION / CODEX_VERSION は build-arg で渡してよい——内容由来の値であり、
-          # かつ参照する層が配布ステージの終端レイヤーに限られるため、失効の波及先が各
-          # エージェント CLI のバイナリ層だけに留まる（D-26 / D-27 / 02-design 判断4）。
+          # CLAUDE_VERSION / CODEX_VERSION / CHROME_DEVTOOLS_MCP_VERSION は build-arg で
+          # 渡してよい——内容由来の値であり、かつ参照する層が配布ステージの終端レイヤーに
+          # 限られるため、失効の波及先が各バイナリ層だけに留まる
+          # （D0-dist-03 / D0-dist-04 / D0-dist-06 / DSN-dist-01）。
           build-args: |
             USERNAME=dev
             USER_UID=1000
             USER_GID=1000
             CLAUDE_VERSION=${{ needs.prepare.outputs.claude_version }}
             CODEX_VERSION=${{ needs.prepare.outputs.codex_version }}
+            CHROME_DEVTOOLS_MCP_VERSION=${{ needs.prepare.outputs.chrome_devtools_mcp_version }}
           # バージョン(日次で変わるタイムスタンプ)は build-arg=IMAGE_VERSION として
           # Dockerfile の LABEL 経由でレイヤーチェーンに載せると、その層以降の
           # レイヤーキャッシュが毎日失効し（cache-from が効かず）、pull が毎回

@@ -432,6 +432,103 @@ print("✓ codex config.toml に不足していた既定鍵を追記しました
       + ("（landlock を除く。上記の理由により）" if ll_blocked else ""))
 PYEOF
 }
+
+# codex の設定へブラウザ操作用 MCP サーバーを登録する（FR-env-12-14 / D0-dist-06 項4）。
+# ensure_codex_config と同じ流儀: **書かれていないときだけ追記し、既存の値は一切変えない**。
+# 別関数にしてあるのは呼ぶ条件が違うためである — 既定3鍵はブラウザ確認の有無に関わらず要るが、
+# この登録は接続先（コンテナ内 Chrome の :9222）が在るときだけ意味を持つので、
+# VNC ありの初期化からだけ呼ぶ。
+ensure_codex_mcp_entry() {
+    _cfg="$LOCAL_CODEX/config.toml"
+    [ -f "$_cfg" ] || return 0        # 既定鍵の生成に失敗した等。起動は止めない
+
+    if ! command -v python3 >/dev/null 2>&1 || ! python3 -c 'import tomllib' >/dev/null 2>&1; then
+        echo "⚠️  python3/tomllib が無いため codex への chrome-devtools 登録をスキップします: $_cfg"
+        return 0
+    fi
+
+    python3 - "$_cfg" <<'PYEOF2'
+import os, sys, tempfile, tomllib
+
+path = sys.argv[1]
+TABLE = ("mcp_servers", "chrome-devtools")
+BLOCK = ['[mcp_servers.chrome-devtools]',
+         'command = "chrome-devtools-mcp"',
+         'args = ["--browserUrl", "http://localhost:9222"]']
+WANT = {TABLE + ("command",): "chrome-devtools-mcp",
+        TABLE + ("args",): ["--browserUrl", "http://localhost:9222"]}
+
+def flatten(d, prefix=()):
+    out = {}
+    for k, v in d.items():
+        p = prefix + (k,)
+        if isinstance(v, dict):
+            out.update(flatten(v, p))
+        else:
+            out[p] = v
+    return out
+
+try:
+    raw = open(path, "rb").read()
+    orig = tomllib.loads(raw.decode("utf-8"))
+except Exception as e:
+    print(f"⚠️  codex config.toml を TOML として読めません。chrome-devtools の登録をスキップします: {path} ({e})")
+    sys.exit(0)
+
+oflat = flatten(orig)
+# 既に何らかの形で登録されているなら触らない（値の是非は利用者のものである）。
+srv = orig.get("mcp_servers")
+if isinstance(srv, dict) and "chrome-devtools" in srv:
+    sys.exit(0)
+if not isinstance(srv, (dict, type(None))):
+    print(f"⚠️  codex config.toml の mcp_servers が通常テーブルではないため、chrome-devtools の登録をスキップします: {path}")
+    sys.exit(0)
+
+text = raw.decode("utf-8")
+nl = "\r\n" if "\r\n" in text else "\n"
+cand = text
+if cand and not cand.endswith(("\n", "\r")):
+    cand += nl
+cand += nl.join([""] + BLOCK) + nl
+
+# 意味で確かめる: 既存の全キーパスの値が不変で、増分がこの表の2鍵だけであること。
+try:
+    new = tomllib.loads(cand)
+except Exception as e:
+    print(f"⚠️  chrome-devtools の登録を追記すると TOML として読めなくなるため、元ファイルを変更しません: {path} ({e})")
+    sys.exit(0)
+nflat = flatten(new)
+for kp, v in oflat.items():
+    if kp not in nflat or nflat[kp] != v:
+        print(f"⚠️  chrome-devtools の追記が既存の設定を変えるため、元ファイルを変更しません: {path}")
+        sys.exit(0)
+extra = set(nflat) - set(oflat)
+if extra != set(WANT) or any(nflat[kp] != WANT[kp] for kp in extra):
+    print(f"⚠️  chrome-devtools の追記の検証に通らないため、元ファイルを変更しません: {path}")
+    sys.exit(0)
+
+d = os.path.dirname(path) or "."
+tmp = None
+try:
+    fd, tmp = tempfile.mkstemp(dir=d)
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        f.write(cand)
+    st = os.stat(path)
+    os.chmod(tmp, st.st_mode & 0o7777)
+    os.chown(tmp, st.st_uid, st.st_gid)
+    os.replace(tmp, path)
+except Exception as e:
+    if tmp:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+    print(f"⚠️  codex config.toml の書き換えに失敗しました（元ファイルは無変更）: {path} ({e})")
+    sys.exit(0)
+print("✓ codex config.toml に chrome-devtools MCP を登録しました: " + path)
+PYEOF2
+}
+
 ensure_codex_config || true
 
 # --- ホストの hooks / env 設定をマージ ---
@@ -644,8 +741,15 @@ fi
 # chrome-devtools MCP サーバーで Chrome を操作するための設定
 if [ "${CLAUDE_DEV_VNC:-}" = "1" ]; then
     # .mcp.json: chrome-devtools エントリを確保
+    # **同梱した実行ファイルを名前で起動する**（FR-env-12-13 / D0-dist-06）。起動のたびに
+    # npx で取得する形はやめた — 取得先の可用性とコンテナ内ファイアウォールにブラウザ確認の
+    # 成否が依存するため。ランチャーは Dockerfile が /usr/local/bin へ置いている。
     MCP_JSON="/workspace/.mcp.json"
-    CHROME_DEVTOOLS_ENTRY='{"command":"npx","args":["-y","chrome-devtools-mcp@latest","--browserUrl","http://localhost:9222"]}'
+    CHROME_DEVTOOLS_ENTRY='{"command":"chrome-devtools-mcp","args":["--browserUrl","http://localhost:9222"]}'
+    # 以前このスクリプトが書いていた値。**これと完全一致するときだけ**同梱物へ向け直す
+    # （FR-env-11-9）。利用者が自分で書き換えた設定を確認なく上書きしないため、部分一致では
+    # 判定しない。
+    CHROME_DEVTOOLS_LEGACY_ENTRY='{"command":"npx","args":["-y","chrome-devtools-mcp@latest","--browserUrl","http://localhost:9222"]}'
 
     if [ ! -f "$MCP_JSON" ]; then
         # 新規作成
@@ -659,9 +763,23 @@ if [ "${CLAUDE_DEV_VNC:-}" = "1" ]; then
                 rm -f "${MCP_JSON}.tmp"
                 echo "⚠️  .mcp.json の更新に失敗しました（不正な JSON？）。chrome-devtools 追加をスキップします"
             fi
+        # 旧値（実行時取得）がそのまま残っているときだけ、同梱物を指す値へ置き換える。
+        elif jq -e --argjson legacy "$CHROME_DEVTOOLS_LEGACY_ENTRY" \
+                '.mcpServers["chrome-devtools"] == $legacy' "$MCP_JSON" >/dev/null 2>&1; then
+            if jq --argjson entry "$CHROME_DEVTOOLS_ENTRY" '.mcpServers["chrome-devtools"] = $entry' "$MCP_JSON" > "${MCP_JSON}.tmp" 2>/dev/null; then
+                mv "${MCP_JSON}.tmp" "$MCP_JSON"
+                echo "🔧 .mcp.json の chrome-devtools を同梱物に切り替えました（起動時の取得が不要になります）"
+            else
+                rm -f "${MCP_JSON}.tmp"
+                echo "⚠️  .mcp.json の更新に失敗しました（不正な JSON？）。chrome-devtools の切り替えをスキップします"
+            fi
         fi
     fi
     chown "$USERNAME":"$USERNAME" "$MCP_JSON"
+
+    # codex 側にも同じ MCP サーバーを登録する（FR-env-12-14 / D0-dist-06 項4）。
+    # 既定3鍵と同じ流儀で、**書かれていないときだけ追記**し、既存の値は変えない。
+    ensure_codex_mcp_entry || true
 
     # computer-use MCP（デスクトップ操作）: rmcp-xdotool バイナリがある場合のみ
     # .mcp.json に定義を用意する。既定では有効化しない（enabledMcpjsonServers に追加しない）。

@@ -1,7 +1,7 @@
 ---
 id: e2e
-version: 1.17.0
-updated: 2026-08-20
+version: 1.18.0
+updated: 2026-08-22
 scope: E2E
 source:
   - docs/02-design/system.md
@@ -665,6 +665,24 @@ verified:
    - macOS(`claude-dev-mac`)でも同じ2つを実行する。実行できない場合は
      **未実施であることを記録する**(手順を省いたことを黙って残さない)。
 
+25. **ブラウザ操作用 MCP サーバーが同梱物として登録される**(`FR-env-11-2` / `FR-env-11-9`)。
+    1. **新規プロジェクトの側**: `.mcp.json` の無いディレクトリで `claude-dev start` を実行し、
+       `jq -r '.mcpServers["chrome-devtools"].command' .mcp.json` が `chrome-devtools-mcp` を
+       返すことを確認する。窓の中で
+       `docker exec` 相当の非ログインシェル(`/bin/sh -c 'chrome-devtools-mcp --version'`)が
+       **バージョンを出して終了コード 0** で終わること。
+       **不合格の条件**: `command` が `npx` である、またはコマンドが見つからない。
+    2. **移行の側**: `.mcp.json` に旧値
+       (`{"command":"npx","args":["-y","chrome-devtools-mcp@latest","--browserUrl","http://localhost:9222"]}`)
+       を書いた状態で `claude-dev start` を実行し、`command` が `chrome-devtools-mcp` へ
+       置き換わること、**同じファイルの他のエントリ(`computer-use` 等)が残っている**ことを
+       確認する。
+    3. **利用者の指定を壊さない側**: `.mcp.json` の `chrome-devtools` を利用者が書き換えた値
+       (例: `args` を `["-y","chrome-devtools-mcp@1.2.0"]` にする)にして `claude-dev start` を
+       実行し、**その値が変わっていない**ことを確認する。
+       **不合格の条件**: 利用者が書いた値が同梱物を指す値へ置き換わる。
+    **後片付け**: `claude-dev stop <name> --volumes`。
+
 ### E2E-02
 
 1. コンテナ内で任意の Web アプリを `0.0.0.0` で待ち受けさせる。
@@ -721,6 +739,17 @@ verified:
    - `codex sandbox --enable use_legacy_landlock -- /bin/sh -c 'touch /tmp/x'` が失敗すること。
    - `--sandbox read-only` を明示した依頼で読み取りが成功すること。
 4. トークンが更新された後に別のコンテナを起動し、再ログインが不要であることを確認する。
+5. **codex にブラウザ操作用 MCP サーバーが登録される**(`FR-env-12-13` / `FR-env-12-14`)。
+   - ブラウザ確認ありの構成で起動した窓の中で、
+     `python3 -c 'import tomllib;print(tomllib.load(open("/workspace/.codex/config.toml","rb"))["mcp_servers"]["chrome-devtools"])'`
+     が `command` に `chrome-devtools-mcp`、`args` に `--browserUrl http://localhost:9222` を
+     持つ表を出すこと。
+   - **既に書かれている登録は変わらない**: その表の `command` を別の値に書き換えて
+     `claude-dev stop` → `start` し、書き換えた値のままであることを確認する。
+   - **ブラウザ確認なしの構成(`--no-vnc`)では登録しない**: `mcp_servers` が無い(または
+     `chrome-devtools` を含まない)ことを確認する。
+   - **不合格の条件**: 既定3鍵のどれかが書き換わる、`config.toml` が読めなくなる、
+     または追記に失敗して起動が止まる。
 
 ## テスト設計の判断
 

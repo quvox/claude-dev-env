@@ -1,7 +1,7 @@
 ---
 id: 02-system
-version: 2.19.0
-updated: 2026-08-20
+version: 2.20.0
+updated: 2026-08-22
 source:
   - docs/01-requirements/functional.md
   - docs/01-requirements/non-functional.md
@@ -323,13 +323,14 @@ verified:
 | FR-env-10-5 | MOD-cli-start | 完全 | -(設計判断を要さない) |
 | FR-env-10-6 | MOD-cli-start | 完全 | -(設計判断を要さない) |
 | FR-env-11-1 | MOD-entrypoint | 完全 | -(設計判断を要さない) |
-| FR-env-11-2 | MOD-entrypoint | 完全 | -(設計判断を要さない) |
+| FR-env-11-2 | MOD-entrypoint | 完全 | DSN-dist-01(同梱した MCP サーバーを起動時に双方のエージェントへ登録する。同梱そのものはこの設計判断が置き場を定める) |
 | FR-env-11-3 | (モジュール外)`03-impl/environments/images.md` / `03-impl/infra/local/ghcr.md` | 完全 | -(設計判断を要さない) |
 | FR-env-11-4 | MOD-cli-start | 完全 | -(設計判断を要さない) |
 | FR-env-11-5 | MOD-cli-start | 完全 | -(設計判断を要さない) |
 | FR-env-11-6 | MOD-cli-start | 完全 | DSN-mod-04 |
 | FR-env-11-7 | MOD-cli-start | 完全 | -(設計判断を要さない) |
 | FR-env-11-8 | MOD-cli-common | 完全 | -(設計判断を要さない) |
+| FR-env-11-9 | MOD-entrypoint | 完全 | -(設計判断を要さない) |
 | FR-env-12-1 | (モジュール外)`03-impl/environments/images.md` / `03-impl/infra/local/ghcr.md` | 完全 | DSN-dist-01 |
 | FR-env-12-2 | (モジュール外)`03-impl/environments/images.md` / `03-impl/infra/local/ghcr.md` | 完全 | -(設計判断を要さない) |
 | FR-env-12-3 | (モジュール外)`03-impl/environments/images.md` / `03-impl/infra/local/ghcr.md` | 完全 | DSN-dist-01 |
@@ -341,6 +342,8 @@ verified:
 | FR-env-12-9 | (モジュール外)`03-impl/environments/images.md` / `03-impl/infra/local/ghcr.md` | 完全 | DSN-dist-02 |
 | FR-env-12-10 | MOD-entrypoint | 完全 | DSN-dist-02 |
 | FR-env-12-11 | MOD-entrypoint | 完全 | DSN-dist-02 |
+| FR-env-12-13 | (モジュール外)`03-impl/environments/images.md` / `03-impl/infra/local/ghcr.md` | 完全 | DSN-dist-01(MCP サーバーをエージェント CLI と同じ扱いで終端レイヤーに置き、版は CI が解決した具体値をキャッシュキーにする) |
+| FR-env-12-14 | MOD-entrypoint | 完全 | DSN-dist-02(既存の設定を書き換えず、書かれていないものだけを追記する扱いを MCP の登録にも当てる) |
 | FR-env-13-1 | (モジュール外)`03-impl/environments/images.md` | 完全 | DSN-dist-01(同梱物の導入を配布ステージの終端レイヤーに置く一般原則。同梱外部バイナリの設置もこの原則の適用である) |
 | FR-env-13-2 | (モジュール外)`03-impl/environments/images.md` | 完全 | -(設計判断を要さない) |
 | FR-env-13-3 | (モジュール外)`03-impl/environments/images.md` | 完全 | DSN-dist-01(アーキテクチャ別の置き分けは設置層の中で解決し、ステージ構成を増やさない) |
@@ -437,10 +440,10 @@ verified:
 
 | E2E ID | 対応 UC | シナリオ | 対象/対象外(理由) |
 |---|---|---|---|
-| E2E-01 | UC-01 | `claude-dev start`(ブラウザ確認あり / `--no-vnc`)→ `/workspace` マウント・認証・ファイアウォール・tmux → `claude` 起動 → 再実行での再接続。**続けて破壊的操作が「自分が作った資源」にだけ効くことを確認する**: 管理ラベルの付与 / 遊休判定がイメージに依存しないこと / 排他ロックと残骸の引き継ぎ / ラベルを持たない既存コンテナを巻き込まないこと / compose 資源が別プロジェクトを巻き込まないこと / `stop` が受理しない名前 / `logout` がプロジェクト配下の認証コピーを消すこと / 確認と非対話時の中止 / 削除失敗の列挙(`FR-env-01` 受入基準 9・14〜21 / `FR-env-03` 受入基準 14〜24)。**さらにセッション由来の資源の片付けと、`logout` の後にそれが `stop` で回収できないことを確認する**(`FR-env-01` 受入基準 22〜27 / `FR-env-03` 受入基準24)。**あわせて名前付きボリュームの扱い(削除の明示が無いときは残して名前と削除する方法を表示し、明示したときだけ消す)と、存在しなかった資源を「削除できなかった」と表示しないことを確認する**(同 28〜34)。**プロジェクト環境ファイルの受け渡し(渡る・値を出さない・追跡から外れる・予約名を採用しない・無くても起動する)もこのシナリオで確認する**(`FR-env-14`)(確認する項目と手順は `03-impl/tests/e2e.md` が持つ) | 対象(Must) |
+| E2E-01 | UC-01 | `claude-dev start`(ブラウザ確認あり / `--no-vnc`)→ `/workspace` マウント・認証・ファイアウォール・tmux → `claude` 起動 → 再実行での再接続。**続けて破壊的操作が「自分が作った資源」にだけ効くことを確認する**: 管理ラベルの付与 / 遊休判定がイメージに依存しないこと / 排他ロックと残骸の引き継ぎ / ラベルを持たない既存コンテナを巻き込まないこと / compose 資源が別プロジェクトを巻き込まないこと / `stop` が受理しない名前 / `logout` がプロジェクト配下の認証コピーを消すこと / 確認と非対話時の中止 / 削除失敗の列挙(`FR-env-01` 受入基準 9・14〜21 / `FR-env-03` 受入基準 14〜24)。**さらにセッション由来の資源の片付けと、`logout` の後にそれが `stop` で回収できないことを確認する**(`FR-env-01` 受入基準 22〜27 / `FR-env-03` 受入基準24)。**あわせて名前付きボリュームの扱い(削除の明示が無いときは残して名前と削除する方法を表示し、明示したときだけ消す)と、存在しなかった資源を「削除できなかった」と表示しないことを確認する**(同 28〜34)。**プロジェクト環境ファイルの受け渡し(渡る・値を出さない・追跡から外れる・予約名を採用しない・無くても起動する)もこのシナリオで確認する**(`FR-env-14`)。**あわせてブラウザ操作用 MCP サーバーが同梱物として登録されること(取得を伴わずに起動すること)と、以前の実行時取得の設定が置き換わり、利用者が書き換えた設定は変わらないことを確認する**(`FR-env-11-2` / `FR-env-11-9`)(確認する項目と手順は `03-impl/tests/e2e.md` が持つ) | 対象(Must) |
 | E2E-02 | UC-02 | `claude-dev forward` → 8100 番台の割当と SSH トンネル → クライアントのブラウザで表示 → `claude-dev ports` で確認 | 対象(Must) |
 | E2E-03 | UC-03 | コンテナ内で危険な `docker run` → 拒否 / `/workspace` bind の許可 / **`CTR-docker-api` が拒否条件と定めない要求の透過**。**あわせて、作成されたコンテナ・ネットワーク・名前付きボリュームに所有者ラベルが付いていることを確認する**(`FR-env-07` 受入基準11) | 対象(Must) |
-| E2E-06 | UC-06 | `claude-dev login-codex` → デバイス認証 → 別プロジェクトで `start` → 再ログイン不要で `codex` が起動し、**シェルコマンドが成功して `/workspace` を読み書きできる**。landlock の疎通確認が通り、読み取り専用の明示指定で読み取りが成功する。トークン更新が次のコンテナへ引き継がれる | 対象(Must) |
+| E2E-06 | UC-06 | `claude-dev login-codex` → デバイス認証 → 別プロジェクトで `start` → 再ログイン不要で `codex` が起動し、**シェルコマンドが成功して `/workspace` を読み書きできる**。landlock の疎通確認が通り、読み取り専用の明示指定で読み取りが成功する。トークン更新が次のコンテナへ引き継がれる。**あわせて codex の設定にブラウザ操作用 MCP サーバーが登録され、既に書かれている登録は変わらないことを確認する**(`FR-env-12-13` / `FR-env-12-14`) | 対象(Must) |
 
 **全 UC がカバーされている**(UC-01〜UC-03 / UC-06 → E2E-01〜E2E-03 / E2E-06)。上流の UC を
 持たない E2E シナリオは作らない。**`E2E-04` / `E2E-05` は 2026-08-08 に廃止した**

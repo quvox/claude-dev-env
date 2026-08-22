@@ -488,6 +488,7 @@ FROM base AS claude-cli
 ARG USERNAME=devuser
 ARG CLAUDE_VERSION=latest
 ARG CODEX_VERSION=latest
+ARG CHROME_DEVTOOLS_MCP_VERSION=latest
 
 USER $USERNAME
 WORKDIR /tmp
@@ -496,6 +497,14 @@ RUN export PATH="${USER_HOME}/.local/share/fnm:$PATH" \
     && eval "$($USER_HOME/.local/share/fnm/fnm env)" \
     && npm install -g "@openai/codex@${CODEX_VERSION}" \
     && codex --version
+# ブラウザ操作用 MCP サーバー（chrome-devtools MCP）。エージェント CLI と同じ扱いで、
+# CI が解決した具体バージョンをキャッシュキーにして終端ステージへ入れる（D0-dist-06 /
+# DSN-dist-01 項1'）。起動のたびの取得（npx -y ...@latest）をやめるための同梱である
+# （FR-env-12-13）。
+RUN export PATH="${USER_HOME}/.local/share/fnm:$PATH" \
+    && eval "$($USER_HOME/.local/share/fnm/fnm env)" \
+    && npm install -g "chrome-devtools-mcp@${CHROME_DEVTOOLS_MCP_VERSION}" \
+    && chrome-devtools-mcp --version
 WORKDIR /workspace
 USER root
 
@@ -509,6 +518,16 @@ RUN FNM_DEFAULT_BIN="${USER_HOME}/.local/share/fnm/aliases/default/bin" \
         "$FNM_DEFAULT_BIN" "$FNM_DEFAULT_BIN" > /usr/local/bin/codex \
     && chmod 755 /usr/local/bin/codex \
     && /usr/local/bin/codex --version
+
+# chrome-devtools MCP 共通ランチャー: 理由は上の codex と同一である。
+# 実体が #!/usr/bin/env node の JS ランチャーなので、fnm 初期化のないシェル
+# （bash -c / docker exec / エージェントが起こす MCP サーバー）から node が解決できない。
+RUN FNM_DEFAULT_BIN="${USER_HOME}/.local/share/fnm/aliases/default/bin" \
+    && [ -x "${FNM_DEFAULT_BIN}/chrome-devtools-mcp" ] \
+    && printf '#!/bin/sh\nexport PATH="%s:${PATH}"\nexec "%s/chrome-devtools-mcp" "$@"\n' \
+        "$FNM_DEFAULT_BIN" "$FNM_DEFAULT_BIN" > /usr/local/bin/chrome-devtools-mcp \
+    && chmod 755 /usr/local/bin/chrome-devtools-mcp \
+    && /usr/local/bin/chrome-devtools-mcp --version
 
 # --- 同梱外部バイナリの設置（externals/）---
 # 保守者が externals/ へ手で置いたファイルを /usr/local/bin へ設置する（FR-env-13 / D0-dist-05）。
@@ -535,6 +554,7 @@ FROM vnc-base AS claude-vnc
 ARG USERNAME=devuser
 ARG CLAUDE_VERSION=latest
 ARG CODEX_VERSION=latest
+ARG CHROME_DEVTOOLS_MCP_VERSION=latest
 
 USER $USERNAME
 WORKDIR /tmp
@@ -543,6 +563,14 @@ RUN export PATH="${USER_HOME}/.local/share/fnm:$PATH" \
     && eval "$($USER_HOME/.local/share/fnm/fnm env)" \
     && npm install -g "@openai/codex@${CODEX_VERSION}" \
     && codex --version
+# ブラウザ操作用 MCP サーバー（chrome-devtools MCP）。エージェント CLI と同じ扱いで、
+# CI が解決した具体バージョンをキャッシュキーにして終端ステージへ入れる（D0-dist-06 /
+# DSN-dist-01 項1'）。起動のたびの取得（npx -y ...@latest）をやめるための同梱である
+# （FR-env-12-13）。
+RUN export PATH="${USER_HOME}/.local/share/fnm:$PATH" \
+    && eval "$($USER_HOME/.local/share/fnm/fnm env)" \
+    && npm install -g "chrome-devtools-mcp@${CHROME_DEVTOOLS_MCP_VERSION}" \
+    && chrome-devtools-mcp --version
 WORKDIR /workspace
 USER root
 
@@ -556,6 +584,16 @@ RUN FNM_DEFAULT_BIN="${USER_HOME}/.local/share/fnm/aliases/default/bin" \
         "$FNM_DEFAULT_BIN" "$FNM_DEFAULT_BIN" > /usr/local/bin/codex \
     && chmod 755 /usr/local/bin/codex \
     && /usr/local/bin/codex --version
+
+# chrome-devtools MCP 共通ランチャー: 理由は上の codex と同一である。
+# 実体が #!/usr/bin/env node の JS ランチャーなので、fnm 初期化のないシェル
+# （bash -c / docker exec / エージェントが起こす MCP サーバー）から node が解決できない。
+RUN FNM_DEFAULT_BIN="${USER_HOME}/.local/share/fnm/aliases/default/bin" \
+    && [ -x "${FNM_DEFAULT_BIN}/chrome-devtools-mcp" ] \
+    && printf '#!/bin/sh\nexport PATH="%s:${PATH}"\nexec "%s/chrome-devtools-mcp" "$@"\n' \
+        "$FNM_DEFAULT_BIN" "$FNM_DEFAULT_BIN" > /usr/local/bin/chrome-devtools-mcp \
+    && chmod 755 /usr/local/bin/chrome-devtools-mcp \
+    && /usr/local/bin/chrome-devtools-mcp --version
 
 # --- 同梱外部バイナリの設置（externals/）---
 # 保守者が externals/ へ手で置いたファイルを /usr/local/bin へ設置する（FR-env-13 / D0-dist-05）。

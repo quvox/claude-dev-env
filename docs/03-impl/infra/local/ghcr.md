@@ -1,7 +1,7 @@
 ---
 id: local-ghcr
-version: 1.2.0
-updated: 2026-08-18
+version: 1.3.0
+updated: 2026-08-22
 source:
   - docs/02-design/architecture.md
 summary: 配布イメージの公開先 GHCR の構成(リポジトリ・タグ・マルチアーキ・認証の置き場所)
@@ -76,19 +76,20 @@ graph LR
 | `REGISTRY` | ワークフローの環境変数 | `ghcr.io` | 必須 |
 | `CLAUDE_VERSION` | `prepare` ジョブが `latest` チャネルから解決。手動実行時は入力で上書きできる | 解決値 | 必須 |
 | `CODEX_VERSION` | `prepare` ジョブが npm registry から解決。手動実行時は入力で上書きできる | 解決値 | 必須 |
+| `CHROME_DEVTOOLS_MCP_VERSION` | `prepare` ジョブが npm registry から解決。手動実行時は入力で上書きできる | 解決値 | 必須 |
 | `IMAGE_VERSION` | ビルド時刻(JST)から作るタイムスタンプ | — | 必須 |
 
 ## デプロイ手順
 
 1. 日次スケジュール(`cron: '30 18 * * *'` = 03:30 JST)で自動実行される。
-2. 切り戻し・臨時ビルドは手動実行(`workflow_dispatch`)で行い、必要ならエージェント CLI の
-   バージョンを入力で指定する。
+2. 切り戻し・臨時ビルドは手動実行(`workflow_dispatch`)で行い、必要ならエージェント CLI と
+   ブラウザ操作用 MCP サーバーのバージョンを入力で指定する。
 
 | やりたいこと | コマンド |
 |---|---|
 | 取得 | `claude-dev pull` |
 | ローカルで作り直す(配布に依存しない) | `make build` |
-| 切り戻し | ワークフローを手動実行し、`claude_version` / `codex_version` に既知の良い版を指定する |
+| 切り戻し | ワークフローを手動実行し、`claude_version` / `codex_version` / `chrome_devtools_mcp_version` に既知の良い版を指定する |
 
 ### 取得(pull)が失敗したときの切り分け
 
