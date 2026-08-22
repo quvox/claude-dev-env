@@ -9,11 +9,11 @@ source:
 summary: どのモジュールにも属さないイメージのビルドと GHCR 配布の受入基準⇄テスト対応
 keywords: [テスト, イメージ, GHCR]
 verified:
-  at: 2026-08-18
-  version: 1.4.0
+  at: 2026-08-22
+  version: 1.5.0
   against:
-    - {doc: docs/01-requirements/functional.md, version: 1.17.0}
-    - {doc: docs/02-design/system.md, version: 2.13.0}
+    - {doc: docs/01-requirements/functional.md, version: 1.24.0}
+    - {doc: docs/02-design/system.md, version: 2.20.0}
 ---
 
 # イメージのビルドと GHCR 配布 のテスト対応

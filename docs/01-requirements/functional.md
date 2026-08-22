@@ -1,6 +1,6 @@
 ---
 id: functional
-version: 1.23.0
+version: 1.24.0
 updated: 2026-08-22
 source:
   - docs/00-requests/request.md
@@ -12,13 +12,13 @@ source:
 summary: 機能要件 FR-env-01〜14。受け入れ基準は EARS で書く
 keywords: [機能要件, EARS, FR]
 verified:
-  at: 2026-08-20
-  version: 1.22.0
+  at: 2026-08-22
+  version: 1.24.0
   against:
     - {doc: docs/00-requests/request.md, version: 1.6.0}
     - {doc: docs/00-requests/acceptances.md, version: 1.6.1}
     - {doc: docs/00-requests/decisions/auth.md, version: 1.3.1}
-    - {doc: docs/00-requests/decisions/dist.md, version: 1.3.0}
+    - {doc: docs/00-requests/decisions/dist.md, version: 1.4.0}
     - {doc: docs/00-requests/decisions/env.md, version: 1.7.0}
     - {doc: docs/00-requests/decisions/sec.md, version: 1.4.0}
 ---
@@ -329,7 +329,7 @@ verified:
 | FR-env-12-9 | 境界値 | WHERE `workspace-write` が指定された場合は本要件の対象外とし(**対象外とする理由は `D0-dist-04` 項6 が持つ**)、書き込みを伴う自動化は既定設定で実行する |
 | FR-env-12-10 | 異常系 | IF 既存の設定ファイルが解釈できない、または追記内容が検証に通らないならば、システムは既存ファイルを書き換えてはならず、警告だけを出して起動を続行しなければならない |
 | FR-env-12-11 | 異常系 | IF 既定設定の生成・追記に失敗したならば、システムはコンテナの起動を止めてはならない(codex を使わない利用者の起動を妨げない) |
-| FR-env-12-13 | 正常系 | WHEN 配布イメージをビルドするとき、システムはブラウザ操作用の MCP サーバーを**両方**の配布イメージに、**具体バージョンでピン留めして**同梱しなければならず、起動時や実行時のダウンロードに依存してはならない(`D0-dist-06` 項1〜項3) |
+| FR-env-12-13 | 正常系 | WHEN 配布イメージをビルドするとき、システムはブラウザ操作用の MCP サーバーを**両方**の配布イメージに、**そのビルド時点で公開されている最新のバージョンそのものへ固定して**同梱しなければならず、起動時や実行時のダウンロードに依存してはならない。**バージョンを人が指定してビルドし直せなければならない**(不良な版を引いたときの戻し道。`D0-dist-06` 項1〜項3) |
 | FR-env-12-14 | 正常系 | WHERE ブラウザ確認ありの構成の場合、WHEN コンテナを起動したとき、システムは codex の設定ファイルにブラウザ操作用 MCP サーバーの登録が無ければ**追記**しなければならず、既に書かれている登録の値を変更してはならない(受け入れ基準8 と同じ扱い。**ブラウザ確認なしの構成では登録しない** — 接続先のブラウザが存在しないため) |
 
 <!-- FR-env-12-12 は 2026-08-10 に廃止した(オーケストレーターの削除にともない、対象外を宣言する

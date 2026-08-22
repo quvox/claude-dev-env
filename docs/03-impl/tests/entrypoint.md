@@ -1,6 +1,6 @@
 ---
 id: entrypoint
-version: 1.4.0
+version: 1.5.0
 updated: 2026-08-22
 scope: MOD-entrypoint
 source:
@@ -9,11 +9,11 @@ source:
 summary: MOD-entrypoint(コンテナ起動シーケンス)の受入基準⇄テスト対応
 keywords: [テスト]
 verified:
-  at: 2026-08-19
-  version: 1.3.0
+  at: 2026-08-22
+  version: 1.5.0
   against:
-    - {doc: docs/01-requirements/functional.md, version: 1.20.0}
-    - {doc: docs/02-design/system.md, version: 2.16.0}
+    - {doc: docs/01-requirements/functional.md, version: 1.24.0}
+    - {doc: docs/02-design/system.md, version: 2.20.0}
 ---
 
 # MOD-entrypoint のテスト対応
@@ -36,7 +36,7 @@ verified:
 | FR-env-08-2 | 正常系 | E2E | E2E-01(実機確認手順) | 未検証(テスト未実装) |
 | FR-env-08-3 | 正常系 | E2E | E2E-01(実機確認手順) | 未検証(テスト未実装) |
 | FR-env-11-1 | 正常系 | E2E | E2E-01(実機確認手順) | 未検証(テスト未実装) |
-| FR-env-11-2 | 正常系 | E2E | E2E-01(実機確認手順) | 未検証(テスト未実装) |
+| FR-env-11-2 | 正常系 | E2E | E2E-01(実機確認手順25。Claude Code 側)＋ E2E-06(実機確認手順5。codex 側) | 未検証(テスト未実装) |
 | FR-env-11-9 | 境界値 | E2E | E2E-01(実機確認手順) | 未検証(テスト未実装) |
 | FR-env-12-4 | 正常系 | E2E | E2E-01(実機確認手順) | 未検証(テスト未実装) |
 | FR-env-12-5 | 正常系 | E2E | E2E-01(実機確認手順) | 未検証(テスト未実装) |

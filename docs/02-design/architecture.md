@@ -1,6 +1,6 @@
 ---
 id: architecture
-version: 1.8.0
+version: 1.8.1
 updated: 2026-08-22
 source:
   - docs/01-requirements/functional.md
@@ -9,10 +9,10 @@ source:
 summary: 全体構成・データモデル・インフラ設計と、アーキテクチャ級の設計判断(DSN-arch / auth / dist)
 keywords: [アーキテクチャ, 全体構成, 設計判断, DSN]
 verified:
-  at: 2026-08-20
-  version: 1.7.1
+  at: 2026-08-22
+  version: 1.8.1
   against:
-    - {doc: docs/01-requirements/functional.md, version: 1.22.0}
+    - {doc: docs/01-requirements/functional.md, version: 1.24.0}
     - {doc: docs/01-requirements/non-functional.md, version: 1.8.0}
     - {doc: docs/01-requirements/system.md, version: 1.3.0}
 ---
@@ -219,7 +219,8 @@ sequenceDiagram
 
 - 判断(**2026-08-18 に同梱外部バイナリまで射程を広げた。2026-08-22 にエージェントが使う MCP サーバーを対象へ加えた。見出しの文言は変えていない** — `DSN-*` の ID が識別子であり、見出しの改名は反映の座標を動かすため): イメージを4ステージに分ける——重い共通層の `base`、ブラウザ確認資産を積む
   `vnc-base`(`FROM base`)、配布する2つの終端ステージ(`FROM base` / `FROM vnc-base`)。
-  **中身が入れ替わりうる同梱物は、すべて終端ステージの最終レイヤーにのみ置く。**
+  **中身が入れ替わりうる同梱物は、すべて終端ステージの末尾側に置く**(`base` / `vnc-base` には
+  決して置かない。同梱物どうしの順序は下の項が定める — 差し替えの頻度が読めないものほど後ろ)。
   対象は3種類ある。
   1. **エージェント CLI**(Claude Code / Codex CLI): キャッシュキーには CI が解決した具体
      バージョンを使う。

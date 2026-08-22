@@ -7,10 +7,10 @@ source:
 summary: イメージの配布と、同梱する外部 CLI・MCP サーバーに関する決定事項(D0-dist-*)
 keywords: [配布, GHCR, 決定事項]
 verified:
-  at: 2026-08-18
-  version: 1.3.0
+  at: 2026-08-22
+  version: 1.4.0
   against:
-    - {doc: docs/00-requests/request.md, version: 1.5.0}
+    - {doc: docs/00-requests/request.md, version: 1.6.0}
 ---
 
 # 配布・同梱の決定事項

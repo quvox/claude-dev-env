@@ -151,6 +151,8 @@
   `SR-05` / issues: なし
 
 ## 残務(文書整合ほか)
+- 2026-08-22 **`check-ssot.py` の CS21(件数の主張)が、複数レンジの summary を偽と報告する**: `docs/00-requests/acceptances.md` の summary は `AC-01〜AC-03 と AC-06〜AC-08` と全数を正しく書いているのに、検査は最初のレンジだけを読んで残りを「summary が実体より狭い」と出す(`docs/01-requirements/usecases.md` の `UC-01〜UC-03 と UC-06`、`docs/03-impl/tests/e2e.md` の `E2E-01〜E2E-03 と E2E-06` も同型で、計4件すべて誤検知)。文書側は正しいので直さない。キットの検査の側の話であり、凍結が解けたら `/kit-improve` で扱う(F2 文書整合フロー)
+- 2026-08-22 **`docs/02-design/environments.md:58` が E2E 台本の ID を固定の置き場の外で使っている**(`check-ssot.py` CS22)。e2e の失効判定は `system.md` と `testing.md` しか見ないので、この言及は失効判定に効かない。定義も言及も `system.md` へ寄せるか、`testing.md` を新設して `e2e_scripts_in` を宣言し直すかの二択(F2 文書整合フロー)
 
 - 2026-08-20 `docs/pendings.md` の「残務(文書整合ほか)」節: 残務行の 48 行中 40 行が日付の直後に `docs/` 始まりのパスを置いていないため、`.claude/scripts/doc-health.py:437` の `LEFTOVER_RE` が第2トークンをパスとして取る前提が崩れ、`:486` の実在検査(`docs/` 始まりのパスが消えていたら落とす)が大半の行に効いていない(規範は `.claude/directions/issues-pendings.md` §2.1 でこの形を load-bearing と明記する。キット凍結中なので規範側の判断は `/kit-improve` が持つ)。
 - 2026-08-20 **`docs/02-design/environments.md` の `source:` と `verified.against:` が、同ファイル `:177`-`:188`(監査と QA が走るサンドボックスの強度)の根拠2文書を持たない**(F3 実装整合フロー / 独立レビュー lens: claude が検出)。同段落は `docs/00-requests/decisions/dist.md` の `D0-dist-04` 項6 と `docs/01-requirements/functional.md` の `FR-env-12-5` を根拠に引くが、`source:` は `docs/01-requirements/system.md` と `docs/02-design/architecture.md` の2件だけで、`verified.against:` も同じ2件しか持たない。上流が動いたときにこの段落が失効することを機械が言えない。**段落の内容そのものは上流と一致している**ことは確認した(`dist.md:82`-`:88` / `functional.md:324` / `architecture.md:258`-`:263`)ので、これは記述の誤りではなく追跡欄の取りこぼしである。次に `environments.md` を触るタスク、または `/verify-docs` が `source:` を取り直す。
