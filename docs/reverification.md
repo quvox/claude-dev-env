@@ -9,6 +9,7 @@
 | docs/00-requests/decisions/auth.md | docs/00-requests/request.md | 1.4.0 | 1.6.0 | 再検証候補 | - |
 | docs/00-requests/decisions/scope.md | docs/00-requests/request.md | 1.4.0 | 1.6.0 | 再検証候補 | - |
 | docs/01-requirements/decisions/split.md | docs/01-requirements/functional.md | 1.19.0 | 1.24.0 | 再検証候補 | - |
+| docs/01-requirements/functional.md | docs/00-requests/decisions/dist.md | 1.4.0 | 1.5.0 | 再検証候補 | - |
 | docs/01-requirements/non-functional.md | docs/00-requests/request.md | 1.5.0 | 1.6.0 | 再検証候補 | - |
 | docs/01-requirements/system.md | docs/00-requests/request.md | 1.5.0 | 1.6.0 | 再検証候補 | - |
 | docs/01-requirements/system.md | docs/00-requests/decisions/sec.md | 1.3.1 | 1.4.0 | 再検証候補 | - |
@@ -77,8 +78,8 @@
 ## 集計
 
 - 参照総数: 100
-- 最新: 33
-- 再検証候補: 67
+- 最新: 32
+- 再検証候補: 68
 - 判定不能: 0
 - 仕様文書frontmatterの解析警告: 0
 
@@ -102,12 +103,10 @@
 | issue | 055-modify-ac17-demands-listing-stopped-unlabeled-containers | 2026-08-05 | - | FR-env-03, D0-env-08, CTR-cli-container, MODULE-cli-logout, MODULE-cli-reset, docs/02-design/contracts/cli-container.md | 判定不能: closes_whenが空 |
 | issue | 094-modify-user-visible-values-are-stated-verbatim-in-two-layers | 2026-08-08 | - | FR-env-12-5, FR-orch-03-3, FR-env-01-18, FR-env-01-16, D0-dist-04, D0-env-06, DSN-dist-02, CTR-cli-orchestrator, CTR-cli-container, docs/02-design/logging.md | 判定不能: closes_whenが空 |
 | issue | 097-modify-cli-help-dispatch-branch-is-absent-from-the-feature-table | 2026-08-11 | 人間が `MODULE-cli-help` を機能表に加えるか加えないかを回答し、その回答が docs/03-impl/features.md に反映されたとき(加える場合は docs/03-impl/relations/MODULE-cli-help.md と 02-design/relations.md の PLAN-* まで反映されたとき) | docs/03-impl/features.md, MODULE-makefile-help, docs/01-requirements/usecases.md | - |
-| issue | 098-modify-entrypoint-writes-user-controlled-paths-as-root | 2026-08-22 | entrypoint が `/workspace` 配下の設定ファイルを書くとき、固定名の一時ファイルへの root のリダイレクトと、シンボリックリンクを追う `chown` のどちらも残っていないことが `scripts/entrypoint-claude.sh` の読取で確認できたとき | MODULE-entrypoint-claude, FR-env-11-2, FR-env-11-9, FR-env-12-14, scripts/entrypoint-claude.sh | - |
-| issue | 099-bug-mcp-entry-presence-test-treats-null-as-absent | 2026-08-22 | `.mcp.json` の `chrome-devtools` に `null` または `false` が書かれた状態で起動しても、その値が同梱物を指す値へ書き換わらないことが実機で確認できたとき | MODULE-entrypoint-claude, FR-env-11-9, FR-env-11-2, scripts/entrypoint-claude.sh | - |
 
 ### 集計
 
 - 棚上げ: 7(最古の記録日 2026-08-02)
-- issue: 8(最古の記録日 2026-08-03)
+- issue: 6(最古の記録日 2026-08-03)
 - 条件が読めない(判定不能): 5
 - 残務: 50 行(最古 2026-08-10)
