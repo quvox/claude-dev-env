@@ -433,6 +433,33 @@ print("✓ codex config.toml に不足していた既定鍵を追記しました
 PYEOF
 }
 
+# /workspace 配下の JSON を安全に書き換える（課題票 098）。
+# この entrypoint は root で動き、/workspace は利用者が自由に書けるディレクトリなので、
+# **固定名の一時ファイルへリダイレクトしてはならない** — あらかじめ別のパスへの
+# シンボリックリンクとして置かれると、root のシェルがリンク先を切り詰めて書く。
+# 同じファイルの codex 設定側（ensure_codex_config / ensure_codex_mcp_entry）が既に
+# tempfile.mkstemp + os.replace で採っている形を、JSON を書く側へも揃える。
+# 引数: <対象パス> <jq のフィルタ> [jq へ渡す追加引数...]
+#   例: update_json_file "$MCP_JSON" '.mcpServers["x"] = $entry' --argjson entry "$E"
+# 返り値: 0 = 書き換えた / 1 = 書き換えなかった（呼び出し側が警告を出す）
+update_json_file() {
+    _ujf_target="$1"; shift
+    _ujf_filter="$1"; shift
+    if [ -L "$_ujf_target" ]; then
+        echo "⚠️  ${_ujf_target} はシンボリックリンクなので書き換えません（リンク先を壊さないため）"
+        return 1
+    fi
+    _ujf_dir="$(dirname "$_ujf_target")"
+    _ujf_tmp="$(mktemp "${_ujf_dir}/.claude-dev-json.XXXXXX" 2>/dev/null)" || return 1
+    if jq "$@" "$_ujf_filter" "$_ujf_target" > "$_ujf_tmp" 2>/dev/null; then
+        chmod --reference="$_ujf_target" "$_ujf_tmp" 2>/dev/null || chmod 0644 "$_ujf_tmp"
+        mv "$_ujf_tmp" "$_ujf_target"
+        return 0
+    fi
+    rm -f "$_ujf_tmp"
+    return 1
+}
+
 # codex の設定へブラウザ操作用 MCP サーバーを登録する（FR-env-12-14 / D0-dist-06 項4）。
 # ensure_codex_config と同じ流儀: **書かれていないときだけ追記し、既存の値は一切変えない**。
 # 別関数にしてあるのは呼ぶ条件が違うためである — 既定3鍵はブラウザ確認の有無に関わらず要るが、
@@ -538,11 +565,9 @@ HOST_HOOKS="$LOCAL_CLAUDE/host-hooks.json"
 if [ -f "$HOST_HOOKS" ]; then
     if jq -e '.hooks // .env' "$HOST_HOOKS" >/dev/null 2>&1; then
         SETTINGS="$LOCAL_CLAUDE/settings.json"
-        if jq --slurpfile overlay "$HOST_HOOKS" '. * $overlay[0]' "$SETTINGS" > "${SETTINGS}.tmp" 2>/dev/null; then
-            mv "${SETTINGS}.tmp" "$SETTINGS"
-            chown "$USERNAME":"$USERNAME" "$SETTINGS"
+        if update_json_file "$SETTINGS" '. * $overlay[0]' --slurpfile overlay "$HOST_HOOKS"; then
+            chown -h "$USERNAME":"$USERNAME" "$SETTINGS"
         else
-            rm -f "${SETTINGS}.tmp"
             echo "⚠️  ホスト設定のマージに失敗しました"
         fi
     fi
@@ -751,31 +776,34 @@ if [ "${CLAUDE_DEV_VNC:-}" = "1" ]; then
     # 判定しない。
     CHROME_DEVTOOLS_LEGACY_ENTRY='{"command":"npx","args":["-y","chrome-devtools-mcp@latest","--browserUrl","http://localhost:9222"]}'
 
-    if [ ! -f "$MCP_JSON" ]; then
+    if [ -L "$MCP_JSON" ]; then
+        # シンボリックリンクは追わない（課題票 098）。リンク先を root で書くことになるため
+        echo "⚠️  /workspace/.mcp.json はシンボリックリンクなので触りません（chrome-devtools の設定を書きません）"
+    elif [ ! -f "$MCP_JSON" ]; then
         # 新規作成
         echo "{\"mcpServers\":{\"chrome-devtools\":${CHROME_DEVTOOLS_ENTRY}}}" | jq . > "$MCP_JSON"
     else
         # 既存ファイルに chrome-devtools がなければ追加
-        if ! jq -e '.mcpServers["chrome-devtools"]' "$MCP_JSON" >/dev/null 2>&1; then
-            if jq --argjson entry "$CHROME_DEVTOOLS_ENTRY" '.mcpServers["chrome-devtools"] = $entry' "$MCP_JSON" > "${MCP_JSON}.tmp" 2>/dev/null; then
-                mv "${MCP_JSON}.tmp" "$MCP_JSON"
-            else
-                rm -f "${MCP_JSON}.tmp"
+        # **キーの有無で判定する（課題票 099）。** `jq -e` は値が null / false のとき
+        # 終了コード 1 を返すので、値の真偽で見ると「書いてあるのに未登録」と読み違え、
+        # FR-env-11-9 の「それ以外の値は変更してはならない」を破る。
+        if ! jq -e '(.mcpServers // {}) | has("chrome-devtools")' "$MCP_JSON" >/dev/null 2>&1; then
+            if ! update_json_file "$MCP_JSON" '.mcpServers["chrome-devtools"] = $entry' \
+                    --argjson entry "$CHROME_DEVTOOLS_ENTRY"; then
                 echo "⚠️  .mcp.json の更新に失敗しました（不正な JSON？）。chrome-devtools 追加をスキップします"
             fi
         # 旧値（実行時取得）がそのまま残っているときだけ、同梱物を指す値へ置き換える。
         elif jq -e --argjson legacy "$CHROME_DEVTOOLS_LEGACY_ENTRY" \
                 '.mcpServers["chrome-devtools"] == $legacy' "$MCP_JSON" >/dev/null 2>&1; then
-            if jq --argjson entry "$CHROME_DEVTOOLS_ENTRY" '.mcpServers["chrome-devtools"] = $entry' "$MCP_JSON" > "${MCP_JSON}.tmp" 2>/dev/null; then
-                mv "${MCP_JSON}.tmp" "$MCP_JSON"
+            if update_json_file "$MCP_JSON" '.mcpServers["chrome-devtools"] = $entry' \
+                    --argjson entry "$CHROME_DEVTOOLS_ENTRY"; then
                 echo "🔧 .mcp.json の chrome-devtools を同梱物に切り替えました（起動時の取得が不要になります）"
             else
-                rm -f "${MCP_JSON}.tmp"
                 echo "⚠️  .mcp.json の更新に失敗しました（不正な JSON？）。chrome-devtools の切り替えをスキップします"
             fi
         fi
     fi
-    chown "$USERNAME":"$USERNAME" "$MCP_JSON"
+    [ -L "$MCP_JSON" ] || chown -h "$USERNAME":"$USERNAME" "$MCP_JSON"
 
     # codex 側にも同じ MCP サーバーを登録する（FR-env-12-14 / D0-dist-06 項4）。
     # 既定3鍵と同じ流儀で、**書かれていないときだけ追記**し、既存の値は変えない。
@@ -787,12 +815,11 @@ if [ "${CLAUDE_DEV_VNC:-}" = "1" ]; then
     # 画面取得は scrot を併用する（rmcp-xdotool は入力専用）。
     if command -v rmcp-xdotool >/dev/null 2>&1; then
         COMPUTER_USE_ENTRY='{"command":"rmcp-xdotool","args":[],"env":{"DISPLAY":":99"}}'
-        if ! jq -e '.mcpServers["computer-use"]' "$MCP_JSON" >/dev/null 2>&1; then
-            if jq --argjson entry "$COMPUTER_USE_ENTRY" '.mcpServers["computer-use"] = $entry' "$MCP_JSON" > "${MCP_JSON}.tmp" 2>/dev/null; then
-                mv "${MCP_JSON}.tmp" "$MCP_JSON"
-                chown "$USERNAME":"$USERNAME" "$MCP_JSON"
+        if ! jq -e '(.mcpServers // {}) | has("computer-use")' "$MCP_JSON" >/dev/null 2>&1; then
+            if update_json_file "$MCP_JSON" '.mcpServers["computer-use"] = $entry' \
+                    --argjson entry "$COMPUTER_USE_ENTRY"; then
+                chown -h "$USERNAME":"$USERNAME" "$MCP_JSON"
             else
-                rm -f "${MCP_JSON}.tmp"
                 echo "⚠️  .mcp.json への computer-use 追加に失敗しました（不正な JSON？）。スキップします"
             fi
         fi
@@ -801,24 +828,24 @@ if [ "${CLAUDE_DEV_VNC:-}" = "1" ]; then
     # .claude.json: chrome-devtools MCP を有効化
     # .claude.json が存在しない場合は新規作成する
     CLAUDE_JSON="$LOCAL_CLAUDE/.claude.json"
-    if [ ! -f "$CLAUDE_JSON" ]; then
+    if [ -L "$CLAUDE_JSON" ]; then
+        echo "⚠️  ${CLAUDE_JSON} はシンボリックリンクなので触りません（MCP 有効化を書きません）"
+    elif [ ! -f "$CLAUDE_JSON" ]; then
         echo '{}' > "$CLAUDE_JSON"
-        chown "$USERNAME":"$USERNAME" "$CLAUDE_JSON"
+        chown -h "$USERNAME":"$USERNAME" "$CLAUDE_JSON"
         chmod 600 "$CLAUDE_JSON"
     fi
     if ! jq -e '(.projects["/workspace"].enabledMcpjsonServers // []) | index("chrome-devtools")' "$CLAUDE_JSON" >/dev/null 2>&1; then
-        if jq '
+        if update_json_file "$CLAUDE_JSON" '
             .projects //= {} |
             .projects["/workspace"] //= {} |
             .projects["/workspace"].enabledMcpjsonServers = (
                 (.projects["/workspace"].enabledMcpjsonServers // []) + ["chrome-devtools"] | unique
             )
-        ' "$CLAUDE_JSON" > "${CLAUDE_JSON}.tmp" 2>/dev/null; then
-            mv "${CLAUDE_JSON}.tmp" "$CLAUDE_JSON"
-            chown "$USERNAME":"$USERNAME" "$CLAUDE_JSON"
+        '; then
+            chown -h "$USERNAME":"$USERNAME" "$CLAUDE_JSON"
             chmod 600 "$CLAUDE_JSON"
         else
-            rm -f "${CLAUDE_JSON}.tmp"
             echo "⚠️  .claude.json の更新に失敗しました（不正な JSON？）。MCP 有効化をスキップします"
         fi
     fi

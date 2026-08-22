@@ -125,7 +125,10 @@ UID/GID 追従(FR-env-02)、認証共有(FR-env-03)、firewall の適用(FR-env-
     「Docker ネットワーク(重要)」を書き、`CLAUDE_DEV_VNC=1` なら「Web アプリの動作確認(重要)」、
     `/dev/kvm` があり `CLAUDE_DEV_VM != 1` なら「KVM / 仮想化(重要)」を足す。VM モードでは KVM/VM の
     情報を CLAUDE.md に書かず `VM_DEV.md` に集約する。`/workspace/CLAUDE.md` が無ければ作る。
-18. **MCP 設定**(`CLAUDE_DEV_VNC=1` のときのみ): `/workspace/.mcp.json` に `chrome-devtools`
+18. **MCP 設定**(`CLAUDE_DEV_VNC=1` のときのみ)。**登録の有無は値の真偽ではなくキーの有無で見る**
+    (`(.mcpServers // {}) | has("chrome-devtools")`)。**書き換えは `update_json_file` を通す** —
+    `mktemp` で同じディレクトリに一時ファイルを作り、書けたときだけ差し替える。対象が
+    シンボリックリンクなら何も書かずに警告する。`/workspace/.mcp.json` に `chrome-devtools`
     (`chrome-devtools-mcp --browserUrl http://localhost:9222`。**同梱物を名前で起動する** —
     実行時取得をしない。`FR-env-12-13` / `D0-dist-06`)を確保する。
     **既存のエントリが、以前このスクリプトが書いていた実行時取得の値**
@@ -246,6 +249,8 @@ UID/GID 追従(FR-env-02)、認証共有(FR-env-03)、firewall の適用(FR-env-
 | `mcp_servers` が通常テーブルでない(配列テーブル等) | 何も書かず警告だけ出す(既存ファイルを温存する) | codex からブラウザ操作の MCP が見えない。起動は続く |
 | chrome-devtools の追記が検証に落ちた(追記後に TOML として読めない / 既存の値が動く) | 書き込まない | 同上 |
 | `ensure_codex_mcp_entry` が失敗 | `|| true` で握りつぶす(`set -e` の下でも起動を止めない) | 同上 |
+| `/workspace/.mcp.json`(または `.claude.json` / `settings.json`)がシンボリックリンク | 何も書かずに警告だけ出す(リンク先を root で書かない) | その設定は入らない。起動は続く |
+| 一時ファイルを作れない / `jq` が失敗する | 差し替えず、一時ファイルを消して警告だけ出す | 既存ファイルは無変更のまま。起動は続く |
 | `.mcp.json` の chrome-devtools が利用者の書き換えた値 | **置き換えない**(旧値と完全一致するときだけ同梱物へ向け直す) | 利用者の指定がそのまま生きる。同梱物へは移行しない |
 | firewall の適用に失敗 | 無視して続行する | ネットワーク制限がかからないまま起動する |
 | `vm-up.sh` が失敗 | 失敗バナーを出し `DOCKER_HOST` を上書きせず DooD 経路を維持する | VM は使えないが docker は使える |
@@ -264,6 +269,8 @@ UID/GID 追従(FR-env-02)、認証共有(FR-env-03)、firewall の適用(FR-env-
 | 5 | CLAUDE.md への書き込みをマーカー範囲の削除 + 再生成にする(`--kvm` の付け外しに追従でき、利用者の記述を壊さない) | D0-scope-02 |
 | 6 | `computer-use` MCP を `enabledMcpjsonServers` に入れない(強権限のため利用時に明示有効化させる) | D0-sec-01 |
 | 7 | ブラウザ操作用 MCP サーバーを**同梱物としてコマンド名で起動する**。起動のたびの取得をやめ、版はイメージのビルド時に固定する | D0-dist-06 |
+| 9 | `/workspace` 配下の JSON を書く経路をすべて `update_json_file`(`mktemp` + 差し替え + シンボリックリンクの拒否)に通す。root で動くので、固定名の一時ファイルへリダイレクトすると利用者が張ったリンクの先を切り詰める | D0-sec-06 / 課題票 098 |
+| 10 | 登録の有無を `jq -e` の真偽ではなく `has()` で判定する。`jq -e` は値が `null` / `false` のとき終了コード 1 を返し、「書いてあるのに未登録」と読み違える | FR-env-11-9 / 課題票 099 |
 | 8 | codex への登録を `ensure_codex_mcp_entry` という**別関数**にし、ブラウザ確認ありの初期化からだけ呼ぶ。既定3鍵は VNC の有無に関わらず要るが、ブラウザ操作の登録は接続先(`:9222`)が在るときだけ意味を持つ。読み直して検証してから置き換える流儀は既定3鍵と同一にする | D0-dist-06 / D0-dist-04 項6 |
 
 - [DS-05] MCP サーバーの登録名を `chrome-devtools` のまま据え置く(同梱物に替えても名前を変えない) — 理由: 名前は利用者の `.mcp.json` と `.claude.json` の `enabledMcpjsonServers` に既に書かれており、変えると既存プロジェクトで有効化が外れる。中身の入れ替えは名前を変えずにできる / 見直す条件: 同じ名前で別の MCP サーバーを登録したい要望が出たとき
