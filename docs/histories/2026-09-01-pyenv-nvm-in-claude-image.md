@@ -45,7 +45,7 @@ summary: claude イメージの base ステージへ CPython 3本(3.11.11/3.13.1
 
 | 理由ID | 対象 | 内容 | コミット |
 |---|---|---|---|
-| R-01 | .devcontainer/Dockerfile.claude(base ステージ) | fnm の直後に nvm 導入ブロックを新設(`NVM_VERSION` / `NODE_LINES` / `NODE_DEFAULT_LINE`)。pyenv 導入部を3本ビルド + `pyenv global` 固定へ。シェル初期化(`/etc/zsh/zshrc`・`/etc/bash.bashrc`)へ nvm の `--no-use` 読み込みを追加。apt の一覧へ `libatomic1` を追加 | (段5 のコミット) |
+| R-01 | .devcontainer/Dockerfile.claude(base ステージ) | fnm の直後に nvm 導入ブロックを新設(`NVM_VERSION` / `NODE_LINES` / `NODE_DEFAULT_LINE`)。pyenv 導入部を3本ビルド + `pyenv global` 固定へ。シェル初期化(`/etc/zsh/zshrc`・`/etc/bash.bashrc`)へ nvm の `--no-use` 読み込みを追加。apt の一覧へ `libatomic1` を追加 | 99082e1 |
 
 ## 実施した移行
 

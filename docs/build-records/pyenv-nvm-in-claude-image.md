@@ -1,12 +1,12 @@
 ---
 slug: pyenv-nvm-in-claude-image
-state: building
+state: awaiting-verify
 critical: false
 origin: human-report
 issue: なし
 started: 2026-09-01T13:57:55+09:00
-updated: 2026-09-01T13:57:55+09:00
-commit: -
+updated: 2026-09-01T15:35:00+09:00
+commit: 99082e1ef34b7dde1f531652855ee1855fc778e7
 summary: claude イメージの base ステージへ pyenv の3系統(3.11.11/3.13.14/3.14.7)と nvm v0.40.6(Node 22/24/26 系列の最新)を入れる
 ---
 
