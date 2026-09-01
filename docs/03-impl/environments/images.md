@@ -7,8 +7,8 @@ source:
 summary: 配布イメージ(claude-cli / claude-vnc)のステージ構成・言語ランタイムの版管理・ビルド引数・キャッシュの効かせ方
 keywords: [イメージ, Dockerfile, ビルド, pyenv, nvm]
 verified:
-  at: 2026-08-22
-  version: 1.3.0
+  at: 2026-09-01
+  version: 1.4.0
   against:
     - {doc: docs/02-design/environments.md, version: 1.7.0}
 ---
