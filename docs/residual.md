@@ -33,4 +33,8 @@
 
 ## 残務(文書整合ほか)
 
-なし
+- 2026-09-01 docs/build-records/pyenv-nvm-in-claude-image.md:基本要件の点検 BR-08 の落とし先が「方針は `docs/03-impl/environments/images.md`「環境変数(ビルド引数)」に1行で記す」と書かれているが、その方針の1行は実際には `docs/03-impl/environments/images.md:95`(「言語ランタイムのバージョン管理」の「実装上の判断」)に在る。方針そのものは書かれておりコードの引用も一致しているので、BR-08 の充足は損なわれていない。誤っているのは節の名前だけである(F3 実装整合フロー)
+- 2026-09-01 docs/03-impl/environments/images.md:frontmatter `source:` が `docs/02-design/environments.md` だけを挙げているが、同ファイルはサービスとポートの表しか持たず、イメージのステージ構成の設計意図は `docs/02-design/architecture.md` の `DSN-dist-01` に在る(本文もその ID を引いている)。上流が動いたときにこの文書が失効することを機械が言えない。基準コミット 69579da より前から在る取りこぼしである(F3 実装整合フロー)
+- 2026-09-01 docs/build-records/bundle-chrome-devtools-mcp.md:基本要件の点検 `check-baseline-verdicts.py` の BR-03 の疑いが、この記録と `fix-make-status-hides-docker-query-failure.md` / `fix-session-list-undercount.md` / `fix-start-auxiliary-halts-and-tmux-runtime-env.md` / `repair-entrypoint-config-writes.md` の計5本に出ている。根はいずれも `USERNAME=` を含む行であり、それはビルド引数かシェル変数の代入であって利用者が値を決める識別子ではない。この run の対象集合の外なので裁定していない(F3 実装整合フロー)
+- 2026-09-01 docs/build-records/bundle-chrome-devtools-mcp.md:基本要件の点検 BR-06 の疑い(`.github/workflows/ghcr-images.yml:143` の `secrets.`)が残っている。`.github/workflows/ghcr-images.yml` は前回の verify-impl の green 以降変わっていないためこの run の対象集合の外であり、裁定していない(F3 実装整合フロー)
+- 2026-09-01 docs/build-records/fix-make-status-hides-docker-query-failure.md:基本要件の点検 `check-baseline-verdicts.py` の BR-05 の疑いが、この記録と `fix-start-auxiliary-halts-and-tmux-runtime-env.md` に出ている(`Makefile:302` の `docker volume rm`、`claude-dev:337` の `rm -rf`)。どちらもこの run の対象集合の外なので裁定していない(F3 実装整合フロー)
