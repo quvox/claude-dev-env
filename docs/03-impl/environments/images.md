@@ -1,11 +1,11 @@
 ---
-id: images
-version: 1.3.0
-updated: 2026-08-22
+id: container-images
+version: 1.4.0
+updated: 2026-09-01
 source:
   - docs/02-design/environments.md
-summary: 配布イメージ(claude-cli / claude-vnc)のステージ構成・ビルド引数・キャッシュの効かせ方
-keywords: [イメージ, Dockerfile, ビルド]
+summary: 配布イメージ(claude-cli / claude-vnc)のステージ構成・言語ランタイムの版管理・ビルド引数・キャッシュの効かせ方
+keywords: [イメージ, Dockerfile, ビルド, pyenv, nvm]
 verified:
   at: 2026-08-22
   version: 1.3.0
@@ -32,7 +32,8 @@ graph LR
   VNC --> VNCF[claude-vnc<br/>= 配布イメージ・ブラウザ確認あり]
 ```
 
-- `base` が `ubuntu:24.04` の上に開発ツール(Go・Python・各種 CLI)を積む。
+- `base` が `ubuntu:24.04` の上に開発ツール(Go・Python・Node.js・各種 CLI)を積む。
+  **言語ランタイムの版管理(pyenv / fnm / nvm)もここに在る**(下の「言語ランタイムのバージョン管理」)。
   **`ENV container=docker` はここで焼き込む**ので、`vnc-base` も終端ステージも継承する
   (`D0-env-06`)。
 - `vnc-base` が `FROM base` で VNC・Chrome・日本語入力を積む。
@@ -49,6 +50,49 @@ graph LR
 レイヤーをそのバイナリ層だけに限定するためである。`vnc-base` は `base` に連なるため、`base` の途中を失効させると VNC の高コスト層
 まで巻き込んで再ビルド・再取得になる(`DSN-dist-01` / `NFR-perf-01`)。同梱外部バイナリの設置層も
 同じ理由で終端に置く(次の節)。
+
+## 言語ランタイムのバージョン管理(pyenv / fnm / nvm)
+
+`base` ステージが積む開発ツールのうち、**Python と Node.js は版を切り替えて使えるようにしてある**。
+どちらも `base` に置く — `NFR-perf-02` が、ブラウザ確認ありイメージだけが持つ追加層に
+言語ランタイムが1件でも現れることを不合格としているので、置ける場所が `base` しかない。
+
+**Python — pyenv(`${USER_HOME}/.pyenv`)**
+
+| 項目 | 内容 |
+|---|---|
+| 導入する版 | `PYTHON_VERSIONS` に並べた CPython を全部ソースビルドする。既定は 3.11.11 / 3.13.14 / 3.14.7 |
+| `python` と打つと動くもの | `PYTHON_GLOBAL_VERSION`(既定 3.13.14)。`pyenv global` で設定する |
+| 版の指定の仕方 | **具体的な MAJOR.MINOR.PATCH で書く。** 系列の最新へ任せると、ビルドした日によって入る版が変わり、どの版で動かしたかを後から言えなくなる |
+| 検証 | `pyenv global` の直後に `python --version` が `PYTHON_GLOBAL_VERSION` と一致することを確かめ、違えばビルドを落とす(そのために導入の `RUN` の PATH へ `${PYENV_ROOT}/shims` を前置している) |
+| 増やすとき | 実行時に `pyenv install <版>` でビルドできる(ビルド依存は apt で導入済み) |
+
+**Node.js — fnm(`${USER_HOME}/.local/share/fnm`)と nvm(`${USER_HOME}/.nvm`)の併存**
+
+| 項目 | fnm | nvm |
+|---|---|---|
+| 版 | 22 系・24 系(ビルド時にその系列の最新へ解決) | `NODE_LINES`(既定 `22 24 26`)。系列ごとにその時点の最新へ解決する |
+| 既定 | **`fnm default 24`。`node` と打ったときに動くのはこちらである** | `nvm alias default 24`(fnm と同じ系列に合わせてあるだけで、PATH には出ない) |
+| シェル初期化 | `fnm env --use-on-cd` を評価し、PATH を張る | **`--no-use` で読み込むだけ。PATH を書き換えない** |
+| 使い方 | 何もしなければこれが効いている | `nvm use 26` のように明示的に切り替えたときだけ前に出る |
+| 検証 | (既存) | 系列ごとに導入直後の `node --version` が `v<系列>.` で始まることを確かめ、違えばビルドを落とす |
+
+**`node` の既定の解決先を nvm へ移してはならない。** `codex` と `chrome-devtools-mcp` の
+`/usr/local/bin` ランチャーは fnm の `aliases/default/bin` を PATH に前置して実体を exec しており、
+`FR-env-12-2`(対話シェル・非対話シェル・`docker exec` のいずれからも `codex` が解決できること)は
+この経路で満たされている。既定を移すと、対話シェル以外からこの2つが解決できなくなる。
+
+**Node 26 系は `libatomic.so.1` を要求する**(22 系・24 系は要求しない)。`g++` 経由でも入るが、
+依存が暗黙になるのを避けて `libatomic1` を apt の一覧へ明示してある。
+
+**実装上の判断(標準委任)**
+
+- [DS-04] nvm を fnm と**併存**させ、`node` の既定の解決先は fnm のままにする — 理由: 上の `FR-env-12-2` の経路が fnm の既定エイリアスに依存しており、既定を移すと `codex` / `chrome-devtools-mcp` が非対話シェルから解決できなくなる。要望は fnm の置き換えではなく nvm の追加である / 見直す条件: fnm をやめると決めたとき(そのときはランチャー2本の参照先も同時に移す)
+- [DS-04] nvm はシェル初期化で **`--no-use`** で読み込む — 理由: 読み込むだけで PATH を書き換えないので、既定の解決先を fnm に保ったまま `nvm use <系列>` を使えるようにできる / 見直す条件: nvm を既定にすると決めたとき
+- [DS-04] Node の版は**系列(`NODE_LINES`)で指定し、ビルド時にその系列の最新へ解決する** — 理由: 同じイメージの `fnm install 24` と、これまでの `pyenv latest -k` が同じやり方であり、ここだけ CI 解決 + build-arg のピン留め(`D0-dist-03` / `D0-dist-04` / `D0-dist-06` が**同梱エージェント CLI について**定めたもの)へ寄せると、保守者が2つの流儀を覚えることになる。釘付けが要るときは `--build-arg NODE_LINES="22.23.2 24.20.0 26.8.1"` で具体版を渡せる / 見直す条件: 版が勝手に上がって困る事故が起きたとき
+- [DS-04] Python の版は**具体的な MAJOR.MINOR.PATCH で固定する**(Node と扱いを変える) — 理由: 要望が 3.11.11 / 3.13.14 / 3.14.7 と patch まで名指ししている。加えて CPython はソースビルドであり、系列の最新へ任せると再ビルドのたびに数十分の差が出る / 見直す条件: patch を追い続ける手間が問題になったとき
+- [DS-04] `pyenv global` の既定を **3.13.14** にする — 理由: これまでの既定が 3.13 系であり、今回の指定にも 3.13.14 が含まれる。既定を動かさない選択が利用者にとっていちばん驚きが少ない / 見直す条件: 3.14 系を既定にする指示が出たとき
+- [DS-04] pyenv / nvm へ渡すビルド引数の展開は、**版を1つずつ渡すところをすべて二重引用で囲む**(`PYTHON_VERSIONS` / `NODE_LINES` そのものの展開だけは、空白で区切って回すために引用しない) — 理由: 引数は保守者がビルド時に渡す値だが、引用の無い展開はグロブと単語分割を通すので、意図しない語がインストーラの引数になりうる / 見直す条件: 版の並びを空白区切り以外の形で渡すようになったとき
 
 ## 同梱外部バイナリの設置(externals/)
 
@@ -153,7 +197,11 @@ graph LR
 | `USER_UID` / `USER_GID` | ビルド時のユーザー ID(起動時に entrypoint がホストへ追従させる) | `1500` / `1500` | 任意 | 同上 |
 | `IMAGE_VERSION` | イメージのラベルに入れる版(タイムスタンプ) | `local` | 任意 | 同上 |
 | `GO_VERSION` | 同梱する Go | `1.26.1` | 任意 | `base` ステージの Go 導入部 |
-| `PYTHON_VERSION` | 同梱する Python | `3.13` | 任意 | `base` ステージの pyenv 導入部 |
+| `PYTHON_VERSIONS` | 同梱する CPython の並び(空白区切り。全部ソースビルドする) | `3.11.11 3.13.14 3.14.7` | 任意 | `base` ステージの pyenv 導入部 |
+| `PYTHON_GLOBAL_VERSION` | `pyenv global` に設定する版(`python` と打つと動くもの) | `3.13.14` | 任意 | 同上 |
+| `NVM_VERSION` | 導入する nvm の版(git のタグ名) | `v0.40.6` | 任意 | `base` ステージの nvm 導入部 |
+| `NODE_LINES` | nvm で導入する Node の系列の並び(空白区切り)。**具体版を書けばそこへ釘付けできる** | `22 24 26` | 任意 | 同上 |
+| `NODE_DEFAULT_LINE` | nvm の `default` エイリアスが指す系列(PATH には出ない) | `24` | 任意 | 同上 |
 | `CLAUDE_VERSION` | 同梱する Claude Code。**CI が具体バージョンへ解決して渡す** | `latest` | 実質必須(CI から) | 配布ステージ `claude-cli` / `claude-vnc` の冒頭 |
 | `CODEX_VERSION` | 同梱する Codex CLI。**CI が具体バージョンへ解決して渡す** | `latest` | 実質必須(CI から) | 同上 |
 | `CHROME_DEVTOOLS_MCP_VERSION` | 同梱するブラウザ操作用 MCP サーバー(`chrome-devtools-mcp`)。**CI が具体バージョンへ解決して渡す** | `latest` | 実質必須(CI から) | 同上 |
@@ -170,6 +218,11 @@ graph LR
 | 同梱エージェント CLI が更新されない | `CLAUDE_VERSION=latest` / `CODEX_VERSION=latest` のまま渡すと**文字列が変わらずキャッシュキーとして機能せず**、導入層が永久にヒットして中身だけ凍結する(2026-07 に実際に発生) | CI の prepare ジョブで具体バージョンへ解決してから build-arg で渡す(`infra/local/ghcr.md`) |
 | 取得が毎回フルダウンロードになる | 時刻由来の値をレイヤーチェーンに入れると、内容が変わらない日も全層が失効する | レイヤーチェーンに入れてよいのは**内容由来**の値だけ(`DSN-dist-01`)。時刻はラベルに置く |
 | VNC 層まで再ビルドされる | エージェント CLI の導入や同梱外部バイナリの設置を `base` の途中に置くと、`FROM base` の `vnc-base` まで失効が波及する | 導入・設置は終端ステージの最終レイヤーにのみ置く |
+| **`node` と打つと nvm ではなく fnm 側の Node が動く** | **仕様である。** nvm はシェル初期化で `--no-use` で読み込まれ、PATH を書き換えない(`FR-env-12-2` の経路を守るため) | nvm 側を使うときは `nvm use 26` のように系列を明示する |
+| **nvm の Node 26 が `libatomic.so.1` が無くて起動しない** | Node 26 系の公式ビルドだけがこの共有ライブラリを要求する(22 系・24 系は要求しない) | apt の一覧に `libatomic1` を明示してある。ベースイメージを差し替えるときはこの依存を落とさない |
+| **pyenv の導入部で `python` が見つからずビルドが落ちる** | `pyenv global` を設定しても、`${PYENV_ROOT}/shims` が PATH に無いと `python` は解決できない(`${PYENV_ROOT}/bin` に在るのは `pyenv` 本体だけである) | 導入の `RUN` の PATH に `${PYENV_ROOT}/shims` を前置してある。検証の1行を足すときはここを崩さない |
+| **`make build-claude` が以前より大幅に長くなった** | pyenv が CPython を1本から3本のソースビルドに増えた | 手元で試すだけなら `--build-arg PYTHON_VERSIONS=3.13.14` で1本に絞れる |
+| **base ステージを変えた日は利用者の `docker pull` が増分でなくなる** | 言語ランタイムは `base` に置くほかなく(`NFR-perf-02`)、`base` の途中を失効させると `vnc-base` と終端ステージまで巻き込む | **これは仕様である。** `NFR-perf-01` の目標値は「同梱エージェント CLI と同梱外部バイナリのどちらも変わらない日」を条件にしており、ランタイムの入れ替えはその条件の外である |
 | ローカルビルドと配布イメージで版が違う | ローカルは `latest` の既定のまま解決されるため、ビルドした時点の版が焼かれる | チームで揃えるときは `claude-dev pull` を使う |
 | **`externals/` が無いと `COPY` の時点でビルドが失敗する** | `COPY externals/ ...` はビルド文脈にそのパスが無いと失敗する。**`.gitignore` に入れると CI の `actions/checkout` 後のツリーに存在しない** | `externals/README.md` を必ずコミットしておく(ディレクトリが空でも存在する状態を保つ)。`.dockerignore` を新設する場合も `externals/` を除外しない |
 | **片方の配布イメージにしか同梱物が入らない** | 設置の `RUN` を一方の終端ステージにしか書かなかった | 両方の終端ステージに同じ処理を書く。`FR-env-13-1` を満たさないだけでなく、`NFR-perf-02` の「ブラウザ確認ありイメージだけが持つ追加層にビルド済み成果物が現れない」にも当たる |
