@@ -79,10 +79,12 @@
 | [2026-08-22-repair-entrypoint-config-writes.md](2026-08-22-repair-entrypoint-config-writes.md) | 2026-08-22 | docs/build-records/repair-entrypoint-config-writes.md | 03 | 起動処理が /workspace 配下の設定を書く経路を mktemp とリンク拒否へ揃え、登録の有無の判定を値の真偽からキーの有無へ直した | docs/03-impl/relations/MODULE-entrypoint-claude.md | FR-env-11-9<br>MODULE-entrypoint-claude | docs/issues/098-modify-entrypoint-writes-user-controlled-paths-as-root.md | 適用外 | - |
 | [2026-08-22-verify-docs-mcp-bundle.md](2026-08-22-verify-docs-mcp-bundle.md) | 2026-08-22 | なし(taskless — flow: verify-docs) | 01 | F2 文書整合の増分 run。合格証9本を発行し、独立レビューの所見4件のうち3件を自動修正、1件を質問シートへ回した | docs/01-requirements/functional.md<br>docs/02-design/architecture.md<br>docs/03-impl/tests/entrypoint.md | D0-dist-06<br>DSN-dist-01<br>E2E-06<br>FR-env-11-2<br>FR-env-12-13 | なし | 適用外 | - |
 | [2026-08-22-verify-impl-mcp-bundle.md](2026-08-22-verify-impl-mcp-bundle.md) | 2026-08-22 | なし(taskless — flow: verify-impl) | 03 | F3 実装整合の増分 run。コールグラフを再生成し、CI が渡さない build 引数の記述を実測へ直し、独立レビューの所見2件を課題票にした | docs/03-impl/callgraphs/*.md<br>docs/03-impl/feature-graph.md<br>docs/03-impl/index.md<br>docs/03-impl/infra/local/ghcr.md | D0-dist-03<br>FR-env-11-9 | なし | 適用外 | - |
+| [2026-09-01-pyenv-nvm-in-claude-image.md](2026-09-01-pyenv-nvm-in-claude-image.md) | 2026-09-01 | docs/build-records/pyenv-nvm-in-claude-image.md | 03 | claude イメージの base ステージへ CPython 3本(3.11.11/3.13.14/3.14.7)と nvm v0.40.6(Node 22/24/26 系列)を入れた | docs/03-impl/environments/images.md<br>docs/03-impl/tests/images.md | D0-dist-03<br>D0-dist-04<br>D0-dist-06<br>FR-env-12-2<br>RQ-env-02 | なし | 適用外 | - |
+| [2026-09-01-verify-impl-pyenv-nvm.md](2026-09-01-verify-impl-pyenv-nvm.md) | 2026-09-01 | なし(taskless — flow: verify-impl) | 03 | コールグラフを再生成し、エントリポイントの種別が cli から main へ直った(道具の出力の変化) | docs/03-impl/callgraphs/go.md<br>docs/03-impl/callgraphs/index.md<br>docs/03-impl/callgraphs/shell.md<br>docs/03-impl/environments/images.md | - | なし | 適用外 | - |
 
 ## 集計
 
-- 履歴数: 73
+- 履歴数: 75
 - 文書・IDを索引化できない履歴: 1
 - 解析警告: 0
 - critical復旧記録の警告: 0

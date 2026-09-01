@@ -21,7 +21,7 @@ unresolved: 0
 
 | 種別 | 識別子 | 正規化キー | ハンドラ | 検出根拠 |
 |---|---|---|---|---|
-| cli | `dispatch main @ docker-proxy/main.go::main` | `/docker-proxy/main.go` | `docker-proxy/main.go::main` | docker-proxy/main.go |
+| main | `dispatch main @ docker-proxy/main.go::main` | `/docker-proxy/main.go` | `docker-proxy/main.go::main` | docker-proxy/main.go |
 
 ## 関数表
 

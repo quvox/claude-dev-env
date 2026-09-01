@@ -2,7 +2,7 @@
 # Claude Code コンテナ
 # =============================================================================
 # ベース: Ubuntu 24.04
-# 言語: Node.js (fnm), Python3 (venv), Go, Rust
+# 言語: Node.js (fnm + nvm), Python3 (pyenv), Go, Rust
 # ツール: git, gh (GitHub CLI), tmux, zsh, vim, make, gcc, curl, wget, etc.
 # Claude Code CLI
 # ブラックリスト方式ファイアウォール
@@ -40,6 +40,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     iproute2 net-tools iputils-ping \
     # ビルドツール
     make gcc g++ pkg-config \
+    # Node.js 26 系の公式ビルドが必要とする共有ライブラリ（g++ 経由でも入るが、
+    # 依存を明示しておかないと g++ を外した日に nvm の Node 26 が黙って起動しなくなる）
+    libatomic1 \
     # sudo・プロセス管理
     sudo procps \
     # Python 3
@@ -124,6 +127,33 @@ RUN curl -fsSL https://fnm.vercel.app/install | bash -s -- \
     && fnm install 22 \
     && fnm use 24
 
+# --- nvm (Node.js バージョン管理。fnm と併存させる) ---
+# ${USER_HOME}/.nvm に配置する。**`node` の既定の解決先は fnm のままである** ―
+# codex / chrome-devtools-mcp の /usr/local/bin ランチャーが fnm の
+# aliases/default/bin を参照しており（FR-env-12-2 が「対話シェル・非対話シェル・
+# docker exec のいずれからも解決できること」を求めている）、既定を nvm へ移すと
+# その2つが対話シェル以外から解決できなくなる。そのためシェル初期化では
+# --no-use で読み込むだけにし、nvm は PATH を書き換えない（`nvm use <系列>` で
+# 明示的に切り替えたときだけ前に出る）。
+# NODE_LINES は系列の並びである。具体版へ釘付けしたいときは
+# --build-arg NODE_LINES="22.23.2 24.20.0 26.8.1" のように渡す。
+ARG NVM_VERSION=v0.40.6
+ARG NODE_LINES="22 24 26"
+ARG NODE_DEFAULT_LINE=24
+RUN export NVM_DIR="${USER_HOME}/.nvm" PROFILE=/dev/null \
+    && curl -fsSL "https://raw.githubusercontent.com/nvm-sh/nvm/${NVM_VERSION}/install.sh" | bash \
+    && bash -c '. "${NVM_DIR}/nvm.sh" || exit 1; \
+        for line in ${NODE_LINES}; do \
+            nvm install "${line}" || exit 1; \
+            v="$(node --version)"; \
+            case "${v}" in \
+                "v${line}"|"v${line}."*) echo "nvm: installed Node ${v} (line ${line})" ;; \
+                *) echo "nvm: 系列 ${line} の解決結果が ${v} でした" >&2; exit 1 ;; \
+            esac; \
+        done; \
+        nvm alias default "${NODE_DEFAULT_LINE}" || exit 1; \
+        nvm ls'
+
 # --- Go ---
 ARG GO_VERSION=1.26.1
 RUN curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-$(dpkg --print-architecture).tar.gz" \
@@ -134,19 +164,27 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
     | sh -s -- -y --default-toolchain stable --profile minimal
 
 # --- pyenv (Python バージョン管理) ---
-# ${USER_HOME}/.pyenv に配置。既定の CPython を1つソースビルドして global に設定し、
-# インストール直後から `python`/`pyenv` が使える状態にする。追加バージョンは実行時に
-# `pyenv install <ver>` でビルドできる（ビルド依存は apt で導入済み）。
-ARG PYTHON_VERSION=3.13
+# ${USER_HOME}/.pyenv に配置。PYTHON_VERSIONS に並べた CPython をすべてソースビルドし、
+# PYTHON_GLOBAL_VERSION を global に設定する。インストール直後から `python`/`pyenv` が
+# 使える状態にする。さらに別の版が要るときは実行時に `pyenv install <ver>` でビルドできる
+# （ビルド依存は apt で導入済み）。
+# **版は具体的な MAJOR.MINOR.PATCH で指定する** ― 系列の最新へ任せると、ビルドした日に
+# よって入る版が変わり、どの版で動かしたかを後から言えなくなる。
+ARG PYTHON_VERSIONS="3.11.11 3.13.14 3.14.7"
+ARG PYTHON_GLOBAL_VERSION=3.13.14
 RUN git clone --depth 1 https://github.com/pyenv/pyenv.git ${USER_HOME}/.pyenv
 # シム高速化用の C 拡張（任意。失敗してもビルドは継続する）
 RUN cd ${USER_HOME}/.pyenv && src/configure && make -C src || echo "pyenv native ext build skipped"
 RUN export PYENV_ROOT="${USER_HOME}/.pyenv" \
-    && export PATH="${PYENV_ROOT}/bin:${PATH}" \
-    && PYV="$(pyenv latest -k ${PYTHON_VERSION})" \
-    && echo "pyenv: installing CPython ${PYV}" \
-    && pyenv install "${PYV}" \
-    && pyenv global "${PYV}"
+    && export PATH="${PYENV_ROOT}/shims:${PYENV_ROOT}/bin:${PATH}" \
+    && for v in ${PYTHON_VERSIONS}; do \
+           echo "pyenv: installing CPython ${v}"; \
+           pyenv install "${v}" || exit 1; \
+       done \
+    && pyenv global "${PYTHON_GLOBAL_VERSION}" \
+    && pyenv rehash \
+    && test "$(python --version 2>&1)" = "Python ${PYTHON_GLOBAL_VERSION}" \
+    && pyenv versions
 
 # --- pnpm ---
 RUN export PATH="${USER_HOME}/.local/share/fnm:$PATH" \
@@ -223,7 +261,7 @@ RUN CHROMIUM_PATH=$(find ${USER_HOME}/.cache/ms-playwright -name "chrome" \( -pa
     fi
 
 
-# --- シェル初期化: PATH と fnm を設定 ---
+# --- シェル初期化: PATH と fnm / nvm / pyenv を設定 ---
 # システム側（/etc/zsh/zshrc, /etc/bash.bashrc）に配置し、
 # ~/.zshrc はユーザーカスタマイズ用としてボリュームで共有する
 RUN mkdir -p /etc/zsh && { \
@@ -231,6 +269,9 @@ RUN mkdir -p /etc/zsh && { \
         echo '# --- claude-dev: PATH ---'; \
         echo 'export PATH="${HOME}/.local/share/fnm:${PATH}"'; \
         echo 'eval "$(fnm env --use-on-cd --shell zsh 2>/dev/null)"'; \
+        echo '# nvm (Node バージョン管理。--no-use なので PATH を書き換えない)'; \
+        echo 'export NVM_DIR="${HOME}/.nvm"'; \
+        echo '[ -s "${NVM_DIR}/nvm.sh" ] && . "${NVM_DIR}/nvm.sh" --no-use'; \
         echo 'export PATH="${HOME}/.local/bin:${HOME}/.cargo/bin:/usr/local/go/bin:${HOME}/go/bin:${PATH}"'; \
         echo '# pyenv (Python バージョン管理)'; \
         echo 'export PYENV_ROOT="${HOME}/.pyenv"'; \
@@ -242,6 +283,9 @@ RUN mkdir -p /etc/zsh && { \
         echo '# --- claude-dev: PATH ---'; \
         echo 'export PATH="${HOME}/.local/share/fnm:${PATH}"'; \
         echo 'eval "$(fnm env --use-on-cd --shell bash 2>/dev/null)"'; \
+        echo '# nvm (Node バージョン管理。--no-use なので PATH を書き換えない)'; \
+        echo 'export NVM_DIR="${HOME}/.nvm"'; \
+        echo '[ -s "${NVM_DIR}/nvm.sh" ] && . "${NVM_DIR}/nvm.sh" --no-use'; \
         echo 'export PATH="${HOME}/.local/bin:${HOME}/.cargo/bin:/usr/local/go/bin:${HOME}/go/bin:${PATH}"'; \
         echo '# pyenv (Python バージョン管理)'; \
         echo 'export PYENV_ROOT="${HOME}/.pyenv"'; \

@@ -28,12 +28,12 @@ unresolved: 3
 | cli | `dispatch attach @ claude-dev::main` | `/claude-dev/attach` | `claude-dev::main#attach` | claude-dev |
 | cli | `dispatch code @ claude-dev-mac::main` | `/claude-dev-mac/code` | `claude-dev-mac::main#code` | claude-dev-mac |
 | cli | `dispatch code @ claude-dev::main` | `/claude-dev/code` | `claude-dev::main#code` | claude-dev |
-| cli | `dispatch entrypoint-claude.sh @ scripts/entrypoint-claude.sh::main` | `/entrypoint-claude.sh` | `scripts/entrypoint-claude.sh::main` | scripts/entrypoint-claude.sh |
+| main | `dispatch entrypoint-claude.sh @ scripts/entrypoint-claude.sh::main` | `/entrypoint-claude.sh` | `scripts/entrypoint-claude.sh::main` | scripts/entrypoint-claude.sh |
 | cli | `dispatch firewall @ claude-dev-mac::main` | `/claude-dev-mac/firewall` | `claude-dev-mac::main#firewall` | claude-dev-mac |
 | cli | `dispatch firewall @ claude-dev::main` | `/claude-dev/firewall` | `claude-dev::main#firewall` | claude-dev |
 | cli | `dispatch forward @ claude-dev-mac::main` | `/claude-dev-mac/forward` | `claude-dev-mac::main#forward` | claude-dev-mac |
 | cli | `dispatch forward @ claude-dev::main` | `/claude-dev/forward` | `claude-dev::main#forward` | claude-dev |
-| cli | `dispatch init-firewall-claude.sh @ scripts/init-firewall-claude.sh::main` | `/init-firewall-claude.sh` | `scripts/init-firewall-claude.sh::main` | scripts/init-firewall-claude.sh |
+| main | `dispatch init-firewall-claude.sh @ scripts/init-firewall-claude.sh::main` | `/init-firewall-claude.sh` | `scripts/init-firewall-claude.sh::main` | scripts/init-firewall-claude.sh |
 | cli | `dispatch list @ claude-dev-mac::main` | `/claude-dev-mac/list` | `claude-dev-mac::main#list` | claude-dev-mac |
 | cli | `dispatch list @ claude-dev::main` | `/claude-dev/list` | `claude-dev::main#list` | claude-dev |
 | cli | `dispatch login @ claude-dev-mac::main` | `/claude-dev-mac/login` | `claude-dev-mac::main#login` | claude-dev-mac |
@@ -64,9 +64,9 @@ unresolved: 3
 | cli | `dispatch unforward @ claude-dev::main` | `/claude-dev/unforward` | `claude-dev::main#unforward` | claude-dev |
 | cli | `dispatch upgrade @ claude-dev-mac::main` | `/claude-dev-mac/upgrade` | `claude-dev-mac::main#upgrade` | claude-dev-mac |
 | cli | `dispatch upgrade @ claude-dev::main` | `/claude-dev/upgrade` | `claude-dev::main#upgrade` | claude-dev |
-| cli | `dispatch vm @ scripts/vm::main` | `/vm` | `scripts/vm::main` | scripts/vm |
-| cli | `dispatch vm-up.sh @ scripts/vm-up.sh::main` | `/vm-up.sh` | `scripts/vm-up.sh::main` | scripts/vm-up.sh |
-| cli | `dispatch wait-limit-reset.sh @ scripts/wait-limit-reset.sh::main` | `/wait-limit-reset.sh` | `scripts/wait-limit-reset.sh::main` | scripts/wait-limit-reset.sh |
+| main | `dispatch vm @ scripts/vm::main` | `/vm` | `scripts/vm::main` | scripts/vm |
+| main | `dispatch vm-up.sh @ scripts/vm-up.sh::main` | `/vm-up.sh` | `scripts/vm-up.sh::main` | scripts/vm-up.sh |
+| main | `dispatch wait-limit-reset.sh @ scripts/wait-limit-reset.sh::main` | `/wait-limit-reset.sh` | `scripts/wait-limit-reset.sh::main` | scripts/wait-limit-reset.sh |
 
 ## 関数表
 

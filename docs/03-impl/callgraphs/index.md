@@ -47,9 +47,12 @@ languages: 6
      本番実行系から到達しないものは機能ではない(features.md §0.1)。
      **ここに本番コードが並んでいたら誤除外である。** callgraph-config.local.json の
      *_markers を絞ること。照合規則(目印の形で決まる)は directions/callgraphs.md
-     §5.9.1 の表を見る。 -->
+     §5.9.1 の表を見る。
+     宣言したガード節 = dispatch_guards で入口から外した分岐(§5.7)。
+     **効かなかった宣言 = 綴り違いか、コードから消えたガードである。**
+     効いていないものが並んでいたら、宣言を直すか消すこと(黙って外さないための行である)。 -->
 
-| 言語 | 種別 | 件数 | ファイル |
+| 言語 | 種別 | 件数 | ファイル / 宣言 |
 |---|---|---|---|
 | go | テスト | 3 | `docker-proxy/binds_test.go`, `docker-proxy/labels_test.go`, `docker-proxy/main_test.go` |
 

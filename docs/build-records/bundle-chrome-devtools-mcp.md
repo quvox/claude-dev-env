@@ -1,11 +1,11 @@
 ---
 slug: bundle-chrome-devtools-mcp
-state: awaiting-verify
+state: verified
 critical: false
 origin: human-report
 issue: なし
 started: 2026-08-22T17:30:00+09:00
-updated: 2026-08-22T18:40:00+09:00
+updated: 2026-09-01T05:56:12+00:00
 commit: b6a7256b9f6348924a977dfe414ab5bcc543a3f7
 summary: chrome-devtools MCP を配布イメージへピン留めで同梱し、claude と codex の双方から実行時ダウンロードなしで使えるようにする
 ---
