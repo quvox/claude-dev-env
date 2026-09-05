@@ -1,6 +1,12 @@
 .env
-workspace/
-!workspace/.gitkeep
+# `workspace/` と書くとディレクトリごと除外され、git が中へ降りないので
+# `!workspace/.gitkeep` は**決して効かない**(`.colabtmux` と同じ誤り)。`/*` で中身だけを除外する。
+# なお `workspace/.gitkeep` は**実在しない**(一度も追跡されたことがない)ため、この否定はいま
+# 何にも一致しない。ファイルを作れば意図どおりに効く。**このタスクでは作らない** —
+# `workspace/` が複製先に存在せねばならないとは、どの仕様ドキュメントも述べていないからである
+# (`externals/` は `externals/README.md` で明示的にその形を採っている。`03-impl/environments/images.md`)。
+/workspace/*
+!/workspace/.gitkeep
 
 # --- .claude/ の追跡範囲 ---------------------------------------------------
 # この `.claude` の1行は claude-dev start が起動のたびに書き足すものである

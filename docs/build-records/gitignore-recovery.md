@@ -48,7 +48,7 @@ summary: .claude/ 配下が git に1件も追跡されていない状態を、�
 ## 主張
 
 - 触ったモジュールのテスト: green(`cd docker-proxy && go test ./...` → `ok  	github.com/quvox/claude-dev-env/docker-proxy	(cached)`)
-- lint / build: green(`cd docker-proxy && go vet ./...` → 出力なし・終了コード0 / `make build` → 終了コード0、`naming to docker.io/library/claude-dev-docker-proxy:latest` まで到達)
+- lint / build: green(`cd docker-proxy && go vet ./...` → 出力なし・終了コード0 / `make build` → 終了コード0、最終行 `✅ claude-dev-docker-proxy`。独立レビューの所見④を直した後に回し直した値である)
 - 外部挙動の変化: なし
   (製品のコードを1バイトも変えない。変わるのは本リポジトリが git で追跡する集合だけである)
 - 認証・決済・不可逆への接触: あり(critical: true) — `.claude/.credentials.json`(OAuth 資格情報)を
@@ -139,6 +139,8 @@ summary: .claude/ 配下が git に1件も追跡されていない状態を、�
   `directions/` `scripts/` `skills/` `state/` は追跡され、
   `.credentials.json` `history.jsonl` `projects/` `__pycache__/` `skills/colabtmux/` は除外された
 
+<!-- 独立レビューの所見と裁定は 進捗メモ の末尾に在る。 -->
+
 ## 進捗メモ(再開点)
 
 - 2026-09-06 段0 完了: guard-branch.py OK(work/2026-09-06-kit-migrate)。
@@ -191,4 +193,27 @@ summary: .claude/ 配下が git に1件も追跡されていない状態を、�
 
 ## 申し送り
 
-- なし
+- **`workspace/.gitkeep` は実在しないので、複製先に `workspace/` ディレクトリは現れない。**
+  パターンは直したので、ファイルを1つ置けば意図どおりに追跡される。置くかどうかは
+  「`workspace/` が複製先に存在せねばならないか」という要求の問題であり、
+  それを述べた仕様ドキュメントは無い(原則4 により、こちらでは作らない)。
+- 独立レビューが挙げた weakest point: `.claude/` の許可はディレクトリ単位なので、
+  将来そこへ置かれる未知のファイルも追跡候補になる。現存152本では秘密を検出しなかったが、
+  追加時の走査に依存する。ファイル単位の許可に落とすと、キットが1本増えるたびに
+  `.gitignore` の更新漏れで黙って取りこぼすので、ディレクトリ単位のままにした。
+- 2026-09-06 独立レビュー(`review-060834` / codex)を受領。5点中4点 合格、1点 不合格。
+  **合格**: ①秘密の漏洩(資格情報・履歴・実行状態9種はすべて `.gitignore:19` に一致し
+  `git ls-files` に0件、追跡152本の秘密走査も0件)②取りこぼし(`stamps.json` を追跡中)
+  ③自己復元(`grep -qxF '.claude'` が成功し `claude-dev:1567` は追記しない)
+  ⑤人間の決定「A」との一致(道具152本を追跡、missions は0本)。
+  **不合格(低)**: ④`.gitignore:2-3` の `workspace/` + `!workspace/.gitkeep` が、
+  `.colabtmux` とまったく同じ理由で死んでいる。
+- 2026-09-06 所見④の裁定: **直した(実装を直した)**。`.gitignore` はこのタスクのクロージャ
+  そのものであり、作業指示も「`.gitignore` の編集を精査し、意図と衝突しないよう整理する」ことを
+  求めている。同じ誤りを1つのファイルの中で片方だけ直して残すのは筋が通らない。
+  `/workspace/*` + `!/workspace/.gitkeep` に改めた。
+  **`workspace/.gitkeep` は作らない** — 一度も存在せず、`workspace/` が複製先に存在せねば
+  ならないと述べた仕様ドキュメントも無いので、作れば上流に無いものを作ることになる(原則4)。
+  実地に確認: ファイルを置くと `git status` が `?? workspace/.gitkeep` を出す(確認後に削除)。
+  `workspace/` 配下の他のものは従来どおり無視される
+

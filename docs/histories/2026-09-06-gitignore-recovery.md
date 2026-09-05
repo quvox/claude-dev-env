@@ -33,6 +33,13 @@ summary: .claude/ 配下が一度も git に追跡されていなかった状態
 - 変更が必要になった条件: `.colabtmux/colabtmux.conf:1` が
   「このファイルはコミットして共有する」と自ら宣言しており、意図と実際が食い違っていた。
 
+### R-03 `workspace/` の否定も同じ理由で死んでいた(独立レビューの指摘)
+
+- 起点層・根拠: 独立レビュー(`review-060834` / codex)の所見4。
+  `git check-ignore -v --no-index workspace/.gitkeep` → `.gitignore:2:workspace/`。
+- 変更が必要になった条件: `.colabtmux` とまったく同じ誤りが同じファイルの中に在り、
+  片方だけ直すと筋が通らない。`.gitignore` はこのタスクのクロージャそのものである。
+
 ## 変更内容の要約
 
 - ルートの `.gitignore` に `.claude/` の**許可リスト**(既定で全部除外し、名前を挙げたものだけ戻す)を置いた。
@@ -57,8 +64,9 @@ summary: .claude/ 配下が一度も git に追跡されていなかった状態
 
 | 理由ID | 対象 | 内容 | コミット |
 |---|---|---|---|
-| R-01 | `.gitignore` | `.claude/` の許可リスト(13件を名指しで追跡、それ以外は既定で除外) | <commit> |
-| R-02 | `.gitignore` | `.colabtmux/` → `/.colabtmux/*` + 効く否定 / `CLAUDE.md` `AGENTS.md` の先頭に `/` | <commit> |
+| R-01 | `.gitignore` | `.claude/` の許可リスト(12件を名指しで追跡、それ以外は既定で除外) | efcc36b |
+| R-02 | `.gitignore` | `.colabtmux/` → `/.colabtmux/*` + 効く否定 / `CLAUDE.md` `AGENTS.md` の先頭に `/` | efcc36b |
+| R-03 | `.gitignore` | `workspace/` → `/workspace/*` + 効く否定(`workspace/.gitkeep` 自体は作らない — 原則4) | <commit> |
 
 ## 実施した移行
 
