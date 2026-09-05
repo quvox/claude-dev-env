@@ -1,0 +1,22 @@
+# 何がキットの構成要素かの正は `scripts/kit-dist.json` の include(allowlist)。
+# ここは git 用の別語彙であり、両者は目的が違う。
+#
+# **git で共有するものと、配布物に入れるものは別である。**
+# `scripts/*.local.json`・`settings.local.json`・`missions/` は配布物には入らない
+# (kit-dist.json の include に無い / exclude が落とす)が、**git では共有する** —
+# プロジェクト固有の宣言(`code_roots`・`f4_scopes`・許可リスト)は、どの複製でも同じ値で
+# なければ、同じコードに対して違う判定が出るからである(`directions/conventions.md` §1)。
+# **個人・環境ごとの設定は `~/.claude/settings.json`(利用者ごとの設定)へ書く。**
+#
+# キット専用のツール環境。git 管理外にする。
+# `python3 .claude/scripts/setup-tools.py` でいつでも再構築できる。
+.venv/
+.tools/
+__pycache__/
+*.pyc
+# kit-patch.py の控えと、本流へ渡す途中のパッチ。どちらもローカルの作業状態であって
+# キットの構成要素ではない(kit-dist.json の include にも載らない)。
+# improvements/ 全体を外す — パッチは本流へ移したら残らず、メモは diff が消すので、
+# ここに履歴として残すものは何も無い。
+.kit-snapshot.tar.gz
+improvements/

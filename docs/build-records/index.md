@@ -6,7 +6,7 @@
 
 | slug | 状態 | critical | 更新 | 概要 |
 |---|---|---|---|---|
-| bundle-chrome-devtools-mcp | awaiting-verify | false | 2026-08-22T18:40:00+09:00 | chrome-devtools MCP を配布イメージへピン留めで同梱し、claude と codex の双方から実行時ダウンロードなしで使えるようにする |
+| bundle-chrome-devtools-mcp | verified | false | 2026-09-01T05:56:12+00:00 | chrome-devtools MCP を配布イメージへピン留めで同梱し、claude と codex の双方から実行時ダウンロードなしで使えるようにする |
 | cleanup-retired-changeset-kit-records | verified | false | 2026-08-20T05:43:36+00:00 | 規約刷新で廃止された変更指示系スクリプト・規範に紐づくキットパッチ・残務・issue を後始末する |
 | delete-issue-102-per-human-adjudication | verified | false | 2026-08-20T05:43:36+00:00 | 人間の裁定により issue 102 を削除し、102 を参照している索引・03 層の集計・残務行を整合させる |
 | delete-issue-110-per-human-adjudication | verified | false | 2026-08-20T06:26:50+00:00 | 人間の裁定により issue 110 を削除し(closes_when は未充足)、110 を参照している 03 層の集計文と生成索引を整合させる |
@@ -15,9 +15,10 @@
 | fix-make-status-hides-docker-query-failure | verified | false | 2026-08-20T05:43:36+00:00 | make status が docker への問い合わせの失敗を0件と同一視する欠陥を直し、claude-dev list と同じ警告行を出す |
 | fix-session-list-undercount | verified | true | 2026-08-20T05:43:36+00:00 | list / make status / make clean の Claude コンテナ列挙を、イメージ由来から「管理ラベル ∪ イメージ ∪ 固定接頭辞」へ改める |
 | fix-start-auxiliary-halts-and-tmux-runtime-env | verified | true | 2026-08-20T05:43:36+00:00 | start の補助処理2つを握って起動を止めないようにし、CLI が作り直す tmux の窓へ entrypoint の実行時の値を届ける |
-| pyenv-nvm-in-claude-image | awaiting-verify | false | 2026-09-01T15:35:00+09:00 | claude イメージの base ステージへ pyenv の3系統(3.11.11/3.13.14/3.14.7)と nvm v0.40.6(Node 22/24/26 系列の最新)を入れる |
-| repair-entrypoint-config-writes | awaiting-verify | false | 2026-08-22T19:55:00+09:00 | 起動処理が /workspace 配下の設定を書くときの一時ファイルと chown を安全な形へ揃え、登録の有無の判定を値の真偽からキーの有無へ直す |
+| gitignore-recovery | building | true | 2026-09-06T08:31:04+09:00 | .claude/ 配下が git に1件も追跡されていない状態を、許可リスト方式で直す(認証情報は除外を維持) |
+| pyenv-nvm-in-claude-image | verified | false | 2026-09-01T05:56:12+00:00 | claude イメージの base ステージへ pyenv の3系統(3.11.11/3.13.14/3.14.7)と nvm v0.40.6(Node 22/24/26 系列の最新)を入れる |
+| repair-entrypoint-config-writes | verified | false | 2026-09-01T05:56:12+00:00 | 起動処理が /workspace 配下の設定を書くときの一時ファイルと chown を安全な形へ揃え、登録の有無の判定を値の真偽からキーの有無へ直す |
 
-件数: 11
+件数: 12
 
 <!-- END GENERATED: build-index.py -->

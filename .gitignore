@@ -1,14 +1,68 @@
 .env
 workspace/
 !workspace/.gitkeep
+
+# --- .claude/ の追跡範囲 ---------------------------------------------------
+# この `.claude` の1行は claude-dev start が起動のたびに書き足すものである
+# (`claude-dev:1567`。判定は `.claude` か `.claude/` に**完全一致する行**の有無だけを
+#  見るので、消しても次回の起動で黙って戻り、下の許可リストごと無効になる)。
+# だから消さずに残し、次の行でディレクトリだけを打ち消して、git が中へ降りられるようにする。
 .claude
-CLAUDE.md
-AGENTS.md
+!/.claude/
+# 中身は**既定で全部除外し、名前を挙げたものだけ戻す**(許可リスト)。除外リストにしない理由は
+# `.claude/scripts/kit-dist.json` の `_comment` と同じである — `.claude/` はキットの置き場で
+# あると同時に Claude Code 自身の実行状態の置き場でもあり、除外リストだと列挙し忘れたものが
+# 混入する。許可リストなら知らないものは決して入らない。
+# これにより `.credentials.json`(OAuth 資格情報)・`.claude.json`・`history.jsonl`・
+# `projects/`・`sessions/`・`cache/`・`file-history/`・`shell-snapshots/`・`backups/`・
+# `.venv/` などは、名前を挙げていないので自動的に除外側へ落ちる。
+/.claude/*
+!/.claude/.gitignore
+!/.claude/kit-manifest.json
+# settings.local.json は**共有しない**。キットの `.claude/.gitignore` 冒頭は「git では共有する」と
+# しているが、その理由として挙げているのは「どの複製でも同じ値でなければ、同じコードに対して
+# 違う判定が出る」ことであり、それに当たるのは `scripts/*.local.json`(検証の判定を変える宣言)
+# である。settings.local.json は道具の許可リストで判定を変えず、実際に機械固有の絶対パス
+# (利用者名を含む `/tmp/claude-1000/-home-<利用者名>-...`)を持つ。公開リポジトリなので載せない。
+!/.claude/settings.json
+!/.claude/tools-readme.md
+!/.claude/agents/
+!/.claude/directions/
+!/.claude/migrations/
+!/.claude/roles/
+!/.claude/scripts/
+!/.claude/skills/
+!/.claude/state/
+!/.claude/templates/
+# 許可した中から、さらに落とすもの。
+# skills/colabtmux/ は colabtmux が起動のたびに配り直すファイルであり(kit-dist.json の
+# `_comment` が根拠)、記録しても次の起動で上書きされて差分だけが毎回出る。
+/.claude/skills/colabtmux/
+# missions/ は本リポジトリが公開であるため載せない(2026-09-06 人間の決定「A」。
+# 構築記録 docs/build-records/gitignore-recovery.md の「決定シート(回答済み)」に逐語あり)。
+# 依頼の逐語・エージェント間のやり取り・進行台帳であり、公開して得るものがない。
+# 上の `/.claude/*` で既に落ちているが、意図を残すために明示する。
+/.claude/missions/
+# 許可したディレクトリの中の生成物は `.claude/.gitignore` が落とす(__pycache__/ ・ *.pyc)。
+# --------------------------------------------------------------------------
+
+# ルート直下の2本だけを対象にする(2026-08-02 commit 976960c で意図的に git から外された)。
+# **先頭の `/` は必須である** — 無いとどの階層の同名ファイルにも一致し、
+# キットの雛形 `.claude/templates/AGENTS.md` まで巻き込む。
+/CLAUDE.md
+/AGENTS.md
 
 # プロジェクト直下の claude-dev 設定（ユーザー固有の SSH 鍵選択。マシン依存・成果物ではない）
 /.claude-dev.yaml
+# codex の設定と資格情報(auth.json)。丸ごと追跡しない。
 .codex
 
 # macOS の AppleDouble メタデータ(仕様ドキュメントではない)
 ._*
-.colabtmux/
+
+# colabtmux の作業状態(board.db・logs/・run/)は追跡せず、設定ファイルだけ共有する
+# (`.colabtmux/colabtmux.conf:1` が「このファイルはコミットして共有する」と宣言している)。
+# `.colabtmux/` と書くとディレクトリごと除外されて git が中へ降りないため、
+# `!.colabtmux/colabtmux.conf` は**決して効かない**。だから `/*` で中身だけを除外する。
+/.colabtmux/*
+!/.colabtmux/colabtmux.conf

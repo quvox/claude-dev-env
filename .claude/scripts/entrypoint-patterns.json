@@ -1,0 +1,81 @@
+{
+  "_comment": [
+    "scan-entrypoints.py が使うエントリポイント検出パターン。",
+    "目的は「機能間連携仕様書の候補を機械的に列挙し、AI がリポジトリ全体を読まずに済むようにする」こと。",
+    "再現率を優先しており、誤検出は AI が捨てる前提。取りこぼしの方が高くつく。",
+    "プロジェクト固有のパターンは .claude/scripts/entrypoint-patterns.local.json に同じ形式で書くと",
+    "マージされる(languages は言語キーごとに patterns が追記され、excludes は和集合になる)。",
+    "regex は Python の re 構文。symbol_group が捕捉するグループをシンボル名として使う。"
+  ],
+  "excludes": [
+    ".git/", "node_modules/", "vendor/", "dist/", "build/", "target/",
+    ".venv/", "venv/", "__pycache__/", ".next/", ".nuxt/", "coverage/",
+    ".mypy_cache/", ".pytest_cache/", ".terraform/", "migrations/"
+  ],
+  "test_markers": ["test_", "_test.", ".test.", ".spec.", "/tests/", "/test/", "/__tests__/", "/e2e/"],
+  "max_file_bytes": 1048576,
+  "languages": {
+    "python": {
+      "extensions": [".py"],
+      "patterns": [
+        { "kind": "rest-api", "regex": "@(?:app|router|api|bp|blueprint)\\.(?:route|get|post|put|patch|delete)\\s*\\(\\s*[\"']([^\"']+)", "symbol_group": 1, "note": "Flask/FastAPI ルート" },
+        { "kind": "rest-api", "regex": "^\\s*(?:path|re_path|url)\\s*\\(\\s*r?[\"']([^\"']*)[\"']", "symbol_group": 1, "note": "Django urls" },
+        { "kind": "rest-api", "regex": "^\\s*(?:async\\s+)?def\\s+(lambda_handler|handler|main_handler)\\s*\\(", "symbol_group": 1, "note": "Lambda/関数ハンドラ" },
+        { "kind": "event", "regex": "@(?:shared_task|app\\.task|celery\\.task)", "symbol_group": 0, "note": "Celery タスク(次行の def がシンボル)" },
+        { "kind": "event", "regex": "@(?:receiver|listens_for|on_event)\\s*\\(", "symbol_group": 0, "note": "シグナル/イベント購読" },
+        { "kind": "tool", "regex": "@(?:click\\.command|click\\.group|app\\.command)\\s*\\(?", "symbol_group": 0, "note": "CLI コマンド" },
+        { "kind": "tool", "regex": "add_parser\\s*\\(\\s*[\"']([^\"']+)", "symbol_group": 1, "note": "argparse サブコマンド" },
+        { "kind": "function-call", "regex": "^\\s*(?:el)?if\\s+(?:cmd|command|action|op|operation|event_type|route)\\s*==\\s*[\"']([^\"']+)", "symbol_group": 1, "note": "cmd 等による内部分岐(1分岐=1機能)" },
+        { "kind": "function-call", "regex": "^\\s*case\\s+[\"']([^\"']+)[\"']\\s*:", "symbol_group": 1, "note": "match/case 分岐" },
+        { "kind": "tool", "regex": "@(?:mcp|server)\\.(?:tool|resource)\\s*\\(", "symbol_group": 0, "note": "MCP ツール" }
+      ]
+    },
+    "javascript": {
+      "extensions": [".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx"],
+      "patterns": [
+        { "kind": "rest-api", "regex": "\\b(?:app|router|api|server)\\.(?:get|post|put|patch|delete|all|use)\\s*\\(\\s*[\"'`]([^\"'`]+)", "symbol_group": 1, "note": "Express/Koa ルート" },
+        { "kind": "rest-api", "regex": "^\\s*export\\s+(?:async\\s+)?function\\s+(GET|POST|PUT|PATCH|DELETE)\\s*\\(", "symbol_group": 1, "note": "Next.js Route Handler" },
+        { "kind": "rest-api", "regex": "^\\s*export\\s+default\\s+(?:async\\s+)?function\\s+(\\w+)", "symbol_group": 1, "note": "Next.js pages/api の既定エクスポート", "path_contains": ["pages/api/", "api/"] },
+        { "kind": "rest-api", "regex": "@(?:Get|Post|Put|Patch|Delete)\\s*\\(\\s*[\"']?([^\"')]*)", "symbol_group": 1, "note": "NestJS コントローラ" },
+        { "kind": "event", "regex": "\\.(?:on|addEventListener|subscribe)\\s*\\(\\s*[\"'`]([^\"'`]+)", "symbol_group": 1, "note": "イベント購読" },
+        { "kind": "user-action", "regex": "\\bon(?:Click|Submit|Change|Blur|KeyDown)\\s*=\\s*\\{\\s*([A-Za-z_$][\\w$]*)", "symbol_group": 1, "note": "React のユーザ操作ハンドラ" },
+        { "kind": "function-call", "regex": "^\\s*case\\s+[\"'`]([^\"'`]+)[\"'`]\\s*:", "symbol_group": 1, "note": "switch による分岐" },
+        { "kind": "tool", "regex": "\\.command\\s*\\(\\s*[\"'`]([^\"'`]+)", "symbol_group": 1, "note": "CLI サブコマンド" }
+      ]
+    },
+    "go": {
+      "extensions": [".go"],
+      "patterns": [
+        { "kind": "rest-api", "regex": "\\b(?:http|mux|r|router|e)\\.(?:HandleFunc|Handle|GET|POST|PUT|PATCH|DELETE)\\s*\\(\\s*\"([^\"]+)", "symbol_group": 1, "note": "net/http, chi, gin, echo" },
+        { "kind": "function-call", "regex": "^\\s*case\\s+\"([^\"]+)\"\\s*:", "symbol_group": 1, "note": "switch による分岐" },
+        { "kind": "tool", "regex": "&cobra\\.Command\\{\\s*$", "symbol_group": 0, "note": "cobra コマンド" }
+      ]
+    },
+    "java_kotlin": {
+      "extensions": [".java", ".kt"],
+      "patterns": [
+        { "kind": "rest-api", "regex": "@(?:Get|Post|Put|Patch|Delete|Request)Mapping\\s*\\(\\s*[\"']?([^\"')]*)", "symbol_group": 1, "note": "Spring MVC" },
+        { "kind": "event", "regex": "@(?:EventListener|KafkaListener|RabbitListener|Scheduled)", "symbol_group": 0, "note": "イベント/スケジュール" }
+      ]
+    },
+    "ruby": {
+      "extensions": [".rb"],
+      "patterns": [
+        { "kind": "rest-api", "regex": "^\\s*(?:get|post|put|patch|delete|resources)\\s+[\"':]([\\w/:\\-]+)", "symbol_group": 1, "note": "Rails routes / Sinatra" }
+      ]
+    },
+    "php": {
+      "extensions": [".php"],
+      "patterns": [
+        { "kind": "rest-api", "regex": "Route::(?:get|post|put|patch|delete|any)\\s*\\(\\s*[\"']([^\"']+)", "symbol_group": 1, "note": "Laravel ルート" }
+      ]
+    },
+    "infra": {
+      "extensions": [".tf", ".yaml", ".yml"],
+      "patterns": [
+        { "kind": "event", "regex": "^\\s*(?:schedule|cron)\\s*[:=]\\s*[\"']?(cron\\([^\"')]+\\)|[-\\d*/, ]+)", "symbol_group": 1, "note": "スケジュール起動" },
+        { "kind": "rest-api", "regex": "^\\s*(?:resource\\s+\"aws_api_gateway|resource\\s+\"aws_lambda_function)\\s+\"([^\"]+)", "symbol_group": 1, "note": "API Gateway / Lambda 定義" }
+      ]
+    }
+  }
+}
