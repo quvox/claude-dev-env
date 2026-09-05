@@ -5,8 +5,8 @@ critical: true
 origin: human-report
 issue: なし
 started: 2026-09-06T08:31:04+09:00
-updated: 2026-09-06T08:53:10+09:00
-commit: efcc36bed9010b8e0a9cbda9331e1cad36445281
+updated: 2026-09-06T09:05:00+09:00
+commit: daf4170207a255dc3ecd7afb552c3678be86032d
 summary: .claude/ 配下が git に1件も追跡されていない状態を、許可リスト方式で直す(認証情報は除外を維持)
 ---
 
