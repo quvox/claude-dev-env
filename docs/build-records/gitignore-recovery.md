@@ -23,9 +23,21 @@ summary: .claude/ 配下が git に1件も追跡されていない状態を、�
 
 ## 影響範囲(closure)
 
-- .gitignore
+- .gitignore(このタスクの主題。**下の注記のとおり、ゲートはこの行を読めていない**)
+- docs/residual.md(解消した1行を掃き出し、発見した3行を足した)
+- docs/build-records/index.md(索引。build-index.py が再生成する共有生成物)
+- docs/histories/2026-09-06-gitignore-recovery.md(このタスクの履歴)
 
-<!-- 段3 でクロージャを1本に縮めた。当初は `.claude/.gitignore` も含めていたが、
+<!-- **注意 — `check-buildrecord.py` BRC3 は `.gitignore` の行を数えていない。**
+     判定に使う正規表現 `^[-*]\s+`?([\w][\w./-]*)`?`(:68)は先頭が単語文字であることを
+     要求するので、`.` で始まるパスは1件残らず落ちる。BRC2(critical パターンの照合)も
+     同じ `paths` を読むので、dotfile だけのクロージャは「空」かつ「critical パターンに
+     掛からない」と読まれる(fail-open)。この記録が BRC3 を通るのは、上の docs/ の3行が
+     在るからであって、主題である `.gitignore` が数えられたからではない。
+     前例でも同じことが起きている: pyenv-nvm-in-claude-image.md の
+     `.devcontainer/Dockerfile.claude` も落ちていた。残務に1行を残した。
+
+     段3 でクロージャを1本に縮めた経緯。当初は `.claude/.gitignore` も含めていたが、
      そのファイルは `.claude/scripts/kit-dist.json` の include に載る**キットの構成要素**であり、
      キットを編集できるのは `/kit-improve` だけである(CLAUDE.md §6)。
      加えて `missions/` を外す判断は本リポジトリが公開であることに依存するプロジェクト固有の
@@ -37,7 +49,8 @@ summary: .claude/ 配下が git に1件も追跡されていない状態を、�
 
 - 触ったモジュールのテスト: green(`cd docker-proxy && go test ./...` → `ok  	github.com/quvox/claude-dev-env/docker-proxy	(cached)`)
 - lint / build: green(`cd docker-proxy && go vet ./...` → 出力なし・終了コード0 / `make build` → 終了コード0、`naming to docker.io/library/claude-dev-docker-proxy:latest` まで到達)
-- 外部挙動の変化: なし(製品のコードを1バイトも変えない。変わるのは本リポジトリが git で追跡する集合だけ)
+- 外部挙動の変化: なし
+  (製品のコードを1バイトも変えない。変わるのは本リポジトリが git で追跡する集合だけである)
 - 認証・決済・不可逆への接触: あり(critical: true) — `.claude/.credentials.json`(OAuth 資格情報)を
   持つディレクトリの無視を解除する作業であり、公開リポジトリへの追加は事実上不可逆である
 - E2E・全件テスト・ブラウザQA: 実施していない(/verify-tests に委ねる — 及第ライン)
