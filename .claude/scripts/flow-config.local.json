@@ -1,0 +1,48 @@
+{
+  "_comment": [
+    "このプロジェクト固有の値(配布物の上書き展開で消えない側)。",
+    "",
+    "code_roots: 製品コードとテストコードの置き場。正は docs/02-design/environments.md の",
+    "  「コールグラフ抽出設定」の internal_roots(claude-dev / claude-dev-mac / scripts/ /",
+    "  Makefile / docker-proxy/)であり、それに、イメージの中身を決める .devcontainer/ と",
+    "  日次ビルドの .github/workflows/ を足したものである(03-impl/infra/local/ghcr.md が",
+    "  この2つを名指ししている)。",
+    "",
+    "ここに載らないもの(externals/ workspace/ tmp/ 設定ファイル類)は検証の入力ではない。",
+    "  その正しさはビルドと E2E が動かして確かめる — 差分が在ることは検証ではない。",
+    "",
+    "scope_roots: 区分ごとのコードの置き場。宣言した区分は、その置き場に掛からない変更では",
+    "  失効しなくなる。**未宣言の区分は code_roots 全体へ倒れる(過大近似・安全側)。**",
+    "  unit だけを宣言している。根拠: 03-impl/tests/strategy.md の試験の表で、単体は",
+    "  `cd docker-proxy && go test ./...` の1行だけであり、シェル側は自動テストを持たない。",
+    "  **integration と e2e は宣言しない** — 02-design/system.md「結合テスト対象」のとおり、",
+    "  CTR-docker-api 以外の契約は「実機確認」で観測しており、シェル(claude-dev / scripts/ /",
+    "  .devcontainer/)の変更が結合と E2E の結果を変えうる。狭く誤ると穴になるので、",
+    "  観測手段が実機である区分は広いままにする。",
+    "",
+    "f4_scopes: デプロイゲートが green を要求する /verify-tests の区分。",
+    "  **qa(探索的ブラウザQA)を外している。** 根拠: docs/pendings.md の 2026-08-20 の行 —",
+    "  02-design/system.md の DSN-ui-01「UI はホスト CLI に限り、Web GUI を持たない」により",
+    "  「適用外(UI 無し)」と既に記録されている。外す作業だけがキットの凍結で保留されていたが、",
+    "  その凍結は 2026-08-22 に廃止された(sysdev-multi/CLAUDE.md §3)。",
+    "  ui_roots は宣言しない — UI が無いので、qa を外すことが正しい形であり、",
+    "  置き場を宣言しても意味を持たない。",
+    "",
+    "code_excludes: 宣言しない。code_roots の中に、どの検証も読まないと言い切れるファイルが",
+    "  見当たらないため(scripts/tmux.conf や .devcontainer/tmux.conf は配布イメージの中身であり、",
+    "  E2E の実機確認が動かす対象に入る)。迷ったら書かない、が規範の但し書きである。"
+  ],
+  "code_roots": [
+    "claude-dev",
+    "claude-dev-mac",
+    "Makefile",
+    "scripts/",
+    "docker-proxy/",
+    ".devcontainer/",
+    ".github/workflows/"
+  ],
+  "scope_roots": {
+    "unit": ["docker-proxy/"]
+  },
+  "f4_scopes": ["unit", "integration", "e2e"]
+}

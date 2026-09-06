@@ -1,0 +1,26 @@
+# キット専用 venv (.claude/.venv) に入れる依存。
+#
+# 原則:
+#   ・**対象プロジェクトの環境には何も入れない。** ここは開発ツールの都合であって、
+#     プロジェクトの依存ではない(混ぜると、どちらの都合で壊れたのか分からなくなる)。
+#   ・**Tier2 はここに書いたものだけで動く。** ホストの言語ツールチェーンを要求しない。
+#   ・**Tier1(SCIP / go-callgraph)はここに書かない。** ホスト側の Go / Node が必要で、
+#     キットが勝手に入れるべきものではない(setup-tools.py は検出だけする)。
+#   ・バージョンは初回インストール時に `requirements.lock` へ固定される。
+#     再現性が要るときは lock を配布する。
+#
+# 現在の状態: **Python は依存ゼロ、Go は tree-sitter が要る**。
+#   Python 抽出器は標準ライブラリの `ast` だけで動く。Go を解析するなら venv が要るので
+#   `python3 .claude/scripts/setup-tools.py` を1回走らせる。
+#   下の行は各段が着手されたときにコメントを外す(バージョンは lock で固定される)。
+
+# --- P4: Go 抽出器 ---
+tree-sitter
+tree-sitter-go
+
+# --- P6: TypeScript 抽出器 ---
+tree-sitter-typescript
+
+# --- 契約(OpenAPI)と P5: infra 抽出器 ---
+pyyaml            # OpenAPI / CloudFormation / SAM の読み取り
+# python-hcl2     # Terraform (hcl2json バイナリが在るならそちらを優先する)

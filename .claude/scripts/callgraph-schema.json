@@ -1,0 +1,492 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "コールグラフ中間表現",
+  "description": [
+    "抽出器(言語ごと)と出力器(Markdown 生成)の間の契約。",
+    "この形に正規化することで、抽出手段(ast / tree-sitter / 正規表現)を差し替えても",
+    "出力と検査が変わらない。callgraph-check.py もこの形を入力に取る。",
+    "決定性の要件: 配列はすべて出力前にコードポイント順でソートされていること。",
+    "行番号・タイムスタンプ・絶対パスは含めない(.claude/directions/callgraphs.md §4)。"
+  ],
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "languages"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1"
+    },
+    "config": {
+      "description": "再現に必要な設定の写し。index.md にのみ出力する",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "internal_roots": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "excludes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "languages": {
+      "description": "言語(および infra)ごとの抽出結果。キーが出力ファイル名になる",
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^[a-z][a-z0-9_-]*$"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "tier",
+          "extractor",
+          "symbols",
+          "edges",
+          "endpoints",
+          "unresolved"
+        ],
+        "properties": {
+          "tier": {
+            "description": "2=tree-sitter/ast(名前解決。既定) 3=正規表現(関係性は不完全)",
+            "type": "integer",
+            "enum": [
+              2,
+              3
+            ]
+          },
+          "extractor": {
+            "description": "抽出手段の識別。バージョンを含む。index.md にのみ出力する",
+            "type": "string"
+          },
+          "degraded_reason": {
+            "description": "Tier2 を狙って落ちた理由(パーサ不在など)。必ず報告される",
+            "type": "string"
+          },
+          "external_call_count": {
+            "description": "internal_roots 外への呼び出し数。関数表には出さず件数だけ持つ",
+            "type": "integer",
+            "minimum": 0
+          },
+          "symbols": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "file",
+                "name",
+                "kind",
+                "visibility"
+              ],
+              "properties": {
+                "id": {
+                  "description": "<repo相対パス>::<修飾名>。行番号を含めない",
+                  "type": "string",
+                  "pattern": "^[^:]+::[^:]+$"
+                },
+                "file": {
+                  "type": "string"
+                },
+                "name": {
+                  "description": "修飾名(クラス等は . で連結)",
+                  "type": "string"
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "function",
+                    "method",
+                    "constructor",
+                    "property",
+                    "handler",
+                    "route",
+                    "resource"
+                  ]
+                },
+                "visibility": {
+                  "type": "string",
+                  "enum": [
+                    "public",
+                    "private"
+                  ]
+                },
+                "signature": {
+                  "description": "任意。書くならリファクタで変わる=実装の変化なので決定性を壊さない",
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "edges": {
+            "description": "呼び出し辺。from も to も同一言語の symbols.id",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "from",
+                "to"
+              ],
+              "properties": {
+                "from": {
+                  "type": "string"
+                },
+                "to": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "endpoints": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "protocol",
+                "path_pattern",
+                "path_key",
+                "handler",
+                "source"
+              ],
+              "properties": {
+                "id": {
+                  "description": "例: POST /v1/auth/login",
+                  "type": "string"
+                },
+                "protocol": {
+                  "description": "入口の種別。`main` だけは種別を主張しない値で、「これは実行される1本の入口である」ことしか言わない。出すのは2つ — Go の `package main` の `func main` と、**分岐(`case \"$1\"`)を持たないシェルスクリプト**である。対話的な道具なのか定時処理なのか常駐サーバなのかは抽出位置から決まらないので、種別の突き合わせ(CG6)には使わない",
+                  "type": "string",
+                  "enum": [
+                    "rest",
+                    "graphql",
+                    "grpc",
+                    "event",
+                    "schedule",
+                    "cli",
+                    "tool",
+                    "main"
+                  ]
+                },
+                "method": {
+                  "type": "string"
+                },
+                "path_pattern": {
+                  "description": "元の表記(/users/{id} / /users/:id 等)",
+                  "type": "string"
+                },
+                "path_key": {
+                  "description": "照合用に各パラメータ区間を {} へ潰したもの。ALB/APIGW との突合に使う",
+                  "type": "string"
+                },
+                "handler": {
+                  "description": "ハンドラの symbols.id。特定できなければ空文字",
+                  "type": "string"
+                },
+                "source": {
+                  "description": "検出根拠(@router.post / r.GET / aws_lb_listener_rule 等)",
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "unresolved": {
+            "description": "解決できなかった呼び出し。空欄で落とさない(directions/callgraphs.md §5.5)",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "from",
+                "expression",
+                "reason"
+              ],
+              "properties": {
+                "from": {
+                  "description": "呼び出し元の symbols.id",
+                  "type": "string"
+                },
+                "expression": {
+                  "description": "ソース上の呼び出し式(正規化して1行)",
+                  "type": "string"
+                },
+                "reason": {
+                  "type": "string",
+                  "enum": [
+                    "dynamic",
+                    "higher-order",
+                    "reflection",
+                    "ambiguous",
+                    "boundary"
+                  ]
+                },
+                "candidates": {
+                  "description": "reason=ambiguous のとき、全候補を列挙する",
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "vendored_dirs": {
+            "description": "ベンダリングされた第三者ライブラリとして解析対象から外したディレクトリ。黙って外さないための記録であり、index.md に必ず表示される",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "skipped_files": {
+            "description": "テスト・開発ツールとして解析対象から外したファイル(test_markers / tooling_markers)。黙って外すと「網羅した」という誤読を生むので index.md に必ず表示される",
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "tests": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "tooling": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "dropped_catchall": {
+            "description": "shell 抽出器が catch-all(`*)` 等)として数えなかった分岐の数",
+            "type": "integer"
+          }
+        }
+      }
+    },
+    "routing": {
+      "description": "インフラのパス転送(API Gateway / ALB / OpenAPI)。infra 抽出器の出力",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "kind",
+          "match",
+          "target",
+          "source"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "apigw",
+              "alb",
+              "cloudfront",
+              "openapi",
+              "other"
+            ]
+          },
+          "match": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "method": {
+                "type": "string"
+              },
+              "host": {
+                "type": "string"
+              },
+              "path_pattern": {
+                "type": "string"
+              },
+              "path_key": {
+                "type": "string"
+              },
+              "priority": {
+                "type": "integer"
+              }
+            }
+          },
+          "target": {
+            "description": "転送先。lambda 関数名 / ターゲットグループ / サービス名など",
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "type",
+              "ref"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "lambda",
+                  "target-group",
+                  "service",
+                  "url",
+                  "other"
+                ]
+              },
+              "ref": {
+                "type": "string"
+              },
+              "handler_hint": {
+                "description": "Lambda の handler 設定など、シンボルに結び付く手掛かり",
+                "type": "string"
+              }
+            }
+          },
+          "source": {
+            "description": "定義元(infra/alb.tf::aws_lb_listener_rule.auth 等)",
+            "type": "string"
+          }
+        }
+      }
+    },
+    "boundaries": {
+      "description": "言語・プロセスを跨ぐ辺の候補。ツールでは確定できないので確度を必ず持つ",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "kind",
+          "from",
+          "to",
+          "confidence",
+          "evidence"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "http",
+              "iac",
+              "queue",
+              "rpc"
+            ]
+          },
+          "from": {
+            "description": "呼び出し側の symbols.id。特定できなければ空文字",
+            "type": "string"
+          },
+          "to": {
+            "description": "宛先。endpoints.id / トピック名 / 転送先",
+            "type": "string"
+          },
+          "confidence": {
+            "description": "確実=設定から辿れた / 候補=リテラル一致 / 未解決=変数組み立て等",
+            "type": "string",
+            "enum": [
+              "確実",
+              "候補",
+              "未解決"
+            ]
+          },
+          "evidence": {
+            "description": "根拠(URL リテラル、突合したキー、定義元)",
+            "type": "string"
+          }
+        }
+      }
+    },
+    "orphan_endpoints": {
+      "description": "呼び出し元が特定できなかったエンドポイント。AI に渡される宿題そのもの",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "resources": {
+      "description": "データストア・キュー・トピック・バケットの参照(共有データストア結合 / P10)。呼び出し辺として存在しない連携を、資源の側から拾うためにある",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "key",
+          "kind",
+          "name",
+          "refs"
+        ],
+        "properties": {
+          "key": {
+            "description": "`<種別>:<正規化名>`。突合はこのキーで行う",
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "dynamodb",
+              "s3",
+              "sqs",
+              "sns",
+              "kinesis",
+              "rds",
+              "env",
+              "other"
+            ]
+          },
+          "name": {
+            "description": "正規化名。変数で組み立てた区間は `{}`、解決できなかった環境変数は `$VAR`、実名不明のインフラ資源は `#Logical`。**解決できなくても捨てない**(同じ名前を触るもの同士は実体が何であれ結合している)",
+            "type": "string"
+          },
+          "refs": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "symbol",
+                "access",
+                "confidence",
+                "evidence"
+              ],
+              "properties": {
+                "symbol": {
+                  "type": "string"
+                },
+                "access": {
+                  "description": "permission は IAM 由来。**使っている証拠ではなく使える上界**なので結合には数えない",
+                  "type": "string",
+                  "enum": [
+                    "read",
+                    "write",
+                    "readwrite",
+                    "permission",
+                    "unknown"
+                  ]
+                },
+                "confidence": {
+                  "type": "string",
+                  "enum": [
+                    "確実",
+                    "候補",
+                    "未解決"
+                  ]
+                },
+                "evidence": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "resource_stats": {
+      "description": "資源抽出の内訳。**黙って落とさない**ための記録(資源とみなさなかった環境変数、IAM の Resource:'*' の件数など)。resources.md にのみ出力する",
+      "type": "object"
+    }
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "_comment": [
+    "check-buildrecord.py BRC2 の設定。プロジェクト固有の語は同じ形式の",
+    "critical-config.local.json に書くと**和集合でマージ**される(配布物の上書き展開で",
+    "消えないのはこちら)。",
+    "critical_path_patterns: 構築記録のクロージャのパスにこれらの語が部分一致したとき、",
+    "  critical: false の申告を拒否する(fail-closed)。critical: true は verify 系フローの",
+    "  優先順位と独立レビュー対象の選定にのみ使われ、経路は分岐しない(規範: flows.md §3)。",
+    "  誤検知の代償は独立レビュー1回ぶんで安い — 語を減らすときは、その領域の接触が",
+    "  レビュー対象から漏れることを受け入れたことになる。"
+  ],
+  "critical_path_patterns": [
+    "auth", "login", "password", "credential", "session",
+    "payment", "billing", "charge",
+    "token", "secret", "crypt",
+    "privacy", "personal", "gdpr",
+    "audit", "migration"
+  ]
+}

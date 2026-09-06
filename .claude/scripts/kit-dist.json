@@ -1,0 +1,49 @@
+{
+  "_comment": [
+    "キットが「自分は何でできているか」を持つ唯一の場所。配布(tarball)と差分抽出(kit-patch.py)は",
+    "ここを正とする。**kit は自分の名前**で、`kit-patch.py diff` がパッチの先頭に `# キット: <name>` として",
+    "刻む — 本流の `make patch` はそれを読んで宛先を決める(宛先の取り違えは、当てた側でも",
+    "当てられた側でも気付かれない唯一の事故である)。**本流のディレクトリ名と同じにすること。**",
+    "ここを正とする。.claude/.gitignore は git 用の別語彙なので別に存在するが、正はこのファイルである。",
+    "",
+    "include は allowlist である。除外リストではない。理由: .claude/ はキットの置き場であると同時に、",
+    "環境によっては Claude Code 自身の実行状態(sessions/ projects/ history.jsonl .credentials.json",
+    "cache/ file-history/ 等)の置き場でもある。除外リストで書くと列挙し忘れたものがパッチに混入し、",
+    "パッチは人へ渡るものなので事故になる。allowlist なら知らないものは決して入らない。",
+    "",
+    "末尾が / のエントリはディレクトリ配下すべて。それ以外はファイル1つ。",
+    "exclude は include に載ったものからさらに落とす(fnmatch。* は / も跨いで一致する)。",
+    "",
+    ".claude/skills/colabtmux/ を落としているのは、それが colabtmux の教え込み(道具が起動のたびに",
+    "配り直すファイル)であってキットの構成要素ではないからである。含めると、道具側が文面を変えた",
+    "版が固定されてパッチに混入する。正は colabtmux 側の CTR-agent-skill。",
+    "",
+    "include は『型』であって、ある版が実際に何であったかの記録ではない。上書き展開(tar -xzf)は",
+    "削除をしないので、旧版の取り残しを特定するには版ごとの確定一覧が要る。それが",
+    ".claude/kit-manifest.json(kit-manifest.py が作る)であり、それ自身も同梱する。",
+    ""
+  ],
+  "kit": "sysdev-multi",
+
+  "include": [
+    "CLAUDE.md",
+    ".claude/.gitignore",
+    ".claude/kit-manifest.json",
+    ".claude/settings.json",
+    ".claude/tools-readme.md",
+    ".claude/agents/",
+    ".claude/directions/",
+    ".claude/migrations/",
+    ".claude/roles/",
+    ".claude/scripts/",
+    ".claude/skills/",
+    ".claude/templates/"
+  ],
+  "exclude": [
+    "*/__pycache__/*",
+    "*.pyc",
+    "*.local.json",
+    "*/.DS_Store",
+    ".claude/skills/colabtmux/*"
+  ]
+}

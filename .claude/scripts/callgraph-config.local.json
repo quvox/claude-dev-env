@@ -1,0 +1,17 @@
+{
+  "_comment": [
+    "このプロジェクト固有のコールグラフ抽出設定。callgraph-config.json とマージされる(配列は和集合)。",
+    "正は docs/02-design/environments.md の「コールグラフ抽出設定」。値を変えるときは 02 を先に直すこと。",
+    "workspace/ = 利用者の作業コピー置き場(成果物ではない)。",
+    "tmp/ = 一時生成物。",
+    "scripts/e2e6-codex.sh = E2E の実機検証スクリプト。製品の機能ではなく検証手段のため外す(docs/pendings.md P-001)。",
+    "task-remove-orchestrator(2026-08-10)で orchestrator/vendor/ と .orchestrator/ を落とした(対象ごと削除したため)。",
+    "include_tooling: true — 02-design/environments.md の「有効な言語」が make を含み、Makefile のターゲットは機能表の MODULE-makefile-* として境界に載っている。キット既定の tooling_markers(Makefile/.github//.devcontainer/)を効かせると make のシンボルが 0 になり、機能表と食い違う。"
+  ],
+  "excludes": [
+    "workspace/",
+    "tmp/",
+    "scripts/e2e6-codex.sh"
+  ],
+  "include_tooling": true
+}
