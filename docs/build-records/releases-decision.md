@@ -5,7 +5,7 @@ critical: false
 origin: human-report
 issue: なし
 started: 2026-09-06T09:07:39+09:00
-updated: 2026-09-06T09:32:00+09:00
+updated: 2026-09-06T09:36:00+09:00
 commit: 3dceee5e33933bafa090a9f7d3af40d0de96533b
 summary: リリース台帳 .claude/state/releases.json を新設するかを人間に問い、その答えのとおりに閉じる
 ---
@@ -34,6 +34,13 @@ summary: リリース台帳 .claude/state/releases.json を新設するかを人
      いずれも slug で一意に決まるファイルと機械が再生成する索引である。 -->
 
 - .claude/state/releases.json(**新設しないと裁定した** — 人間の回答 A。ファイルは存在しないままである)
+- docs/build-records/releases-decision.md(この記録そのもの)
+- docs/histories/2026-09-06-releases-decision.md(この裁定の履歴)
+
+<!-- 注: 上の1行目は `check-buildrecord.py` BRC3 が実パスとして数えない —
+     同スクリプト 68行目の CLOSURE_PATH が `^[-*]\s+`?([\w][\w./-]*)`?` であり、
+     先頭のドットが `[\w]` に当たらないためである。キットの検査側の穴であり、
+     このタスクのクロージャの外なので手を付けていない(報告に載せた)。 -->
 
 ## 主張
 
@@ -113,6 +120,11 @@ summary: リリース台帳 .claude/state/releases.json を新設するかを人
 
 ## 申し送り
 
+- **キットの検査に穴を1つ見つけた(このタスクでは直していない)**: `check-buildrecord.py` の
+  68行目 `CLOSURE_PATH = re.compile(r"^[-*]\s+`?([\w][\w./-]*)`?")` は先頭がドットのパスを
+  実パスとして数えないので、`.claude/` や `.github/` だけを触るタスクは BRC3(クロージャが空)で
+  必ず落ちる。直すならキットの改善の手順(`/kit-improve`)であり、書き先(`docs/residual.md`)は
+  この作業指示が許した書き込み先の外なので、記録先の振り分けは中央エージェントに委ねる。
 - 出口の問い: **お伺いする事項なし**(質問キューは空のまま。下降の途中で新しい論点が1件も
   立たなかった — 書くファイルが1本も無いため)
 
