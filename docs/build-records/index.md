@@ -10,7 +10,7 @@
 | cleanup-retired-changeset-kit-records | verified | false | 2026-08-20T05:43:36+00:00 | 規約刷新で廃止された変更指示系スクリプト・規範に紐づくキットパッチ・残務・issue を後始末する |
 | delete-issue-102-per-human-adjudication | verified | false | 2026-08-20T05:43:36+00:00 | 人間の裁定により issue 102 を削除し、102 を参照している索引・03 層の集計・残務行を整合させる |
 | delete-issue-110-per-human-adjudication | verified | false | 2026-08-20T06:26:50+00:00 | 人間の裁定により issue 110 を削除し(closes_when は未充足)、110 を参照している 03 層の集計文と生成索引を整合させる |
-| docs-ux-migrate | building | false | 2026-09-06T09:12:00+09:00 | 移行 2026-08-28-docs-ux を当て、02-design/system.md の UI設計節の中身を docs/ux/ へ引っ越す |
+| docs-ux-migrate | awaiting-verify | false | 2026-09-06T09:41:00+09:00 | 移行 2026-08-28-docs-ux を当て、02-design/system.md の UI設計節の中身を docs/ux/ へ引っ越す |
 | document-codex-sandbox-preconditions | verified | true | 2026-08-20T05:43:36+00:00 | コンテナで codex を起こす側が前提にしてよい環境を実測して 02 に明文化し、bwrap の非ゼロを故障と読む誤りを断つ |
 | facts-json-close | awaiting-verify | false | 2026-09-06T09:08:42+09:00 | 事実の宣言 docs/facts.json を、宣言する事実0件として置き、移行 2026-08-27-facts-json を閉じる |
 | fix-fr-env-07-13-owner-and-codex-sandbox-defaults | verified | true | 2026-08-20T07:01:50+00:00 | F2 の独立レビューが挙げた「高」2件(FR-env-07-13 の担当根拠と契約の正面衝突、codex サンドボックス既定と 02 の記述の不一致)を 02-design 側で直す修繕 |
