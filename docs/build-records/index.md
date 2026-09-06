@@ -19,7 +19,7 @@
 | fix-start-auxiliary-halts-and-tmux-runtime-env | verified | true | 2026-08-20T05:43:36+00:00 | start の補助処理2つを握って起動を止めないようにし、CLI が作り直す tmux の窓へ entrypoint の実行時の値を届ける |
 | gitignore-recovery | awaiting-verify | true | 2026-09-06T09:05:00+09:00 | .claude/ 配下が git に1件も追跡されていない状態を、許可リスト方式で直す(認証情報は除外を維持) |
 | pyenv-nvm-in-claude-image | verified | false | 2026-09-01T05:56:12+00:00 | claude イメージの base ステージへ pyenv の3系統(3.11.11/3.13.14/3.14.7)と nvm v0.40.6(Node 22/24/26 系列の最新)を入れる |
-| releases-decision | building | false | 2026-09-06T09:14:00+09:00 | リリース台帳 .claude/state/releases.json を新設するかを人間に問い、その答えのとおりに閉じる |
+| releases-decision | building | false | 2026-09-06T09:20:00+09:00 | リリース台帳 .claude/state/releases.json を新設するかを人間に問い、その答えのとおりに閉じる |
 | repair-entrypoint-config-writes | verified | false | 2026-09-01T05:56:12+00:00 | 起動処理が /workspace 配下の設定を書くときの一時ファイルと chown を安全な形へ揃え、登録の有無の判定を値の真偽からキーの有無へ直す |
 
 件数: 15
