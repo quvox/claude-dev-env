@@ -1,12 +1,12 @@
 ---
 slug: releases-decision
-state: building
+state: awaiting-verify
 critical: false
 origin: human-report
 issue: なし
 started: 2026-09-06T09:07:39+09:00
-updated: 2026-09-06T09:30:00+09:00
-commit: -
+updated: 2026-09-06T09:32:00+09:00
+commit: 3dceee5e33933bafa090a9f7d3af40d0de96533b
 summary: リリース台帳 .claude/state/releases.json を新設するかを人間に問い、その答えのとおりに閉じる
 ---
 
@@ -21,7 +21,7 @@ summary: リリース台帳 .claude/state/releases.json を新設するかを人
   - 成果物(コンテナイメージ・ホスト CLI)が名乗る版の出し方を変えること。
     このタスクは起動の入口にも、いま版を出しているイメージのラベルにも触れない。
   - 過去の構築記録の `- 外部挙動の変化:` の書き直し(移行が明示的に禁じている)。
-  - 移行の手順2(`state: building` の構築記録の宣言を3値に直す)の実施 —
+  - 移行の手順2(`state: awaiting-verify` の構築記録の宣言を3値に直す)の実施 —
     対象が0件であることを確認済み(調査メモ)。
 
 ## 影響範囲(closure)
@@ -92,7 +92,7 @@ summary: リリース台帳 .claude/state/releases.json を新設するかを人
 - 成果物はいま既に版を名乗っている。値の出所はコンテナイメージの `io.github.quvox.claude-dev.version` ラベルで、CI ビルドは `YYYYMMDDHHmm`、手元ビルドは `local` — `claude-dev:520-524`、表示は `claude-dev:1459` と `claude-dev:1709`
 - その値は3つ組ではなく、台帳とは別の持ち主である — `.claude/directions/baseline.md:108`(値の持ち主は1箇所)
 - イメージは GHCR へ毎日 03:30 JST に自動 push されている(`workflow_dispatch` でも起動可)— `.github/workflows/ghcr-images.yml:6-9`
-- 移行の手順2(`state: building` の構築記録の宣言を3値に直す)の対象は0件。既存の構築記録13本のうち `building` は1本も無く、`awaiting-verify` の gitignore-recovery は既に3値の `なし` で書かれている
+- 移行の手順2(`state: awaiting-verify` の構築記録の宣言を3値に直す)の対象は0件。既存の構築記録13本のうち `building` は1本も無く、`awaiting-verify` の gitignore-recovery は既に3値の `なし` で書かれている
 - いまデプロイゲートは red(未 verified の構築記録 gitignore-recovery が1件)。`stamps.py release` は red のとき拒む — `.claude/scripts/stamps.py:1533-1535`
 - 未コミットの変更が在るときも `stamps.py release` は拒む — `.claude/scripts/stamps.py:1536-1538`
 - `.claude/state/releases.json` は git の除外に掛からない(`git check-ignore` が非該当)。T1 gitignore-recovery が `.claude/` の追跡を戻した後なので、新設すればそのまま追跡される
@@ -112,6 +112,9 @@ summary: リリース台帳 .claude/state/releases.json を新設するかを人
 - 2026-09-06 09:14 エージェントからの相談を `.claude/missions/2026-09-06-kit-migrate/questions/6.md` に置き、中央エージェントへ1行、Slack を1回鳴らして回答を待つ
 
 ## 申し送り
+
+- 出口の問い: **お伺いする事項なし**(質問キューは空のまま。下降の途中で新しい論点が1件も
+  立たなかった — 書くファイルが1本も無いため)
 
 - **最初のリリースは、このミッションが閉じてデプロイゲートが green になったときに打つ** —
   人間の回答「今回を初リリースとする」がそれを指す。手順は `flows.md` §9 のとおり
