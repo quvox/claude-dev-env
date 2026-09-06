@@ -1,6 +1,6 @@
 ---
 id: MODULE-cli-reset
-updated: 2026-08-19
+updated: 2026-09-06
 module: MOD-cli-reset
 kind: tool
 sync: sync
@@ -43,7 +43,7 @@ Docker 資源**をまとめて消す(FR-env-01)。認証も共有ボリューム
      (`FR-env-03` 受入基準17)。**「停止中のものは列挙していない」ことも表示する。ただし実装が出すのは手順9 の最終報告であり、
      手順3 の確認の列挙では出さない**(確認で中止した経路ではこの1行が出ない)。
      列挙は `claude-dev-net` の接続情報から行うので稼働中しか分からない
-     (`02-design/system.md` の SCR-01「残した資源」/ `docs/issues/055`)。
+     (`docs/ux/screens/SCR-01-cli-commands.md` の「状態」/ `docs/issues/055`)。
    - **`fwd-*` 中継コンテナと docker-proxy**: 名前(接頭辞 `fwd-` / 固定名
      `claude-dev-docker-proxy`)で識別する。ラベルを見ない。**docker-proxy の削除は手順7 の
      遊休判定を通ったときだけ**。

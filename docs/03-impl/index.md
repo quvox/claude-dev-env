@@ -1,7 +1,7 @@
 ---
 id: index
-version: 1.37.0
-updated: 2026-08-22
+version: 1.38.0
+updated: 2026-09-06
 source:
   - docs/02-design/system.md
   - docs/02-design/relations.md
