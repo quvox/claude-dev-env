@@ -1,12 +1,12 @@
 ---
 slug: facts-json-close
-state: building
+state: awaiting-verify
 critical: false
 origin: human-report
 issue: なし
 started: 2026-09-06T09:05:49+09:00
-updated: 2026-09-06T09:05:49+09:00
-commit: -
+updated: 2026-09-06T09:08:42+09:00
+commit: 45a2918e0276656269212d714de353695052ad38
 summary: 事実の宣言 docs/facts.json を、宣言する事実0件として置き、移行 2026-08-27-facts-json を閉じる
 ---
 
@@ -95,6 +95,9 @@ summary: 事実の宣言 docs/facts.json を、宣言する事実0件として�
 - 2026-09-06 09:06 `docs/` に機械の欄が0件であることを確認。埋める先が無い以上、
   宣言できる事実も0件であり、手順②(空で閉じる)が唯一の正しい終わり方であると判定した。
 - 2026-09-06 09:07 `docs/facts.json` を `{"facts": []}` として作成。
+- 2026-09-06 09:12 `kit-migrate.py list` で当該移行が `[不要]` に変わったことを確認。
+  `go vet ./...` / `go test ./...` / `build-facts.py check` / `--selftest` すべて green。
+- 2026-09-06 09:14 `build-index.py` を実行し、成果物を1コミットにまとめた(45a2918)。
 
 ## 申し送り
 
