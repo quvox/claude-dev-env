@@ -1,7 +1,7 @@
 ---
 id: architecture
-version: 1.8.1
-updated: 2026-08-22
+version: 1.9.0
+updated: 2026-09-11
 source:
   - docs/01-requirements/functional.md
   - docs/01-requirements/non-functional.md
@@ -106,7 +106,7 @@ graph TD
 
 | 環境 | 用途 | 構成の方針 | 他環境との差異 |
 |---|---|---|---|
-| local | 開発者のホスト(Linux サーバ / macOS)。**本システムの唯一の実行環境** | Docker のネットワーク1本・共有ボリューム3本・プロジェクトごとのコンテナ・共有 docker-proxy 1本で構成する。具体的な構成値は `03-impl/infra/local/` が正 | - |
+| local | 開発者のホスト(Linux サーバ / macOS)。**本システムの唯一の実行環境** | Docker のネットワーク1本・共有ボリューム4本・プロジェクトごとのコンテナ・共有 docker-proxy 1本で構成する。具体的な構成値は `03-impl/infra/local/` が正 | - |
 | dev / prod | 該当なし | 本システムはサーバとしてデプロイされる製品ではなく、開発者の手元で動く開発環境である。配布物はコンテナイメージのみで、その公開先(GHCR)の構成は `03-impl/infra/local/ghcr.md` が持つ | 存在しない |
 
 ## 設計判断

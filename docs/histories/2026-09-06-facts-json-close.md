@@ -27,8 +27,8 @@ summary: 事実の宣言 docs/facts.json を、宣言する事実0件として�
 
 - `docs/facts.json` を `{"facts": []}` として新規に置いた。
 - 判断の中身: `docs/` の中に、この道具が埋める機械の欄
-  (`<!-- BEGIN GENERATED: build-facts.py id=... -->`)は現時点で**1つも無い**
-  (`grep -rn "BEGIN GENERATED: build-facts" docs/` が一致0件)。埋める先が無い以上、
+  (開始の印は `BEGIN GENERATED: build-facts.py id=<事実の id>` を HTML コメントで囲んだ形)は
+  現時点で**1つも無い**(この記録自身の言及を除いて一致0件)。埋める先が無い以上、
   宣言できる事実も0件であり、移行ファイルが★付きで正しい終わり方と定める手順②
   (空で置いて閉じる)を採った。
 - 移行 `2026-08-27-facts-json` は `kit-migrate.py list` で `[不要]` に変わった
