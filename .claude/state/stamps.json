@@ -3,8 +3,8 @@
     "verify-impl": {
       "flow": "verify-impl",
       "scope": null,
-      "commit": "1c28623fdfc3c7d9dd1deadeca622a8955f1a992",
-      "at": "2026-09-01T05:32:58+00:00",
+      "commit": "14fc7dcc47866d9cfea48028f8a4c98181c85984",
+      "at": "2026-09-11T12:27:32+00:00",
       "verdict": "green",
       "code_roots": [
         "claude-dev",
@@ -20,25 +20,27 @@
     "verify-docs": {
       "flow": "verify-docs",
       "scope": null,
-      "commit": "1a5b149976ad1bf036a49620eb4806d15a9eaf7a",
-      "at": "2026-09-01T05:45:21+00:00",
-      "verdict": "green"
+      "commit": "14fc7dcc47866d9cfea48028f8a4c98181c85984",
+      "at": "2026-09-11T12:10:20+00:00",
+      "verdict": "green",
+      "lens": "@review(codex / review-112055)"
     },
     "verify-tests:unit": {
       "flow": "verify-tests",
       "scope": "unit",
-      "commit": "f5f4dbb04ed2160530a4a4f0aea316836181663c",
-      "at": "2026-08-22T10:38:53+00:00",
+      "commit": "14fc7dcc47866d9cfea48028f8a4c98181c85984",
+      "at": "2026-09-11T12:22:09+00:00",
       "verdict": "green",
       "code_roots": [
         "docker-proxy/"
-      ]
+      ],
+      "code_excludes": []
     },
     "verify-tests:integration": {
       "flow": "verify-tests",
       "scope": "integration",
-      "commit": "a9eb2701f9ec38176983081e57144d0f052520ab",
-      "at": "2026-09-01T05:56:07+00:00",
+      "commit": "14fc7dcc47866d9cfea48028f8a4c98181c85984",
+      "at": "2026-09-11T12:22:09+00:00",
       "verdict": "green",
       "code_roots": [
         "claude-dev",
@@ -54,9 +56,9 @@
     "verify-tests:e2e": {
       "flow": "verify-tests",
       "scope": "e2e",
-      "commit": "a9eb2701f9ec38176983081e57144d0f052520ab",
-      "at": "2026-09-01T05:56:09+00:00",
-      "verdict": "green",
+      "commit": "14fc7dcc47866d9cfea48028f8a4c98181c85984",
+      "at": "2026-09-11T12:23:34+00:00",
+      "verdict": "red",
       "code_roots": [
         "claude-dev",
         "claude-dev-mac",
@@ -92,8 +94,8 @@
     "verify-impl": {
       "flow": "verify-impl",
       "scope": null,
-      "commit": "1c28623fdfc3c7d9dd1deadeca622a8955f1a992",
-      "at": "2026-09-01T05:32:58+00:00",
+      "commit": "14fc7dcc47866d9cfea48028f8a4c98181c85984",
+      "at": "2026-09-11T12:27:32+00:00",
       "verdict": "green",
       "code_roots": [
         "claude-dev",
@@ -109,25 +111,27 @@
     "verify-docs": {
       "flow": "verify-docs",
       "scope": null,
-      "commit": "1a5b149976ad1bf036a49620eb4806d15a9eaf7a",
-      "at": "2026-09-01T05:45:21+00:00",
-      "verdict": "green"
+      "commit": "14fc7dcc47866d9cfea48028f8a4c98181c85984",
+      "at": "2026-09-11T12:10:20+00:00",
+      "verdict": "green",
+      "lens": "@review(codex / review-112055)"
     },
     "verify-tests:unit": {
       "flow": "verify-tests",
       "scope": "unit",
-      "commit": "f5f4dbb04ed2160530a4a4f0aea316836181663c",
-      "at": "2026-08-22T10:38:53+00:00",
+      "commit": "14fc7dcc47866d9cfea48028f8a4c98181c85984",
+      "at": "2026-09-11T12:22:09+00:00",
       "verdict": "green",
       "code_roots": [
         "docker-proxy/"
-      ]
+      ],
+      "code_excludes": []
     },
     "verify-tests:integration": {
       "flow": "verify-tests",
       "scope": "integration",
-      "commit": "a9eb2701f9ec38176983081e57144d0f052520ab",
-      "at": "2026-09-01T05:56:07+00:00",
+      "commit": "14fc7dcc47866d9cfea48028f8a4c98181c85984",
+      "at": "2026-09-11T12:22:09+00:00",
       "verdict": "green",
       "code_roots": [
         "claude-dev",
@@ -174,6 +178,18 @@
       ],
       "code_excludes": [],
       "e2e_scripts_in": "system"
+    }
+  },
+  "full": {
+    "verify-impl": {
+      "commit": "7a786d23f9c3d5edf10e2e9a6b953fe84227f7b9",
+      "at": "2026-09-11T11:52:06+00:00",
+      "verdict": "green"
+    },
+    "verify-docs": {
+      "commit": "14fc7dcc47866d9cfea48028f8a4c98181c85984",
+      "at": "2026-09-11T12:10:20+00:00",
+      "verdict": "green"
     }
   }
 }
