@@ -1,6 +1,6 @@
 ---
 id: ux-flows
-updated: 2026-09-06
+updated: 2026-09-11
 summary: 画面一覧(SCR-nn の台帳)と、ホスト CLI の主要な操作の流れ
 ---
 
@@ -53,5 +53,6 @@ stateDiagram-v2
 
 ### 資源を片付ける(`stop` / `logout` / `reset`)
 
-不可逆な操作は、実行前に対象を示して確認を取る(`FR-env-03-14`)。
+不可逆な操作のうち `logout` / `reset` は、実行前に削除対象の名前を列挙して確認を取る
+(`FR-env-03-14`)。**`stop` は確認を求めない**(`D0-env-08` 項3)。
 確認を経た後の各状態は `screens/SCR-01-cli-commands.md` の「状態」が持つ。

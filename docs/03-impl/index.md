@@ -1,17 +1,17 @@
 ---
 id: index
-version: 1.38.0
-updated: 2026-09-06
+version: 1.39.0
+updated: 2026-09-11
 source:
   - docs/02-design/system.md
   - docs/02-design/relations.md
 summary: 03-impl 層の目次。機能間連携仕様書群の代表として層全体の版と合格証を持つ
 keywords: [目次]
 verified:
-  at: 2026-08-22
-  version: 1.37.0
+  at: 2026-09-11
+  version: 1.39.0
   against:
-    - {doc: docs/02-design/system.md, version: 2.20.0}
+    - {doc: docs/02-design/system.md, version: 2.21.0}
     - {doc: docs/02-design/relations.md, version: 1.12.0}
 ---
 
@@ -105,7 +105,7 @@ CG3/CG4、`check-relations.py`、`check-contracts.py` で確認した。
 
 | 項目 | 値 |
 |---|---|
-| 最終検査 `--check` | 最新(2026-08-11 に再生成。書き換えなし。go 14シンボル/17辺 / shell 170/261 / make 16/21 / python 0/0 / typescript 0/0 / infra 0/0。エントリポイント 63) |
-| `callgraph-check.py` の未解決指摘 | 指摘 24 件・**重大度「高」ゼロ**(2026-08-11 に SSOT に対して実行。中3 = CG3 のプロセス跨ぎ連携 / 低8 = CG2 到達不能候補 / 低1 = CG3 の実装前の連携 / 参考12 = CG4 取りこぼし候補)。中3件は `MODULE-entrypoint-claude` が絶対パス起動するため shell 抽出器が辺を解決できないもので、根拠は `relations/MODULE-entrypoint-claude.md` の本文にある(2026-08-11 に `entrypoint-claude.sh:476` / `:487` / `:522` と `.devcontainer/Dockerfile.claude:260` / `:264` / `:268` で実在を再確認した)。低8 のうち `_destructive_done` / `_release_all_locks` の4件は、2026-08-11 に取りこぼしと判定して `features.md` の「到達しない関数についての判断」に記録した |
+| 最終検査 `--check` | 最新(2026-09-11 に再生成。書き換えなし。go 16シンボル/20辺 / shell 181/276 / make 16/21 / python 0/0 / typescript 0/0 / infra 0/0。エントリポイント 63) |
+| `callgraph-check.py` の未解決指摘 | 指摘 24 件・**重大度「高」ゼロ**(2026-09-11 に SSOT に対して実行。中3 = CG3 のプロセス跨ぎ連携 / 低8 = CG2 到達不能候補 / 低1 = CG3 の抽出器が無い言語を含む連携(`MODULE-cli-start` → `MODULE-entrypoint-claude`)/ 参考12 = CG4 取りこぼし候補)。中3件は `MODULE-entrypoint-claude` が絶対パス起動するため shell 抽出器が辺を解決できないもので、根拠は `relations/MODULE-entrypoint-claude.md` の本文にある(2026-09-11 に `entrypoint-claude.sh:618` / `:629` / `:667` と `.devcontainer/Dockerfile.claude:304` / `:308` / `:312` で実在を再確認した。entrypoint は `/usr/local/bin/` の導入先のパスで起動するので、`impl:` が名乗る `scripts/` の原本へ抽出器が辿り着けない)。低8 のうち `_destructive_done` / `_release_all_locks` の4件は、2026-08-11 に取りこぼしと判定して `features.md` の「到達しない関数についての判断」に記録した |
 | Makefile を解析対象に含めるか | 含める(`callgraph-config.local.json` の `include_tooling: true`)。キット既定は Makefile を開発ツールとして外すが、`MOD-makefile` の 16 ターゲットは機能表が定義する境界の一部であり、外すと機能表と食い違う |
 | 抽出器が無い領域 | Dockerfile と GitHub Actions。この2つはモジュールにせず `environments/images.md` と `infra/local/ghcr.md` が記述を持つ(`DSN-mod-05`) |

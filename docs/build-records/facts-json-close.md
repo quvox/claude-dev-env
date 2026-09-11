@@ -1,11 +1,11 @@
 ---
 slug: facts-json-close
-state: awaiting-verify
+state: verified
 critical: false
 origin: human-report
 issue: なし
 started: 2026-09-06T09:05:49+09:00
-updated: 2026-09-06T09:08:42+09:00
+updated: 2026-09-11T11:52:08+00:00
 commit: 45a2918e0276656269212d714de353695052ad38
 summary: 事実の宣言 docs/facts.json を、宣言する事実0件として置き、移行 2026-08-27-facts-json を閉じる
 ---

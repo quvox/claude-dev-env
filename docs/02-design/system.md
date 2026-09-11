@@ -12,13 +12,13 @@ summary: >
   E2Eシナリオ一覧、UI の有無の宣言を定める(UI/UX の中身は docs/ux/ が持つ)。アーキテクチャと契約と設計判断は architecture.md / contracts/ が持つ。
 keywords: [モジュール分割, DSN-mod, テスト戦略, E2E, UI設計, 要件カバレッジ]
 verified:
-  at: 2026-08-22
-  version: 2.20.0
+  at: 2026-09-11
+  version: 2.21.0
   against:
     - {doc: docs/01-requirements/functional.md, version: 1.24.0}
     - {doc: docs/01-requirements/non-functional.md, version: 1.8.0}
     - {doc: docs/01-requirements/usecases.md, version: 1.7.1}
-    - {doc: docs/02-design/architecture.md, version: 1.8.1}
+    - {doc: docs/02-design/architecture.md, version: 1.10.0}
 ---
 
 # モジュール分割・テスト戦略・UI設計

@@ -2,6 +2,7 @@
 id: 005-modify-docker-proxy-relays-unparseable-bodies
 type: modify
 severity: 中
+origin_layer: 00
 found: 2026-08-03
 found_in: task-docs-restructure の /doc-check(Claude 自身の検査 A1 と docker-proxy/main.go の精読。独立レンズの指摘ではない)
 related: MODULE-docker-proxy-serve, CTR-docker-api, FR-env-07, AC-03, D0-sec-05

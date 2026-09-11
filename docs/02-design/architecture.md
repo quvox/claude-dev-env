@@ -1,7 +1,7 @@
 ---
 id: architecture
-version: 1.8.1
-updated: 2026-08-22
+version: 1.10.0
+updated: 2026-09-11
 source:
   - docs/01-requirements/functional.md
   - docs/01-requirements/non-functional.md
@@ -9,8 +9,8 @@ source:
 summary: 全体構成・データモデル・インフラ設計と、アーキテクチャ級の設計判断(DSN-arch / auth / dist)
 keywords: [アーキテクチャ, 全体構成, 設計判断, DSN]
 verified:
-  at: 2026-08-22
-  version: 1.8.1
+  at: 2026-09-11
+  version: 1.10.0
   against:
     - {doc: docs/01-requirements/functional.md, version: 1.24.0}
     - {doc: docs/01-requirements/non-functional.md, version: 1.8.0}

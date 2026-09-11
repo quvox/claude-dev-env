@@ -8,7 +8,7 @@ summary: >
   チーム全員が同一構成を使えるようにするために提供する。信頼できる社内開発用途に限定。
 keywords: [claude-dev, Docker開発環境, 隔離, 配布, CodexCLI]
 verified:
-  at: 2026-08-19
+  at: 2026-09-11
   version: 1.6.0
   against: []
 ---

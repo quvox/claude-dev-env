@@ -7,7 +7,7 @@ source:
 summary: 隔離境界と権限制限に関する決定事項(D0-sec-*)
 keywords: [セキュリティ, 隔離, 決定事項]
 verified:
-  at: 2026-08-19
+  at: 2026-09-11
   version: 1.4.0
   against:
     - {doc: docs/00-requests/request.md, version: 1.6.0}
