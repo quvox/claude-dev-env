@@ -2,6 +2,7 @@
 id: 010-modify-forward-host-port-selection-is-racy
 type: modify
 severity: 中
+origin_layer: 01
 found: 2026-08-03
 found_in: task-impl-depth のドライラン パス2(コード精読。issue 004 の観点「並行性と順序」)
 related: MODULE-cli-forward, FR-env-06, NFR-scale-01

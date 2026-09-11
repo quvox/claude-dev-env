@@ -7,10 +7,10 @@ source:
 summary: 記述粒度と実装範囲に関する決定事項(D0-scope-*)
 keywords: [スコープ, 粒度, 決定事項]
 verified:
-  at: 2026-08-12
+  at: 2026-09-11
   version: 1.2.1
   against:
-    - {doc: docs/00-requests/request.md, version: 1.4.0}
+    - {doc: docs/00-requests/request.md, version: 1.6.0}
 ---
 
 # スコープ・実装粒度の決定事項

@@ -8,11 +8,11 @@ source:
 summary: システム・環境の要件 SR-01〜SR-34(必須制約・実行環境・依存・運用の前提)
 keywords: [システム要件, SR, 技術前提]
 verified:
-  at: 2026-08-18
+  at: 2026-09-11
   version: 1.3.0
   against:
-    - {doc: docs/00-requests/request.md, version: 1.5.0}
-    - {doc: docs/00-requests/decisions/sec.md, version: 1.3.1}
+    - {doc: docs/00-requests/request.md, version: 1.6.0}
+    - {doc: docs/00-requests/decisions/sec.md, version: 1.4.0}
 ---
 
 # システム・環境の要件

@@ -2,6 +2,7 @@
 id: 028-modify-name-uniqueness-does-not-satisfy-nfr-scale-01
 type: modify
 severity: 中
+origin_layer: 03
 found: 2026-08-03
 found_in: task-impl-depth の /doc-check 反復4(独立レンズ=Codex が単独で発見)
 related: NFR-scale-01, MODULE-cli-start, MODULE-cli-forward, MODULE-cli-stop, CTR-cli-container

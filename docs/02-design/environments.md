@@ -1,18 +1,18 @@
 ---
 id: environments
-version: 1.7.0
-updated: 2026-08-20
+version: 1.7.1
+updated: 2026-09-11
 source:
   - docs/01-requirements/system.md
   - docs/02-design/architecture.md
 summary: 開発環境の構成・セットアップ手順・lint/テスト/ドキュメント整合検査の厳密なコマンド文字列・Codex実行設定
 keywords: [開発環境, コマンド, lint, テスト, Codex]
 verified:
-  at: 2026-08-20
-  version: 1.7.0
+  at: 2026-09-11
+  version: 1.7.1
   against:
     - {doc: docs/01-requirements/system.md, version: 1.3.0}
-    - {doc: docs/02-design/architecture.md, version: 1.7.1}
+    - {doc: docs/02-design/architecture.md, version: 1.10.0}
 ---
 
 <!-- 2026-08-04 /doc-check ssot task-impl-depth(新しい実行): **合格証を再発行した(1.0.0)。**
@@ -55,7 +55,7 @@ verified:
 | 単体テスト(docker-proxy) | `cd docker-proxy && go test ./...` | プロキシの検査ロジック |
 | カバレッジ計測(docker-proxy) | `cd docker-proxy && go test -cover ./...` | テスト戦略が参照する計測手段(`03-impl/tests/strategy.md`)。合否の条件は課さない |
 | 結合テスト | 上記の `go test` に含まれる | 契約ごとの責任モジュールは `system.md`「結合テスト対象」が正。シェル側の契約は実機確認 |
-| E2Eテスト | 自動テストランナーは無い。実機で `claude-dev` を操作する | シェル系 E2E(E2E-01〜03・E2E-06)はすべて実機確認。手順は `03-impl/tests/e2e.md` |
+| E2Eテスト | 自動テストランナーは無い。実機で `claude-dev` を操作する | シェル系 E2E はすべて実機確認。台本の一覧と手順は `docs/03-impl/tests/e2e.md`「実機確認の手順」が正 |
 | build | `make build` | `claude`(ブラウザ確認なし)+ `claude-vnc` + `docker-proxy` を一括ビルド |
 | build(個別) | `make build-claude` / `make build-claude-vnc` / `make build-docker-proxy` | `claude-vnc` はベースに続けてビルドする |
 | 再ビルド(キャッシュ無し) | `make upgrade` | 全イメージを作り直す |

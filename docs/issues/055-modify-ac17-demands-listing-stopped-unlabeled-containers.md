@@ -2,6 +2,7 @@
 id: 055-modify-ac17-demands-listing-stopped-unlabeled-containers
 type: modify
 severity: 中
+origin_layer: 01
 found: 2026-08-05
 found_in: /doc-check ssot task-fix-destructive-scope の独立監査(Codex / docs モード 00〜02 層)
 related: FR-env-03, D0-env-08, CTR-cli-container, MODULE-cli-logout, MODULE-cli-reset, docs/02-design/contracts/cli-container.md

@@ -81,10 +81,17 @@
 | [2026-08-22-verify-impl-mcp-bundle.md](2026-08-22-verify-impl-mcp-bundle.md) | 2026-08-22 | なし(taskless — flow: verify-impl) | 03 | F3 実装整合の増分 run。コールグラフを再生成し、CI が渡さない build 引数の記述を実測へ直し、独立レビューの所見2件を課題票にした | docs/03-impl/callgraphs/*.md<br>docs/03-impl/feature-graph.md<br>docs/03-impl/index.md<br>docs/03-impl/infra/local/ghcr.md | D0-dist-03<br>FR-env-11-9 | なし | 適用外 | - |
 | [2026-09-01-pyenv-nvm-in-claude-image.md](2026-09-01-pyenv-nvm-in-claude-image.md) | 2026-09-01 | docs/build-records/pyenv-nvm-in-claude-image.md | 03 | claude イメージの base ステージへ CPython 3本(3.11.11/3.13.14/3.14.7)と nvm v0.40.6(Node 22/24/26 系列)を入れた | docs/03-impl/environments/images.md<br>docs/03-impl/tests/images.md | D0-dist-03<br>D0-dist-04<br>D0-dist-06<br>FR-env-12-2<br>RQ-env-02 | なし | 適用外 | - |
 | [2026-09-01-verify-impl-pyenv-nvm.md](2026-09-01-verify-impl-pyenv-nvm.md) | 2026-09-01 | なし(taskless — flow: verify-impl) | 03 | コールグラフを再生成し、エントリポイントの種別が cli から main へ直った(道具の出力の変化) | docs/03-impl/callgraphs/go.md<br>docs/03-impl/callgraphs/index.md<br>docs/03-impl/callgraphs/shell.md<br>docs/03-impl/environments/images.md | - | なし | 適用外 | - |
+| [2026-09-06-docs-ux-migrate.md](2026-09-06-docs-ux-migrate.md) | 2026-09-06 | docs/build-records/docs-ux-migrate.md | 02 | 移行 2026-08-28-docs-ux を当て、02-design/system.md の UI設計節の中身を docs/ux/ へ移した | docs/02-design/system.md<br>docs/03-impl/index.md<br>docs/03-impl/relations/MODULE-cli-reset.md | DSN-ui-01<br>FR-env-01<br>FR-env-01-16<br>MODULE-cli-reset | なし | 適用外 | - |
+| [2026-09-06-facts-json-close.md](2026-09-06-facts-json-close.md) | 2026-09-06 | docs/build-records/facts-json-close.md | 03 | 事実の宣言 docs/facts.json を、宣言する事実0件として置き、移行 2026-08-27-facts-json を閉じる | - | - | なし | 適用外 | - |
+| [2026-09-06-gitignore-recovery.md](2026-09-06-gitignore-recovery.md) | 2026-09-06 | docs/build-records/gitignore-recovery.md | 03 | .claude/ 配下が一度も git に追跡されていなかった状態を、ルートの .gitignore に許可リストを置いて直す | - | MODULE-cli-start | なし | 記録済み | - |
+| [2026-09-06-kit-migrate.md](2026-09-06-kit-migrate.md) | 2026-09-06 | なし(taskless — flow: kit-migrate) | kit | キットの版上げの据え付け。移行台帳のうち mechanical 1件(colabtmux.conf の discuss-1 除外)を適用し、docs/residual.md の1行を新しい版に照らして失効させた。judgment 4件は判断待ちのまま残す | - | - | なし | 適用外 | - |
+| [2026-09-06-releases-decision.md](2026-09-06-releases-decision.md) | 2026-09-06 | docs/build-records/releases-decision.md | 00 | リリース台帳(.claude/state/releases.json)を新設するかを人間に問い、A(まだ外へ出していない)の裁定により新設せずに閉じた | - | - | なし | 適用外 | - |
+| [2026-09-11-verify-docs-all.md](2026-09-11-verify-docs-all.md) | 2026-09-11 | なし(taskless — flow: verify-docs) | 02 | F2 文書整合(全数)。共有ボリュームの本数を 4本→3本 へコードに合わせて戻し、E2E 台本 ID の写しと課題票の起点層を直し、00〜02 の21文書へ合格証を発行した | docs/00-requests/decisions/env.md<br>docs/02-design/architecture.md<br>docs/02-design/environments.md<br>docs/03-impl/infra/local/docker-resources.md<br>docs/03-impl/tests/e2e.md | D0-env-08<br>E2E-01<br>E2E-06 | なし | 適用外 | - |
+| [2026-09-11-verify-impl-all.md](2026-09-11-verify-impl-all.md) | 2026-09-11 | なし(taskless — flow: verify-impl) | 03 | F3 実装整合(全数)。事実の生成器の検査を塞いでいた引用の綴りを直し、再生成は差分ゼロだった | - | - | なし | 適用外 | - |
 
 ## 集計
 
-- 履歴数: 75
-- 文書・IDを索引化できない履歴: 1
+- 履歴数: 82
+- 文書・IDを索引化できない履歴: 5
 - 解析警告: 0
 - critical復旧記録の警告: 0
