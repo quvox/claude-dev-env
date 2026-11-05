@@ -144,7 +144,7 @@ def md_headings(text):
 
 
 def cs8(docs):
-    """曖昧語・未決点。**程度を表す語も曖昧語である**(CLAUDE.md §7)。"""
+    """曖昧語・未決点。**程度を表す語も曖昧語である**(`.claude/directions/core.md` §6)。"""
     out = []
     for k, d in docs.items():
         for n, line in visible_lines(d['body'], d.get('base', 0)):
@@ -234,36 +234,69 @@ def cs18(docs):
 # 機械検査ではなく、**そもそも何も書かなかった**場合はそれにも何にも当たらない。実装が在れば実現方法の判断は必ず在るので、
 # 「判断なし」なら理由付きでそう書かせる — 沈黙と「判断が無かった」を区別できるようにする。
 # 規範: .claude/directions/delegation.md §3 / 03-impl.md / 02-design.md
+# **3つ目の値は見出しの深さ**(`##` なら 2)。**対象ごとに違う** — REST 契約の「設計判断」は
+# `###` で(`.claude/templates/02-contract.md`)、REST でない契約は `##` である
+# (同 `02-contract-nonrest.md`)ので、契約は両方を受ける。深さを固定にすると、
+# **節が在るのに「節が無い」と言う**ことになる。
 WHY_SECTIONS = [
-    (re.compile(r'01-requirements/functional[^/]*\.md$'), "今回決めた既定(開示)"),
-    (re.compile(r'03-impl/relations/MODULE-[^/]+\.md$'), "実装上の判断"),
-    (re.compile(r'03-impl/tests/(?!index\.md$)[^/]+\.md$'), "テスト設計の判断"),
-    (re.compile(r'02-design/architecture\.md$'), "設計判断"),
-    (re.compile(r'02-design/system\.md$'), "分割の根拠"),
+    (re.compile(r'01-requirements/functional[^/]*\.md$'), "今回決めた既定(開示)", (2,)),
+    (re.compile(r'03-impl/relations/MODULE-[^/]+\.md$'), "実装上の判断", (2,)),
+    (re.compile(r'03-impl/tests/(?!index\.md$)[^/]+\.md$'), "テスト設計の判断", (2,)),
+    (re.compile(r'02-design/architecture\.md$'), "設計判断", (2,)),
+    (re.compile(r'02-design/system\.md$'), "分割の根拠", (2,)),
+    (re.compile(r'02-design/contracts/(?:.*/)?(?!index\.md$)[^/]+\.md$'), "設計判断", (2, 3)),
+    (re.compile(r'02-design/logging\.md$'), "設計判断", (2,)),
 ]
+WHY_HEADING = re.compile(r'^(#{1,6})\s+(.+)$')
 RELATIONS_INSTRUCTION = re.compile(r'03-impl/relations/MODULE-[^/]+\.md$')
 NO_DECISION = re.compile(r'(判断なし|該当なし|なし)\s*[::((]')
 PLACEHOLDER = re.compile(r'<[^<>\n]{0,60}>')
-SKELETON = re.compile(r'\[[A-Za-z]{1,6}-?\d*\]|理由|見直す条件|却下した案|判断|[-—:：/|*`。、\s]')
+# 定型のラベルは中身ではない。**雛形が置く欄の名前はすべて並べる** ★ —
+# 1つでも漏らすと、その欄が空でも「書いてある」と数えられる(2026-09-13: `影響する要件` の
+# 1語で、`02-architecture.md` の空の設計判断が CS19 を通っていた)。
+SKELETON = re.compile(r'\[[A-Za-z]{1,6}-?\d*\]|理由|見直す条件|却下した案|影響する要件|判断'
+                      r'|[-—:：/|*`。、\s]')
 
 
-def why_section(body: str, heading: str, base: int = 0) -> tuple[bool, bool]:
-    """(節が在ったか, 中身が在ったか)。雛形の差し込み記号だけの状態は「無い」と数える。"""
+def why_section(body: str, heading: str, base: int = 0,
+                levels: tuple[int, ...] = (2,)) -> tuple[bool, bool]:
+    """(節が在ったか, 中身が在ったか)。雛形の差し込み記号だけの状態は「無い」と数える。
+
+    `levels` は見出しの深さの候補(`##` なら 2)。節は**同じ深さか、それより浅い見出し**で
+    終わる。**それより深い見出しは、その節の中身として数える**(`### DSN-arch-01 …` は
+    「設計判断」の中身である)。
+    """
     inside = found = filled = False
+    depth = 0
     for _n, line in visible_lines(body, base):
         s = line.strip()
-        if s.startswith("## "):
+        m = WHY_HEADING.match(s)
+        if m:
             if inside:
-                break
-            inside = heading in s
-            found = found or inside
-            continue
+                if len(m.group(1)) <= depth:
+                    break
+                # **深い見出しは器であって中身ではない** ★(2026-09-13)。
+                # 数えると、雛形の `### DSN-log-01 <タイトル>` が在るだけで「書いてある」に
+                # なり、**判断も理由も空のまま CS19 を通る。** 中身は、その下の行が持つ。
+                continue
+            else:
+                if len(m.group(1)) in levels and heading in m.group(2):
+                    inside, found, depth = True, True, len(m.group(1))
+                continue
         if not inside or not s:
             continue
         if set(s) <= set("|- :"):
             continue                       # 表の区切り行
-        if NO_DECISION.search(s):
-            return True, True              # 「判断なし: <理由>」は明示された答えである
+        marker = NO_DECISION.search(s)
+        if marker:
+            # **「判断なし」と書いただけでは通さない** ★(2026-09-12 の検査 A2-4)。
+            # 印の後ろの理由から差し込み記号と定型のラベルを落として、なお中身が残るかを見る
+            # (`- 判断なし:` / `- 判断なし: <理由>` / `- なし: <>` はどれも空である)。
+            # 理由の無い「判断なし」は、CS19 が区別しようとしている沈黙そのものである。
+            reason = SKELETON.sub("", PLACEHOLDER.sub("", s[marker.end():])).strip()
+            if reason:
+                return True, True          # 「判断なし: <理由>」は明示された答えである
+            continue                       # 理由が空。この行は「書いてある」と数えない
         # **雛形の骨だけの行を「書いてある」と数えない。** 差し込み記号と定型のラベルを落として
         # なお中身が残るかで見る(`- [DS-<nn>] <決めたこと> — 理由: <> / 見直す条件: <>` は空である)。
         if SKELETON.sub("", PLACEHOLDER.sub("", s)).strip():
@@ -281,16 +314,18 @@ def cs19(docs):
     out = []
     for k, d in docs.items():
         target = d['fm'].get('target', '') or k
-        for pat, heading in WHY_SECTIONS:
+        for pat, heading, levels in WHY_SECTIONS:
             if not pat.search(target):
                 continue
-            found, filled = why_section(d['body'], heading, d.get('base', 0))
+            found, filled = why_section(d['body'], heading, d.get('base', 0), levels)
             if not found:
-                out.append(("CS19", k, f"「## {heading}」の節が無い"
+                marks = "」または「".join(f"{'#' * lv} {heading}" for lv in levels)
+                out.append(("CS19", k, f"「{marks}」の節が無い"
                                        "(見出しは消さない。原則9)"))
             elif not filled:
                 out.append(("CS19", k, f"「{heading}」が空。判断が無かったのなら"
-                                       "「判断なし: <理由>」と書く — **沈黙と不在は区別できない**"))
+                                       "「判断なし: <理由>」と書く — **沈黙と不在は区別できない**"
+                                       "(理由を空にした「判断なし:」も、ここでは空と数える)"))
     return out
 
 
@@ -300,12 +335,119 @@ def cs19(docs):
 # 完成判定が止まり、止まった側は原因を辿れない。決めるのは 01 を書く AI であり、
 # 人間には問わない — 値はこの要件の行そのものが持つ(規範の「分割可否」の「どこで決まるか」)。
 # **`SR-*` は対象外**(技術前提であって、部分的に満たされるという状態が無い)。
+#
+# **差し込み記号は値ではない** ★ — 雛形の `<不可分 | 段階可(理由)>` は選択肢の見本であって
+# 決定ではない。`<…>` を落としてから値を探さないと、**雛形を写しただけの行が「決定済み」と
+# 数えられる**(`cs25_substantive` と同じ強度である)。
+# **値はちょうど1つである** — `不可分` と `段階可` が同じ行に残るのは選択肢の消し忘れであり、
+# 決定ではない(規範の「値はちょうど2つ」)。
+# **`段階可` は理由を持つ**(規範の「理由の無い `段階可` は重大度「高」の所見である」)。
+# 空の文句は理由ではないので、**逃げ道の理由と同じ強度で見る**(`cs25_reason_ok` を共有する —
+# 同じ判定を2つ持たない)。**`不可分` には理由を求めない** — 規範が課していない記入義務を
+# 検査が作らない。
+# **列の位置は決め打ちしない** ★ — 非機能要件の表で `分割可否` が何列目かは規範が決めて
+# いないので、**見出し行から列を特定する**(CS25 が同じ事故で学んだことである)。
+# 見出しが読めない表では、これまでどおり行全体を見る。
 CS24_FUNC = re.compile(r'01-requirements/functional[^/]*\.md$')
 CS24_NONFUNC = re.compile(r'01-requirements/non-functional\.md$')
 CS24_FR = re.compile(r'^##\s+(FR-[A-Za-z0-9_-]+-\d+)')
 CS24_NFR_ROW = re.compile(r'^\|\s*(NFR-[A-Za-z0-9-]+-\d+)\s*\|')
 CS24_VALUE = re.compile(r'不可分|段階可')
+CS24_FIELD = re.compile(r'分割可否\s*\**\s*[:：]')
+CS24_OPEN = re.compile(r'段階可\s*[(（]')
+CS24_REASON_LABEL = re.compile(r'\A\s*理由\s*[:：]\s*')
 CS24_MSG = "(未記載は既定ではなく違反である — 規範は 01-requirements.md の `分割可否`)"
+CS24_REASON_MSG = ("(理由の無い `段階可` は重大度「高」の所見である — 規範は "
+                   "01-requirements.md の `分割可否`)")
+
+
+def cs24_value(text):
+    """その欄が述べている `分割可否`。**差し込み記号は値ではない。**
+
+    返り値は (値, 理由)。値は `不可分` / `段階可` / `両方`(選択肢の消し忘れ)/ None(未記入)。
+    理由は `段階可` のときだけ文字列で、丸括弧が無ければ空文字である。
+    """
+    s = PLACEHOLDER.sub("", text)
+    # **値を探すのは、理由の外だけである** ★ — 理由の本文に「不可分」と書けるので
+    # (「検索と編集は不可分ではなく独立して使える」)、欄の全体を走査すると
+    # **正しい記入を「選択肢の消し忘れ」と読む。** 先に理由を切り離す。
+    span = cs24_reason_span(s)
+    outside = (s[:span[0]] + s[span[1]:]) if span else s
+    kinds = {g.group(0) for g in CS24_VALUE.finditer(outside)}
+    if span:
+        kinds.add("段階可")
+    if len(kinds) > 1:
+        return "両方", None
+    if not kinds:
+        return None, None
+    v = kinds.pop()
+    if v == "不可分":
+        return v, None
+    if not span:
+        return v, ""
+    inner = s[span[0]:span[1]]
+    inner = inner[inner.index("(") + 1 if "(" in inner[:8] else inner.index("（") + 1:-1]
+    return v, CS24_REASON_LABEL.sub("", inner).strip()
+
+
+def cs24_reason_span(text):
+    """`段階可(…)` の丸括弧を**対応まで追って**切り出す。無ければ None。
+
+    **最初の閉じ括弧で切らない** ★ — 理由の中に補足の括弧を書くことは禁じていないので、
+    そこで切ると**残りが選択肢の側へ戻り**、理由に「不可分」と書いた正しい記入を
+    「選択肢の消し忘れ」と読む(2026-09-13)。
+    """
+    m = CS24_OPEN.search(text)
+    if not m:
+        return None
+    start = m.start()
+    depth = 0
+    for i in range(text.index("(", start) if "(" in text[start:m.end()] else
+                   text.index("（", start), len(text)):
+        if text[i] in "(（":
+            depth += 1
+        elif text[i] in ")）":
+            depth -= 1
+            if depth == 0:
+                return start, i + 1
+    return None                            # 閉じていない = 括弧を書きかけている
+
+
+def cs24_bad(text):
+    """`分割可否` の欄が抱える誤り。無ければ None。"""
+    v, reason = cs24_value(text)
+    if v is None:
+        return f"の値が未記入である{CS24_MSG}"
+    if v == "両方":
+        return ("に `不可分` と `段階可` が両方在る"
+                "(値はちょうど1つ — 選択肢を消し忘れた行は決定ではない)")
+    if v == "段階可" and not cs24_reason_ok(reason):
+        return f"の `段階可` に理由が無い{CS24_REASON_MSG}"
+    return None
+
+
+def cs24_reason_ok(text):
+    """`段階可` の理由が中身を持つか。**空と、空の文句だけを弾く。**
+
+    **`cs25_reason_ok` を使わない** ★ — あちらは最小文字数(`CS25_MIN_REASON`)を課すが、
+    この検査に文字数の条件は無い(裁定 A-1: 理由の質を文字数で判定する仕組みは含めない)。
+    妥当かどうかを読むのは `/verify-docs` である。
+    """
+    core = SKELETON.sub("", PLACEHOLDER.sub("", text)).strip()
+    return bool(core) and not CS25_HOLLOW.match(core)
+
+
+def cs24_is_field(line):
+    """その行が `分割可否` の欄か。**題だけの言及は欄ではない。**"""
+    if "分割可否" not in line:
+        return False
+    return bool(CS24_FIELD.search(line)) or cs24_value(line)[0] is not None
+
+
+def cs24_cells(line):
+    """表の行を欄に割る。行でなければ None。"""
+    s = line.strip()
+    return [c.strip() for c in s.strip("|").split("|")] if s.startswith("|") else None
 
 
 def cs24(docs):
@@ -321,16 +463,29 @@ def cs24(docs):
                     if cur and not seen:
                         out.append(("CS24", k, f"{at}行: 「{cur}」に 分割可否 が無い{CS24_MSG}"))
                     cur, at, seen = m.group(1), n, False
-                elif cur and "分割可否" in line and CS24_VALUE.search(line):
+                elif cur and cs24_is_field(line):
                     seen = True
+                    bad = cs24_bad(line)
+                    if bad:
+                        out.append(("CS24", k, f"{n}行: 「{cur}」の 分割可否 {bad}"))
             if cur and not seen:
                 out.append(("CS24", k, f"{at}行: 「{cur}」に 分割可否 が無い{CS24_MSG}"))
         elif CS24_NONFUNC.search(target):
+            col = None
             for n, line in visible_lines(d['body'], d.get('base', 0)):
+                cells = cs24_cells(line)
+                if cells is None:
+                    continue
                 m = CS24_NFR_ROW.match(line.strip())
-                if m and not CS24_VALUE.search(line):
-                    out.append(("CS24", k,
-                                f"{n}行: 「{m.group(1)}」の行に 分割可否 が無い{CS24_MSG}"))
+                if not m:
+                    for i, c in enumerate(cells):      # 見出し行から列を特定する
+                        if "分割可否" in c:
+                            col = i
+                    continue
+                cell = cells[col] if col is not None and col < len(cells) else line
+                bad = cs24_bad(cell)
+                if bad:
+                    out.append(("CS24", k, f"{n}行: 「{m.group(1)}」の行の 分割可否 {bad}"))
     return out
 
 
@@ -546,9 +701,78 @@ def cs25(docs):
 # 参照の書き換えが同じクロージャに在るかは機械には判定できない。
 # **見出しが残っているのに条項だけが消えた形**が違反である。
 # 状態層の読み手は増やさない(原則10): 鮮度スタンプは `stamps.py` から読む。
+# **条項は構造で読む**(課題311): 規範は条項 ID を `FR-<domain>-nn-#` とし、`#` の欄を
+# 番地と呼ぶ(同 `:84`)ので、表の1列目には複合形(`| FR-auth-01-3 |`。雛形の形)も
+# 局所番地(`| 6-2 |`。要件の見出しの下で番地だけを書く形)も在りうる。本文の全文から
+# 複合形だけを拾うと、局所番地で書いた 01 では母集団が常に空になり、この検査は導入以来
+# 一度も鳴らなかった(しかも本文中の参照「FR-payment-03 基準13」は条項として数えていた)。
+# だから要件の見出し(`## FR-…-nn`)から、同じ深さ以上の次の見出しまでを要件の範囲とし、
+# その中の**受け入れ基準の表**(見出し行の判定は CS25 と同じ `cs25_is_header`。検討メモの表を
+# 条項と数えない)の行の1列目だけを条項として読む — 複合形はそのまま、数字で始まる番地は
+# `見出しの ID-番地` に組み立てる。フェンスの扱いも CS25 と揃える(同じ印でだけ閉じる)。
 CS26_LAYER = "01-requirements"
 CS26_CLAUSE = re.compile(r'FR-[A-Za-z0-9_-]*\d+-\d+(?![\w-])')
-CS26_REQ = re.compile(r'^#+\s+(FR-[A-Za-z0-9_-]*\d+)(?![\w-])')
+CS26_REQ = re.compile(r'^(#+)\s+(FR-[A-Za-z0-9_-]*\d+)(?![\w-])')
+CS26_HEAD = re.compile(r'^(#+)\s')
+CS26_LOCAL = re.compile(r'^\d[^\s|]*$')      # 局所番地: 1 / 6-2 / 12(2)
+
+
+def cs26_clauses(text):
+    """01 の文書1本から ({条項 ID: その要件の ID}, 要件の ID の集合) を読む。
+
+    基準の版にも現在の版にも同じものを当てる。**要件の見出しも同じ走査で集める** —
+    条項だけフェンスを除き、見出しは生の全行から拾うと、例示の `## FR-…` が
+    「見出しが残っている」と数えられ、要件まるごとの移行が違反に化ける。
+    """
+    out, reqs, req, depth, fence, in_tbl, prev = {}, set(), None, 0, None, False, None
+    for line in text.splitlines():
+        s = line.strip()
+        if not s.startswith("|"):
+            prev = None
+        fm = CS25_FENCE.match(line)
+        if fm:
+            if fence is None:
+                fence = fm.group(1)
+            elif fence == fm.group(1):
+                fence = None
+            continue
+        if fence:
+            continue
+        h = CS26_HEAD.match(s)
+        if h:
+            m = CS26_REQ.match(s)
+            if m:
+                req, depth = m.group(2), len(m.group(1))
+                reqs.add(req)
+            elif req and len(h.group(1)) <= depth:
+                req = None             # 同じ深さ以上の見出し = その要件の範囲の終わり
+            in_tbl = False
+            continue
+        cells = cs25_cells(s)
+        if cells is None:
+            # **空行では表の種類を忘れない** — 実物の 01 には、受け入れ基準の表が空行で切れて
+            # 見出し行なしに番地の続きから再開する形が在る(`| 18 | …`)。忘れるとその条項が
+            # 基準の版からも現在の版からも黙って消え、消しても鳴らない。
+            # **空行以外(段落・箇条書き)では忘れる** — その後の見出し行の無いパイプ行は
+            # 受け入れ基準の表の続きとは言えず、数字を条項と取り違えると消失を隠す
+            if s:
+                in_tbl = False
+            continue
+        if CS25_SEP.match(s):
+            # 区切り行の直前の行が表の見出し行である。ここで表の種類を決め直す
+            in_tbl = bool(prev) and cs25_is_header([CS25_DECOR.sub("", c) for c in prev])
+            continue
+        prev = cells
+        if not req or not in_tbl:
+            continue
+        cell = CS25_DECOR.sub("", cells[0])
+        if cell.startswith(req + "-") and CS26_LOCAL.match(cell[len(req) + 1:]):
+            out[cell] = req            # 複合形(番地は局所形と同じ字の並び。`FR-x-02-12(2)` も)
+        elif CS26_CLAUSE.fullmatch(cell):
+            out[cell] = req
+        elif CS26_LOCAL.match(cell):
+            out[f"{req}-{cell}"] = req
+    return out, reqs
 
 
 def _git(repo, *args):
@@ -597,33 +821,37 @@ def cs26(docs, docs_root, repo):
                    f"{docs_root.name}/{CS26_LAYER}")
     if listing is None:
         return [], f"基準の版 {rev[:12]} を引けない", []
-    base_ids = set()
+    base_ids = {}
     for path in (x.strip() for x in listing.splitlines()):
         if not path.endswith(".md"):
             continue
         text = _git(repo, "show", f"{rev}:./{path}")
         if text is None:
             continue                   # その版で読めない1本は飛ばす
-        base_ids |= set(CS26_CLAUSE.findall(text))
-    if not base_ids:
-        # **基準の版に条項が1件も無い** = 比べる相手が無い。「違反なし」ではない
-        return [], f"基準の版 {rev[:12]} に {CS26_LAYER} の条項が無い", []
-    now_ids, now_reqs = set(), set()
+        base_ids.update(cs26_clauses(text)[0])
+    now_ids, now_reqs = {}, set()
     for k, d in docs.items():
         if not k.startswith(CS26_LAYER + "/"):
             continue
-        now_ids |= set(CS26_CLAUSE.findall(d['raw']))
-        for line in d['raw'].splitlines():
-            m = CS26_REQ.match(line.strip())
-            if m:
-                now_reqs.add(m.group(1))
+        ids, reqs = cs26_clauses(d['raw'])
+        now_ids.update(ids)
+        now_reqs |= reqs
+    if not base_ids:
+        # **基準の版に条項が1件も無い** = 比べる相手が無い。「違反なし」ではない。
+        # 現在の版にも無いなら、古い基準のせいではなく**条項の書き方を読めていない**疑いが先に立つ
+        # (課題311 はこの2つを同じ文言で印字していたので、基準の版を新しくすれば直ると読めた)
+        if not now_ids:
+            return [], (f"基準の版 {rev[:12]} にも現在の版にも {CS26_LAYER} の条項が1件も"
+                        "読めない — 要件の見出し `## FR-…-nn` の下の表の1列目に条項 ID を置いて"
+                        "いるかを確かめる"), []
+        return [], f"基準の版 {rev[:12]} に {CS26_LAYER} の条項が無い", []
     out, moved = [], []
     # **所見の鍵は実際の文書のパスである**(層名だけだと、`/build` §1 と `/verify-docs` §1 の
     # 「クロージャの中だけを見る」という振り分けがどちらも掛からない — 他の CS 検査と同じ形にする)。
     # 消えた条項はいまどの文書にも無いので、その要件を持っている文書を鍵にし、
     # 見つからなければ層の中の最初の文書へ倒す。
     def _where(cid):
-        req = cid.rsplit("-", 1)[0]
+        req = base_ids[cid]            # 番地にハイフンが入る(`6-2`)ので、ID を切って推さない
         for k, d in sorted(docs.items()):
             if k.startswith(CS26_LAYER + "/") and req in d['raw']:
                 return k
@@ -631,8 +859,8 @@ def cs26(docs, docs_root, repo):
             if k.startswith(CS26_LAYER + "/"):
                 return k
         return CS26_LAYER
-    for cid in sorted(base_ids - now_ids):
-        if cid.rsplit("-", 1)[0] in now_reqs:
+    for cid in sorted(set(base_ids) - set(now_ids)):
+        if base_ids[cid] in now_reqs:
             out.append(("CS26", _where(cid),
                         f"条項 ID「{cid}」が基準の版({rev[:12]})から消えている — "
                         "その要件の見出しは残っているので、番号の振り直しか行ごとの削除である。"
@@ -957,12 +1185,128 @@ def cs23(docs, repo):
 
 
 # 検査の一覧。**--list と報告の見出しはここだけを見る**(二重定義を作らない)。
+# CS28: 02 の要件カバレッジ表の、**形で判定できる崩れ** ★(2026-09-15。inspection-28 A-15 / B-15)
+#
+# これまでこの表は「専用の機械検査は無い」と規範自身が明記しており(`02-design.md` の
+# 「規則 / 検査主体」の表)、崩れは**次の文書検証まで誰にも見えなかった**。
+# 同じ「行が在るか」を、構築の出口・文書検証・試験検証の3か所が人手で読み直してもいた。
+#
+# **ここで見るのは形だけである** — 中身がその条項を本当に満たすかは、人が読む側に残る:
+#
+#   (a) `充足` が空でなく、決められた語彙のどれかであること
+#       FR/NFR は 完全 / 部分(P-nnn) / 適用外(理由) / -、SR は 満たす / 破れている(ID)。
+#   (b) 1つの条項の**主担当行がちょうど1つ**であること(`-` 以外の値を持つ行が1つ)。
+#   (c) 01 に在る条項が、この表に**行を1つ以上持つ**こと。
+#
+# **雛形のままの行は数えない** — `<…>` を含む ID は見本であって宣言ではない。
+# **表が無い / 読めないときは何も言わない**(まだ書いていない段階で鳴らさない)。
+CS28_ID = re.compile(r'^(FR-[A-Za-z0-9_-]+-\d+-\d+|NFR-[A-Za-z0-9_-]+-\d+|SR-\d+)$')
+CS28_HEAD = re.compile(r'要件カバレッジ')
+CS28_FR_OK = ("完全", "-")
+CS28_SR_OK = ("満たす",)
+
+
+def cs28_rows(doc: dict):
+    """カバレッジ表の行を (条項ID, 充足) で返す。見出しから列を特定する。"""
+    rows, in_tbl, cols = [], False, None
+    for _n, line in visible_lines(doc['body'], doc.get('base', 0)):
+        s = line.strip()
+        if s.startswith("#"):
+            in_tbl, cols = bool(CS28_HEAD.search(s)), None
+            continue
+        if not in_tbl or not s.startswith("|"):
+            continue
+        cells = [c.strip() for c in s.strip("|").split("|")]
+        if cols is None:
+            if any("充足" in c for c in cells):
+                cols = {"id": 0, "fit": next(i for i, c in enumerate(cells) if "充足" in c)}
+            continue
+        if set("".join(cells)) <= set("-: "):      # 区切り行
+            continue
+        if cols["fit"] >= len(cells):
+            continue
+        rows.append((cells[0], cells[cols["fit"]]))
+    return rows
+
+
+def cs28(files: dict) -> list:
+    out = []
+    design = [k for k in files if k.endswith("02-design/system.md")]
+    if not design:
+        return out
+    rows = cs28_rows(files[design[0]])
+    # **行が0件でも、ここで戻らない** ★ — 表を丸ごと空にした状態こそ
+    # 「01 の条項が1行も無い」が最も効くべき場面である(下の走査へ落とす)。
+    seen: dict[str, int] = {}
+    for cid, fit in rows:
+        if "<" in cid or not CS28_ID.match(cid):
+            continue                                   # 雛形の見本・表の外
+        is_sr = cid.startswith("SR-")
+        # **値は全体で一致させる** ★ — 開き括弧の前だけを見ると、`完全(余計)` や
+        # `部分(理由)`(棚上げを指していない)がそのまま通る。
+        # 括弧を取る値は、括弧の中身の**形**まで決める:
+        #   部分(P-nnn) / 適用外(空でない理由) / 破れている(空でない課題票 ID)
+        norm = fit.strip().replace("（", "(").replace("）", ")")
+        if is_sr:
+            good = (norm == "満たす"
+                    or re.fullmatch(r'破れている\(\s*\S[^)]*\)', norm) is not None)
+            vocab = "満たす / 破れている(課題票 ID)"
+        else:
+            good = (norm in ("完全", "-")
+                    or re.fullmatch(r'部分\(\s*P-\d{3}\s*\)', norm) is not None
+                    or re.fullmatch(r'適用外\(\s*\S[^)]*\)', norm) is not None)
+            vocab = "完全 / 部分(P-nnn) / 適用外(理由) / -"
+        if not fit:
+            out.append(("CS28", design[0], f"{cid} の 充足 が空欄である"))
+        elif not good:
+            out.append(("CS28", design[0],
+                        f"{cid} の 充足「{fit}」が語彙の外である({vocab})"))
+        if norm != "-":
+            seen[cid] = seen.get(cid, 0) + 1
+    listed: dict[str, int] = {}
+    for cid, _fit in rows:
+        if "<" not in cid and CS28_ID.match(cid):
+            listed[cid] = listed.get(cid, 0) + 1
+    for cid in sorted(listed):
+        n = seen.get(cid, 0)
+        if n != 1:
+            out.append(("CS28", design[0],
+                        f"{cid} の主担当行が {n} 行ある(ちょうど1行であること — "
+                        f"`-` 以外の 充足 を持つ行が主担当である)"))
+    # `部分(P-nnn)` の参照先が棚上げに実在すること(形で判定できる「参照先の存在」)
+    pend = [k for k in files if k.endswith("pendings.md")]
+    if pend:
+        # **コメントを外してから見る** ★ — 雛形の書式の見本(コメントの中の `## P-001 …`)を
+        # 実物と数えると、指していない棚上げが実在扱いになる。
+        d = files[pend[0]]
+        body = "\n".join(l for _n, l in visible_lines(d["body"], d.get("base", 0)))
+        for cid, fit in rows:
+            if "<" in cid or not CS28_ID.match(cid):
+                continue
+            m = re.match(r'部分\s*[(（]\s*(P-\d+)\s*[)）]', fit.strip())
+            if m and not re.search(rf'(?m)^#+\s*{re.escape(m.group(1))}\b', body):
+                out.append(("CS28", design[0],
+                            f"{cid} の 充足 が指す棚上げ {m.group(1)} が pendings.md に無い"))
+    declared = {cid for cid, _ in rows if CS28_ID.match(cid) and "<" not in cid}
+    for k, d in files.items():
+        if "01-requirements/" not in k:
+            continue
+        text = "\n".join(l for _n, l in visible_lines(d['body'], d.get('base', 0)))
+        for m in re.finditer(r'\b(FR-[A-Za-z0-9_-]+-\d+-\d+|NFR-[A-Za-z0-9_-]+-\d+|SR-\d+)\b', text):
+            cid = m.group(1)
+            if cid not in declared:
+                out.append(("CS28", k, f"{cid} が 02 の要件カバレッジ表に1行も無い"))
+                declared.add(cid)                      # 同じ ID を何度も言わない
+    return out
+
+
 CHECK_NAMES = {"CS8": "曖昧語・未決点", "CS11": "参照実在", "CS12": "同型の走査記録",
                "CS18": "要件に降りてきた機構", "CS19": "理由の網羅",
                "CS20": "issue の起点層", "CS21": "件数の主張",
                "CS22": "E2E 台本の置き場", "CS23": "e2e_scripts_in の宣言の裏取り",
                "CS24": "分割可否の記載", "CS25": "境界値と異常系の条項",
-               "CS26": "条項 ID の消失", "CS27": "採番の一意"}
+               "CS26": "条項 ID の消失", "CS27": "採番の一意",
+               "CS28": "要件カバレッジ表の形"}
 
 
 SSOT_LAYERS = ("00-requests", "01-requirements", "02-design", "03-impl")
@@ -1047,7 +1391,7 @@ def main_ssot(root):
     # 検査は「違反を 0 にできること」を満たさねばならない。
     E = (cs8({k: v for k, v in docs.items() if not k.startswith("00-requests")})
          + cs11(docs, repo) + cs18(docs) + cs19(docs) + cs21(docs) + cs22(docs)
-         + cs23(docs, repo) + cs24(docs) + cs25(docs))
+         + cs23(docs, repo) + cs24(docs) + cs25(docs) + cs28(docs))
     e12, counts = cs12(repo)
     E += e12 + cs20(repo) + cs27(repo)
     e26, cs26_undecided, cs26_moved = cs26(docs, docs_root, repo)
@@ -1063,7 +1407,7 @@ def main_ssot(root):
         v = by.get(code, [])
         if code == "CS26" and cs26_undecided:
             # **「検査していない」を「OK」と印字しない**(このファイル冒頭の fail-closed)
-            print(f"  {code} {label}: 判定不能({cs26_undecided})")
+            print(f"  {code} {label}: 未検査 — 判定不能({cs26_undecided})")
             continue
         print(f"  {code} {label}: {'違反 %d 件' % len(v) if v else 'OK'}")
         for where, msg in v:          # **省略しない。** 母集団を数えるための出力である
@@ -1131,6 +1475,68 @@ def selftest() -> int:
         check("(cs27) 棚上げの重複番号を捕まえる", any("P-003" in m for _, _, m in got))
         check("(cs27) 歯抜けと一意な番号は違反にしない",
               not any("012" in m or "P-007" in m for _, _, m in got) and len(got) == 2)
+        # --- CS28(2026-09-15。inspection-28 A-15 / B-15)
+        def _doc(body):
+            return {"body": body, "base": 0, "fm": {}}
+        tbl = ("## 要件カバレッジ確認\n\n"
+               "| 受け入れ基準 ID | 割り当てモジュール | 充足 | 根拠 |\n|---|---|---|---|\n"
+               "| FR-a-01-1 | MOD-a | 完全 | DSN-x-01 |\n"
+               "| FR-a-01-2 | MOD-a |  | - |\n"
+               "| FR-a-01-3 | MOD-a | ばっちり | - |\n"
+               "| FR-a-01-4 | MOD-a | 完全 | - |\n"
+               "| FR-a-01-4 | MOD-b | 完全 | - |\n"
+               "| SR-01 | MOD-a | 満たす | - |\n")
+        got = cs28({"02-design/system.md": _doc(tbl),
+                    "01-requirements/functional.md": _doc("- FR-a-01-1\n- FR-a-09-1\n")})
+        msgs = [m for _, _, m in got]
+        check("(cs28) 充足の空欄を捕まえる", any("空欄" in m for m in msgs))
+        check("(cs28) 語彙の外の値を捕まえる", any("語彙の外" in m for m in msgs))
+        check("(cs28) 主担当が2行を捕まえる", any("主担当行が 2 行" in m for m in msgs))
+        check("(cs28) 表に無い条項を捕まえる", any("FR-a-09-1" in m for m in msgs))
+        check("(cs28) 正しい行は鳴らさない",
+              not any("FR-a-01-1" in m or "SR-01" in m for m in msgs))
+        check("(cs28) 雛形の見本を実物と数えない",
+              cs28({"02-design/system.md": _doc(
+                  "## 要件カバレッジ確認\n\n| 受け入れ基準 ID | 充足 |\n|---|---|\n"
+                  "| FR-<domain>-01-1 | <完全> |\n")}) == [])
+        check("(cs28) 表が無ければ何も言わない", cs28({"02-design/system.md": _doc("# 設計\n")}) == [])
+        tbl2 = ("## 要件カバレッジ確認\n\n"
+                "| 受け入れ基準 ID | 充足 |\n|---|---|\n"
+                "| FR-a-01-1 | 部分() |\n| FR-a-01-2 | 適用外 |\n"
+                "| FR-a-01-3 | 部分(P-009) |\n| SR-01 | 破れている() |\n")
+        got2 = [m for _, _, m in cs28({"02-design/system.md": _doc(tbl2),
+                                       "pendings.md": _doc("## P-003 x\n")})]
+        check("(cs28) 部分の括弧が空なら捕まえる", any("FR-a-01-1" in m and "語彙の外" in m for m in got2))
+        check("(cs28) 適用外に理由が無ければ捕まえる", any("FR-a-01-2" in m and "語彙の外" in m for m in got2))
+        check("(cs28) 破れているに課題票が無ければ捕まえる", any("SR-01" in m and "語彙の外" in m for m in got2))
+        # 全体一致(2026-09-15 の2巡目)— 前だけ見ると素通りした型
+        got3 = [m for _, _, m in cs28({"02-design/system.md": _doc(
+            "## 要件カバレッジ確認\n\n| ID | 充足 |\n|---|---|\n"
+            "| FR-b-01-1 | 完全(余計) |\n| FR-b-01-2 | 部分(理由) |\n"
+            "| FR-b-01-3 | 部分(P-1) |\n| SR-02 | 満たす(余計) |\n")})]
+        for cid in ("FR-b-01-1", "FR-b-01-2", "FR-b-01-3", "SR-02"):
+            check(f"(cs28) 語彙の全体一致: {cid}", any(cid in m and "語彙の外" in m for m in got3))
+        # 表が空でも 01 の条項の走査は止めない(2026-09-15 の2巡目)
+        check("(cs28) 表が空でも条項の欠落を言う",
+              any("FR-c-01-1" in m for _, _, m in cs28({
+                  "02-design/system.md": _doc("## 要件カバレッジ確認\n\n| ID | 充足 |\n|---|---|\n"),
+                  "01-requirements/functional.md": _doc("- FR-c-01-1\n")})))
+        # 棚上げの見本(コメントの中)を実物と数えない(2026-09-15 の2巡目)
+        check("(cs28) 棚上げの見本を実物と数えない",
+              any("P-001" in m for _, _, m in cs28({
+                  "02-design/system.md": _doc("## 要件カバレッジ確認\n\n| ID | 充足 |\n|---|---|\n"
+                                              "| FR-d-01-1 | 部分(P-001) |\n"),
+                  "pendings.md": _doc("<!-- 書式:\n## P-001 <タイトル>\n-->\n")})))
+        # 主担当0行(2026-09-15 の2巡目)
+        check("(cs28) 主担当が0行でも捕まえる",
+              any("0 行" in m for _, _, m in cs28({"02-design/system.md": _doc(
+                  "## 要件カバレッジ確認\n\n| ID | 充足 |\n|---|---|\n| FR-e-01-1 | - |\n")})))
+        check("(cs28) 指す棚上げが無ければ捕まえる", any("P-009" in m for m in got2))
+        check("(cs28) 実在する棚上げなら鳴らさない",
+              not any("P-003" in m for _, _, m in cs28({
+                  "02-design/system.md": _doc("## 要件カバレッジ確認\n\n| ID | 充足 |\n|---|---|\n"
+                                              "| FR-a-01-1 | 部分(P-003) |\n"),
+                  "pendings.md": _doc("## P-003 x\n")})))
         # 雛形のコメントの中の書式例は実物ではない(独立確認 2026-09-05)
         (repo / "docs/pendings.md").write_text(
             "<!-- 書式:\n## P-001 <一行タイトル>\n- 決めた日: <YYYY-MM-DD>\n-->\n"
@@ -1269,6 +1675,37 @@ def selftest() -> int:
           and not run23_raw("[]", {"e2e_scripts_in": "system"}, "## E2E-01\n手順。"), "")
     check("(k) CS23: 壊れた JSON の local も同じく飛ばす",
           bool(run23_raw("{", {"e2e_scripts_in": "testing"}, "## E2E-01\n手順。")), "")
+
+    # (l) CS19: 見出しの深さは対象ごとに違う(REST 契約の「設計判断」は `###`)
+    def run19(rel_and_text) -> list:
+        with tempfile.TemporaryDirectory() as td:
+            root = pathlib.Path(td) / "docs"
+            for rel, text in rel_and_text.items():
+                p = root / rel
+                p.parent.mkdir(parents=True, exist_ok=True)
+                p.write_text(text, encoding="utf-8")
+            docs, _files = load_ssot(root)
+            return cs19(docs)
+
+    check("(l) CS19: REST 契約の `### 設計判断` を「節が無い」と言わない",
+          not run19({"02-design/contracts/order.md": doc(
+              "契約", "## OpenAPI に書けないこと\n\n### 設計判断\n\n"
+                      "#### DSN-order-01 期限\n\n- 判断: 期限は締切で切る\n")}), "")
+    check("(l) CS19: 契約に「設計判断」が無ければ捕まえる",
+          bool(run19({"02-design/contracts/order.md": doc(
+              "契約", "## OpenAPI に書けないこと\n\n### 認可の考え方\n\n境界で切る。\n")})), "")
+    check("(l) CS19: contracts/index.md は生成物なので見ない",
+          not run19({"02-design/contracts/index.md": doc("索引", "## 一覧\n\n- なし\n")}), "")
+    check("(l) CS19: logging.md の `## 設計判断` を見る",
+          bool(run19({"02-design/logging.md": doc("ログ", "## ログレベル\n\n- INFO\n")}))
+          and not run19({"02-design/logging.md": doc(
+              "ログ", "## 設計判断\n\n### DSN-log-01 保存期間\n\n- 判断: 90日\n")}), "")
+    check("(l) CS19: 雛形の骨だけ(深い見出し + 空の判断・理由)は「空」と数える",
+          any("空" in msg for _c, _k, msg in run19({"02-design/logging.md": doc(
+              "ログ", "## 設計判断\n\n### DSN-log-01 <タイトル>\n\n- 判断: <>\n- 理由: <>\n")})), "")
+    check("(l) CS19: 隣の節を理由と読み違えない",
+          any("設計判断" in msg for _c, _k, msg in run19({"02-design/contracts/order.md": doc(
+              "契約", "### 設計判断\n\n### 認可の考え方\n\n境界で切る。\n")})), "")
 
     for name, okc, _ in results:
         print(f"  {'PASS' if okc else 'FAIL'}  {name}")

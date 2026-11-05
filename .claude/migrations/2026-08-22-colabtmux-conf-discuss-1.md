@@ -25,7 +25,7 @@ summary: colabtmux.conf の監視の除外に discuss-1 を足す。足さない
 exclude_windows = ["orchestrator", "discuss-1"]
 ```
 
-雛形との差が他にも在るかは `diff "$c" .claude/templates/colabtmux.conf` で見る。
+雛形との差が他にも在るかは `diff "$c" colabtmux.conf` で見る。
 **雛形をそのまま上書きしてはならない** — `[project] name` はこのプロジェクトの値である。
 
 **設定の置き場は2つありうる** ★ — `colabtmux` は自分の状態の置き場(`.colabtmux/`)の中に

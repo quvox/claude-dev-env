@@ -16,7 +16,7 @@
   後から同じファイルへ機能が増えれば偽陽性になり、移動・削除されれば見逃しになる。
   `commit:` が無い/引けないときだけ作業ツリーへ落とし、そのことを数えて印字する。
 
-これは**計器である**(CLAUDE.md §3)。数えて印字するだけで、疑いの有無では何も拒まない。
+これは**計器である**(`.claude/directions/core.md` §3)。数えて印字するだけで、疑いの有無では何も拒まない。
 拒むのは及第ライン(`stamps.py check`)だけであり、疑いは裁定ではない — 裁定は人間か F3 が行う。
 
 ★ 取りこぼしを数える: 疑いの件数だけでなく、**検査できなかった行**(パターン未設定の BR、
@@ -75,7 +75,8 @@ LOCAL = Path(".claude/scripts/baseline-evidence.local.json")
 BR_ROW = re.compile(r"^\|\s*\**\s*(BR-\d{2})\s*\**\s*\|")
 # 先頭の `.` を許す — `.env.example` や `.github/workflows/ci.yml` は普通のクロージャの
 # 構成要素であり、これを弾くと**黙って走査から落ちる**(実測: 10件が落ちていた)
-CLOSURE_PATH = re.compile(r"^[-*]\s+`([^`]+)`|^[-*]\s+([\w.][\w./-]*)")
+CLOSURE_PATH = re.compile(r"^[-*]\s+`([^`]+)`|^[-*]\s+(\S+)")
+CLOSURE_BARE = re.compile(r"[\w.][\w./+-]*\Z")
 PRUNE = {".git", "node_modules", "vendor", "dist", "build", "__pycache__",
          ".venv", "venv", "target", ".next", "coverage"}
 MAX_BYTES = 2_000_000
@@ -387,7 +388,7 @@ def scan_record(root: Path, path: Path, cfg, idx: dict, tree: Tree,
                 unresolved.append(line[:60])
             continue
         rel = (m.group(1) or m.group(2)).strip()
-        if not safe_rel(rel):
+        if not safe_rel(rel) or (m.group(1) is None and not CLOSURE_BARE.match(rel)):
             unresolved.append(rel)      # 黙って捨てず、死角として数える
             continue
         rel = norm_rel(rel)
@@ -584,7 +585,7 @@ def run(root: Path, targets: list[Path], quiet: bool, use_commit: bool) -> int:
     if total["no_commit"]:
         print(f"  `commit:` を引けず作業ツリーに照らした記録: {total['no_commit']}本"
               f"(その分、後の変更による偽陽性と、移動・削除による見逃しが起きうる)")
-    print("これは計器である(CLAUDE.md §3)。疑いは裁定ではない — "
+    print("これは計器である(`.claude/directions/core.md` §3)。疑いは裁定ではない — "
           "各行を、その記録が宣言したクロージャのファイル全体に照らして判定し直すこと"
           "(`baseline.md` §1 の1)。")
     return 0

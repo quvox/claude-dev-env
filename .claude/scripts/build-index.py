@@ -7,7 +7,12 @@ index.md を手書きしてはならない(CLAUDE.md 原則10)。目次は必ず
 使い方:
     python3 .claude/scripts/build-index.py            # 全 index を再生成
     python3 .claude/scripts/build-index.py --check     # 差分があるか検査のみ(CI 用)
+    python3 .claude/scripts/build-index.py --only-missing  # **まだ無い index だけ**作る
     python3 .claude/scripts/build-index.py relations   # 特定の対象だけ(下表の name)
+
+`--only-missing` は `/setup` のためのものである。**既存の docs/ を1バイトも変えない**という
+初期設定の約束と、既に在る index への追記・更新が食い違っていた(2026-09-13。C2-7)。
+`--check` とは同時に指定できない(検査と生成は別の仕事である)。
 
 機械の欄(手で保守する文書の中の、道具が丸ごと書く区画 — `conventions.md` §4)は次の印の
 あいだだけを置き換える。印の外(フロントマター・手書きの前置き)は保持する。
@@ -31,6 +36,12 @@ END = "<!-- END GENERATED: build-index.py -->"
 # **読むときは旧終端(ツール名なし)も受ける。** 1つのファイルに2つのツールが書く場面で
 # 取り違えないよう終端にもツール名を入れたが、既存の index.md は旧形を持つ。両方受ければ
 # **一度きりの差分すら出さずに移行できる**(KIT-generated-note-churns-every-artifact)。
+# **`END_OURS` は「この道具の区画の終端」だけに当たる** ★ — 別の道具の終端
+# (`<!-- END GENERATED: build-facts.py -->` など)には当たらない。
+# 区画の同居は `conventions.md` §4 が認めているので、**他人の終端を自分のものとして
+# 拾ってはならない**(2026-09-13。C2-8)。
+END_OURS = re.compile(r"<!-- END GENERATED(?:: build-index\.py)? -->")
+# 生成する内容にマーカーが混ざっていないかを見るときだけ、**どの道具の終端でも**拾う。
 END_ANY = re.compile(r"<!-- END GENERATED(?:: [\w.-]+)? -->")
 
 # name: (対象ディレクトリ, 出力する index, 走査パターン, 見出し, 列定義)
@@ -322,11 +333,18 @@ def write_index(root: Path, cfg: dict, block: str, check_only: bool) -> tuple[bo
     generated = f"{BEGIN}\n\n{block}\n\n{END}"
     if path.is_file():
         old = path.read_text(encoding="utf-8")
-        m_end = END_ANY.search(old)
-        if BEGIN in old and m_end:
+        if BEGIN in old:
             head, rest = old.split(BEGIN, 1)
-            _, tail = rest.split(m_end.group(0), 1)
-            new = f"{head}{generated}{tail}"
+            # **終端は BEGIN より後ろで、自分の区画のものだけを探す** ★ — 文書の頭から
+            # 探すと、前に居る別の道具の区画の終端を拾い、それが BEGIN の後ろには
+            # 無いので分割に失敗して例外で止まる(2026-09-13。C2-8)。
+            m_end = END_OURS.search(rest)
+            if m_end is None:
+                raise SystemExit(
+                    f"エラー: 機械の欄の終端が無い: {cfg['index']} — "
+                    f"BEGIN の後ろに `{END}` を置くこと"
+                    "(旧終端 `<!-- END GENERATED -->` も読む)")
+            new = f"{head}{generated}{rest[m_end.end():]}"
         else:
             new = old.rstrip() + "\n\n" + generated + "\n"
     else:
@@ -334,8 +352,10 @@ def write_index(root: Path, cfg: dict, block: str, check_only: bool) -> tuple[bo
     # **終端の形だけの違いは「変更」ではない。** 終端にツール名を入れた移行で、中身が
     # 1バイトも変わっていない index が一斉に「差分あり」になった(実測: 1件 → 10件)。
     # 正規化して比べれば移行の churn はゼロで、次に中身が動いたとき自然に新形へ移る。
+    # **正規化するのは自分の終端だけである** — 他の道具の区画まで正規化して比べると、
+    # あちらの終端が変わった差分を「変更なし」と読む(C2-8)。
     current = path.read_text(encoding="utf-8") if path.is_file() else None
-    if current is not None and END_ANY.sub(END, new) == END_ANY.sub(END, current):
+    if current is not None and END_OURS.sub(END, new) == END_OURS.sub(END, current):
         return False, f"変更なし: {cfg['index']}"
     if not check_only:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -357,8 +377,11 @@ def main(argv: list[str]) -> int:
         return 0
     flags = {a for a in argv[1:] if a.startswith("--")}
     names = [a for a in argv[1:] if not a.startswith("--")]
-    if flags - {"--check"}:
+    if flags - {"--check", "--only-missing"}:
         print(__doc__)
+        return 2
+    if {"--check", "--only-missing"} <= flags:
+        print("エラー: --check と --only-missing は同時に指定できない")
         return 2
     unknown = [n for n in names if n not in TARGETS]
     if unknown:
@@ -368,14 +391,22 @@ def main(argv: list[str]) -> int:
 
     root = find_root(Path.cwd())
     check_only = "--check" in flags
+    only_missing = "--only-missing" in flags
     selected = names or list(TARGETS)
     changed = 0
 
-    print("## index 再生成" + ("(--check: 検査のみ)" if check_only else ""))
+    print("## index 再生成"
+          + ("(--check: 検査のみ)" if check_only else "")
+          + ("(--only-missing: まだ無いものだけ)" if only_missing else ""))
     for name in selected:
         cfg = TARGETS[name]
         if not (root / cfg["dir"]).is_dir():
             print(f"  skip {name} — {cfg['dir']} が無い")
+            continue
+        # **既に在る index には触らない。** 初期設定の「既存の docs/ を1バイトも変えない」を
+        # 守るための口である(C2-7)。古いままの index は後続の通常作業が直す。
+        if only_missing and (root / cfg["index"]).is_file():
+            print(f"  skip {name} — {cfg['index']} は既に在る(--only-missing)")
             continue
         rows = collect(root, name, cfg)
         did, msg = write_index(root, cfg, render(root, cfg, rows), check_only)

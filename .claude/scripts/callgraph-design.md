@@ -37,7 +37,7 @@
 
 - 実行時トレースによる動的コールグラフ生成(静的解析のみ)
 - 呼び出し回数・パフォーマンス情報
-- コードの品質評価(それは `/codex-audit` の仕事)
+- コードの品質評価(**この道具の範囲外である。** 誰が担うかはここでは案内しない)
 - **どちらが正かの判断**(事実の不一致を出すだけ)
 - Windows 対応
 
@@ -78,6 +78,7 @@ IaC   ───────► │ infra  : hcl2json / CFN・SAM YAML / OpenAPI 
     ├── python_ast.py              # Tier2
     ├── go_treesitter.py           # Tier2
     ├── ts_treesitter.py           # Tier2
+    ├── rust_treesitter.py         # Tier2
     ├── shell_regex.py             # Tier3(常時 — 上位 Tier なし)
     ├── make_regex.py              # Tier3(常時)
     ├── infra.py                   # Terraform / CloudFormation / SAM / OpenAPI
@@ -131,6 +132,7 @@ IaC   ───────► │ infra  : hcl2json / CFN・SAM YAML / OpenAPI 
 | Python | 標準 `ast` + import 解決。**依存ゼロ**で、AST が正確なので精度は高い | `@app.get` / `@router.post` / `@app.route` デコレータ。`APIRouter(prefix=)` を辿ってプレフィックスを合成 |
 | Go | `tree-sitter-go` + パッケージ内/跨パッケージの名前解決 | `r.GET("/p", h)` / `e.POST` / `chi.Route`。グループ(`r.Group("/v1")`)のプレフィックス合成 |
 | TypeScript | `tree-sitter-typescript` | `Express` の `app.get`、`Next.js` の `app/**/route.ts` の `export function GET`、`pages/api/**` の `default export` |
+| Rust | `tree-sitter-rust` + `Cargo.toml` のパッケージ名と `mod` の木による名前解決(`use` / `crate::` / `super::`、別クレート)。受け手の型は引数・`let` の型注釈、`Self` を返す関連関数、構造体のフィールドの型から推定する(`Arc<T>` 等の包みは剥がす)。`#[cfg(test)]` の項目とクレート直下の `examples/` `benches/` `build.rs` は読まない | axum の `.route("/p", get(h))` と `.nest("/v1", …)`(`let` で束ねた変数越し・別の関数越しの接頭辞も合成)、actix-web の `#[get("/p")]` と `web::scope("/v1").service(h)` / `.configure(f)` / `web::resource("/p").route(…)`、rocket の `#[get("/p")]` と `.mount("/v1", routes![…])`。バイナリ(`src/main.rs`・`src/bin/*.rs`・`[[bin]]`)の `fn main` は Go と同じく `protocol: main` |
 | shell | **Tier 3 のみ**(正規表現)。関数定義(ネスト含む)・`case "$1"` のディスパッチ・リテラル `source` の跨ファイル解決。ヒアドキュメント本文とコメントは `base.scan_shell_line` で除去する | `case "${1:-help}" in` の各分岐を `dispatch <値> @ <file>::main`(`protocol: cli` — `case "$1"` が引数を捌いている証拠が在る)。**ディスパッチの無いスクリプトは1本=1入口で、`protocol: main`**(2026-08-25。種別を主張しない値。下の Go の行と同じ理由) |
 | make | **Tier 3 のみ**(正規表現)。ターゲット・依存辺・`$(MAKE) x` 辺。レシピ行は shell の規則でコメントを落とす | ターゲットごとに1入口(`protocol: cli`) |
 | Go(バイナリ入口) | 上の Go と同じ抽出器 | `package main` の `func main` を `dispatch main @ <file>::main`(`protocol: main`)。**配布されるバイナリの入口**。`func main` から分かるのは「実行ファイルの入口である」ことだけなので、`cli` とは言わない(種別を主張しない protocol。CG6 の突き合わせには使わない) |
@@ -289,6 +291,7 @@ unresolved: 37
 | **P4** | **Go 抽出器(tree-sitter)+ chi/gin/echo/mux** | `../pos-system`(297ファイル/5万行/chi v5)で実用域 | **完了** |
 | **P5** | **infra 抽出器(CFN/SAM/OpenAPI/Terraform)+ boundaries 結合** | `ct_uemura` の SAM 9本が実シンボルに「確実」で解決 | **完了** |
 | **P6** | **TypeScript/Vue 抽出器 + HTTP クライアント URL 突合** | `pos-system` でフロント→バックの候補辺 110本 | **完了** |
+| **P11** | **Rust 抽出器(tree-sitter)+ axum/actix-web/rocket**(2026-10-31) | 合成の題材(`build-callgraphs.py --selftest` の `_RUST_FIXTURE`)で名前解決と接頭辞の合成が通る | **完了**(**実プロジェクトでの実測は未確認**) |
 | ~~P7~~ | ~~Tier1 アダプタ(Go: `gocg` / x/tools)~~ | — | **削除した**(実装・実測した上での判断。根拠は §6.1) |
 | P8 | `relations-coverage.py` 廃止・`relations-query.py` 拡張 | 重複した機能が残っていない | 未着手 |
 | **P9** | **機能表 + `propose-features.py` + `cluster-features.py`**(§8) | `ct_uemura` で①〜④が出て、`callees` の材料が機械で埋まる | **完了**(実測は §6.2。配線 §8.6 も完了) |
@@ -553,7 +556,7 @@ P9 の知見(すべて実データでしか出なかった):
 
 ### 8.1 なぜこれを足すのか
 
-`callgraph-check.py` の縮約(§4.2)は `relations` の `impl:` を所有関係として使う。つまり
+`callgraph-check.py` の縮約(この設計文書の §4.2)は `relations` の `impl:` を所有関係として使う。つまり
 **relations が書けていないと縮約が動かない**。しかし relations を書くのに必要な材料
 (誰が誰を呼ぶか)こそが縮約の結果である。**鶏と卵**になっていた。
 
@@ -711,7 +714,7 @@ AI の仕事が「コードを読んで連携を見つける」から「機械�
 
 | ファイル | 変更内容 |
 |---|---|
-| `CLAUDE.md` | §1 の層の表に features.md を追加(**境界を決める1枚**)。原則10 のツール表に2本追加。§4 の参照先に追加 |
+| `CLAUDE.md`(当時。いまは `core.md`) | §1 の層の表に features.md を追加(**境界を決める1枚**)。原則10 のツール表に2本追加。§4 の参照先に追加 |
 | `.claude/directions/03-impl.md` | Files に `features.md` を追加。版・検証済み記録を持たず relations 層と一体であることを明記 |
 | `.claude/directions/relations.md` | §1 の単位の説明を「機能表が単位を定義する」に変更。§6 のツール表に2本追加 |
 | `.claude/directions/callgraphs.md` | §6 の CG 表を、この設計(`.claude/scripts/callgraph-design.md` §8.5)の置換に合わせる。CG5 → FT2 |
@@ -723,7 +726,7 @@ AI の仕事が「コードを読んで連携を見つける」から「機械�
 | `.claude/scripts/check-relations.py` | FT3(機能表 ⇄ relations の 1:1)を追加 — **後に撤去**(検査IDの実装は `callgraph-check.py` 1本。inspection-21 V-2) |
 | `.claude/tools-readme.md` | 2本を追加。導入経路の順序に機能表を挿入 |
 
-**配線は完了した。** 上表のすべてに反映済みで、`CLAUDE.md` の原則10 と §4、`tools-readme.md` の
+**配線は完了した。** 上表のすべてに反映済みで、原則10 と `.claude/directions/core.md` §4、`tools-readme.md` の
 ツール表にも2本を追加した。
 
 ## 9. 共有データストア結合(P10) — 呼び出し辺として存在しない連携

@@ -19,6 +19,13 @@ tar は上書きはするが**削除はしない**。だから前の版にあっ
   - `files` にあって中身が違う → 改造されたか壊れている
   - どちらにも無い             → **そのプロジェクトの持ち物**。キットは手を出さない
 
+**現物を集める範囲は `kit-dist.json` の include だけである。** だから **include から外れた
+廃止済みのパス**(`.claude/improvements/` の下、リポジトリ直下の `AGENTS.md`)は上の3つの
+どれにも入らず、**検査に何も出ない**。それを「既知の旧ファイルは無い」と読まれるのが害なので、
+`retired` に載る**個別のパスだけ**を直接見て、在れば別枠で報告する(2026-09-13。C3-4)。
+**「消してよい」とは言わない** — 同じ場所を別の用途で使い直していることがある
+(`AGENTS.md` は colabtmux が作り直す)。**判定の終了コードも変えない。**
+
 マニフェスト自身は展開で上書きされるので、展開後は常に「新しい版の」マニフェストになる。
 その一覧に無く `retired` に載っているものが取り残しである、という判定が成り立つ。
 
@@ -49,6 +56,7 @@ import argparse
 import hashlib
 import importlib.util
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -116,16 +124,38 @@ def read_manifest(root: Path) -> dict | None:
     return m
 
 
+def collect_links(root: Path) -> dict[str, str]:
+    """同梱リストに載ったもののうち、**シンボリックリンクだけ**を {パス: 指す先} で集める。
+
+    **リンクはハッシュで持てない** ★ — 辿れば中身は指す先と同じになり、1つの編集が
+    2件に数えられる(`AGENTS.md` と `CLAUDE.md`)。だから `files` には入れない。
+    **しかし `retired` にも入れてはならない** — あれは「旧版の取り残し。消してよい」の意味で、
+    展開先が現役のリンクを消してしまう。**別枠で持つのが正しい。**
+    """
+    dist = json.loads((root / ".claude/scripts/kit-dist.json").read_text(encoding="utf-8"))
+    links: dict[str, str] = {}
+    for entry in dist["include"]:
+        base = root / entry.rstrip("/")
+        cands = sorted(base.rglob("*")) if entry.endswith("/") else [base]
+        for q in cands:
+            if q.is_symlink():
+                links[q.relative_to(root).as_posix()] = os.readlink(q)
+    return dict(sorted(links.items()))
+
+
 def build_manifest(root: Path, previous: dict | None) -> dict:
     """現物からマニフェストを組む。retired は前のマニフェストから積み上げる。"""
     files = {rel: sha256(data) for rel, data in collect_kit(root).items()}
+    links = collect_links(root)
     old_files = set((previous or {}).get("files", {}))
+    old_links = set((previous or {}).get("links", {}))
     old_retired = set((previous or {}).get("retired", []))
-    # 前の版にあって今は無いものを足し、復活したものは落とす。
-    retired = sorted((old_retired | old_files) - set(files))
+    # 前の版にあって今は無いものを足し、復活したもの(リンクを含む)は落とす。
+    retired = sorted((old_retired | old_files | old_links) - set(files) - set(links))
     return {
         "_comment": COMMENT,
         "files": dict(sorted(files.items())),
+        "links": links,
         "retired": retired,
     }
 
@@ -174,8 +204,31 @@ def cmd_update(args) -> int:
 
 # ---------------------------------------------------------------- check
 
+def _outside(root: Path, retired: set[str], collected: set[str]) -> list[str]:
+    """**配布範囲の外に残っている廃止済みのパス。**
+
+    `collect_kit` は `kit-dist.json` の include しか集めないので、include から外れた
+    廃止済みのパスはどの組にも入らない。**探索はせず、`retired` に載る個別のパスだけを
+    直接見る**(C3-4)。**見つけても「消してよい」とは言わない** — 同じ場所を別の用途で
+    使い直していることがある。
+    """
+    out = []
+    for rel in retired:
+        if rel in collected:
+            continue                      # 配布範囲の中に在るものは stale が拾う
+        if rel.startswith(("/", "~")) or ".." in rel.split("/"):
+            continue                      # マニフェストが壊れていても外へ出ない
+        if (root / rel).exists():
+            out.append(rel)
+    return sorted(out)
+
+
 def classify(root: Path, m: dict) -> dict[str, list[str]]:
-    """展開先の現物をマニフェストと突き合わせて4つに割る。"""
+    """展開先の現物をマニフェストと突き合わせて割る。
+
+    4つ(取り残し / 改造 / 欠落 / 管理外)に加えて、**配布範囲の外に残っている
+    廃止済みのパス**(`retired_outside`)を返す。最後の1つは報告だけで、判定には使わない。
+    """
     actual = {rel: sha256(data) for rel, data in collect_kit(root).items()}
     files = m.get("files", {})
     retired = set(m.get("retired", []))
@@ -193,7 +246,8 @@ def classify(root: Path, m: dict) -> dict[str, list[str]]:
         if rel not in actual:
             missing.append(rel)
     return {"stale": sorted(stale), "modified": sorted(modified),
-            "missing": sorted(missing), "unknown": sorted(unknown)}
+            "missing": sorted(missing), "unknown": sorted(unknown),
+            "retired_outside": _outside(root, retired, set(actual))}
 
 
 def cmd_check(args) -> int:
@@ -236,6 +290,13 @@ def cmd_check(args) -> int:
         print(f"\n  --  キット管理外 {len(r['unknown'])} 件"
               f"(このプロジェクトの持ち物。**触らない**)", file=sys.stderr)
         for p in r["unknown"]:
+            print(f"        {p}", file=sys.stderr)
+
+    if r["retired_outside"]:
+        print(f"\n  --  配布範囲の外に残っている廃止済みのパス {len(r['retired_outside'])} 件"
+              f"(**そのままでは上の4つに出ない**。消してよいかは1本ずつ見る —"
+              f" 同じ場所を別の用途で使い直していることがある)", file=sys.stderr)
+        for p in r["retired_outside"]:
             print(f"        {p}", file=sys.stderr)
 
     if args.json:
@@ -355,6 +416,18 @@ def selftest() -> int:
 
         c = A(); c.root = str(dst); c.strict = False; c.json = False
         check(cmd_check(c) == 1, "check: 取り残しがあれば非0")
+
+        # --- 配布範囲の外の廃止済みパス(C3-4): 報告はするが、判定は変えない
+        m2out = dict(m2); m2out["retired"] = sorted(set(m2["retired"]) | {"notes/old.md"})
+        (dst / ".claude" / "kit-manifest.json").write_text(dump(m2out), encoding="utf-8")
+        check(classify(dst, m2out)["retired_outside"] == [],
+              "在りもしないパスを配布範囲の外の取り残しとして数えている")
+        _w(dst / "notes" / "old.md", "旧版のメモ\n")
+        check(classify(dst, m2out)["retired_outside"] == ["notes/old.md"],
+              "配布範囲の外に残った廃止済みのパスを見落としている")
+        (dst / "notes" / "old.md").unlink()
+        (dst / "notes").rmdir()
+        (dst / ".claude" / "kit-manifest.json").write_text(dump(m2), encoding="utf-8")
 
         # --- 取り残しを消せば合格する
         (dst / ".claude" / "skills" / "b" / "SKILL.md").unlink()

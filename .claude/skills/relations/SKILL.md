@@ -11,7 +11,7 @@ argument-hint: <対象>(MOD-slug / パス / all)[--apply] [--bootstrap]
 **このスキルはコードを変更してはならない。**
 
 **このスキルが `/retrofit` を呼ぶことは決してなく**、`/retrofit` がこれを呼ぶことも決してない
-(順序は固定である — CLAUDE.md §5)。書式・粒度・ID の規則・道具立ての唯一の正は
+(順序は固定である — `.claude/directions/core.md` §5)。書式・粒度・ID の規則・道具立ての唯一の正は
 `.claude/directions/features.md` と `.claude/directions/relations.md` であり、
 **このファイルはそれらを複製しない。**
 
@@ -77,7 +77,7 @@ python3 .claude/scripts/guard-branch.py --slug relations
 `features.md`、`relations/`、`contracts/`、`index.md`、そして 02。
 それらが動くのは `--apply` のときだけである。
 
-`--apply` が許されるのはちょうど3つの場合である(**これはこのスキルが旗を渡してよいのはいつか**の
+`--apply` が許されるのはちょうど3つの場合である(**これはこのスキルがオプションを渡してよいのはいつか**の
 話であり、**そもそもどの SSOT への書込みが許されるかの正は CLAUDE.md 原則1 である**)。
 それ以外で渡されたときは、**理由を述べて検査モードへ落ちる**:
 
@@ -123,7 +123,7 @@ F3 は `building` のクロージャを判定から除外するので、**黙っ
 ローカルの配列は和として併合されるので、配布された既定の `.`(= リポジトリ全体)が必ず生き残る。
 モノレポでは、**ローカルのファイルの `excludes` に兄弟パッケージ等を並べて絞る**
 (除外を足すのは、和であっても縮む向きである。恒久的な直し方はスクリプトの変更であり、
-それは汎用的な直しなので `/kit-improve` の2つの縛り(CLAUDE.md §3)を満たせば
+それは汎用的な直しなので `/kit-improve` の2つの縛り(`.claude/directions/core.md` §3)を満たせば
 いつでも直してよい)。設定の鍵の正は `.claude/tools-readme.md` の設定の表。
 精度の段は `.claude/directions/callgraphs.md` §5.8。
 依存が足りなければ各スクリプトが `setup-tools.py` を走らせろと言う — それに従う。
@@ -148,7 +148,7 @@ python3 .claude/scripts/relations-query.py --health     # 既存グラフの構�
   未解決の表は「機械には見えなかった」を意味する — **この2つは別物である。**
   AI がコードを読み、未解決のぶんだけ埋める。
 - **道具にエンドポイントの「呼び出し元」は決められない。** そこは AI の領分である。
-- 抽出器の無い言語(`Python` / `Go` / `TypeScript` / `infra` / **`shell` / `make`** 以外)では、
+- 抽出器の無い言語(`Python` / `Go` / `TypeScript` / `Rust` / `infra` / **`shell` / `make`** 以外)では、
   最後の手段として `python3 .claude/scripts/scan-entrypoints.py <target>` を使い、
   **その領域は実質 Tier 3 であることを明示的に述べる。**
   shell と make には抽出器が**在る**が、正規表現ベースである(**Tier 3**):
@@ -227,7 +227,7 @@ python3 .claude/scripts/propose-features.py      # 昇格後の残りを再確�
 **この繰り返しの上限は2回である**(run の中の反復の回数であって、検証の周の本数ではない)。
 2回で尽きなかった候補は、昇格しなかった理由とともに §8 の報告の表へ
 出して終わる — `.claude/directions/features.md` §4 が論じているのは反復が収束することであって、
-1つの run で収束しきることではない。上限の数字は検証フローと同じである(CLAUDE.md §3)。
+1つの run で収束しきることではない。上限の数字は検証フローと同じである(`.claude/directions/core.md` §3)。
 
 機能表をクロージャに含む `/build` が `state: building` のあいだは、
 `.claude/directions/callgraphs.md` §6.1 を見る — そこでの FT1 と「古い」の終了コード1 は**仕様である。**
@@ -309,7 +309,7 @@ frontmatter に在って本文に無いものが在れば、**その文書は未
    - 「中(確度は候補)」の CG4 → 候補で繋がった辺である。
      **コードを読み、採否を決め、理由を書く。**
 
-   **照合と修正の繰り返しは最大2回である**(修正ループの上限と同じ数字 — CLAUDE.md §3。
+   **照合と修正の繰り返しは最大2回である**(修正ループの上限と同じ数字 — `.claude/directions/core.md` §3。
    この「2」は run の中の反復の回数であって、検証の周の本数ではない)。2回で残った高は
    報告(§8)に「未解決の高 N 件」と名乗って出し、記録先の振り分け
    (`.claude/directions/issues-pendings.md` §1)を通して残す。**閉じないまま繰り返さない。**
@@ -346,7 +346,7 @@ frontmatter に在って本文に無いものが在れば、**その文書は未
 
 **コードを読み違え、それが黙って「仕様」になること** — それがまさにこの仕事の危険である。
 読むだけの相互確認を**1つの独立レビュー — ここで使えるなら Codex、でなければ新しい文脈の
-サブエージェント** へ委任する(起動の規則: `/verify-docs` §2。方針: CLAUDE.md §6):
+サブエージェント** へ委任する(起動の規則: `/verify-docs` §2。方針: `.claude/directions/core.md` §5):
 導出した `MODULE-*` がコードと一致しているか(`impl` のパス、公開インターフェース、
 呼び出し関係、テストが実在するか)を確かめさせ、
 **対応する `MODULE-*` を持たない入口**を見つけさせる。

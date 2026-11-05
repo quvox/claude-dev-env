@@ -7,7 +7,7 @@
 
 - **ツールの依存はキット専用 venv (`.claude/.venv`) に閉じ込める。プロジェクトの環境にもホストにも
   何も入れない。**
-- **Python は依存ゼロで動く**(標準 `ast`)。**Go / TypeScript / infra は tree-sitter と PyYAML が
+- **Python は依存ゼロで動く**(標準 `ast`)。**`Go` / `TypeScript` / `Rust` / `infra` は `tree-sitter` と `PyYAML` が
   必須**なので `setup-tools.py` を1回走らせる(**`/setup` がこれを走らせる**ので、導入の経路では
   手で打たなくてよい)。**必須依存が無いと `build-callgraphs.py` は起動時に
   直し方を1行言って止まる**(縮退経路は無い — 半分見えない地図で検査を完走させない。
@@ -70,11 +70,12 @@ python3 .claude/scripts/setup-tools.py --clean     # .venv と .tools を消す(
 | `relations-query.py` | **これを変えると何に響くか**。呼び出し元・経路・構造の健全性 | `directions/relations.md` §6 |
 | `check-relations.py` | 機能間連携仕様書の**内部整合**(対称性・参照実在・必須項目)。**機能表との1:1(FT3)は見ない** — その検査IDは `callgraph-check.py` が1本で持つ | `directions/relations.md` §6.3 |
 | `check-ssot.py` | **SSOT 全体に仕様ドキュメントの一括検査**(CS 群 — 曖昧語・参照実在・同型走査・要件に降りた機構・理由の網羅・課題票の起点層・**件数の主張**(本文の数字と実体の数の突き合わせ)ほか。**この並びは抜粋であり、正の一覧は `--list`**、CS21 の自己検査は `--selftest`)。数秒で終わるので編集のたびに回せる。`/build` §1 が母集団の凍結に、`/verify-docs` §1 が検査のたびに使う | このスクリプトの `--list` と docstring |
-| `check-backlog.py` | **未クローズの課題票と残務の計器**。数えて出すだけで**何も拒まない**(旗も設定も無い) | CLAUDE.md §3 / `directions/issues-pendings.md` §1・§2.1 |
-| `check-debt.py` | **検証負債の計器**(未検証構築記録・鮮度スタンプの古さ・**全数の最終実行**・未回答シート・**試験区分の置き場の宣言漏れの件数**)。数えて出すだけで**何も拒まない**(宣言漏れも義務ではない — 内訳と直し方は `stamps.py check` の注記)。`--demote` は滞留した building を降格する。**鮮度スタンプの古さは記録日からの日数であって失効の判定ではない** — いま green かは `stamps.py check` が正 | CLAUDE.md §4 / `directions/flows.md` §4 |
-| `check-mission.py` | **ミッションの予算の計器**(①台帳の `開始:` からの経過時間と `予算:`、②出した作業指示の本数と計画の見込みの2倍、③同じ要件への修繕の本数=3本目)。**数えて出すだけで何も拒まない** — 発火中に配車を止めるのは規範の禁止のほう(`orchestration.md` §3.0 の6)。読むのは `.claude/missions/<mid>/` の台帳と `orders/` だけ。**欄を持たない古い台帳では発火しない**。再開は人間が台帳に書く `- 再開許可:` の1行 | `directions/orchestration.md` §3.0 の6・§7 / `skills/mission/SKILL.md` §3 |
-| `stamps.py` | **鮮度スタンプの記録と、デプロイゲートの判定**。verify 系フローが完走時に `record`(範囲を絞った run は `--covers <path>`、全数を回した run は `--full`)、デプロイ前に `check`(全フロー green で 0。red なら**回すべき最小の範囲**を印字)。`deps` は失効判定の依存集合(許可リスト)を印字する。**green は無条件には記録できず、`record` が拒むことがある**(条件の正は `flows.md` §2 — 見るのは**そのフローの依存の中だけ**であり、依存の外の汚れは拒まない。red はいつでも記録できる)。**記録先の `.claude/state/stamps.json` は git で共有する** — 打つのは1周に1回、明示のパスで(`flows.md` §2)。**`release` は別の仕事である** — 出したことを `.claude/state/releases.json` へ1件残し、**成果物の版の桁を構築記録の宣言から決める**(人間は桁を指定しない。`--current` は版だけを印字する。`flows.md` §9) | CLAUDE.md §3・§4 / `directions/flows.md` §2 |
-| `check-buildrecord.py` | **構築記録は突き合わせ可能な形か**(BRC 検査 — 一覧は `--list`。frontmatter・critical フラグの fail-closed 照合・クロージャ・主張・基本要件の全件判定)。`/build` の構築記録ゲート | `directions/build-record.md` / `directions/baseline.md` |
+| `check-ux.py` | **UX 文書(`docs/ux/`)が実在を保っているか**(UX 検査 — 引いている条項 ID が `01-requirements/functional*.md` の受け入れ基準に実在し退役していないか / 画面一覧の台帳と `screens/SCR-nn-*.md` が双方向に対応するか / `reviews/NN.md` の指摘番号が実在するか)。違反は非0(ブロッキング)。走るのは `/build` のクロージャに `docs/ux/` が入るときと、`/verify-tests` が qa 試験区分を走らせる**前**である。`docs/ux/` が無いプロジェクトでは何も見ずに 0 | `directions/ux.md` の「機械検査」の節 |
+| `check-backlog.py` | **未クローズの課題票と残務の計器**。数えて出すだけで**何も拒まない**(オプションも設定も無い) | `.claude/directions/core.md` §3 / `directions/issues-pendings.md` §1・§2.1 |
+| `check-debt.py` | **検証負債の計器**(未検証構築記録・鮮度スタンプの古さ・**全数の最終実行**・未回答シート・**試験区分の置き場の宣言漏れの件数**)。数えて出すだけで**何も拒まない**(宣言漏れも義務ではない — 内訳と直し方は `stamps.py check` の注記)。`--demote` は滞留した building を降格する。**鮮度スタンプの古さは記録日からの日数であって失効の判定ではない** — いま green かは `stamps.py check` が正 | `.claude/directions/core.md` §4 / `directions/flows.md` §4 |
+| `check-mission.py` | **ミッションの予算の計器**(数えるのは台帳の `開始:` からの経過時間と `予算:` の1つだけ。**作業指示の本数は数えない** — 2026-09-20 に本数の上限を廃した)。**数えて出すだけで何も拒まない** — 発火中に配車を止めるのは規範の禁止のほう(`orchestration.md` §3.0 の6)。読むのは `.claude/missions/<mid>/ledger.md` だけ(`orders/` はもう読まない)。**欄を持たない古い台帳では発火しない**。再開は人間が台帳に書く `- 再開許可:` の1行 | `directions/orchestration.md` §3.0 の6・§7 / `skills/mission/SKILL.md` §3 |
+| `stamps.py` | **鮮度スタンプの記録と、デプロイゲートの判定**。verify 系フローが完走時に `record`(範囲を絞った run は `--covers <path>`、全数を回した run は `--full`)、デプロイ前に `check`(全フロー green で 0。red なら**回すべき最小の範囲**を印字)。`deps` は失効判定の依存集合(許可リスト)を印字する。**green は無条件には記録できず、`record` が拒むことがある**(条件の正は `flows.md` §2 — 見るのは**そのフローの依存の中だけ**であり、依存の外の汚れは拒まない。red はいつでも記録できる)。**記録先の `.claude/state/stamps.json` は git で共有する** — 打つのは1周に1回、明示のパスで(`flows.md` §2)。**`release` は別の仕事である** — 出したことを `.claude/state/releases.json` へ1件残し、**成果物の版の桁を構築記録の宣言から決める**(人間は桁を指定しない。`--current` は版だけを印字する。`flows.md` §9) | `.claude/directions/core.md` §3・§4 / `directions/flows.md` §2 |
+| `check-buildrecord.py` | **構築記録は突き合わせ可能な形か**(BRC 検査 — 一覧は `--list`。frontmatter・重要な変更のフラグの fail-closed 照合・クロージャ・クロージャと作業コミットの突き合わせ(この作業が書いていない入力は理由つきの申告で除く)・主張・基本要件の全件判定)。`/build` の構築記録ゲート | `directions/build-record.md` / `directions/baseline.md` |
 | `check-baseline-verdicts.py` | **過去の構築記録の `非該当` を、クロージャの中身に照らして疑う計器**。`非該当` の行ごとに、その記録が宣言したクロージャのファイルを `baseline-evidence.json` の証拠パターンで走査する。**`verified` を含む全状態の記録を読む** — 他の見る者が届かない隙間がこれの持ち場である(**分担の正は `directions/baseline.md` §1 の4。ここでは言い直さない**)。**過去の記録は、その記録の `commit:` 時点の中身に照らす**(いまの作業ツリーに照らすと、後から同じファイルへ機能が増えれば偽陽性、移動・削除なら見逃しになる。`--worktree` で今の中身に切り替わる)。**数えて印字するだけで、疑いの有無では何も拒まない**(終了コード 0。使い方・前提エラーだけ 2)。**疑いの数と一緒に、「検査できなかった行」「部分的にしか検査できていない行」「記録に判定行が無い BR」も印字する**(最後の1つは、足したばかりの項目が過去の記録に対して盲目であることを言う。**遡って埋め直さない** — `baseline.md` §4.3)。**疑いを黙らせる口が2つある** ★ — ファイル単位の `skip_globs` と、**行単位の `adjudicated`**(`baseline-evidence.json` / `.local.json`。記録と `BR-nn` と `why` の3つを書く)。**`why` の自由文しか歯止めが無い**ので、**人間が裁定したものだけを入れる** — 計器を黙らせるために使えば、その行はもう誰も見ない | `directions/baseline.md` §1 の4 / `skills/verify-impl/SKILL.md` §1 |
 | `relations-coverage.py` | 抽出器が無い言語の**網羅性**(正規表現ベース) | `directions/relations.md` §6 |
 | `scan-entrypoints.py` | 抽出器が無い言語のエントリポイント候補(**最後の手段**) | `directions/relations.md` §6 |
@@ -82,13 +83,15 @@ python3 .claude/scripts/setup-tools.py --clean     # .venv と .tools を消す(
 | `build-index.py` | 各 `index.md` の再生成 | CLAUDE.md 原則10 |
 | `doc-health.py` | **上流変更後の再検証候補**、**棚上げ・課題票の鮮度確認の候補**(記録日つきの一覧。判定は書かない)、文書・仕様IDから辿る**履歴逆引き索引**を生成する。`--check` は生成物の鮮度検査、`--health` は書き込まず警告件数を表示する。既存SSOT・確定済み履歴は変更しない。**今日の日付を使わないので、同じ入力なら同じ生成物になる**。残務(`docs/residual.md`)については `--as-of --sweep --record=<履歴>` が**重複と対象が実在しない行だけ**を落とし、`--rotate` が 50行以上のときファイルを `docs/residual-NNN.md` へ押し出す(**1行も落とさない**。錠つき — 2本が重なっても連番を採り合わない)。**`--next-issue-id` / `--next-pending-id` は課題票・棚上げの連番を錠の下で払い出す**(2026-09-05。手で数えると削除済みの再発行と並走の同番が起きる — issues-pendings.md §2.2・§3) | CLAUDE.md 原則6・原則10 / directions/issues-pendings.md §2.1・§8 |
 | `check-sheet.py` | **SSOT を書き始めてよいか**(決定シートが人間に確認されたか — 「一括回答」に1行あるか、全ブロックが埋まっているか、またはチャット回答の構築記録への転記(逐語引用+日付)があるか。SH 検査 — 一覧は `--list`)。fail-closed。**SH10 は「問うてはならないことを問っていないか」** — エラー処理・テスト・ログ・設定(DS-01〜DS-04)の論点は根拠なしに載せられない | `directions/build-record.md` §3 / `skills/build/SKILL.md` §1 |
-| `kit-patch.py` | **このキットをどう改造したか。本流へ戻すパッチは何か**(改造前に `status`、パッチは `diff --slug <slug>`)。配布・控え・差分の3者が `kit-dist.json` の include だけを正とする(`files` がその列挙。`.claude/improvements/` はどれにも入らない — 改善の作業跡は `diff` が消す)。**控えの取り直しは人間の操作ではない**: `diff` の成功時と、配布物の入れ替わり(`kit-manifest.json` の指紋)を見た `status` が自動で取り直す(旧 `snapshot --force` は廃止)。**パッチの置き場は道具が持つ**(`diff --slug` が `.claude/improvements/patches/KIT-<slug>.patch` へ書き、絶対パスを出す。`status` は書く前からその場所を出す)。**パッチは宛先を名乗る**(先頭の `# キット: <名前>` — `kit-dist.json` の `kit` から。本流の `make patch` がこれを読んで宛先を決める)。**手順の正は `/kit-improve`** — 単体で呼ぶのは `status` の確認までにする | `skills/kit-improve/SKILL.md` / CLAUDE.md §3(キットを直してよい2つの縛りと記録) / `scripts/kit-dist.json` |
+| `guard-branch.py` | **いま書き込んでよい枝に居るか**(保護ブランチなら作業ブランチを作って移る — 判定と移動が1本になっている)。`--slug <slug>` が `/build`、`--verify` が F2・F3・F4、`--name work/<mid>` が艦隊の中央エージェント。**終了コード1(こちらの知らない事情が在る)を握りつぶさない** — `git branch -D` で先へ進むと書きかけを消す | `directions/flows.md` §7.1 |
+| `kit-patch.py` | **このキットをどう改造したか。本流へ戻すパッチは何か**(改造前に `status`、パッチは `diff --slug <slug>`)。配布・控え・差分の3者が `kit-dist.json` の include だけを正とする(`files` がその列挙。`.claude/improvements/` はどれにも入らない — 改善の作業跡は `diff` が消す)。**控えの取り直しは人間の操作ではない**: `diff` の成功時と、配布物の入れ替わり(`kit-manifest.json` の指紋)を見た `status` が自動で取り直す(旧 `snapshot --force` は廃止)。**パッチの置き場は道具が持つ**(`diff --slug` が `.claude/improvements/patches/KIT-<slug>.patch` へ書き、絶対パスを出す。`status` は書く前からその場所を出す)。**パッチは宛先を名乗る**(先頭の `# キット: <名前>` — `kit-dist.json` の `kit` から。本流の `make patch` がこれを読んで宛先を決める)。**手順の正は `/kit-improve`** — 単体で呼ぶのは `status` の確認までにする | `skills/kit-improve/SKILL.md` / `.claude/directions/core.md` §3(キットを直してよい2つの縛りと記録) / `scripts/kit-dist.json` |
 | `kit-manifest.py` | **上書き展開した後、旧版の取り残しはどれか**。`check` が現物を4つに割る(旧版の取り残し / 改造 / 欠落 / キット管理外)。**tar は上書きしても削除しない**ので、廃止したスキルやスクリプトは展開先で生き続ける。`update` は配布側が版ごとの確定一覧(`.claude/kit-manifest.json`)を作り直す(`make check` が鮮度を見る) | `scripts/kit-dist.json` / 導入手順(`make dist` の出力) |
 | `kit-migrate.py` | **新しい版を展開した後、このプロジェクトで要る移行はどれか**。`.claude/migrations/*.md`(1件 = 1ファイル)の `detect` を走らせ、**要るものだけ**を並べる(`check` は要るものが在れば 1)。載っているのは**上書き展開では直らないもの**だけである — 記録ファイルの引っ越し、配布物に含まれない設定ファイルへの追記、プロジェクト自身の宣言の作り直し。**手順を当てるのはこの道具ではなく `/kit-migrate`** である(機械に当てられない形の手順が混ざる) | `skills/kit-migrate/SKILL.md`(書式と当て方の正)/ `.claude/migrations/` |
 | `check-kit-refs.py` | **キット内の参照は生きているか**(パスの実在・`CLAUDE.md §n` / `原則n` の範囲・`<file>.md §n` の見出し実在・**`reading.md` が名前で指した見出しの実在**・**検査ID(`CS`/`SH`/`BRC`/`LA`+数字)の実在**・**`baseline.md` の `| BR-nn |` 行が §2 の中だけに在ること**)。
 対象は `.md` だけでなく `.py` と `scripts/*.md` も含む。**規範を改番・再構築した後に必ず回す** — 実測で、再構築後にエラーメッセージの案内先が4系統死んでいた(`make check` にも入っている) | CS11 の思想をキット自身へ(このスクリプトの docstring) |
 | `check-language.py` | **記述言語と用語の表記は規約どおりか**(LA 検査 — ファイル区分ごとの言語・引用島の除外・規範用語集の禁止表記・規範用語集自身の壊れ・**単独で書いてはならない語**(LA5)。一覧は `--list`、残りは `--todo`)。**列挙を持たない** — ファイル区分は `directions/conventions.md` §3 の表を、禁止表記と単独で書かない語は `directions/glossary.md` の表を読む。移行の途中は `scripts/language-config.json` の `migrated` に載ったファイルだけを見る(`make check` にも入っている) | `directions/conventions.md` §3 / `directions/glossary.md` |
 | `notify-slack.py` | **人間を呼ぶ**(艦隊運用専用。**AI が叩ける引数は `question` / `done` の2語だけ** — CLI 自体は `--notice <文>` も受けるが、それは colabtmux 監視専用の口で AI は使わない)。文面は `<時刻> [<プロジェクト>] <文>` で、名前は `colabtmux.conf` の `[project] name`(無ければディレクトリ名)。**叩けるのは3者だけ** — `question <ウィンドウ名>` は問いを持つ作業エージェント本人と `@triage`、そして**予算の計器が発火して配車を止めたときの中央エージェント**(その1場面だけ。`orchestration.md` §3.0 の6)、`done` は中央エージェント。送信は fail-open(失敗してもミッションは止めない)だが、**終了コード0は「送った」の意**なので、**送っていない3経路(未設定・送信失敗・Slack が `ok:false`)はどれも `3`**(結果は常に標準出力に1行。この `3` は下の約束の外に在る専用値である) | `directions/orchestration.md` §6.1 |
+| `launch-agent.py` | **エージェントを起こす唯一の口**(`<kind> <role>`)。**claude には役のファイルのパスを `--append-system-prompt-file` で、codex には同じファイルの中身を `-c developer_instructions=` で渡して** exec する(codex の口が文字列しか受けないため)。**起動時に何も組み立てない — 渡すのは役のファイル1本だけである。codex の砂箱は選ばない** ★ — 役によらず `--sandbox danger-full-access` が必ず入り(2026-09-20)、`--sandbox` に他の値を書くと止まる。**`--ask-for-approval never` も落とさない**。`--` の後ろはそのまま起動コマンドの末尾へ付く(`--model` `--effort`)。**`--print` は起こさずに起動行を表示するだけ**。**この口を通さずにエージェントを起こさない** — 手で組み立てると、役の本文が kind によってずれる | `directions/orchestration.md` §1.1 / §1.1.1 |
 
 `make check` / `make dist` / `make patch` は**キット本流リポジトリ(キットのルートディレクトリを
 含むリポジトリ — この `.claude/` の2階層上)側のターゲット**である。展開先のプロジェクトには Makefile は配られない — 展開先で使うのは
@@ -184,7 +187,7 @@ python3 .claude/scripts/doc-health.py --health
 
 - **キットは実行の許可の既定モード(`defaultMode`)を配らない** ★(2026-08-24 に `bypassPermissions` を
   外した — 理由は `install-notes.txt`。プロジェクトの設定はリポジトリに書き込める人が変えられる)。
-  **だから許可リストが実際に効く経路である。** ただし**それを打つ人が起動旗か個人設定で
+  **だから許可リストが実際に効く経路である。** ただし**それを打つ人が起動時のオプションか個人設定で
   bypass を選んでいる環境では、許可リストは判定に関与しない** — codex 等の失敗を許可の問題と
   診断してよいのは、bypass が効いていない環境に限る(`/verify-docs` §2)。
 - **`python3` の許可は `.claude/scripts/` のキット自身のツールを名指ししたものだけ**である
@@ -244,8 +247,8 @@ python3 .claude/scripts/doc-health.py --check               # 再検証候補・
 |---|---|---|
 | `scripts/callgraph-config.json` | `internal_roots` / `excludes` / **`vendor_markers`** / **`test_markers` / `tooling_markers`**(+ `include_tests` / `include_tooling`) / 言語の有効化 / `features`(提案の閾値) / `resources`(資源スキャン。`env_patterns` ほか) / `output_dir`・`source_roots`・`max_file_bytes` | `callgraph-config.local.json`(配列キーは和集合でマージ — `internal_roots` は local では**絞れない**。本節末尾の注記) |
 | `scripts/entrypoint-patterns.json` | Tier3 のエントリポイント検出パターン | `entrypoint-patterns.local.json` |
-| `scripts/flow-config.json` | **フロー層の設定**(`max_building_hours` = building の滞留を分ける時間 / `f4_scopes` = デプロイゲートが要求する F4 の試験区分一覧 / **`code_roots`**(製品コードとテストコードの置き場。鮮度スタンプの失効判定の許可リスト)/ `ui_roots`(qa 試験区分だけに効く UI の置き場)/ `scope_roots`(試験区分ごとのコードの置き場。宣言した試験区分は変更影響の判定をその範囲に絞る)/ **`code_excludes`**(コードの置き場の中に在るが検証の入力ではないパス。動いても失効させない。**既定は空**、狭く誤ると穴になるので迷ったら書かない。どの置き場より**真に狭い**項目だけを受け付ける — 外のパスも、置き場の親も、置き場と等しいものも落とす(置き場そのものを外したいなら `code_roots` から消す)。宣言は焼き込むので変えたら失効する。**欄を持たない古い記録も比べる**ので、後から足しても取りこぼさない)/ `e2e_scripts_in`(E2E 台本の置き場。`system` か `testing`))。**着手を拒むための値は無い** | `flow-config.local.json` |
-| `scripts/critical-config.json` | **critical フラグの機械判定**(クロージャのパスに部分一致するパターン。check-buildrecord.py BRC2) | `critical-config.local.json`(和集合でマージ) |
+| `scripts/flow-config.json` | **フロー層の設定**(`max_building_hours` = building の滞留を分ける時間 / `f4_scopes` = デプロイゲートが要求する F4 の試験区分一覧 / **`code_roots`**(製品コードとテストコードの置き場。鮮度スタンプの失効判定の許可リスト)/ `ui_roots`(qa 試験区分だけに効く操作面の置き場。**画面だけでなくサブコマンドの実装も入れる** — 2026-09-15)/ `scope_roots`(試験区分ごとのコードの置き場。宣言した試験区分は変更影響の判定をその範囲に絞る)/ **`code_excludes`**(コードの置き場の中に在るが検証の入力ではないパス。動いても失効させない。**既定は空**、狭く誤ると穴になるので迷ったら書かない。どの置き場より**真に狭い**項目だけを受け付ける — 外のパスも、置き場の親も、置き場と等しいものも落とす(置き場そのものを外したいなら `code_roots` から消す)。宣言は焼き込むので変えたら失効する。**欄を持たない古い記録も比べる**ので、後から足しても取りこぼさない)/ `e2e_scripts_in`(E2E 台本の置き場。`system` か `testing`))。**着手を拒むための値は無い** | `flow-config.local.json` |
+| `scripts/critical-config.json` | **重要な変更のフラグの機械判定**(クロージャのパスに部分一致するパターン。check-buildrecord.py BRC2) | `critical-config.local.json`(和集合でマージ) |
 | `scripts/requirements.txt` | venv に入れる依存の名前 | — |
 | `scripts/callgraph-schema.json` | 抽出器と下流の**契約**(中間表現) | — |
 
@@ -267,7 +270,7 @@ python3 .claude/scripts/doc-health.py --check               # 再検証候補・
 `internal_roots` は `*.local.json` では絞れない**(何を書いても `.` が残り、エラーも警告も出ない)。
 モノレポの当面の絞り込みは **local の `excludes` に兄弟パッケージ等を列挙する**
 (和集合でも「足せば狭まる」方向 — §6 の既存案内と同型)。恒久策はスクリプト修正であり、
-汎用的な直しなので `/kit-improve` でいつでも直してよい(CLAUDE.md §3)。
+汎用的な直しなので `/kit-improve` でいつでも直してよい(`.claude/directions/core.md` §3)。
 プロジェクト固有の値は `*.local.json` に書く(**配布物には入らないが、git では共有する** —
 `.claude/.gitignore` §先頭のコメント)。
 
@@ -277,18 +280,23 @@ python3 .claude/scripts/doc-health.py --check               # 再検証候補・
 |---|---|
 | `venv: 作成に失敗した` | Debian/Ubuntu で `python3-venv` が無い。**ホスト側の作業**(キットは apt を叩かない) |
 | シンボル数が異常に多い / `ambiguous` だらけ | **第三者ライブラリが混ざっている**。`callgraphs/index.md` の「解析対象から外したもの」と「シンボルが集中しているディレクトリ」を見る。独自名でベンダリングしていて自動検出に掛からない場合は `callgraph-config.local.json` の `excludes` に足す |
-| 自前コードが勝手に除外された | そのディレクトリに `*.dist-info` などの目印が紛れている。`vendor_markers` を `local.json` で上書きするか、目印を消す。除外は index.md に必ず出るので黙って消えることはない |
+| 自前コードが勝手に除外された | そのディレクトリに `*.dist-info` などの目印が紛れている。**`local.json` の `vendor_markers` は既定へ足すだけで、既定の目印を減らせない**(和集合でマージする。`cgx/base.py`)。**できるのは、不要だと確かめられた目印そのものを消すことである** — 消せない目印(実際に要るもの)なら、そのディレクトリの除外は設定では解けないので、**人間の裁定を待つ。** 除外は index.md に必ず出るので黙って消えることはない |
 | エントリポイントが 0 件 | パターンが未対応かもしれない。**「無い」と結論しない**。`entrypoint-patterns.local.json` に追加する |
 | `ambiguous` が大量に出る | まず `excludes` / `vendor_markers` の漏れを疑う(実測ではそれが原因だった)。候補は全部出ており、機能表クラスタリングが候補辺として算入するので境界は落ちない |
 | `CG3` が「低: 断定できない」 | 経路上に未解決の呼び出しがある。**ツールが見えていないだけ**なので、コードを読んで判断し根拠を本文に書く |
 | `--check` が毎回「古い」 | callgraphs を手で編集していないか。**手書きは禁止**(次の再生成で消える) |
 | Tier が意図せず 3 に落ちた | `setup-tools.py --check` で不足を見る。降格理由は `callgraphs/index.md` の `降格理由` 列にも出る |
-| 抽出器が無い言語がある | Python / Go / TypeScript(Vue含む) / infra(CFN・SAM・OpenAPI・Terraform)は実装済み。それ以外の言語は `scan-entrypoints.py` + `relations-coverage.py` で暫定的に見る。**覆えていないことを報告に明記する** |
+| 抽出器が無い言語がある | Python / Go / TypeScript(Vue含む) / Rust / infra(CFN・SAM・OpenAPI・Terraform)は実装済み。それ以外の言語は `scan-entrypoints.py` + `relations-coverage.py` で暫定的に見る。**覆えていないことを報告に明記する** |
 | CI だけ落ちる | venv が作れず Tier3 に降格している可能性。ログの Tier と `degraded_reason` を見る |
 | デプロイゲートが `未宣言` と言う / verify を何本回しても red のまま | `flow-config.json` の `code_roots` が空(= 未宣言)である。**verify では動かせない red** で、`promote` も全件保留になる。`flow-config.local.json` に製品コードとテストコードの置き場を書く — **最初の**宣言は lint/テストのコマンドを 02 に書くのと同じ1回であり、**以後は `/build` が毎回、触ったコードのパスが宣言の下に在るかを見直して足す**(`directions/flows.md` §2) |
 
 ## 7. ツールを増やすとき
 
+- **§2 のツール一覧に1行足す。** 答える問いと、正(規範)の在り処を書く。
+  **ここは機械が見ていない** ★ — 許可リストの漏れは `make check` が拾うが(§3.1)、
+  **この表の漏れは誰も拾わない。** 入口からは §2 だけが引かれるので(CLAUDE.md 原則10)、
+  載っていない道具は在っても見つからない(実測 2026-09-13: `check-ux.py` と
+  `guard-branch.py` の2本が、別の手順からは呼ばれているのにこの表に無かった)。
 - **中間表現(`callgraph-schema.json`)が契約。** 抽出器を足すのは `cgx/` に1ファイル追加して
   `cgx/__init__.py` の `EXTRACTORS` に1行足すだけ。出力器と検査器は触らない。
 - **下流は Markdown を読まない。** 必ず `--format json` の中間表現を読む(表の書式変更で壊れないため)。

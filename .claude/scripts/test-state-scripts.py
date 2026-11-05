@@ -69,6 +69,38 @@ def main() -> int:
                   file=sys.stderr)
             return 1
 
+        # CS24: **雛形を写しただけの欄は決定ではない。** 差し込み記号を落としてから値を探す
+        # のでなければ、選択肢の見本がそのまま「記載済み」と数えられる。
+        fr_head = "---\nid: fr\n---\n## FR-auth-01 認証\n"
+        fr_tail = "\n## 今回決めた既定(開示)\n\n- 判断なし: 決めた既定が無い\n"
+        for why, value, want in (
+                ("差し込み記号のままの欄を決定と数えた", "<不可分 | 段階可(理由)>", 1),
+                ("選択肢を消し忘れた行を決定と数えた", "不可分 / 段階可(理由: 後追いでよい)", 1),
+                ("理由の無い `段階可` を通した", "段階可", 1),
+                ("空の理由の `段階可` を通した", "段階可(理由: <>)", 1),
+                ("空の文句を理由として通した", "段階可(理由: 特になし)", 1),
+                ("理由の在る `段階可` を落とした", "段階可(理由: 参照系から先に出す)", 0),
+                # 理由の本文に `不可分` と書けるので、欄の全体を走査すると正しい記入を弾く
+                ("理由の中の `不可分` を選択肢の残りと読んだ",
+                 "段階可(理由: 検索と編集は不可分ではなく独立して使える)", 0),
+                # 理由の中に補足の括弧が在っても、最初の閉じ括弧で切らない
+                ("理由の中の入れ子の括弧で切った",
+                 "段階可(検索(参照)と編集は不可分ではなく独立して使える)", 0),
+                ("全角の括弧を読まなかった", "段階可（理由: 全角の括弧でも読む）", 0),
+                # 裁定 A-1: 理由の質を文字数で判定する仕組みは含めない
+                ("短い理由を文字数で弾いた", "段階可(理由: 別売り)", 0),
+                ("`不可分` に理由を求めた", "不可分", 0)):
+            (d / "functional.md").write_text(
+                fr_head + f"- **分割可否: {value}**\n" + fr_tail, encoding="utf-8")
+            r = subprocess.run([sys.executable, str(HERE / "check-ssot.py"), "docs"],
+                               cwd=td, capture_output=True, text=True)
+            # **報告の見出しで判定する。** 終了コードは他の検査(この fixture は条項の表を
+            # 持たないので CS25)でも 1 になるので、CS24 の当否には使えない。
+            hit = 0 if "CS24 分割可否の記載: OK" in r.stdout else 1
+            if hit != want:
+                print(f"NG CS24 {why}(値: {value})\n{r.stdout}\n{r.stderr}", file=sys.stderr)
+                return 1
+
         # CS25: 正常系だけの受け入れ基準は落ちる。**逃げ道と抜け道を名指しで塞ぐ** —
         # ここに並んでいるのはどれも、独立検査が実際に通してみせた入力である。
         head = ("---\nid: fr\n---\n## FR-auth-01 認証\n- **分割可否: 不可分**\n")
@@ -191,6 +223,116 @@ def main() -> int:
                                cwd=td, capture_output=True, text=True)
             if "CS26 条項 ID の消失: OK" not in r.stdout:
                 print(f"NG CS26 が `delete` の退役を違反にした\n{r.stdout}", file=sys.stderr)
+                return 1
+
+        # CS26 の局所番地形(課題311): 要件の見出しの下で表の1列目に番地だけを書く形
+        # (`| # | 種別 | 基準 |` / `| 2-2 |`)。規範は `#` の欄を番地と呼ぶので、この形も
+        # 条項として読めなければならない — 読めないと母集団が空になり、黙って判定不能になる。
+        # 番地にハイフンが入る(`2-2`)ので、条項 ID の末尾を切って要件を推す読み方も落とす。
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / ".claude").mkdir()
+            (root / "CLAUDE.md").write_text("# x\n", encoding="utf-8")
+            d = root / "docs/01-requirements"
+            d.mkdir(parents=True)
+            # 要件の中の検討メモの表(1列目が数字でも条項ではない)と、空行で切れて
+            # 見出し行なしに再開する受け入れ基準の表(実物の 01 に在る形)を含める
+            memo = "\n| 観点 | 説明 |\n|---|---|\n| 7 | 検討メモ |\n"
+            head = ("---\nid: fr\n---\n## FR-auth-01 認証\n- **分割可否: 不可分**\n"
+                    "\n本文の参照 FR-auth-02-9 は条項ではない。\n" + memo)
+            rows = ("\n| # | 種別 | 基準 |\n|---|---|---|\n"
+                    "| 1 | 正常系 | WHEN 押す the system SHALL 開く |\n"
+                    "| 2 | 境界値 | IF 上限 THEN 拒否 |\n"
+                    "| 2-2 | 境界値 | IF 下限 THEN 拒否 |\n"
+                    "\n| 3 | 異常系 | IF 落ちる THEN 伝える |\n"
+                    "| FR-auth-01-4(2) | 異常系 | IF 切れる THEN 伝える |\n"
+                    # 段落の後の見出し行の無いパイプ行は表の続きではない(条項 2-2 と同じ数字)
+                    "\n補足の段落。\n| 2-2 | 見出しの無い別の行 |\n")
+            tail = "\n## 今回決めた既定(開示)\n\n| 9 | 範囲の外の表 |\n"
+            (d / "functional.md").write_text(head + rows + tail, encoding="utf-8")
+            for args in (["init", "-q"], ["add", "-A"],
+                         ["-c", "user.email=t@t", "-c", "user.name=t",
+                          "commit", "-qm", "base"]):
+                subprocess.run(["git"] + args, cwd=td, check=True, capture_output=True)
+            r = subprocess.run([sys.executable, str(HERE / "check-ssot.py"), "docs"],
+                               cwd=td, capture_output=True, text=True)
+            if "CS26 条項 ID の消失: OK" not in r.stdout:
+                print(f"NG CS26 が局所番地形の条項を読めなかった\n{r.stdout}", file=sys.stderr)
+                return 1
+            # 2-2 を行ごと消した = 違反(要件の見出しは残っている)
+            (d / "functional.md").write_text(
+                head + rows.replace("| 2-2 | 境界値 | IF 下限 THEN 拒否 |\n", "") + tail,
+                encoding="utf-8")
+            r = subprocess.run([sys.executable, str(HERE / "check-ssot.py"), "docs"],
+                               cwd=td, capture_output=True, text=True)
+            if "CS26 条項 ID の消失: 違反 1 件" not in r.stdout or "FR-auth-01-2-2" not in r.stdout:
+                print(f"NG CS26 が局所番地形の消えた条項を見逃した\n{r.stdout}", file=sys.stderr)
+                return 1
+            # 番地に括弧を含む複合形の条項を消した = 違反
+            (d / "functional.md").write_text(
+                head + rows.replace("| FR-auth-01-4(2) | 異常系 | IF 切れる THEN 伝える |\n", "")
+                + tail, encoding="utf-8")
+            r = subprocess.run([sys.executable, str(HERE / "check-ssot.py"), "docs"],
+                               cwd=td, capture_output=True, text=True)
+            if "CS26 条項 ID の消失: 違反 1 件" not in r.stdout or "FR-auth-01-4(2)" not in r.stdout:
+                print(f"NG CS26 が括弧を含む複合形の消えた条項を見逃した\n{r.stdout}",
+                      file=sys.stderr)
+                return 1
+            # 空行の後に再開した表の条項を消した = 違反(再開した表を読めていなければ鳴らない)
+            (d / "functional.md").write_text(
+                head + rows.replace("| 3 | 異常系 | IF 落ちる THEN 伝える |\n", "") + tail,
+                encoding="utf-8")
+            r = subprocess.run([sys.executable, str(HERE / "check-ssot.py"), "docs"],
+                               cwd=td, capture_output=True, text=True)
+            if "CS26 条項 ID の消失: 違反 1 件" not in r.stdout or "FR-auth-01-3" not in r.stdout:
+                print(f"NG CS26 が空行の後に再開した表の消えた条項を見逃した\n{r.stdout}",
+                      file=sys.stderr)
+                return 1
+            # 退役(`delete`)は違反ではない。検討メモの表・範囲の外の表・本文の参照が
+            # 消えても条項の消失ではない
+            (d / "functional.md").write_text(
+                head.replace("FR-auth-02-9", "別の要件").replace(memo, "")
+                + rows.replace("| 2-2 | 境界値 |", "| 2-2 | delete |")
+                + "\n## 今回決めた既定(開示)\n\n- 判断なし: 決めた既定が無い\n",
+                encoding="utf-8")
+            r = subprocess.run([sys.executable, str(HERE / "check-ssot.py"), "docs"],
+                               cwd=td, capture_output=True, text=True)
+            if "CS26 条項 ID の消失: OK" not in r.stdout:
+                print(f"NG CS26 が局所番地形の退役か範囲の外を違反にした\n{r.stdout}",
+                      file=sys.stderr)
+                return 1
+
+            # 要件まるごとの移行は違反ではない — フェンスの中の例示の見出しを
+            # 「見出しが残っている」と数えると、移行が条項ごとの違反に化ける
+            (d / "functional.md").write_text(
+                "---\nid: fr\n---\n## 例示\n\n```markdown\n## FR-auth-01 認証\n```\n" + tail,
+                encoding="utf-8")
+            r = subprocess.run([sys.executable, str(HERE / "check-ssot.py"), "docs"],
+                               cwd=td, capture_output=True, text=True)
+            if "CS26 条項 ID の消失: OK" not in r.stdout or "移行と読める消失" not in r.stdout:
+                print(f"NG CS26 がフェンスの中の見出しで要件の移行を違反にした\n{r.stdout}",
+                      file=sys.stderr)
+                return 1
+
+        # 条項を1件も読めない構成は「未検査」と名乗る(黙って OK にしない)
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / ".claude").mkdir()
+            (root / "CLAUDE.md").write_text("# x\n", encoding="utf-8")
+            d = root / "docs/01-requirements"
+            d.mkdir(parents=True)
+            (d / "functional.md").write_text(
+                "---\nid: fr\n---\n## 要件\n条項の表が無い。\n", encoding="utf-8")
+            for args in (["init", "-q"], ["add", "-A"],
+                         ["-c", "user.email=t@t", "-c", "user.name=t",
+                          "commit", "-qm", "base"]):
+                subprocess.run(["git"] + args, cwd=td, check=True, capture_output=True)
+            r = subprocess.run([sys.executable, str(HERE / "check-ssot.py"), "docs"],
+                               cwd=td, capture_output=True, text=True)
+            if ("CS26 条項 ID の消失: 未検査 — 判定不能" not in r.stdout
+                    or "現在の版にも" not in r.stdout):
+                print(f"NG CS26 が条項を読めない構成で未検査と名乗らなかった\n{r.stdout}",
+                      file=sys.stderr)
                 return 1
 
     print("OK 状態層+一括検査: stamps / check-debt / check-buildrecord / check-sheet /"

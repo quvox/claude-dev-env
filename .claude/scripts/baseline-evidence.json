@@ -107,7 +107,17 @@
     "★ 依存の錠前のうち `package-lock.json` と `pnpm-lock.yaml` を skip_globs へ足した",
     "(`*.lock` は既に `Cargo.lock` などを覆っていたが、この2つは拡張子が違う)。",
     "**効くのは全 BR に対してである** — 機械が作り直すファイルは、",
-    "そのタスクが何を決めたかの証拠にならない。"
+    "そのタスクが何を決めたかの証拠にならない。",
+    "",
+    "★ BR-13 の適用条件は「人が操作する画面を作る / 変える」という単独の条件である。",
+    "だから BR-10 が context(弱い証拠を有効にする文脈)に置いている画面の印を、",
+    "そのまま強い証拠として採れる — BR-10 は「ブラウザから呼ばれ」かつ「状態を変える」の",
+    "積なので、同じ印を強い証拠に置けなかった。",
+    "**散文に当たる緩い印は置かない**: `document.` `window.` `fetch(` `axios` は画面を",
+    "持たないコードにも当たるので落としてある。",
+    "**その代わりに取りこぼすもの**: 画面を組み立てる部分がテンプレート言語や外部の設計",
+    "ファイルに在って、コードの中に要素も部品名も現れない作り。**これらは疑いにも",
+    "「検査できなかった行」にも現れない** — 拾うのは F3 と人間である。"
   ],
   "skip_globs": [
     "*.gif",
@@ -231,6 +241,20 @@
       "\"version\"\\s*:\\s*\"v?\\d+\\.\\d+\\.\\d+\"",
       "\\bVersion\\s*:\\s*\"v?\\d+\\.\\d+\\.\\d+\"",
       "flag\\.\\w+\\(\\s*[\"']version[\"']"
+    ],
+    "BR-13": [
+      "</?(?:form|input|button|select|option|textarea|fieldset|legend|label|dialog|details|summary|table|nav)\\b",
+      "<[A-Z][A-Za-z0-9]*[\\s/>]",
+      "<[a-z][a-z0-9]*-[a-z0-9-]+[\\s/>]",
+      "(?i)\\bon(?:click|submit|change|input|keydown|keyup)\\s*=",
+      "@(?:click|submit|change|input|keydown)(?:\\.[\\w.]+)*\\s*=",
+      "on:(?:click|submit|change|input|keydown)(?:\\|[\\w|]+)?\\s*=",
+      "v-on:\\w+\\s*=",
+      "ng-(?:click|submit)\\s*=",
+      "(?i)\\baria-[a-z]+\\s*=",
+      "(?i)\\brole\\s*=\\s*[\"'](button|dialog|menu|tab|checkbox|radio|listbox|alert)",
+      "(?i)\\btabIndex\\b",
+      "from\\s+['\"](react|vue|svelte|preact)['\"]"
     ]
   },
   "weak": {

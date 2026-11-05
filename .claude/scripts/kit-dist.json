@@ -27,6 +27,9 @@
 
   "include": [
     "CLAUDE.md",
+    "AGENTS.md",
+    "colabtmux.conf",
+    ".agents/",
     ".claude/.gitignore",
     ".claude/kit-manifest.json",
     ".claude/settings.json",

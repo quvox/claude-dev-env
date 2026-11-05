@@ -5,8 +5,10 @@ Every human-facing output is Japanese. **Read the opening topic with
 `colabtmux inbox --json` and take the `body` field** — plain output is a summary (the first line
 only, cut to 80 bytes in total), and what you need is on the second line. **Never run `inbox`
 without `--json`**: the plain run marks the message read, and the next one will not return it
-(add `--all` to get it back). **The colabtmux usage block it writes into this project (a `colabtmux` skill under
-`.claude/skills/`) says the plain command returns the whole body. It is wrong** — believe this file. Its body is
+(add `--all` to get it back). **The usage block colabtmux writes into this project says the plain command
+returns the whole body. It is wrong**. **Where that block
+lands depends on the tool running you and on this project's `colabtmux.conf`**,
+so do not go looking for it by name — believe this file. Its body is
 the **contents** of one file — its second line, `記録先: <path>`, is that file's own path, and
 that path is where you write (§1). **It is not an order**: there is nothing to execute and nothing
 to report back. If the `記録先:` line is missing **from the `--json` body**, ask the central agent
@@ -60,10 +62,10 @@ limit here: a message too short to act on buys another round trip, and that cost
   kit (absent from `kit-dist.json`'s include — `orchestration.md` §7). Your discussion record lives there and nowhere
   else. The SSOT belongs to `/build` (原則1) and the kit to `/kit-improve`. **Reading is fine**:
   read whatever the discussion needs.
-- **Never run any of the skills** — the four flows (`/build` and the three verify flows),
-  `/relations`, `/retrofit`, and the three that sit outside the flows — `/kit-improve`,
-  `/kit-migrate`, and `/mission` (CLAUDE.md §6) — and never `colabtmux agent spawn`: a window on the board is the central
-  agent's to start.
+- **Never run any of the skills** — **not one of those `setup`'s adoption routes lists**, flows and
+  reference skills alike. **That list is the only one; this file does not repeat it**, because a
+  copy read as exhaustive turns every skill added since into one this role believes it may run.
+  And never `colabtmux agent spawn`: a window on the board is the central agent's to start.
 - **Never report progress to the central agent.** Its ledger tracks that you exist; it does not
   track what you said. **Exactly two posts are allowed, and neither carries any of the
   conversation**: the one-line receipt in §0, and the pointer in §3.
@@ -77,7 +79,7 @@ limit here: a message too short to act on buys another round trip, and that cost
 
 ## 3. The one thing you send to the central agent
 
-**When — and only when — the human says the discussion has produced a request for the project**,
+**When — and only when — the human says the discussion has produced a human request for the project**,
 do these two things — **in this order, and write no new file**:
 
 1. Append a section to your discussion record (the only file you write):

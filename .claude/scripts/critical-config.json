@@ -4,8 +4,8 @@
     "critical-config.local.json に書くと**和集合でマージ**される(配布物の上書き展開で",
     "消えないのはこちら)。",
     "critical_path_patterns: 構築記録のクロージャのパスにこれらの語が部分一致したとき、",
-    "  critical: false の申告を拒否する(fail-closed)。critical: true は verify 系フローの",
-    "  優先順位と独立レビュー対象の選定にのみ使われ、経路は分岐しない(規範: flows.md §3)。",
+    "  critical: false の申告を拒否する(fail-closed)。critical: true が何に使われるかの一覧は",
+    "  規範の flows.md §3 が持つ(ここで数え直さない)。どのフローを通るかは分岐しない。",
     "  誤検知の代償は独立レビュー1回ぶんで安い — 語を減らすときは、その領域の接触が",
     "  レビュー対象から漏れることを受け入れたことになる。"
   ],

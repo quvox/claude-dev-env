@@ -9,7 +9,7 @@
 #   ・バージョンは初回インストール時に `requirements.lock` へ固定される。
 #     再現性が要るときは lock を配布する。
 #
-# 現在の状態: **Python は依存ゼロ、Go は tree-sitter が要る**。
+# 現在の状態: **Python は依存ゼロ、Go / TypeScript / Rust は tree-sitter が要る**。
 #   Python 抽出器は標準ライブラリの `ast` だけで動く。Go を解析するなら venv が要るので
 #   `python3 .claude/scripts/setup-tools.py` を1回走らせる。
 #   下の行は各段が着手されたときにコメントを外す(バージョンは lock で固定される)。
@@ -20,6 +20,9 @@ tree-sitter-go
 
 # --- P6: TypeScript 抽出器 ---
 tree-sitter-typescript
+
+# --- Rust 抽出器(2026-10-31) ---
+tree-sitter-rust
 
 # --- 契約(OpenAPI)と P5: infra 抽出器 ---
 pyyaml            # OpenAPI / CloudFormation / SAM の読み取り

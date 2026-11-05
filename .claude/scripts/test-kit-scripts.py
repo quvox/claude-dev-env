@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
-"""キットの据え付け層(`kit-migrate.py`)の自己検査を走らせる fixture。
+"""キットの据え付け・配布・差分の各層(`kit-migrate.py` / `kit-patch.py` / `kit-manifest.py`)の
+自己検査を走らせる fixture。
 
 **置く理由は `make check` がこれを実行することである。** 自己検査は書いただけでは腐る —
 スクリプトを直して自己検査が追随していなければ、ここで止まる
 (`test-state-scripts.py` と同じ役目で、あちらは状態層を持つ)。
 
-`kit-manifest.py` と `kit-patch.py` は `--selftest` を持たない。持ったらここへ足す。
+`kit-manifest.py` と `kit-patch.py` も `--selftest` を持つので、ここで一緒に走らせる ★
+(2026-09-10 まで外れていた — その間、`kit-patch.py` の自己検査が落ちたまま配られていた。
+**`make check` から呼ばれない自己検査は、書いただけで腐る。**)
 """
 import shutil
 import subprocess
@@ -70,13 +73,13 @@ def real_ledger() -> int:
 
 
 def main() -> int:
-    for name in ("kit-migrate.py",):
+    for name in ("kit-migrate.py", "kit-patch.py", "kit-manifest.py"):
         r = subprocess.run([sys.executable, str(HERE / name), "--selftest"],
                            capture_output=True, text=True)
         if r.returncode != 0:
             print(f"NG {name} --selftest\n{r.stdout}\n{r.stderr}", file=sys.stderr)
             return 1
-    print("OK キットの据え付け層の自己検査")
+    print("OK キットの据え付け・配布・差分の各層の自己検査")
     return real_ledger()
 
 

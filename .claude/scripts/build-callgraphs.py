@@ -68,7 +68,7 @@ def run_extractors(root: Path, cfg: dict, langs: list[str],
         try:
             data = importlib.import_module(EXTRACTORS[lang]).extract(root, cfg, scope)
         except (ImportError, RuntimeError) as exc:
-            # 依存ライブラリ(tree-sitter / PyYAML)は go / typescript / infra の**必須依存**で、
+            # 依存ライブラリ(tree-sitter / PyYAML)は go / typescript / rust / infra の**必須依存**で、
             # 縮退経路は無い — 欠けた地図で検査を完走させるより、ここで止まって直させる
             # (fail-closed。inspection-17 判断1)。traceback ではなく直し方を1行で言う。
             print(f"エラー: {lang} の抽出器を起動できない — {exc}", file=sys.stderr)
@@ -833,6 +833,163 @@ def _selftest_go_fixture(cfg: dict) -> list[str]:
     return out
 
 
+_RUST_FIXTURE = {
+    "Cargo.toml": '[workspace]\nmembers = ["api", "core", "web"]\n',
+    "api/Cargo.toml": '[package]\nname = "api-server"\n',
+    "core/Cargo.toml": '[package]\nname = "core-lib"\n',
+    "web/Cargo.toml": '[package]\nname = "web"\n',
+    "core/src/lib.rs": "pub mod store;\npub mod service;\n",
+    "core/src/store.rs": (
+        "pub struct Repo;\n"
+        "impl Repo {\n"
+        "    pub fn new() -> Self { Repo }\n"
+        "    pub fn find_all(&self) {}\n"
+        "}\n"
+        "pub struct Cache;\n"
+        # `find_all` を2つ置くのは、型の推定が壊れたときに名前だけの照合で偶然当たって
+        # 検査が素通りするのを防ぐためである(1つだと一意に当たってしまう)
+        "impl Cache { pub fn find_all(&self) {} pub fn get(&self) {} }\n"
+        "pub struct Codec;\n"
+        "impl Codec { pub fn encode(&self) {} }\n"
+        # 12 の題材: 外部の型を持つフィールド・引数のメソッドと同じ名前の内部メソッド(どちらも1つだけ)
+        "pub struct Table { client: aws_sdk_dynamodb::Client }\n"
+        "impl Table {\n"
+        "    pub fn get_item(&self) {}\n"
+        "    pub fn read(&self) { self.client.get_item(); }\n"
+        "}\n"
+        "pub struct Signer;\n"
+        "impl Signer { pub fn sign(&self) {} }\n"
+        "pub fn sign_url(key: &ring::signature::RsaKeyPair) { key.sign(); }\n"),
+    "core/src/service.rs": (
+        "use std::sync::Arc;\nuse crate::store::Repo;\n"
+        "pub struct Svc { repo: Arc<Repo> }\n"
+        "impl Svc {\n"
+        "    pub fn run(&self) { self.repo.find_all(); }\n"
+        "}\n"),
+    "api/src/main.rs": (
+        "mod routes;\nmod handlers;\n"
+        "#[tokio::main]\nasync fn main() { let app = routes::build(); }\n"),
+    "api/src/handlers.rs": (
+        "use core_lib::store::Repo;\n"
+        "pub async fn list() { let r = Repo::new(); r.find_all(); }\n"
+        "pub async fn stats() {}\n"
+        "pub fn helper() {}\n"
+        "pub async fn shadow(map: std::collections::HashMap<u8, u8>) {\n"
+        "    map.get(&1);\n"
+        "    let helper = || 1;\n"
+        "    helper();\n"
+        "}\n"
+        "pub fn pick() -> Option<u8> { None }\n"
+        "pub fn binder() { let Some(pick) = pick() else { return; }; }\n"
+        "pub fn ext() {\n"
+        "    base64::engine::STANDARD.encode(1);\n"
+        "    let c = reqwest::Client::builder();\n"
+        "    c.encode();\n"
+        "}\n"
+        "#[cfg(test)]\nmod tests { #[test] fn t() { super::helper(); } }\n"),
+    "api/src/routes.rs": (
+        "use axum::{Router, routing::get};\nuse crate::handlers;\n"
+        "pub fn build() -> Router {\n"
+        "    let v1 = Router::new().route(\"/users\", get(handlers::list));\n"
+        "    Router::new()\n"
+        "        .nest(\"/v1\", v1)\n"
+        "        .nest(\"/admin\", admin())\n"
+        "        .route(\"/cb\", get(|| async { client.get(\"/inner\"); }))\n"
+        "}\n"
+        "fn admin() -> Router { Router::new().route(\"/stats\", get(handlers::stats)) }\n"),
+    "web/src/main.rs": (
+        "use actix_web::{web, App, get};\n"
+        "#[get(\"/items/{id}\")]\nasync fn item() -> String { String::new() }\n"
+        "fn main() { App::new().service(web::scope(\"/api\").service(item)); }\n"),
+}
+
+
+def _selftest_rust_fixture(cfg: dict) -> list[str]:
+    """Rust 抽出器の名前解決と経路の回帰フィクスチャ。
+
+    Go 版と同じ理由で、**確度「確定」の偽の辺**と**接頭辞を落とした経路**を恒久に見張る。
+    固定するのは次の9つ:
+
+    1. 別クレートの `use core_lib::store::Repo` を、`Cargo.toml` のパッケージ名(`-` → `_`)で
+       引けること。`Repo::new()` の戻り型 `Self` から `r.find_all()` の受け手の型を推定できること
+    2. 構造体のフィールドの型(`Arc<Repo>`)を剥がして `self.repo.find_all()` を解けること
+    3. 受け手の型が外部(`HashMap`)の `map.get()` が、同名の内部メソッド `Cache.get` へ
+       **解決されないこと**(偽の確定辺)
+    4. 関数の中のローカル変数(`let helper = || …`)が、同じ綴りの関数を**覆う**こと
+    5. `#[cfg(test)]` の中の項目を記号にしないこと
+    6. axum の `.nest("/v1", v1)` — `let` で束ねた変数越しに接頭辞が掛かること
+    7. axum の `.nest("/admin", admin())` — **別の関数**が定義した経路に接頭辞が掛かること
+    8. 経路のハンドラがクロージャのとき、その本体の `client.get("/inner")` を経路と取り違えないこと
+    9. actix の `web::scope("/api").service(item)` — 属性 `#[get]` の経路に接頭辞が掛かり、
+       接頭辞の無い形(`/items/{id}`)が出ないこと
+    10. `let Some(pick) = pick() else {…}` の右辺の `pick` が**関数**に解けること
+        (束縛は文の後から効く。先頭から効かせると辺が消える — 2026-10-31 に実プロジェクトで実測)
+    11. 根が外部のパスの連鎖(`base64::engine::STANDARD.encode(…)`)と、それを束ねた変数の
+        メソッドが、同じ名前の内部メソッド `Codec.encode` へ**解決されないこと**(偽の確定辺。同上)
+    12. 型が外部だと注釈で分かるフィールド(`client: aws_sdk_dynamodb::Client` の
+        `self.client.get_item()`)と引数(`key: &ring::…::RsaKeyPair` の `key.sign()`)のメソッドが、
+        同じ名前の内部メソッドへ**解決されないこと**(2026-11-01 に実プロジェクトで、偽の辺から
+        重大度「高」の取りこぼしの指摘が出た)
+    """
+    try:
+        from cgx import rust_treesitter as _rs
+        _rs._load_parser()
+    except Exception as exc:                       # 抽出器が無い環境では検査しない
+        return [f"rust: 抽出器を読み込めない({exc})"]
+    import copy as _copy
+    import tempfile as _tempfile
+    fcfg = _copy.deepcopy(cfg)
+    for key in ("excludes", "vendor_markers", "test_markers", "tooling_markers"):
+        fcfg[key] = []
+    fcfg["internal_roots"] = ["."]
+    fcfg["source_roots"] = []
+    fcfg.setdefault("languages", {})["rust"] = {"enabled": True, "extensions": [".rs"]}
+    try:
+        with _tempfile.TemporaryDirectory() as td:
+            for rel, body in _RUST_FIXTURE.items():
+                path = Path(td) / rel
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(body, encoding="utf-8")
+            result = _rs.extract(Path(td), fcfg)
+    except Exception as exc:
+        return [f"rust: フィクスチャを抽出できない({exc})"]
+    edges = {(e["from"], e["to"]) for e in result.get("edges", [])}
+    syms = {s["id"] for s in result.get("symbols", [])}
+    ids = {e["id"] for e in result.get("endpoints", [])}
+    out: list[str] = []
+    for label, edge, should in (
+            ("別クレートの use と `Self` の戻り型で受け手を解けていない",
+             ("api/src/handlers.rs::list", "core/src/store.rs::Repo.find_all"), True),
+            ("別クレートの関連関数を解けていない",
+             ("api/src/handlers.rs::list", "core/src/store.rs::Repo.new"), True),
+            ("フィールドの型(Arc<Repo>)を剥がせていない",
+             ("core/src/service.rs::Svc.run", "core/src/store.rs::Repo.find_all"), True),
+            ("外部の型のメソッドが同名の内部メソッドへ解決されている(偽の確定辺)",
+             ("api/src/handlers.rs::shadow", "core/src/store.rs::Cache.get"), False),
+            ("ローカル変数が同じ綴りの関数に覆われていない",
+             ("api/src/handlers.rs::shadow", "api/src/handlers.rs::helper"), False),
+            ("let の右辺の同名関数が、左辺の束縛に覆われている",
+             ("api/src/handlers.rs::binder", "api/src/handlers.rs::pick"), True),
+            ("外部のパスに根を持つ連鎖が同名の内部メソッドへ解決されている(偽の確定辺)",
+             ("api/src/handlers.rs::ext", "core/src/store.rs::Codec.encode"), False),
+            ("外部の型のフィールドのメソッドが同名の内部メソッドへ解決されている(偽の確定辺)",
+             ("core/src/store.rs::Table.read", "core/src/store.rs::Table.get_item"), False),
+            ("外部の型の引数のメソッドが同名の内部メソッドへ解決されている(偽の確定辺)",
+             ("core/src/store.rs::sign_url", "core/src/store.rs::Signer.sign"), False)):
+        if (edge in edges) is not should:
+            out.append(f"rust: {label}: {edge[0]} -> {edge[1]}")
+    if any("tests" in s and s.startswith("api/src/handlers.rs::") for s in syms):
+        out.append("rust: #[cfg(test)] の中の項目を記号にしている")
+    for want in ("GET /v1/users", "GET /admin/stats", "GET /cb", "GET /api/items/{id}",
+                 "dispatch main @ api/src/main.rs::main"):
+        if want not in ids:
+            out.append(f"rust: 経路 {want} が無い(取れたのは {sorted(ids)})")
+    for bad in ("GET /users", "GET /stats", "GET /inner", "GET /items/{id}"):
+        if bad in ids:
+            out.append(f"rust: 接頭辞を落とした・取り違えた経路 {bad} が出ている")
+    return out
+
+
 def run_selftest(root: Path, cfg: dict, langs: list[str], scope: Path | None) -> int:
     """決定性の不変則と、抽出器の回帰フィクスチャを検査する。
 
@@ -841,6 +998,7 @@ def run_selftest(root: Path, cfg: dict, langs: list[str], scope: Path | None) ->
     (3) 出力に行番号・絶対パス・日付が混入していないか
     (4) TS 抽出器がクラスプロパティ形式のメソッドを記号化しているか
     (5) Go 抽出器の名前解決が偽の確定辺を作らないか(`_selftest_go_fixture`)
+    (6) Rust 抽出器の名前解決と経路の接頭辞(`_selftest_rust_fixture`)
     """
     import re as _re
 
@@ -873,6 +1031,7 @@ def run_selftest(root: Path, cfg: dict, langs: list[str], scope: Path | None) ->
 
     failures += _selftest_ts_fixture()
     failures += _selftest_go_fixture(cfg)
+    failures += _selftest_rust_fixture(cfg)
 
     res_list = first.get("resources", [])
     if not sorted_by(res_list, lambda r: r["key"]):
@@ -939,21 +1098,21 @@ def main(argv: list[str]) -> int:
         elif a.startswith("--scope="):
             scope_arg = a.split("=", 1)[1]
         elif a == "--out" and i + 1 < len(args):
-            # **次がフラグなら「値の欠落」である。** `--out $CG_OUT --check` を引用符無しで
+            # **次がオプションなら「値の欠落」である。** `--out $CG_OUT --check` を引用符無しで
             # 書き、`$CG_OUT` が空だと `--out --check` になる。飲み込むと `--check` という名の
             # ディレクトリへ**書き込みが走る**(実測。独立レビュー B)。fail-closed にする。
             if args[i + 1].startswith("--"):
-                print("エラー: --out の値が無い(次がフラグ)。"
+                print("エラー: --out の値が無い(次がオプション)。"
                       "`--out \"$CG_OUT\"` のように**引用符で囲む**こと。")
                 return 2
             i += 1
             out_arg = args[i]
         elif a.startswith("--out="):
-            # `=` 形も同じ扱い: 値がフラグなら欠落である(空白区切りだけ塞いでも
+            # `=` 形も同じ扱い: 値がオプションなら欠落である(空白区切りだけ塞いでも
             # `--out=--check` が素通りして `--check/` へ書き込む。独立検証で実測)
             out_arg = a.split("=", 1)[1]
             if out_arg.startswith("--"):
-                print("エラー: --out= の値がフラグである(値の欠落)。"
+                print("エラー: --out= の値がオプションである(値の欠落)。"
                       "`--out=\"$CG_OUT\"` のように値を渡すこと(変数が空なら解決からやり直す)。")
                 return 2
         else:

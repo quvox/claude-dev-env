@@ -16,9 +16,15 @@ EXTRACTORS: dict[str, str] = {
     "go": "cgx.go_treesitter",
     "infra": "cgx.infra",
     "typescript": "cgx.ts_treesitter",
+    "rust": "cgx.rust_treesitter",
     "shell": "cgx.shell_regex",
     "make": "cgx.make_regex",
 }
+
+# シンボルを出さない抽出器(資源・経路・未解決だけを出す)。この言語が名乗る拡張子
+# (`.tf` / `.yaml` …)は、機能表の入口や `x-impl` として callgraph に現れようがない
+# (`base.unextracted_symbol`。KIT-callgraph-ft1-unsupported-lang)。
+NO_SYMBOLS: frozenset[str] = frozenset({"infra"})
 
 # 未実装だが設定で有効にされうる言語。有効なのに未実装なら明示的に報告する。
 PLANNED: dict[str, str] = {}

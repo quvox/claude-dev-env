@@ -113,7 +113,13 @@ def collect(root: Path, dist: dict) -> dict[str, bytes]:
                     out[rel] = p.read_bytes()
         else:
             p = root / entry
-            if p.is_file() and not excluded(entry, exc):
+            # **リンクは集めない** ★ — ディレクトリの枝と同じ判定である(2026-09-14 まで
+            # この枝だけ抜けていた)。`AGENTS.md` は `CLAUDE.md` へのリンクなので、辿ると
+            # **同じ本文が2つの名前で控えに入り、パッチに同じ差分が2本乗る。**
+            # 当てる側の git はリンクを1行の文字列として持つので、その2本目は必ず落ちる
+            # (実測: `error: kit/AGENTS.md: patch does not apply`)。
+            # **リンク先が配布物に入っていれば、リンク自体は運ばなくてよい。**
+            if p.is_file() and not p.is_symlink() and not excluded(entry, exc):
                 out[entry] = p.read_bytes()
     return dict(sorted(out.items()))
 
@@ -498,10 +504,35 @@ def cmd_diff(args) -> int:
     return 0
 
 
+def collect_symlinks(root: Path, dist: dict) -> list[str]:
+    """同梱リストに載ったもののうち、**シンボリックリンクのパスだけ**を返す。
+
+    **`collect()` はリンクを飛ばす** — パッチはリンクを運べないからである(辿れば
+    リンク先と同じ本文が2つの名前で控えに入り、当てる側の git はリンクを1行の
+    文字列として持つので必ず落ちる)。**しかし配布はリンクをそのまま運ぶ** —
+    tar はリンクを保ち、展開してもリンクのまま戻る(2026-09-14 に実測)。
+    **その2つの要求が食い違うので、集める口を分けてある。**
+    """
+    out = []
+    for entry in dist["include"]:
+        base = root / entry.rstrip("/")
+        cands = sorted(base.rglob("*")) if entry.endswith("/") else [base]
+        for q in cands:
+            if q.is_symlink():
+                rel = q.relative_to(root).as_posix()
+                if not excluded(rel, dist.get("exclude", [])):
+                    out.append(rel)
+    return out
+
+
 def cmd_files(args) -> int:
-    """キットの構成要素を名前順で標準出力へ。配布側が `tar -T` の入力にする。"""
+    """キットの構成要素を名前順で標準出力へ。配布側が `tools/build-tarball.py` への標準入力にする。
+
+    **ここにはリンクも載せる。** パッチの控え(`collect()`)とは要求が違う(上の注記)。
+    """
     root = kit_root()
-    for rel in collect(root, load_dist(root)):
+    dist = load_dist(root)
+    for rel in sorted(set(collect(root, dist)) | set(collect_symlinks(root, dist))):
         sys.stdout.write(rel + ("\0" if args.null else "\n"))
     return 0
 
@@ -601,7 +632,10 @@ def selftest() -> int:
 
         # 改造する
         _w(root / "CLAUDE.md", "rule A\nrule B modified\n")                 # (a)
-        _w(root / ".claude/directions/new.md", "norm 2\n")                  # (b)
+        # **新規ファイルの試験は `.claude/skills/` に置く** ★ — `.claude/directions/` を
+        # 持たないキットが在り(systest)、そこでは同梱リストが拾わないので試験が落ちる。
+        # skills/ はどのキットの include にも在る(スキルの無いものはキットではない)。
+        _w(root / ".claude/skills/y/SKILL.md", "skill 2\n")                 # (b)
         _w(root / ".claude/improvements/KIT-b.md", "new memo\n")            # (j)
         (root / ".claude/skills/x/SKILL.md").unlink()                       # (c)
         _w(root / ".claude/scripts/x.local.json", '{"a":2}\n')              # (d)
@@ -613,7 +647,7 @@ def selftest() -> int:
         new = collect(root, dist)
         text, changed, _ = make_diff(base, new)
         check("(a) 既存ファイルの変更が出る", changed.get("CLAUDE.md") == "変更")
-        check("(b) 新規ファイルが出る", changed.get(".claude/directions/new.md") == "追加")
+        check("(b) 新規ファイルが出る", changed.get(".claude/skills/y/SKILL.md") == "追加")
         check("(c) 削除が出る", changed.get(".claude/skills/x/SKILL.md") == "削除")
         check("(j) 改善の作業跡はパッチに乗らない",
               not any(k.startswith(".claude/improvements") for k in changed))
@@ -742,7 +776,7 @@ def main(argv: list[str] | None = None) -> int:
     d.add_argument("-o", "--out", metavar="FILE", help="出力先を明示する。省略時は標準出力")
     d.set_defaults(func=cmd_diff)
 
-    f = sub.add_parser("files", help="キットの構成要素を名前順に列挙する(配布側の tar -T 用)")
+    f = sub.add_parser("files", help="キットの構成要素を名前順に列挙する(配布側の build-tarball.py 用)")
     f.add_argument("-0", "--null", action="store_true", help="NUL 区切りで出す")
     f.set_defaults(func=cmd_files)
 

@@ -2,7 +2,7 @@
 name: dependabot
 description: GitHub の Dependabot アラートを取り込み、上げられるものを1本にまとめて /build の作業指示にする。アラートの台帳は GitHub 側なので、こちらには写さない。依存そのものは更新しないし、アラートを閉じることもしない
 model: sonnet
-argument-hint: [severity] [--retry <番号,…> | --retry-report <パス>](severity 省略時は open の全件。`critical` / `high` / `medium` / `low` のどれかを渡すと、その重大度以上に絞る。--retry は前の run が上げられなかったアラート番号)
+argument-hint: [severity] [--retry <番号,…> | --retry-report <パス>](severity 省略時は open の全件。`critical` / `high` / `medium` / `low` のどれかを渡すと、その **Dependabot の重大度**以上に絞る。これは GitHub が付ける段階であり、規範の内部の重大度(高/中/低)とは別の尺度である。--retry は前の run が上げられなかったアラート番号)
 ---
 
 # Dependabot アラートの仕分け — まとめて上げ、上がらなかったものだけを見る
@@ -14,7 +14,7 @@ argument-hint: [severity] [--retry <番号,…> | --retry-report <パス>](sever
 **まず上げられるだけ上げる作業指示を作り、上げられなかったものだけを1件ずつ見る。**
 
 **このスキルは依存を1バイトも更新しない。** 依存の更新は製品の振る舞いを変えるので、
-**構築記録を伴う `/build` の仕事である**(CLAUDE.md §4 の小さな修正の例外は、依存の更新にも
+**構築記録を伴う `/build` の仕事である**(`.claude/directions/core.md` §4 の小さな修正の例外は、依存の更新にも
 最小の構築記録を要求している)。ここでやるのは**その手前**である。
 
 **アラートを GitHub 上で閉じる(dismiss する)のも、このスキルの手には無い。** 「使っていない経路だから
@@ -65,7 +65,7 @@ TMP="<このセッションのスクラッチパッド>/dependabot" && mkdir -p 
 # **引数の形は `[severity] [--retry <番号,…> | --retry-report <パス>]` である。**
 # **$ARGUMENTS を丸ごと写さない** ★ — **貼るのは、下の `set --` の1行だけ**である。
 # **解析はここが行う。読み飛ばして空のまま先へ進んではならない** ★ — 空のまま進むと、
-# 重大度の絞り込みも `--retry` も**黙って無視される**(独立検査 2026-09-03 に実測:
+# Dependabot の重大度の絞り込みも `--retry` も**黙って無視される**(独立検査 2026-09-03 に実測:
 # 固定代入だけが書いてあったので、§4 の戻り口が一度も開かなかった)。
 set -- $ARGUMENTS       # ← **ここだけが $ARGUMENTS に触れる。文字列として差し込まれるので、
                         #   シェル変数へ入れてから渡さない** — zsh は変数展開を語に割らないので、
@@ -80,7 +80,7 @@ while [ $# -gt 0 ]; do
                     [ -z "$RETRY$RETRY_REPORT" ] || { echo "--retry と --retry-report は同時に渡せない" >&2; exit 2; }
                     RETRY_REPORT="$2"; shift 2 ;;
     -*)             echo "知らない引数である: $1" >&2; exit 2 ;;
-    *)              [ -z "$SEV_ARG" ] || { echo "重大度は1つだけである: $SEV_ARG と $1" >&2; exit 2; }
+    *)              [ -z "$SEV_ARG" ] || { echo "Dependabot の重大度は1つだけである: $SEV_ARG と $1" >&2; exit 2; }
                     SEV_ARG="$1"; shift ;;
   esac
 done
@@ -113,7 +113,7 @@ case "$SEV_ARG" in
   high)     SEV='&severity=critical,high' ;;
   medium)   SEV='&severity=critical,high,medium' ;;
   low|"")   SEV='' ;;
-  *) echo "重大度は critical / high / medium / low のどれかである: $SEV_ARG" >&2; exit 2 ;;
+  *) echo "Dependabot の重大度は critical / high / medium / low のどれかである: $SEV_ARG" >&2; exit 2 ;;
 esac
 if [ -n "$RETRY" ] && ! printf '%s' "$RETRY" | grep -Eq '^[0-9]+(,[0-9]+)*$'; then
   echo "--retry は数字のカンマ区切りである: $RETRY" >&2; exit 2
@@ -128,7 +128,7 @@ then mv "$TMP/alerts.part" "$TMP/alerts.jsonl"
 else echo "取得に失敗した。HTTP の状態を報告して止まる" >&2; exit 1
 fi
 
-# **戻ってきた番号は、重大度の絞り込みとは別に、1件ずつ「丸ごと」取る** ★ —
+# **戻ってきた番号は、Dependabot の重大度の絞り込みとは別に、1件ずつ「丸ごと」取る** ★ —
 # 絞り込みの外に在る番号も拾うためであり、§4 が使うのは生態系・マニフェスト・`scope`・勧告・
 # `first_patched_version` であって、番号と名前だけでは何も調べられないからである。
 # **1件でも取れなかったら止まる**(欠けた集合で仕分けない)
@@ -236,11 +236,11 @@ gh api --paginate '/repos/{owner}/{repo}/pulls?state=open&per_page=100' \
 - ロックファイルを持たない構成(Maven の `pom.xml`、lock を採らない pip など)
   → **マニフェストが鍵**。
 
-**2本の `/build` が同じファイルを触ることはできない**(CLAUDE.md §4 の並走の規則)ので、
+**2本の `/build` が同じファイルを触ることはできない**(`.claude/directions/core.md` §4 の並走の規則)ので、
 **この鍵を共有するものを分けてはならない。** 鍵が違うものは**別の作業指示の候補**である —
 **「並走できる」とは書かない** ★: 版が設定文書や機械の欄に現れる構成では、鍵が違っても同じ
 文書を2本が動かしうる。**並走の可否をこのスキルは決めない** — **艦隊運用なら**それは
-非交差の証明であり `@triage` の仕事である(CLAUDE.md §4。**「艦隊運用なら」を落とさないこと** —
+非交差の証明であり `@triage` の仕事である(`.claude/directions/core.md` §4。**「艦隊運用なら」を落とさないこと** —
 掲示板の無い運用では `@triage` が居ない)。**艦隊でないなら、作業指示を起こす側が行う。**このスキルは、各作業指示が動かすと見込むファイルの集合を添えて渡すところまでを行う。
 
 **major を跨ぐ更新も、鍵が同じなら同じ1本に入れる。** 別の作業指示にはできない。代わりに、
@@ -255,7 +255,7 @@ gh api --paginate '/repos/{owner}/{repo}/pulls?state=open&per_page=100' \
 2026-09-03 の人間の指示)。
 
 - **上げられたものの記録は、`/build` が書く構築記録1本である** — それは「GitHub が知っている
-  警告」ではなく「こちらが実際に動かしたもの」の記録なので、写しではない(CLAUDE.md §4)。
+  警告」ではなく「こちらが実際に動かしたもの」の記録なので、写しではない(`.claude/directions/core.md` §4)。
 - **上げられなかったもの**(パッチ未提供 / 上げると製品が壊れる)は、**GitHub 側に open のまま残る。
   それが台帳である。** こちらは §5 の報告で1行ずつ名指すだけで、ファイルを作らない。
 - **このスキルは出荷してよいかの判定に一切関わらない** ★(2026-09-03 の人間の指示:
@@ -264,7 +264,7 @@ gh api --paginate '/repos/{owner}/{repo}/pulls?state=open&per_page=100' \
   ここで作ったものを `/build` が実行すれば、構築記録が1本増え、触ったマニフェストと
   ロックファイルが `code_roots` に在るぶん鮮度スタンプが失効する。
   **それは普通の `/build` と同じであって、この例外によるものではない**
-  (だからリリースの直前に配ると、検証の周を1本余計に払う)。**重大度を裁定して人間に決めさせる段も作らない** — このスキルの目的は
+  (だからリリースの直前に配ると、検証の周を1本余計に払う)。**Dependabot の重大度を裁定して人間に決めさせる段も作らない** — このスキルの目的は
   **人間が労力をかけずに脆弱性が減っていくこと**であり、判断を1つ増やすたびにその目的から遠ざかる。
 - したがって、上げられなかったものについて報告に書くのは**事実の1行だけ**でよい:
   どのパッケージが、なぜ上がらなかったか(パッチ未提供 / 上げると壊れる)。
@@ -298,6 +298,8 @@ gh api --paginate '/repos/{owner}/{repo}/pulls?state=open&per_page=100' \
 ```
 /build <生態系> の依存をまとめて更新する(Dependabot アラート #<番号,…> — <n> 件)
 - 上げるもの: <パッケージ> <現在の版> → <目標の版>(まとめて列挙。1行1件)
+  目標の版は `first_patched_version` を下限とする、その時点の最新の安定版
+  (`.claude/directions/delegation.md` §2.3。記憶ではなく公式の配布情報で確かめる)
 - 動かすと見込むファイル: <マニフェスト>[ と <ロックファイル>](並走の可否はこの集合で判定される)
 - 破壊的変更の可能性: <major を跨ぐものだけ名指す。無ければ「無し」>
   major を跨ぐものは独立したコミットにし、コミットごとに試験を通す
@@ -305,12 +307,14 @@ gh api --paginate '/repos/{owner}/{repo}/pulls?state=open&per_page=100' \
   **無い構成**(Maven の `pom.xml` など)ならマニフェストと実際の依存ツリー
   (`mvn dependency:tree` 等)で目標の版が解決していること。加えて、
   触ったモジュールの試験が green・build/lint が green
-- **落ちたときの手当て**: 解決や試験が落ちたら、**落ちた原因のパッケージだけを外して残りを通す。
+- **落ちたときの手当て**: 解決や試験が落ちたら、まず落ちた原因のパッケージを、
+  `first_patched_version` 以上で通る最新の安定版へ下げて試す(`delegation.md` §2.3 の
+  「選べる中で最新」)。**それでも通らないものだけを外して残りを通す。
   外したものは作業指示を分けず、報告に「上げられなかったもの」として名指して返す**
   (依頼元がそれを `/dependabot` の次の run の §4 に掛ける)
 - **仕様ドキュメントは、通常1バイトも動かない** — 依存の版は設計の記述ではないからである。
   動くのは、その版が文書に事実として書かれている場合だけで、そこが機械の欄なら
-  `python3 .claude/scripts/build-facts.py update` が作り直す(CLAUDE.md §7)。
+  `python3 .claude/scripts/build-facts.py update` が作り直す(`.claude/directions/core.md` §6)。
   **版が上がっただけで設計を書き直さない。**
 ```
 

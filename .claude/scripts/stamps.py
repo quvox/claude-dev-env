@@ -14,7 +14,7 @@ git の外に置けば、**検証が通った状態からコードが変わっ�
 各 verify 系フロー(F2 `/verify-docs`・F3 `/verify-impl`・F4 `/verify-tests`)は完走時に
 {flow, scope, commit, 時刻, 判定} を記録する。**デプロイ/リリースのデプロイゲートは
 「verify 系の鮮度スタンプがすべて現在の状態に対して green」と機械的に定義する**(及第ライン —
-規範: CLAUDE.md §4 / .claude/directions/flows.md §2)。
+規範: `.claude/directions/core.md` §4 / .claude/directions/flows.md §2)。
 
 「現在の状態に対して green」の判定:
   **鮮度スタンプ以降に変わったファイル(未コミット・未追跡を含む)が
@@ -23,7 +23,7 @@ git の外に置けば、**検証が通った状態からコードが変わっ�
   例外が2つ: **管理欄だけの変更と、機械の欄の中身だけの変更は失効を作らない**
   (`machine_owned_only` — 管理欄は frontmatter の
   `updated:` 行・`verified:` ブロック、そして**両側が正しい形の `version:` をちょうど1行
-  持つときに限り**その `version:` 行)。F2 の証明書書込みが F3 を毎周失効
+  持つときに限り**その `version:` 行)。F2 の検証済み記録書込みが F3 を毎周失効
   させる構造を消すためである(inspection-16 D2)。**`version:` 行そのものを管理欄に入れたのは
   2026-08-25 の人間の裁定であり、D2 が PATCH までで引いていた線を引き直している。**
   **失効を決めるのは中身であって、版の札ではない** ★ — 本文と管理欄以外の frontmatter が
@@ -31,7 +31,7 @@ git の外に置けば、**検証が通った状態からコードが変わっ�
   (frontmatter は行に分けてから比べるので、**行の区切り方の違いは見ない**。本文はバイトで比べる)。
   「MINOR = 意味が動いた」は中身についての宣言であり、中身が動いていないならその宣言は偽で
   ある。事実と自己申告が食い違うときは事実を採る(CLAUDE.md 原則2)。中身が動いていれば版が
-  据え置きでも失効するので、これは穴ではない(実測 2026-08-25: 証明書を打ち直すだけの run が
+  据え置きでも失効するので、これは穴ではない(実測 2026-08-25: 検証済み記録を打ち直すだけの run が
   本文無変更のまま MINOR を上げ、その1本だけで相手フローの鮮度スタンプが死んでいた)。
   **版の行が消えた・壊れた・重複した側では、版を本文と同じに扱って失効させる** —
   さもないと `version:` を消す変更が管理欄扱いになる(独立レビュー 2026-08-25 の所見1)。
@@ -52,7 +52,7 @@ git の外に置けば、**検証が通った状態からコードが変わっ�
   宣言していないものは何が動いても失効させない。コード側の置き場だけは
   プロジェクトごとに違うので flow-config(.local).json の `code_roots` が正であり、
   **未宣言ならデプロイゲートは red**(fail-closed)。qa 試験区分のコード依存だけは `ui_roots`
-  (UI に関わるコードの置き場)が正で、**未宣言なら code_roots 全体へ倒す**(過大近似 =
+  (操作面に関わるコードの置き場。画面もサブコマンドも入れる)が正で、**未宣言なら code_roots 全体へ倒す**(過大近似 =
   安全側。inspection-17 判断5 — バックエンドだけの変更で探索的ブラウザQAを失効させないための宣言)。
   同梱物(`externals/` 等)の正しさは失効判定ではなく**テスト**が担保する。
   **コードの置き場の中に在るが検証の入力ではないもの**は `code_excludes` で外せる
@@ -71,7 +71,8 @@ git の外に置けば、**検証が通った状態からコードが変わっ�
   どの検証フローも、残務に1行足しただけで F2 を失効させ**、同じ検証の周の中で F2 を
   もう1本払っていた(2026-08-26 の実測。`flows.md` §2)。
   E2E 台本を `testing.md` へ切り出したプロジェクトは `e2e_scripts_in: "testing"` を宣言でき、
-  そのとき e2e / qa の依存から `system.md` が外れる(同 V-4。未宣言は安全側の `"system"`)。
+  そのとき e2e / qa の依存に `testing.md` が入る(同 V-4。未宣言は安全側の `"system"`)。
+  **`system.md` が外れるのは e2e だけである**(2026-09-15。inspection-28 C-21)。
 
 **素の red は「最終 green の基準点」を消さない**(inspection-17 判断4)。latest とは別に
 `last_green` を保持し、部分スタンプも red では捨てない。増分の範囲(「最終 green 以降の差分」)
@@ -81,12 +82,14 @@ git の外に置けば、**検証が通った状態からコードが変わっ�
 latest が red のまま残る)。
 
 **critical: true の awaiting-verify 記録が在るあいだ、F2/F3 の green は `--lens <名前>` 必須**
-(inspection-17 判断9)。CLAUDE.md §6 の「critical は独立レビュー必須」を記録の口で確かめる —
+(inspection-17 判断9)。`setup` の「導入の入口」 の「critical は独立レビュー必須」を記録の口で確かめる —
 防げるのは忘れと依頼の不達であり、申告の嘘は防げない(それはレポートと朝の人間が見る)。
 
 F4 は試験区分別に記録する(unit / integration / e2e / qa)。引数なしの `/verify-tests` は
 全部実施なので全試験区分を一度に記録する。**デプロイゲートは flow-config.json の `f4_scopes`
-に載る全試験区分の green を要求する**(UI の無いプロジェクトは local 設定で `qa` を外す —
+に載る全試験区分の green を要求する**(**人が直接操作する面(画面もサブコマンドも)が1つも
+無いプロジェクト**は local 設定で `qa` を外す — 「画面が無い」だけでは外せない。
+サブコマンドが在るなら探索的CLI QA が走るからである(2026-09-15 の裁定。directions/ux.md §0)。
 それは「見ない」という決定なので、外すなら記録に残すこと。**受理する縮小はこの qa 外しだけ**:
 それ以外の f4_scopes は無視して既定の全試験区分を要求する — fail-closed。inspection-16 H-5)。
 
@@ -127,6 +130,10 @@ inspection-16 D1)。**これはデプロイゲートにも失効判定にも
                                              [--covers <path>]...   # 部分再検証
                                              [--full]               # 全数(all)を回した
                                              [--lens <名前>]        # 走った独立レビュー(critical 時の F2/F3 green に必須)
+                                             [--mode <a1|a2|o1|o2>] [--selected-mode <mode>]
+                                             [--executor <claude|codex>] [--review-engine <claude|codex|none>]
+                                             [--review-reason <理由>] [--degradation-reason <理由>]
+                                             [--model-limit <あり|なし>]  # 使うモデルを軽い層に固定して走ったか
     python3 .claude/scripts/stamps.py check              # 複合のデプロイゲートの判定
     python3 .claude/scripts/stamps.py promote            # 検証が揃った記録を verified へ
     python3 .claude/scripts/stamps.py show               # 一覧(部分スタンプも出す)
@@ -148,8 +155,8 @@ import json
 import re
 import subprocess
 import sys
-from datetime import datetime, timezone
-from pathlib import Path
+from datetime import datetime, timedelta, timezone
+from pathlib import Path, PurePosixPath
 
 try:
     import fcntl                      # 状態ファイルの排他(POSIX のみ。無ければ排他なしで動く)
@@ -190,7 +197,15 @@ DEPENDS: dict[str, tuple[str, ...]] = {
     # 03 の試験表(docs/03-impl/tests/)は suite の結果を1バイトも変えない文書なので依存に
     # 数えない — 数えると「F4 が表の陳腐化を見つける → F3 が直す → コード不変のまま全 suite
     # 失効」という設計内ループになる(inspection-17 判断6。表の整合は F2 の網が見る)。
-    "verify-tests:unit": (CODE,),
+    # **unit だけは、資格情報の混入検査の配線も依存に入れる** ★(2026-09-13。裁定 A2-5)—
+    # 出荷を止めるのはこの試験区分1つだけなので(`principles.md` §12 の完了定義)、
+    # **検査のコマンドを消しても unit の古い green が残る**なら、その唯一の関所が素通りする。
+    # 入れるのは配線を持つ3つだけである(`environments.md` はコマンドの正、
+    # `tests/gates.yml` は呼ぶかどうか、`tests/adapters.yml` は実体)。
+    # **`scope_roots.unit` を宣言した構成では、これらは `<code>` の外に落ちる** — だから
+    # 名指しで足す。テスト基盤を持たないプロジェクトではこの3つが実在しないので、何も起きない。
+    "verify-tests:unit": (CODE, "tests/gates.yml", "tests/adapters.yml",
+                          "docs/02-design/environments.md"),
     "verify-tests:integration": (CODE,),
     # e2e は台本(02 の E2E-nn — 置き場は system.md、切り出し後は testing.md。固定の外に
     # 出た E2E-nn は check-ssot.py の CS22 が違反にする)・実行コマンド(environments)・
@@ -202,17 +217,22 @@ DEPENDS: dict[str, tuple[str, ...]] = {
     "verify-tests:e2e": (CODE, "docs/03-impl/tests/e2e.md", "docs/02-design/system.md",
                          "docs/02-design/testing.md", "docs/02-design/environments.md",
                          "docs/00-requests/acceptances.md"),
-    # qa のコード依存は ui_roots(UI に関わるコードの置き場)が正 — 未宣言なら code_roots
+    # qa のコード依存は ui_roots(操作面に関わるコードの置き場)が正 — 未宣言なら code_roots
     # 全体(過大近似 = 安全側)。02 依存も D3 と同じ手で絞る: 「適用外(UI 無し)」の宣言も、
     # 実行環境と宛先 allowlist も environments.md に在る(02-design.md の
     # 「ブラウザQAの宛先 allowlist」が所有する)。system.md は E2E 台本のため(inspection-17 判断5 —
     # logging.md の散文修正で探索的ブラウザQAが失効する増幅を消す)。
     # docs/ux/(UX 文書)は qa だけの依存である(2026-08-28)。UX 文書は文書検証・実装整合
-    # 検証の依存の外に居るので(directions/ux.md §0)、ここに足さないと、実画面と食い違う内容へ
+    # 検証の依存の外に居るので(directions/ux.md §0)、ここに足さないと、実物と食い違う内容へ
     # 書き換えてもどの検査も鳴らずに出荷できてしまう。失効は周回末の @qa(qa 試験区分の run)が
-    # 実画面との突き合わせで戻す。
+    # 実物との突き合わせで戻す。**docs/ux/ 配下は画面(screens/)だけでなくコマンド
+    # (commands/)も含む**ので、この1行でコマンドの面の失効も覆っている(2026-09-15)。
+    # 01(要件)も qa の依存である ★(2026-09-15。inspection-28 C-24)— 探索的QAは
+    # 「利用者への約束」を読んで当たりを付けるので、約束が変われば見たものは古い。
+    # ここに無いと、要件を書き換えても qa の green が残る。
     "verify-tests:qa": (UI, "docs/ux/", "docs/02-design/system.md",
                         "docs/02-design/environments.md",
+                        "docs/01-requirements/",
                         "docs/00-requests/acceptances.md"),
     # 試験区分別の行が無い verify-tests(将来試験区分が増えたとき)の受け皿。
     "verify-tests": (CODE, "docs/03-impl/tests/"),
@@ -256,7 +276,8 @@ def e2e_scripts_in(root: Path) -> str:
     """E2E 台本(`E2E-nn`)の置き場の宣言。`"system"`(既定)か `"testing"`。
 
     切り出しの済んだプロジェクトだけが `"testing"` を宣言でき、そのとき
-    `docs/02-design/system.md` は e2e / qa の依存から外れ、代わりに `testing.md` が入る。
+    `docs/02-design/testing.md` が e2e / qa の依存に入る。**`system.md` が外れるのは
+    e2e だけである**(2026-09-15。inspection-28 C-21)。
     モジュール分割定義の散文を直しただけの `/build` で最も高価な E2E suite 全件と
     探索的ブラウザQA が失効する過大近似を消すためである(inspection-20 V-4)。
     **未宣言・不正値はすべて `"system"` へ倒す**(過大近似 = 安全側)。
@@ -344,8 +365,10 @@ def head(root: Path) -> str | None:
 def dirty(root: Path) -> list[str] | None:
     """未コミット・未追跡のパス。読めなければ None(=判定不能)。
 
-    改名(`R  old -> new`)は**新しい側**を返す。古い側の名前で覆い判定をすると、
-    もう存在しないパスを「動いた」と数えてしまう。
+    改名(`R  old -> new`)は**両側**を返す ★ — 古い側は「そこから消えた」という変更で
+    あり、依存に掛かるならそれで失効させるのが正しい。新しい側だけを返していたあいだ、
+    `src/` から監視範囲の外(`archive/` など)へ移すと **`src/` から消えたことが
+    どこにも伝わらず、古い green がそのまま生き残った**(inspection-27 C-8)。
     """
     try:
         out = subprocess.run(["git", "status", "--porcelain"],
@@ -358,32 +381,56 @@ def dirty(root: Path) -> list[str] | None:
             continue
         raw = line[3:].strip().strip('"')
         if " -> " in raw:
-            raw = raw.split(" -> ", 1)[1].strip().strip('"')
+            old, new = raw.split(" -> ", 1)
+            paths.append(old.strip().strip('"'))
+            paths.append(new.strip().strip('"'))
+            continue
         paths.append(raw)
+    return paths
+
+
+def diff_paths(root: Path, spec: str) -> list[str] | None:
+    """`git diff` で動いたパス。読めなければ None(=判定不能)。
+
+    **`--name-only` を使わない** ★ — 改名が検出されると新しい側しか出さないので、
+    監視範囲の外へ移した移動元の消滅が拾えない(`dirty` と同じ穴。inspection-27 C-8)。
+    `--name-status` の `R` は**両側**を数える。`C`(コピー)は旧側が残るので新しい側だけ
+    数える(既定では出ないが、`diff.renames` の設定次第で出うる)。
+    """
+    try:
+        out = subprocess.run(["git", "diff", "--name-status", spec],
+                             cwd=root, capture_output=True, text=True, check=True)
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    paths: list[str] = []
+    for line in out.stdout.splitlines():
+        cols = [c.strip().strip('"') for c in line.split("\t")]
+        if len(cols) < 2 or not cols[0]:
+            continue
+        status, names = cols[0], [c for c in cols[1:] if c]
+        if status.startswith("R") and len(names) >= 2:
+            paths += [names[0], names[1]]
+        elif status.startswith("C") and len(names) >= 2:
+            paths.append(names[1])
+        else:
+            paths += names
     return paths
 
 
 def changed_since(root: Path, commit: str) -> list[str] | None:
     """commit..HEAD で変わったパス + 未コミットの変更。読めなければ None(=判定不能)。"""
-    try:
-        diff = subprocess.run(["git", "diff", "--name-only", f"{commit}..HEAD"],
-                              cwd=root, capture_output=True, text=True, check=True)
-    except (OSError, subprocess.CalledProcessError):
+    committed = diff_paths(root, f"{commit}..HEAD")
+    if committed is None:
         return None
     pending = dirty(root)
     if pending is None:
         return None
-    return [line.strip() for line in diff.stdout.splitlines() if line.strip()] + pending
+    return committed + pending
 
 
 def changed_between(root: Path, a: str, b: str) -> list[str] | None:
     """a..b で変わったパス(未コミットは見ない)。読めなければ None(=判定不能)。"""
-    try:
-        diff = subprocess.run(["git", "diff", "--name-only", f"{a}..{b}"],
-                              cwd=root, capture_output=True, text=True, check=True)
-        return [line.strip() for line in diff.stdout.splitlines() if line.strip()]
-    except (OSError, subprocess.CalledProcessError):
-        return None
+    return diff_paths(root, f"{a}..{b}")
 
 
 # 版の行の正規形。**ASCII だけを受け付ける** ★ — `\s` は全角空白を、`\d` は全角数字を通す
@@ -539,7 +586,11 @@ def scope_roots(root: Path, scope: str | None) -> list[str]:
 
 
 def ui_roots(root: Path) -> list[str]:
-    """UI に関わるコードの置き場(qa 試験区分の失効判定用)。空 = 未宣言。
+    """操作面に関わるコードの置き場(qa 試験区分の失効判定用)。空 = 未宣言。
+
+    **名前は画面だけを指すように読めるが、サブコマンドの実装も入れる** — qa 試験区分は
+    画面とコマンドの両方の探索的QAを持つ(directions/ux.md §0)。宣言の名前は据え置いた —
+    改名すると、既に宣言しているプロジェクトの設定が黙って効かなくなるからである。
     **未宣言は red ではなく code_roots 全体へ倒す**(過大近似 = 安全側 —
     inspection-17 判断5。狭く誤宣言したときだけ穴になるので、既定は広いほう)。"""
     for rel in (LOCAL, CONFIG):        # local が優先(code_roots と同じ規則)
@@ -610,14 +661,22 @@ def code_excludes(root: Path) -> list[str]:
             #     入れ子の置き場も試験区分ごとの狭い宣言も、`code_roots` より真に狭いので、
             #     `code_roots` とだけ比べる等号検査はどちらもすり抜ける
             #     (2026-08-22 の独立検査。親 → 等号 → 入れ子 → 試験区分ごとの値、と4度指摘された)。
+            # **(2) は `code_roots` の親だけでは足りない** ★ — 試験区分ごとの宣言
+            # (`scope_roots`)や `ui_roots` の**親**は `code_roots` の中に在るので、
+            # 「置き場の中か」の検査だけでは通ってしまう(2026-09-13。C3-5。実測:
+            # `code_roots = ["src/"]`、`scope_roots.unit = ["src/ui/components/"]` の下で
+            # `code_excludes = ["src/ui/"]` が受理され、unit は二度と失効しなくなった)。
             # **置き場そのものを外したいなら、`code_excludes` ではなく `code_roots` から
             # その項目を消すのが正しい形である。**
             # 置き場が**ファイル**のときは、その下に在るものは存在しえないので容れ物に数えない
             # (`code_roots` は「ファイルでもディレクトリでもよい」— `flow-config.json`)。
             declared = {r.rstrip("/") for r in all_declared_roots(root)}
             def strictly_inside(x: str) -> bool:
-                if x.rstrip("/") in declared:
-                    return False        # (3) 宣言されたどれかの置き場そのもの(試験区分ごとの値も含む)
+                xx = x.rstrip("/")
+                # (3) 宣言されたどれかの置き場そのもの、および (2) その**親**。
+                # `under` は等しいときも真なので、この1行が2種類をまとめて落とす。
+                if any(under(d, xx) for d in declared):
+                    return False
                 return any(under(x, r) and not (root / r).is_file() for r in roots)
             return [x for x in v if x and strictly_inside(x)]
     return []
@@ -684,11 +743,16 @@ def depends(root: Path, flow: str, scope: str | None) -> tuple[list[str], bool]:
             out.extend(ui)
         else:
             out.append(r)
-    # E2E 台本を testing.md へ切り出したと宣言したプロジェクトでは、e2e / qa の依存から
-    # system.md を外し、testing.md を入れる(inspection-20 V-4)。宣言が無ければ何もしない。
+    # E2E 台本を testing.md へ切り出したと宣言したプロジェクトでは、台本の置き場が
+    # そちらへ移るので testing.md を依存に足す(inspection-20 V-4)。宣言が無ければ何もしない。
+    # **system.md を外すのは e2e だけである** ★(2026-09-15。inspection-28 C-21)—
+    # qa にとっての system.md は台本の置き場ではなく、**何を触って確かめるのかの宣言**
+    # (画面とサブコマンドの有無)である。外すと、「サブコマンド無し」→「有り」の訂正が
+    # qa を失効させず、確かめていない操作面を抱えたまま green で出荷できる。
     if dep_key(flow, scope) in ("verify-tests:e2e", "verify-tests:qa") \
             and e2e_scripts_in(root) == "testing":
-        out = [x for x in out if x != "docs/02-design/system.md"]
+        if dep_key(flow, scope) == "verify-tests:e2e":
+            out = [x for x in out if x != "docs/02-design/system.md"]
         if "docs/02-design/testing.md" not in out:
             out.append("docs/02-design/testing.md")
     return out, undeclared
@@ -883,21 +947,52 @@ def uncommitted_in(root: Path, prefixes: list[str],
     return sorted({p for p in pending if depends_on(p, prefixes, excl)})
 
 
-CLOSURE_LINE = re.compile(r"^[-*]\s+`?([\w][\w./-]*)`?")
+# **書式の正は `build-record.md` であり、読み方は3本の道具でそろえる** ★ —
+# `check-buildrecord.py` / `check-baseline-verdicts.py` と同じ式である(2026-09-13。C2-6)。
+# 先頭の `.` を許し、バッククォートで囲めば空白を含む名前も終端まで読む。
+CLOSURE_LINE = re.compile(r"^[-*]\s+`([^`]+)`|^[-*]\s+(\S+)")
+CLOSURE_BARE = re.compile(r"[\w.][\w./+-]*\Z")
+CLOSURE_ITEM = re.compile(r"^[-*]\s+\S")
 CLOSURE_PLACEHOLDER = re.compile(r"<[^<>\n]{0,60}>")
 
 
-def closure_of(text: str) -> list[str]:
-    """構築記録の `## 影響範囲(closure)` に並ぶ実パス。見出しの正は build-record.md。"""
+def _safe_rel(rel: str) -> bool:
+    """リポジトリの中を指す形か。上へ出る形と絶対パスは断る。"""
+    if not rel or rel.startswith(("/", "~")):
+        return False
+    return ".." not in PurePosixPath(rel).parts
+
+
+def _norm_rel(rel: str) -> str:
+    """`./src/x.go` を `src/x.go` にする。"""
+    return "/".join(p for p in PurePosixPath(rel).parts if p != ".")
+
+
+def closure_of(text: str) -> tuple[list[str], bool]:
+    """(構築記録の `## 影響範囲(closure)` に並ぶ実パス, 読めない行が在ったか)。
+    見出しの正は build-record.md。**読めない行は黙って捨てず、呼び手へ伝える** ★ —
+    捨てると、その行が覆いの中を指していたかどうかを判定できないまま
+    「覆いの外」と読まれる(2026-09-13。C2-6)。"""
     m = re.search(r"^##[^\n]*影響範囲[^\n]*$(.*?)(?=^##\s|\Z)", text, re.M | re.S)
     if not m:
-        return []
-    out = []
-    for line in m.group(1).splitlines():
-        hit = CLOSURE_LINE.match(line.strip())
-        if hit and not CLOSURE_PLACEHOLDER.search(line):
-            out.append(hit.group(1))
-    return out
+        return [], False
+    out, unreadable = [], False
+    for raw in m.group(1).splitlines():
+        line = raw.strip()
+        hit = CLOSURE_LINE.match(line)
+        if not hit:
+            if CLOSURE_ITEM.match(line) and not CLOSURE_PLACEHOLDER.search(line):
+                unreadable = True
+            continue
+        rel = (hit.group(1) or hit.group(2)).strip()
+        # 差し込み記号を見るのは名前の側だけである(`check-buildrecord.py` と同じ)
+        if CLOSURE_PLACEHOLDER.search(rel):
+            continue
+        if not _safe_rel(rel) or (hit.group(1) is None and not CLOSURE_BARE.match(rel)):
+            unreadable = True
+            continue
+        out.append(_norm_rel(rel))
+    return out, unreadable
 
 
 def critical_awaiting(root: Path, covers: list[str] | None = None) -> list[str]:
@@ -923,17 +1018,162 @@ def critical_awaiting(root: Path, covers: list[str] | None = None) -> list[str]:
         if len(parts) <= 2 or not re.search(r"(?m)^critical:\s*true\b", parts[1]):
             continue
         if covers:
-            cl = closure_of(text)
-            # クロージャが読めない記録は安全側で要求する(fail-closed)
-            if cl and not any(under(c, x) or under(x, c) for c in covers for x in cl):
+            cl, unreadable = closure_of(text)
+            # クロージャが読めない記録は安全側で要求する(fail-closed)。
+            # **読めない行が1本でも在る記録も同じ扱いにする** ★ — その行が覆いの中を
+            # 指していたかもしれないからである(2026-09-13。C2-6)
+            if cl and not unreadable \
+                    and not any(under(c, x) or under(x, c) for c in covers for x in cl):
                 continue
         out.append(p.name)
     return out
 
 
+def ledger_fields(root: Path, names: tuple[str, ...]):
+    """進行中のミッション台帳から、指定した frontmatter の欄だけを読む。
+
+    台帳の規約は単行の値で、インラインコメント・重複欄を許さない
+    (`orchestration.md` §7。重複は「どちらが効いたのか」を後から決められなくする)。
+    """
+    for path in sorted((root / ".claude/missions").glob("*/ledger.md")):
+        text = path.read_text(encoding="utf-8")
+        parts = text.split("---", 2)
+        if not text.startswith("---\n") or len(parts) < 3:
+            continue
+        fields = {}
+        for name in ("状態",) + names:
+            values = re.findall(r"(?m)^" + name + r":[ \t]*([^\n]*)$", parts[1])
+            if len(values) > 1:
+                raise ValueError(f"台帳 {path.name} の {name} が重複している")
+            if values:
+                fields[name] = values[0].strip().strip("\"'")
+        if fields.get("状態") != "進行中":
+            continue
+        yield path, fields
+
+
+def mission_model_limit(root: Path) -> str | None:
+    """進行中の台帳の `モデル制限:` を読む。欄の無い台帳(導入より古いもの)は None。
+
+    モデル制限は運用モードとは独立の、人間が指示したときだけ入る状態である
+    (`orchestration.md` §1.5 の最後の小節)。**ここが正なのは台帳のほうで**、
+    記録に添えた値が台帳と食い違えば record が拒む — 軽いモデルだけで出した green が、
+    そうと分からないまま証跡に残ることを防ぐためである。
+    """
+    found = set()
+    for path, fields in ledger_fields(root, ("モデル制限",)):
+        value = fields.get("モデル制限")
+        if value is None:
+            continue
+        if value not in ("あり", "なし"):
+            raise ValueError(f"台帳 {path.name} の モデル制限 は あり か なし")
+        found.add(value)
+    if len(found) > 1:
+        raise ValueError("進行中の台帳でモデル制限の値が割れているので先に台帳を直すこと")
+    return found.pop() if found else None
+
+
+def mission_modes(root: Path) -> tuple[str, str] | None:
+    """明示選択した進行中の台帳だけ読む。モード明示なしの a1 は従来どおり扱う。
+
+    **人間の明示が無いときの既定は中央エージェントのエンジンで決まる** — claude なら a1、
+    codex なら o1 である(`orchestration.md` §1.2.1)。台帳に書かれた値だけを見るこの関数から
+    見ると、その違いは「a1 かつ モード明示: なし」(= 従来の未選択 a1。旧形式の記録を
+    そのまま許す)と「それ以外」(= 明示選択したものと同じ扱い。拡張記録を要求する)である。
+    明示モードで引数を忘れて旧形式へ落ちるのを防ぐ。複数の明示台帳を推測で選ばない。
+    台帳の規約は単行の値で、インラインコメント・重複欄・不正値を許さない。
+    """
+    found = []
+    for _path, fields in ledger_fields(root, ("選択モード", "実効モード", "モード明示")):
+        if "選択モード" not in fields and "実効モード" not in fields:
+            continue
+        selected, effective = fields.get("選択モード"), fields.get("実効モード")
+        if selected not in ("a1", "a2", "o1", "o2") or effective not in ("a1", "a2", "o1", "o2"):
+            raise ValueError("進行中の台帳のモード欄が欠落または不正")
+        explicit = fields.get("モード明示", "なし" if selected == effective == "a1" else "あり")
+        if explicit not in ("あり", "なし"):
+            raise ValueError("モード明示は あり または なし")
+        if selected == effective == "a1" and explicit == "なし":
+            continue
+        found.append((selected, effective))
+    if len(found) > 1:
+        raise ValueError("明示モードの進行中台帳が複数在るので先に対象を確定すること")
+    return found[0] if found else None
+
+
+def execution_metadata(mode: str | None, selected_mode: str | None,
+                       executor: str | None, review_engine: str | None,
+                       review_reason: str | None, degradation_reason: str | None,
+                       lens: str | None, model_limit: str | None = None) -> dict:
+    """申告したエンジンの組と縮退を検査する。旧形式は維持し、実行の真偽は証跡で確認する。
+
+    形式を置換せず任意の execution 区画を足す理由は、旧 a1 のスタンプとデプロイゲートを
+    版上げだけで失効させないため。呼出し側は明示モードの記録に必ずこの区画を渡す。
+
+    **モデル制限(`orchestration.md` §1.5)は運用モードとは独立なので、モードの申告が
+    1つも無い記録でも あり なら区画を作る** — 軽い層のモデルだけで出した green が、
+    そうと分からないまま証跡に残らないようにするためである。なし のときは何も足さない
+    (制限なしがこれまでどおりの既定であり、旧形式の記録をそこで変えない)。
+    """
+    if model_limit is not None and model_limit not in ("あり", "なし"):
+        raise ValueError("--model-limit は あり か なし")
+    values = (mode, selected_mode, executor, review_engine, review_reason, degradation_reason)
+    if all(v is None for v in values):
+        return {"execution": {"model_limit": "あり"}} if model_limit == "あり" else {}
+    modes = ("a1", "a2", "o1", "o2")
+    if mode not in modes or executor not in ("claude", "codex"):
+        raise ValueError("拡張記録には --mode と --executor の正しい値が必要")
+    selected = selected_mode if selected_mode is not None else mode
+    if selected not in modes or (selected != mode and (selected, mode) not in
+                                (("a1", "a2"), ("o1", "o2"))):
+        raise ValueError("選択モードからの自動縮退は a1→a2、o1→o2 だけ")
+    if selected != mode and not (degradation_reason or "").strip():
+        raise ValueError("縮退後の記録には --degradation-reason が必要")
+    main_engine = "claude" if mode.startswith("a") else "codex"
+    expected_review = ("codex" if main_engine == "claude" else "claude") \
+        if mode.endswith("1") else main_engine
+    if executor != main_engine:
+        raise ValueError("主実行エンジンが実効モードの中心側と違う")
+    if review_engine not in (expected_review, "none"):
+        raise ValueError("レビューエンジンが実効モードの組と違う")
+    if review_engine == "none":
+        if lens or not (review_reason or "").strip():
+            raise ValueError("未実施レビューには名前を付けず --review-reason を記録する")
+    elif not (lens or "").strip():
+        raise ValueError("実施したレビューには --lens の実際の名前が必要")
+    return {"execution": {"selected_mode": selected, "effective_mode": mode,
+                          "executor": executor, "review_engine": review_engine,
+                          "review_reason": review_reason or "",
+                          "degradation_reason": degradation_reason or "",
+                          "model_limit": model_limit or "なし"}}
+
+
 def record(root: Path, flow: str, verdict: str, scopes: list[str],
            covers: list[str] | None = None, full: bool = False,
-           lens: str | None = None) -> int:
+           lens: str | None = None, evidence: list[str] | None = None,
+           mode: str | None = None, selected_mode: str | None = None,
+           executor: str | None = None, review_engine: str | None = None,
+           review_reason: str | None = None, degradation_reason: str | None = None,
+           model_limit: str | None = None) -> int:
+    try:
+        ledger_modes = mission_modes(root)
+        if ledger_modes:
+            selected, effective = ledger_modes
+            if mode is not None and mode != effective or \
+                    selected_mode is not None and selected_mode != selected:
+                raise ValueError("記録のモードが進行中の台帳と違う")
+            mode, selected_mode = effective, selected
+        # モデル制限も台帳が正である(モードと同じ扱い)。欄の無い台帳では添えた値をそのまま使う。
+        ledger_limit = mission_model_limit(root)
+        if ledger_limit is not None:
+            if model_limit is not None and model_limit != ledger_limit:
+                raise ValueError("記録のモデル制限が進行中の台帳と違う")
+            model_limit = ledger_limit
+        metadata = execution_metadata(mode, selected_mode, executor, review_engine,
+                                      review_reason, degradation_reason, lens, model_limit)
+    except (OSError, ValueError) as error:
+        print(f"エラー: {error}", file=sys.stderr)
+        return 2
     if flow not in FLOWS:
         print(f"エラー: 不明なフロー {flow}(verify-docs / verify-impl / verify-tests)",
               file=sys.stderr)
@@ -961,15 +1201,54 @@ def record(root: Path, flow: str, verdict: str, scopes: list[str],
         print("エラー: F4 に全数の印は無い(毎回が suite 丸ごと=全数であり、全数でしか"
               "回らない検査も無い — flows.md §2.1)", file=sys.stderr)
         return 2
+    # **green には証跡を添える** ★(2026-09-15。inspection-28 A-7)。
+    # これまで green は**完全な自己申告**だった — 走らせた当人が「通った」と書くだけで、
+    # 実際に何を走らせ、何が返ったのかは、どこにも残らなかった。デプロイの可否はこの記録を
+    # 読んで決まるので、**取り違えや思い込みを打ち消すものが1つも無かった。**
+    # ここで要求するのは「**中身の在るファイルが実在すること**」だけである —
+    # **その中身が本物かどうかは保証しない**(それは別の仕組みの仕事である)。
+    # それでも、後から人間や別のエージェントが**現物を開いて確かめられる**ようになる。
+    # red には要らない(落ちたことを記録するのに証跡は要らない)。
+    evidence = [e.strip() for e in (evidence or []) if e.strip()]
+    if verdict == "green":
+        if not evidence:
+            print("エラー: green の記録には --evidence <path> が要る"
+                  "(実際に走らせた結果の置き場。複数可)。"
+                  "実行結果は artifacts/ の下に残し、そのパスを渡すこと。"
+                  "red には要らない", file=sys.stderr)
+            return 2
+        for e in evidence:
+            # **リポジトリの中の相対パスだけを受ける** ★ — 絶対パスや `..` を許すと、
+            # 一時ディレクトリの消えるファイルを指した記録が残り、後から誰も開けない
+            # (記録は git で共有するものなので、指す先も共有される場所でなければ意味が無い)。
+            if PurePosixPath(e).is_absolute() or e.startswith("/") or ".." in Path(e).parts:
+                print(f"エラー: 証跡 {e} はリポジトリの中の相対パスで渡すこと"
+                      "(絶対パスと `..` は受けない — 記録は git で共有するので、"
+                      "指す先も共有される場所である必要がある)", file=sys.stderr)
+                return 2
+            f = root / e
+            if not f.is_file():
+                print(f"エラー: 証跡 {e} が実在しない(記録する前に書き出すこと)", file=sys.stderr)
+                return 2
+            try:
+                if f.stat().st_size == 0:
+                    print(f"エラー: 証跡 {e} が空である(空のファイルは何も示さない)",
+                          file=sys.stderr)
+                    return 2
+            except OSError as err:
+                print(f"エラー: 証跡 {e} を読めない: {err}", file=sys.stderr)
+                return 2
+
     # critical な仕事が検証待ちのとき、F2/F3 の green は独立レビューの実施を名乗って記録する
-    # (CLAUDE.md §6 の必須を機械に接続する — inspection-17 判断9)。これが防ぐのは
+    # (`setup` の「導入の入口」 の必須を機械に接続する — inspection-17 判断9)。これが防ぐのは
     # 「忘れ・依頼の不達に気づかないまま完走」であって嘘ではない(申告ベース)。
-    if verdict == "green" and flow in ("verify-docs", "verify-impl") and not lens:
+    if verdict == "green" and (flow in ("verify-docs", "verify-impl") or
+                               (flow == "verify-tests" and metadata)) and not lens:
         crit = critical_awaiting(root, covers)
         if crit:
             print(f"エラー: この run の範囲に掛かる critical: true の awaiting-verify 記録が在る"
                   f"({', '.join(crit)})— green の記録には独立レビューの実施が必須"
-                  "(CLAUDE.md §6)。--lens <実際に走った独立レビューの名前> を添えて記録すること。"
+                  "(`setup` の「導入の入口」)。--lens <実際に走った独立レビューの名前> を添えて記録すること。"
                   "独立レビューが起こせない・返らない run は green を記録せず中断する"
                   "(/verify-docs §2)", file=sys.stderr)
             return 2
@@ -1013,8 +1292,11 @@ def record(root: Path, flow: str, verdict: str, scopes: list[str],
     for scope in (scopes or [None]):
         k = key(flow, scope)
         entry = {"flow": flow, "scope": scope, "commit": sha, "at": now, "verdict": verdict}
+        entry.update(metadata)
         if lens:
             entry["lens"] = lens
+        if evidence:
+            entry["evidence"] = sorted(set(evidence))
         br = resolved_roots(root, flow, scope)
         if br is not None:
             entry["code_roots"] = br        # 宣言を変えたら見直す(D8。qa は ui_roots の解決値)
@@ -1162,6 +1444,94 @@ def needed(root: Path) -> list[tuple[str, str | None]]:
         + [("verify-tests", s) for s in f4_scopes(root)]
 
 
+def quarantine_overdue(root: Path) -> tuple[list[str], list[str]]:
+    """一時除外(quarantine)のうち、**いま**期限が切れているものを返す ★
+    (2026-09-15。inspection-28 A-20)。
+
+    返すのは (期限切れの一覧, 読めなかった行の一覧)。
+
+    **なぜデプロイゲートが見るのか。** 期限の経過はファイルを1バイトも変えないので、
+    鮮度スタンプの失効判定(コミット間の変更を見る)には**決して映らない**。
+    期限内に green を取って、何も触らずに期限を越えれば、出荷の瞬間には
+    「すべての検証が現在の状態に対して有効」と出る。試験を走らせる瞬間の
+    `quarantine_overdue: fail` は、その試験を走らせなければ効かない。
+
+    **fail-closed**。`due` が無い・読めない項目は期限切れとして扱う
+    (宣言の正: test-runner-usage/references/declarations.md「`due` を省略すると
+    『期限切れ』として扱う」)。判定は同じ規則である —
+    `due` は UTC で、**その翌日の 00:00:00 UTC を過ぎたら期限切れ**。
+
+    yaml を読む道具には依存しない(このスクリプトは標準ライブラリだけで動く)。
+    宣言は1項目1ブロックの平たい形なので、`test:` と `due:` の行だけを拾う。
+
+    **読めない書き方は、黙って飛ばさずに「読めなかった」として返す** ★ —
+    それが fail-closed の意味である。yaml には1行に畳む書き方(`- {test: …, due: …}`)や
+    複数行にまたがる書き方も在り、この読み方はそれらを正しく解釈できない。
+    **飛ばすと、期限切れの項目が「無かったこと」になる。**
+    値を囲む引用符(`"` でも `'` でも)は外して読む。
+    """
+    path = root / "tests/quarantine.yml"
+    if not path.is_file():
+        return [], []
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError as e:
+        return [], [f"{path} を読めない: {e}"]
+    now = datetime.now(timezone.utc)
+    overdue: list[str] = []
+    unreadable: list[str] = []
+    name: str | None = None
+    due: str | None = None
+
+    def close() -> None:
+        if name is None:
+            if due is not None:
+                unreadable.append(f"名前(test:)を読めない項目が在る(due: {due})")
+            return
+        if due is None:
+            overdue.append(f"{name}(due が無い)")
+            return
+        try:
+            d = datetime.strptime(due, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        except ValueError:
+            unreadable.append(f"{name}(due が日付として読めない: {due})")
+            return
+        if now > d + timedelta(days=1):
+            overdue.append(f"{name}(due: {due})")
+
+    def unquote(v: str) -> str:
+        v = v.strip()
+        for q in ('"', "'"):
+            if len(v) >= 2 and v.startswith(q) and v.endswith(q):
+                return v[1:-1]
+        return v
+
+    for raw in lines:
+        line = raw.strip()
+        if line.startswith("- "):
+            close()
+            name, due = None, None
+            line = line[2:].strip()
+            if line.startswith("{"):
+                # 1行に畳んだ書き方。この読み方では解釈しきれないので、読めないと言う。
+                unreadable.append(f"1行に畳んだ書き方は読めない: {raw.strip()[:80]}")
+                name, due = None, None
+                continue
+        m = re.match(r'(test|due)\s*:\s*(.*?)\s*$', line)
+        if not m:
+            continue
+        value = m.group(2)
+        if not (value.startswith('"') or value.startswith("'")):
+            value = value.split("#", 1)[0].rstrip()   # 裸の値の行末コメントだけを落とす
+        value = unquote(value)
+        if m.group(1) == "test":
+            name = value or "(名前が空)"
+        else:
+            due = value or None
+    close()
+    return overdue, unreadable
+
+
 def check(root: Path) -> int:
     data = load_stamps(root)
     latest = data["latest"]
@@ -1211,7 +1581,7 @@ def check(root: Path) -> int:
             print(f"          {k} — {why}")
         print("        直し方: .claude/scripts/flow-config.local.json に")
         print('          "scope_roots": {"<試験区分>": ["<その試験区分に関わる置き場>", ...], ...}')
-        print('          "ui_roots": ["<画面に関わる置き場>", ...]   # qa 試験区分だけに効く')
+        print('          "ui_roots": ["<操作面(画面・コマンド)に関わる置き場>", ...]   # qa 試験区分だけに効く')
         print("        を書く。**判定は今までどおり fail-closed である** — "
               "宣言しないままでも安全側に倒れる。")
         print("        **狭く誤ると穴になる**(見るべき変更が素通りする)ので、迷ったら宣言しない。")
@@ -1245,6 +1615,16 @@ def check(root: Path) -> int:
     if sheets:
         ok = False
         print(f"  NG  未回答のシート: {', '.join(sheets)} — 人間への問いを抱えたままデプロイしない")
+    overdue, unreadable_q = quarantine_overdue(root)
+    if overdue:
+        ok = False
+        print(f"  NG  期限切れの一時除外: {', '.join(overdue)} — "
+              "期限の経過はファイルを変えないので鮮度スタンプには映らない。"
+              "戻すか、課題票と tests/quarantine.yml の期限を引き直す")
+    if unreadable_q:
+        ok = False
+        print(f"  NG  一時除外の宣言を読めない: {', '.join(unreadable_q)} — "
+              "読めないものを『期限内』とは言わない")
     bugs = blocking_issues(root)
     if bugs:
         ok = False
@@ -1373,6 +1753,8 @@ def show(root: Path) -> int:
     for k in sorted(latest):
         e = latest[k]
         print(f"{k}: {e.get('verdict')} @ {str(e.get('commit', ''))[:12]} ({e.get('at')})")
+        if e.get("evidence"):               # A-7。移行が「ここを見る」と案内している
+            print(f"    証跡 {', '.join(e['evidence'])}")
         g = green_entry(data, k)
         if g and e.get("verdict") != "green":
             print(f"    最終green @ {str(g.get('commit', ''))[:12]} ({g.get('at')}) "
@@ -1618,23 +2000,36 @@ def main(argv: list[str]) -> int:
         pos: list[str] = []
         full = False
         lens: str | None = None
+        evidence: list[str] = []
+        execution: dict[str, str] = {}
         i = 0
         while i < len(rest):
+            if rest[i] in ("--mode", "--selected-mode", "--executor", "--review-engine",
+                           "--review-reason", "--degradation-reason",
+                           "--model-limit") and i + 1 < len(rest):
+                name = rest[i][2:].replace("-", "_")
+                if name in execution:
+                    print(f"エラー: {rest[i]} が重複している", file=sys.stderr)
+                    return 2
+                execution[name] = rest[i + 1]; i += 2; continue
             if rest[i] == "--scope" and i + 1 < len(rest):
                 scopes.append(rest[i + 1]); i += 2; continue
             if rest[i] == "--covers" and i + 1 < len(rest):
                 covers.append(rest[i + 1]); i += 2; continue
             if rest[i] == "--lens" and i + 1 < len(rest):
                 lens = rest[i + 1]; i += 2; continue
+            if rest[i] == "--evidence" and i + 1 < len(rest):
+                evidence.append(rest[i + 1]); i += 2; continue
             if rest[i] == "--full":
                 full = True; i += 1; continue
             pos.append(rest[i]); i += 1
         if len(pos) != 2:
             print("使い方: stamps.py record <flow> <green|red> [--scope <s>]... "
-                  "[--covers <path>]... [--full] [--lens <名前>]", file=sys.stderr)
+                  "[--covers <path>]... [--full] [--lens <名前>] "
+                  "[--evidence <path>]...(green には必須)", file=sys.stderr)
             return 2
         with state_lock(root):
-            return record(root, pos[0], pos[1], scopes, covers, full, lens)
+            return record(root, pos[0], pos[1], scopes, covers, full, lens, evidence, **execution)
     if cmd == "check":
         return check(root)
     if cmd == "promote":
@@ -1657,6 +2052,45 @@ def main(argv: list[str]) -> int:
 
 
 def selftest() -> int:
+    # 旧形式を維持しながら明示モードの組・縮退・免除の誤申告を拒否する。
+    assert execution_metadata(None, None, None, None, None, None, None) == {}
+    # モデル制限は運用モードと独立 — 申告が無い記録でも「あり」なら残り、「なし」は旧形式のまま。
+    assert execution_metadata(None, None, None, None, None, None, None, "あり") \
+        == {"execution": {"model_limit": "あり"}}, "モデル制限が証跡から消えた"
+    assert execution_metadata(None, None, None, None, None, None, None, "なし") == {}
+    assert execution_metadata("o1", None, "codex", "claude", None, None, "独立文脈",
+                              "あり")["execution"]["model_limit"] == "あり"
+    assert execution_metadata("o1", None, "codex", "claude", None, None,
+                              "独立文脈")["execution"]["model_limit"] == "なし"
+    try:
+        execution_metadata("o1", None, "codex", "claude", None, None, "独立文脈", "sonnet")
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("モデル制限の不正値が通った")
+    for mode, main_engine, reviewer in (("a1", "claude", "codex"),
+                                        ("o1", "codex", "claude"),
+                                        ("a2", "claude", "claude"),
+                                        ("o2", "codex", "codex")):
+        got = execution_metadata(mode, None, main_engine, reviewer, None, None, "独立文脈")
+        assert got["execution"]["effective_mode"] == mode
+    for selected, effective, engine in (("a1", "a2", "claude"), ("o1", "o2", "codex")):
+        got = execution_metadata(effective, selected, engine, "none", "小さい対象", "認証失敗", None)
+        assert got["execution"]["degradation_reason"] == "認証失敗"
+    for values in (("o1", None, "claude", "claude", None, None, "所見"),
+                   ("o1", None, "codex", "codex", None, None, "所見"),
+                   ("o2", "a1", "codex", "codex", None, "障害", "所見"),
+                   ("a2", "a1", "claude", "claude", None, None, "所見"),
+                   ("a1", None, "claude", "none", None, None, None),
+                   ("a1", None, "claude", "none", "免除", None, "架空のレビュー"),
+                   ("a1", None, "claude", "codex", None, None, None),
+                   ("x", None, "claude", "codex", None, None, "所見")):
+        try:
+            execution_metadata(*values)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"不正な実行記録が通った: {values}")
     import contextlib, io, os, tempfile
     previous = Path.cwd()
     quiet = contextlib.redirect_stdout(io.StringIO())
@@ -1664,6 +2098,40 @@ def selftest() -> int:
     with tempfile.TemporaryDirectory() as td, quiet, silent:
         root = Path(td)
         (root / ".claude/scripts").mkdir(parents=True)
+        mission = root / ".claude/missions/test/ledger.md"
+        mission.parent.mkdir(parents=True)
+        mission.write_text("---\n状態: 進行中\n---\n", encoding="utf-8")
+        assert mission_modes(root) is None, "旧台帳が拡張記録を強制した"
+        mission.write_text("---\n状態: 進行中\n選択モード: a1\n実効モード: a1\n"
+                           "モード明示: なし\n---\n", encoding="utf-8")
+        assert mission_modes(root) is None, "未選択 a1 の動作が変わった"
+        mission.write_text("---\n状態: 進行中\n選択モード: o1\n実効モード: o1\n"
+                           "モード明示: なし\n---\n", encoding="utf-8")
+        assert mission_modes(root) == ("o1", "o1"), \
+            "中央が codex のときの既定 o1 が、未選択 a1 と同じ扱いになった"
+        mission.write_text("---\n状態: 進行中\n選択モード: o1\n実効モード: o2\n"
+                           "モード明示: あり\n---\n", encoding="utf-8")
+        assert mission_modes(root) == ("o1", "o2"), "再開で縮退が失われた"
+        assert record(root, "verify-docs", "red", []) == 2, "明示モードが旧形式に落ちた"
+        assert record(root, "verify-docs", "red", [], mode="a1", executor="claude",
+                      review_engine="none", review_reason="不成立") == 2, "台帳と違うモードが通った"
+        mission.write_text("---\n状態: 進行中\n選択モード: o1\n実効モード: x\n---\n",
+                           encoding="utf-8")
+        assert record(root, "verify-docs", "red", []) == 2, "台帳の不正モードが通った"
+        # モデル制限は台帳が正。欄が無ければ None、値が食い違う記録は拒む。
+        mission.write_text("---\n状態: 進行中\n---\n", encoding="utf-8")
+        assert mission_model_limit(root) is None, "欄の無い台帳がモデル制限を名乗った"
+        mission.write_text("---\n状態: 進行中\nモデル制限: あり\n---\n", encoding="utf-8")
+        assert mission_model_limit(root) == "あり"
+        assert record(root, "verify-docs", "red", [], model_limit="なし") == 2, \
+            "台帳と違うモデル制限が通った"
+        mission.write_text("---\n状態: 進行中\nモデル制限: sonnet\n---\n", encoding="utf-8")
+        assert record(root, "verify-docs", "red", []) == 2, "台帳の不正なモデル制限が通った"
+        mission.unlink()
+        # green の記録に要る証跡(A-7)。実在して中身が在ればよい。
+        (root / "artifacts").mkdir(parents=True, exist_ok=True)
+        (root / "artifacts/ev.txt").write_text("走らせた結果(自己検査の固定物)\n",
+                                               encoding="utf-8")
         (root / "CLAUDE.md").write_text("x", encoding="utf-8")
         os.chdir(root)
         run = lambda *a: subprocess.run(a, cwd=root, capture_output=True, check=True)
@@ -1677,21 +2145,21 @@ def selftest() -> int:
 
         local = root / ".claude/scripts/flow-config.local.json"
         # コードの置き場が未宣言なら F3/F4 は red(fail-closed。黙って穴にしない)
-        assert main(["x", "record", "verify-impl", "green"]) == 0
+        assert main(["x", "record", "verify-impl", "green", "--evidence", "artifacts/ev.txt"]) == 0
         assert stamp_state(root, load_stamps(root), "verify-impl")[0] == "未宣言", \
             "code_roots 未宣言なのに判定が出た"
         local.write_text(json.dumps({"code_roots": ["src/"]}), encoding="utf-8")
         assert main(["x", "check"]) == 1, "未実施で green になった"
-        assert main(["x", "record", "verify-docs", "green"]) == 0
-        assert main(["x", "record", "verify-impl", "green"]) == 0
+        assert main(["x", "record", "verify-docs", "green", "--evidence", "artifacts/ev.txt"]) == 0
+        assert main(["x", "record", "verify-impl", "green", "--evidence", "artifacts/ev.txt"]) == 0
         assert main(["x", "record", "verify-tests", "green",
                      "--scope", "unit", "--scope", "integration",
-                     "--scope", "e2e", "--scope", "qa"]) == 0
+                     "--scope", "e2e", "--scope", "qa", "--evidence", "artifacts/ev.txt"]) == 0
         assert main(["x", "check"]) == 0, "全 green で red になった"
         # red の記録はデプロイゲートを止める
         assert main(["x", "record", "verify-tests", "red", "--scope", "unit"]) == 0
         assert main(["x", "check"]) == 1, "red 混在で green になった"
-        assert main(["x", "record", "verify-tests", "green", "--scope", "unit"]) == 0
+        assert main(["x", "record", "verify-tests", "green", "--scope", "unit", "--evidence", "artifacts/ev.txt"]) == 0
         # 宣言していないパス(同梱物・設定・未追跡)は**何が動いても失効させない**
         (root / "externals").mkdir(); (root / "externals/bin").write_text("y", encoding="utf-8")
         (root / ".gitignore").write_text("tmp/\n", encoding="utf-8")
@@ -1706,10 +2174,10 @@ def selftest() -> int:
         assert stamp_state(root, load_stamps(root), "verify-docs")[0] == "green", \
             "コード変更が F2 を失効させた"
         # ここまでを一度覆い直してから、02 の散文だけを動かす
-        assert main(["x", "record", "verify-docs", "green"]) == 0
-        assert main(["x", "record", "verify-impl", "green"]) == 0
+        assert main(["x", "record", "verify-docs", "green", "--evidence", "artifacts/ev.txt"]) == 0
+        assert main(["x", "record", "verify-impl", "green", "--evidence", "artifacts/ev.txt"]) == 0
         assert main(["x", "record", "verify-tests", "green", "--scope", "unit",
-                     "--scope", "integration", "--scope", "e2e", "--scope", "qa"]) == 0
+                     "--scope", "integration", "--scope", "e2e", "--scope", "qa", "--evidence", "artifacts/ev.txt"]) == 0
         # 02 の散文は unit/integration を失効させない(本日の実害そのもの)
         (root / "docs/02-design").mkdir(parents=True)
         (root / "docs/02-design/architecture.md").write_text("a", encoding="utf-8")
@@ -1727,11 +2195,11 @@ def selftest() -> int:
         st, _, uncovered = stamp_state(root, load_stamps(root), "verify-impl")
         assert uncovered == ["docs/02-design/architecture.md", "src/a.py"], uncovered
         assert main(["x", "record", "verify-impl", "green",
-                     "--covers", "docs/02-design/architecture.md"]) == 0
+                     "--covers", "docs/02-design/architecture.md", "--evidence", "artifacts/ev.txt"]) == 0
         st, _, uncovered = stamp_state(root, load_stamps(root), "verify-impl")
         assert st == "失効" and uncovered == ["src/a.py"], \
             f"部分再検証で閉じた範囲が残っている: {uncovered}"
-        assert main(["x", "record", "verify-impl", "green", "--covers", "src/"]) == 0
+        assert main(["x", "record", "verify-impl", "green", "--covers", "src/", "--evidence", "artifacts/ev.txt"]) == 0
         assert stamp_state(root, load_stamps(root), "verify-impl")[0] == "green", \
             "全部の依存を覆ったのに green にならない"
         # 覆った後にもう一度動いたら、その覆いは効かない(要件3の要)
@@ -1740,15 +2208,31 @@ def selftest() -> int:
         st, _, uncovered = stamp_state(root, load_stamps(root), "verify-impl")
         assert st == "失効" and uncovered == ["src/a.py"], \
             f"覆った後の変更が見逃された: {st} {uncovered}"
-        assert main(["x", "record", "verify-impl", "green", "--covers", "src/"]) == 0
+        assert main(["x", "record", "verify-impl", "green", "--covers", "src/", "--evidence", "artifacts/ev.txt"]) == 0
+        # **監視範囲の外へ改名したら、移動元の消滅で失効する** ★(inspection-27 C-8)
+        # git は改名の**新しい側しか**出さない(`status --porcelain` も `diff --name-only`
+        # も)ので、新しい側だけを見ていたあいだ、`src/` から消えたことが誰にも伝わらず
+        # green が残った。**未コミットとコミット済みの両方で見る。**
+        run("git", "mv", "src/a.py", "externals/a.py")
+        st, _, uncovered = stamp_state(root, load_stamps(root), "verify-impl")
+        assert st == "失効" and uncovered == ["src/a.py"], \
+            f"範囲外への改名(未コミット)で移動元の消滅を見逃した: {st} {uncovered}"
+        commit("c2e")
+        st, _, uncovered = stamp_state(root, load_stamps(root), "verify-impl")
+        assert st == "失効" and uncovered == ["src/a.py"], \
+            f"範囲外への改名(コミット済み)で移動元の消滅を見逃した: {st} {uncovered}"
+        (root / "src").mkdir(exist_ok=True)
+        run("git", "mv", "externals/a.py", "src/a.py")
+        commit("c2f")
+        assert main(["x", "record", "verify-impl", "green", "--covers", "src/", "--evidence", "artifacts/ev.txt"]) == 0
         # 依存の外を覆ったと書かせない
-        assert main(["x", "record", "verify-impl", "green", "--covers", "externals/"]) == 2, \
+        assert main(["x", "record", "verify-impl", "green", "--covers", "externals/", "--evidence", "artifacts/ev.txt"]) == 2, \
             "依存集合の外の --covers が通った"
         # 記録類だけの変更は何も失効させない(verified の記録はデプロイゲートを止めない)
-        assert main(["x", "record", "verify-docs", "green"]) == 0
-        assert main(["x", "record", "verify-impl", "green"]) == 0
+        assert main(["x", "record", "verify-docs", "green", "--evidence", "artifacts/ev.txt"]) == 0
+        assert main(["x", "record", "verify-impl", "green", "--evidence", "artifacts/ev.txt"]) == 0
         assert main(["x", "record", "verify-tests", "green", "--scope", "unit",
-                     "--scope", "integration", "--scope", "e2e", "--scope", "qa"]) == 0
+                     "--scope", "integration", "--scope", "e2e", "--scope", "qa", "--evidence", "artifacts/ev.txt"]) == 0
         # 台帳ディレクトリの欠落は「0件」ではなく NG(fail-closed — inspection-17 M-13)
         assert main(["x", "check"]) == 1, "台帳ディレクトリが無いのにデプロイゲートが green になった"
         (root / "docs/build-records").mkdir(parents=True)
@@ -1804,10 +2288,10 @@ def selftest() -> int:
             "覆っていないコード変更を含む記録が promote された"
         assert "state: verified" in (root / "docs/build-records/d.md").read_text(), \
             "依存を動かしていない記録が、無関係な鮮度スタンプの古さで止められた"
-        assert main(["x", "record", "verify-impl", "green", "--covers", "src/"]) == 0
+        assert main(["x", "record", "verify-impl", "green", "--covers", "src/", "--evidence", "artifacts/ev.txt"]) == 0
         assert main(["x", "record", "verify-tests", "green", "--scope", "unit",
                      "--scope", "integration", "--scope", "e2e", "--scope", "qa",
-                     "--covers", "src/"]) == 0
+                     "--covers", "src/", "--evidence", "artifacts/ev.txt"]) == 0
         assert main(["x", "promote"]) == 0
         assert "state: verified" in (root / "docs/build-records/a.md").read_text(), \
             "部分再検証で覆ったのに promote が遷移しなかった"
@@ -1821,10 +2305,10 @@ def selftest() -> int:
             "updated: 2026-08-20T00:00:00+00:00\n---\n", encoding="utf-8")
         (root / "docs/02-design/architecture.md").write_text("a2", encoding="utf-8")
         commit("c7")                    # verify フロー自身の書込みに相当する後続 commit
-        assert main(["x", "record", "verify-docs", "green"]) == 0
-        assert main(["x", "record", "verify-impl", "green"]) == 0
+        assert main(["x", "record", "verify-docs", "green", "--evidence", "artifacts/ev.txt"]) == 0
+        assert main(["x", "record", "verify-impl", "green", "--evidence", "artifacts/ev.txt"]) == 0
         assert main(["x", "record", "verify-tests", "green", "--scope", "unit",
-                     "--scope", "integration", "--scope", "e2e", "--scope", "qa"]) == 0
+                     "--scope", "integration", "--scope", "e2e", "--scope", "qa", "--evidence", "artifacts/ev.txt"]) == 0
         assert main(["x", "promote"]) == 0
         assert "state: verified" in (root / "docs/build-records/e.md").read_text(), \
             "記録より後の全体スタンプが在るのに promote が遷移しない(通常経路の非収束)"
@@ -1834,8 +2318,8 @@ def selftest() -> int:
         arch.write_text("---\nid: arch\nversion: 1.2.3\nupdated: 2026-08-20\n---\n本文\n",
                         encoding="utf-8")
         commit("c7b")
-        assert main(["x", "record", "verify-docs", "green"]) == 0
-        assert main(["x", "record", "verify-impl", "green"]) == 0
+        assert main(["x", "record", "verify-docs", "green", "--evidence", "artifacts/ev.txt"]) == 0
+        assert main(["x", "record", "verify-impl", "green", "--evidence", "artifacts/ev.txt"]) == 0
         arch.write_text("---\nid: arch\nversion: 1.2.4\nupdated: 2026-08-21\n"
                         "verified:\n  at: 2026-08-21\n  version: 1.2\n---\n本文\n",
                         encoding="utf-8")
@@ -1845,7 +2329,7 @@ def selftest() -> int:
         assert stamp_state(root, load_stamps(root), "verify-docs")[0] == "green", \
             "管理欄だけの変更が F2 を失効させた"
         # 本文が同一なら、MINOR / MAJOR の繰り上げも失効を作らない(2026-08-25)。
-        # 証明書を打ち直すだけの run が版だけ上げて相手フローを殺す構造を消すためである。
+        # 検証済み記録を打ち直すだけの run が版だけ上げて相手フローを殺す構造を消すためである。
         arch.write_text("---\nid: arch\nversion: 1.3.0\nupdated: 2026-08-21\n---\n本文\n",
                         encoding="utf-8")
         commit("c7d")
@@ -1863,7 +2347,7 @@ def selftest() -> int:
         assert stamp_state(root, load_stamps(root), "verify-impl")[0] == "失効", \
             "本文の変更が失効を作らない"
         # 管理欄以外の frontmatter(source: など)が動いても失効する
-        assert main(["x", "record", "verify-impl", "green"]) == 0
+        assert main(["x", "record", "verify-impl", "green", "--evidence", "artifacts/ev.txt"]) == 0
         arch.write_text("---\nid: arch\nversion: 2.0.0\nupdated: 2026-08-21\n"
                         "source:\n  - docs/01-requirements/functional.md\n---\n本文2\n",
                         encoding="utf-8")
@@ -1877,8 +2361,8 @@ def selftest() -> int:
                         "<!-- BEGIN GENERATED: build-facts.py id=n -->\n31本\n"
                         "<!-- END GENERATED: build-facts.py -->\n", encoding="utf-8")
         commit("c7g")
-        assert main(["x", "record", "verify-docs", "green"]) == 0
-        assert main(["x", "record", "verify-impl", "green"]) == 0
+        assert main(["x", "record", "verify-docs", "green", "--evidence", "artifacts/ev.txt"]) == 0
+        assert main(["x", "record", "verify-impl", "green", "--evidence", "artifacts/ev.txt"]) == 0
         arch.write_text("---\nid: arch\nversion: 2.0.0\nupdated: 2026-08-21\n---\n本文2\n"
                         "<!-- BEGIN GENERATED: build-facts.py id=n -->\n33本\n"
                         "<!-- END GENERATED: build-facts.py -->\n", encoding="utf-8")
@@ -1893,12 +2377,12 @@ def selftest() -> int:
         assert stamp_state(root, load_stamps(root), "verify-docs")[0] == "失効", \
             "機械の欄を持つファイルの手書き部分の変更が失効を作らない(パス単位の除外の穴)"
         # 道具名を持たない**旧終端**(雛形 templates/03-index.md が配っている形)でも剥ぐ
-        assert main(["x", "record", "verify-docs", "green"]) == 0
+        assert main(["x", "record", "verify-docs", "green", "--evidence", "artifacts/ev.txt"]) == 0
         arch.write_text("---\nid: arch\nversion: 2.0.0\nupdated: 2026-08-21\n---\n本文3\n"
                         "<!-- BEGIN GENERATED: build-index.py -->\n索引A\n"
                         "<!-- END GENERATED -->\n", encoding="utf-8")
         commit("c7h")
-        assert main(["x", "record", "verify-docs", "green"]) == 0
+        assert main(["x", "record", "verify-docs", "green", "--evidence", "artifacts/ev.txt"]) == 0
         arch.write_text("---\nid: arch\nversion: 2.0.0\nupdated: 2026-08-21\n---\n本文3\n"
                         "<!-- BEGIN GENERATED: build-index.py -->\n索引B\n"
                         "<!-- END GENERATED -->\n", encoding="utf-8")
@@ -1909,9 +2393,9 @@ def selftest() -> int:
                         "<!-- BEGIN GENERATED: build-facts.py id=n -->\n33本\n"
                         "<!-- END GENERATED: build-facts.py -->\n", encoding="utf-8")
         commit("c7h3")
-        assert main(["x", "record", "verify-docs", "green"]) == 0
+        assert main(["x", "record", "verify-docs", "green", "--evidence", "artifacts/ev.txt"]) == 0
         # 区画そのものが消えたら、それは道具の持ち場が動いたということなので失効する
-        assert main(["x", "record", "verify-docs", "green"]) == 0
+        assert main(["x", "record", "verify-docs", "green", "--evidence", "artifacts/ev.txt"]) == 0
         arch.write_text("---\nid: arch\nversion: 2.0.0\nupdated: 2026-08-21\n---\n本文3\n",
                         encoding="utf-8")
         commit("c7g4")
@@ -1922,8 +2406,8 @@ def selftest() -> int:
         arch.write_text("---\nid: arch\nversion: 3.0.0\nupdated: 2026-08-21\n---\n本文3\n",
                         encoding="utf-8")
         commit("c7f")
-        assert main(["x", "record", "verify-docs", "green"]) == 0
-        assert main(["x", "record", "verify-impl", "green"]) == 0
+        assert main(["x", "record", "verify-docs", "green", "--evidence", "artifacts/ev.txt"]) == 0
+        assert main(["x", "record", "verify-impl", "green", "--evidence", "artifacts/ev.txt"]) == 0
         arch.write_text("---\nid: arch\nupdated: 2026-08-21\n---\n本文3\n", encoding="utf-8")
         commit("c7f2")
         assert stamp_state(root, load_stamps(root), "verify-impl")[0] == "失効", \
@@ -1933,7 +2417,7 @@ def selftest() -> int:
         arch.write_text("---\nid: arch\nversion: 3.0.0\nupdated: 2026-08-21\n---\n本文3\n",
                         encoding="utf-8")
         commit("c7f3")
-        assert main(["x", "record", "verify-impl", "green"]) == 0
+        assert main(["x", "record", "verify-impl", "green", "--evidence", "artifacts/ev.txt"]) == 0
         arch.write_text("---\nid: arch\nversion: broken\nupdated: 2026-08-21\n---\n本文3\n",
                         encoding="utf-8")
         commit("c7f4")
@@ -1942,7 +2426,7 @@ def selftest() -> int:
         arch.write_text("---\nid: arch\nversion: 3.0.0\nupdated: 2026-08-21\n---\n本文3\n",
                         encoding="utf-8")
         commit("c7f5")
-        assert main(["x", "record", "verify-impl", "green"]) == 0
+        assert main(["x", "record", "verify-impl", "green", "--evidence", "artifacts/ev.txt"]) == 0
         arch.write_text("---\nid: arch\nversion: 3.0.0\nversion: 4.0.0\n"
                         "updated: 2026-08-21\n---\n本文3\n", encoding="utf-8")
         commit("c7f6")
@@ -1951,7 +2435,7 @@ def selftest() -> int:
         arch.write_text("---\nid: arch\nversion: 3.0.0\nupdated: 2026-08-21\n---\n本文3\n",
                         encoding="utf-8")
         commit("c7f7")
-        assert main(["x", "record", "verify-impl", "green"]) == 0
+        assert main(["x", "record", "verify-impl", "green", "--evidence", "artifacts/ev.txt"]) == 0
         # 版の正規形は ASCII だけ(独立レビュー 2026-08-25 の所見1・第2回)。
         # 空白ゼロ・タブ・全角空白・全角数字は「正しい形」ではないので、そこへの書き換えは失効する。
         for i, bad in enumerate(("version:3.0.0", "version:\t3.0.0",
@@ -1964,15 +2448,15 @@ def selftest() -> int:
             arch.write_text("---\nid: arch\nversion: 3.0.0\nupdated: 2026-08-21\n---\n本文3\n",
                             encoding="utf-8")
             commit(f"c7g{i}r")
-            assert main(["x", "record", "verify-impl", "green"]) == 0
+            assert main(["x", "record", "verify-impl", "green", "--evidence", "artifacts/ev.txt"]) == 0
         # 行末の空白だけは正しい形のままである(退行を作らない)
         arch.write_text("---\nid: arch\nversion: 3.0.1 \nupdated: 2026-08-22\n---\n本文3\n",
                         encoding="utf-8")
         commit("c7h")
         assert stamp_state(root, load_stamps(root), "verify-impl")[0] == "green", \
             "行末の空白だけで失効した(PATCH の繰り上げは管理欄のままであるべき)"
-        assert main(["x", "record", "verify-impl", "green"]) == 0
-        assert main(["x", "record", "verify-docs", "green"]) == 0
+        assert main(["x", "record", "verify-impl", "green", "--evidence", "artifacts/ev.txt"]) == 0
+        assert main(["x", "record", "verify-docs", "green", "--evidence", "artifacts/ev.txt"]) == 0
         # e2e の 02 依存は system.md / testing.md / environments.md に絞られている(inspection-16 D3)
         assert stamp_state(root, load_stamps(root), "verify-tests", "e2e")[0] == "green", \
             "architecture.md の変更が e2e を失効させた(依存が 02 全体のまま)"
@@ -1986,7 +2470,7 @@ def selftest() -> int:
         assert stamp_state(root, load_stamps(root), "verify-tests", "qa")[0] == "失効", \
             "system.md(適用外の根拠の置き場)の変更が qa を失効させない"
         assert main(["x", "record", "verify-tests", "green", "--scope", "unit",
-                     "--scope", "integration", "--scope", "e2e", "--scope", "qa"]) == 0
+                     "--scope", "integration", "--scope", "e2e", "--scope", "qa", "--evidence", "artifacts/ev.txt"]) == 0
         (root / "docs/build-records/nc.md").write_text(
             "---\nslug: nc\nstate: awaiting-verify\ncommit: -\n---\n", encoding="utf-8")
         main(["x", "promote"])
@@ -1995,32 +2479,32 @@ def selftest() -> int:
         (root / "docs/build-records/nc.md").unlink()
         # **依存に未コミットの変更が在るあいだ green は記録できない**(書いた瞬間の失効を作らない)
         (root / "src/c.py").write_text("dirty", encoding="utf-8")
-        assert main(["x", "record", "verify-impl", "green"]) == 2, \
+        assert main(["x", "record", "verify-impl", "green", "--evidence", "artifacts/ev.txt"]) == 2, \
             "依存が汚れているのに green を記録できた"
-        assert main(["x", "record", "verify-impl", "green", "--covers", "src/"]) == 2, \
+        assert main(["x", "record", "verify-impl", "green", "--covers", "src/", "--evidence", "artifacts/ev.txt"]) == 2, \
             "覆いが汚れているのに部分 green を記録できた"
         assert main(["x", "record", "verify-impl", "red"]) == 0, "red が記録できない"
         # 依存の外(docs/ でも記録類)が汚れていても green は通る — 許可リストの帰結
-        assert main(["x", "record", "verify-docs", "green"]) == 0, \
+        assert main(["x", "record", "verify-docs", "green", "--evidence", "artifacts/ev.txt"]) == 0, \
             "依存の外の汚れで F2 の green が止まった"
         commit("c5")
-        assert main(["x", "record", "verify-impl", "green"]) == 0, "コミット後に記録できない"
+        assert main(["x", "record", "verify-impl", "green", "--evidence", "artifacts/ev.txt"]) == 0, "コミット後に記録できない"
         # 鮮度スタンプの commit == HEAD でも、未コミットの依存変更は green を残さない(inspection-16 H-2)
         (root / "src/c.py").write_text("dirty2", encoding="utf-8")
         assert stamp_state(root, load_stamps(root), "verify-impl")[0] == "失効", \
             "同一 HEAD の未コミット変更が見逃された"
         commit("c5b")
-        assert main(["x", "record", "verify-impl", "green"]) == 0
+        assert main(["x", "record", "verify-impl", "green", "--evidence", "artifacts/ev.txt"]) == 0
         # 全数の印は別に持ち、**デプロイゲートにも失効判定にも効かない**
-        assert main(["x", "record", "verify-docs", "green", "--full"]) == 0
+        assert main(["x", "record", "verify-docs", "green", "--full", "--evidence", "artifacts/ev.txt"]) == 0
         assert load_stamps(root)["full"]["verify-docs"]["commit"] == head(root), \
             "--full が全数の印を残さなかった"
         assert main(["x", "record", "verify-docs", "green", "--full",
-                     "--covers", "docs/00-requests/"]) == 2, "--full と --covers が両立した"
+                     "--covers", "docs/00-requests/", "--evidence", "artifacts/ev.txt"]) == 2, "--full と --covers が両立した"
         assert main(["x", "record", "verify-tests", "green", "--scope", "unit",
-                     "--full"]) == 2, "F4 の --full が通った(F4 は全数の印を持たない)"
+                     "--full", "--evidence", "artifacts/ev.txt"]) == 2, "F4 の --full が通った(F4 は全数の印を持たない)"
         assert main(["x", "record", "verify-tests", "green", "--scope", "unit",
-                     "--scope", "integration", "--scope", "e2e", "--scope", "qa"]) == 0
+                     "--scope", "integration", "--scope", "e2e", "--scope", "qa", "--evidence", "artifacts/ev.txt"]) == 0
         assert main(["x", "check"]) == 0, "全数の印がデプロイゲートの判定を変えた"
         # `partial` を持たない既存の stamps.json をそのまま読める(移行不要)
         old = {"latest": load_stamps(root)["latest"]}
@@ -2045,14 +2529,14 @@ def selftest() -> int:
         # --- inspection-17 判断4: 素の red は最終 green の基準点と部分記録を消さない
         (root / "src/e.py").write_text("v1", encoding="utf-8")
         commit("c8")
-        assert main(["x", "record", "verify-impl", "green"]) == 0
+        assert main(["x", "record", "verify-impl", "green", "--evidence", "artifacts/ev.txt"]) == 0
         base_green = load_stamps(root)["last_green"]["verify-impl"]["commit"]
         # **覆い残しが在る部分記録は畳まれない**ので、部分スタンプが red を跨いで残る
         # (畳みの条件は「併合が green」— 下の 2026-08-25 の節がその表側を見る)
         (root / "src/e.py").write_text("v2", encoding="utf-8")
         (root / "src/f.py").write_text("v1", encoding="utf-8")
         commit("c9")
-        assert main(["x", "record", "verify-impl", "green", "--covers", "src/e.py"]) == 0
+        assert main(["x", "record", "verify-impl", "green", "--covers", "src/e.py", "--evidence", "artifacts/ev.txt"]) == 0
         assert load_stamps(root)["last_green"]["verify-impl"]["commit"] == base_green, \
             "覆い残し(src/f.py)が在るのに基準点が進んだ"
         (root / "src/e.py").write_text("v3", encoding="utf-8")
@@ -2066,7 +2550,7 @@ def selftest() -> int:
         assert st == "red" and unc == ["src/e.py", "src/f.py"], \
             f"red でも最終 green 以降の増分範囲を出すはず: {st} {unc}"
         assert main(["x", "check"]) == 1, "red でデプロイゲートが開いた"
-        assert main(["x", "record", "verify-impl", "green"]) == 0
+        assert main(["x", "record", "verify-impl", "green", "--evidence", "artifacts/ev.txt"]) == 0
         assert stamp_state(root, load_stamps(root), "verify-impl")[0] == "green", \
             "red の後の素の green で閉じない"
         # --- 2026-08-25: 部分が覆い切ったら基準点を進めて部分を畳む(相互失効が閉じない件)
@@ -2077,14 +2561,14 @@ def selftest() -> int:
         (root / "src/h.py").write_text("v1", encoding="utf-8")
         commit("c11")
         # 覆い残しが在るあいだは畳まない(fail-closed)
-        assert main(["x", "record", "verify-impl", "green", "--covers", "src/g.py"]) == 0
+        assert main(["x", "record", "verify-impl", "green", "--covers", "src/g.py", "--evidence", "artifacts/ev.txt"]) == 0
         dataA = load_stamps(root)
         assert dataA["last_green"]["verify-impl"]["commit"] == base_before, \
             "覆い残しが在るのに基準点が進んだ"
         assert stamp_state(root, dataA, "verify-impl")[0] == "失効", \
             "覆い残し(src/h.py)が在るのに green になった"
         # 残りを覆った瞬間に併合が green になり、基準点が進んで部分が畳まれる
-        assert main(["x", "record", "verify-impl", "green", "--covers", "src/h.py"]) == 0
+        assert main(["x", "record", "verify-impl", "green", "--covers", "src/h.py", "--evidence", "artifacts/ev.txt"]) == 0
         dataB = load_stamps(root)
         headB = head(root)
         assert dataB["last_green"]["verify-impl"]["commit"] == headB, \
@@ -2100,7 +2584,7 @@ def selftest() -> int:
         st, _, unc = stamp_state(root, load_stamps(root), "verify-impl")
         assert st == "失効" and unc == ["src/g.py"], \
             f"畳んだ後の変更が失効を作らない(fail-open): {st} {unc}"
-        assert main(["x", "record", "verify-impl", "green", "--covers", "src/g.py"]) == 0
+        assert main(["x", "record", "verify-impl", "green", "--covers", "src/g.py", "--evidence", "artifacts/ev.txt"]) == 0
         assert stamp_state(root, load_stamps(root), "verify-impl")[0] == "green", \
             "畳んだ基準点からの部分再検証で閉じない"
         # **`red --covers` は畳まない**(独立レビュー 2026-08-25 の所見)。追記前の全体 green を
@@ -2128,10 +2612,10 @@ def selftest() -> int:
             "red の部分記録が残っていない"
         # **`--covers` の green では latest が red のまま閉じない**(flows.md §2)。
         # 閉じ直すのは素の green である
-        assert main(["x", "record", "verify-impl", "green", "--covers", "src/g.py"]) == 0
+        assert main(["x", "record", "verify-impl", "green", "--covers", "src/g.py", "--evidence", "artifacts/ev.txt"]) == 0
         assert stamp_state(root, load_stamps(root), "verify-impl")[0] == "red", \
             "red を --covers の green で閉じてしまった"
-        assert main(["x", "record", "verify-impl", "green"]) == 0   # 素の green で閉じ直す
+        assert main(["x", "record", "verify-impl", "green", "--evidence", "artifacts/ev.txt"]) == 0   # 素の green で閉じ直す
         assert stamp_state(root, load_stamps(root), "verify-impl")[0] == "green", \
             "素の green で閉じ直せない"
         # 基準点が無いフローは、部分だけでは green にならない(畳みも起きない)
@@ -2141,7 +2625,7 @@ def selftest() -> int:
                                 .get("last_green", {}).items() if k2 != "verify-docs"}}
         (root / STATE).write_text(json.dumps(fresh), encoding="utf-8")
         assert main(["x", "record", "verify-docs", "green",
-                     "--covers", "docs/02-design/"]) == 0
+                     "--covers", "docs/02-design/", "--evidence", "artifacts/ev.txt"]) == 0
         dataC = load_stamps(root)
         assert "verify-docs" not in dataC.get("last_green", {}), \
             "全体スタンプを1度も持たないフローが、部分だけで基準点を得た"
@@ -2150,7 +2634,7 @@ def selftest() -> int:
         # --- inspection-17 判断6: 03 の試験表は unit/integration を失効させない
         # --- inspection-19 V-1: e2e の依存も tests/e2e.md 1本まで絞った(モジュールの表では失効しない)
         assert main(["x", "record", "verify-tests", "green", "--scope", "unit",
-                     "--scope", "integration", "--scope", "e2e", "--scope", "qa"]) == 0
+                     "--scope", "integration", "--scope", "e2e", "--scope", "qa", "--evidence", "artifacts/ev.txt"]) == 0
         (root / "docs/03-impl/tests").mkdir(parents=True)
         (root / "docs/03-impl/tests/mod.md").write_text("表", encoding="utf-8")
         commit("c11")
@@ -2164,7 +2648,7 @@ def selftest() -> int:
         commit("c11b")
         assert stamp_state(root, load_stamps(root), "verify-tests", "e2e")[0] == "失効", \
             "tests/e2e.md の変更が e2e を失効させない(e2e の依存に残っているはず)"
-        assert main(["x", "record", "verify-tests", "green", "--scope", "e2e"]) == 0
+        assert main(["x", "record", "verify-tests", "green", "--scope", "e2e", "--evidence", "artifacts/ev.txt"]) == 0
         # --- inspection-17 判断5: qa のコード依存は ui_roots(未宣言なら code_roots 全体)
         (root / "src/api.py").write_text("b1", encoding="utf-8")
         commit("c12")
@@ -2172,7 +2656,7 @@ def selftest() -> int:
             "ui_roots 未宣言なのにコード変更で qa が失効しない(安全側の既定が壊れた)"
         local.write_text(json.dumps({"code_roots": ["src/"], "ui_roots": ["src/ui/"]}),
                          encoding="utf-8")
-        assert main(["x", "record", "verify-tests", "green", "--scope", "qa"]) == 0
+        assert main(["x", "record", "verify-tests", "green", "--scope", "qa", "--evidence", "artifacts/ev.txt"]) == 0
         (root / "src/api.py").write_text("b2", encoding="utf-8")
         commit("c13")
         assert stamp_state(root, load_stamps(root), "verify-tests", "qa")[0] == "green", \
@@ -2195,7 +2679,7 @@ def selftest() -> int:
         local.write_text(json.dumps({"code_roots": ["src/"], "ui_roots": ["src/ui/"],
                                      "scope_roots": {"unit": ["src/app/"]}}), encoding="utf-8")
         assert main(["x", "record", "verify-tests", "green", "--scope", "unit",
-                     "--scope", "integration"]) == 0
+                     "--scope", "integration", "--evidence", "artifacts/ev.txt"]) == 0
         (root / "src/other.py").write_text("o1", encoding="utf-8")
         commit("c14a")
         assert stamp_state(root, load_stamps(root), "verify-tests", "unit")[0] == "green", \
@@ -2231,14 +2715,14 @@ def selftest() -> int:
             "試験区分を持たないフロー(F3)に、宣言先の無い直し方を出している(消せない注記)"
 
         # --- 2026-08-22 の人間の指示(2): code_excludes — 検証の入力ではないと宣言したパス
-        assert main(["x", "record", "verify-tests", "green", "--scope", "integration"]) == 0
+        assert main(["x", "record", "verify-tests", "green", "--scope", "integration", "--evidence", "artifacts/ev.txt"]) == 0
         (root / "src/notes.md").write_text("n1", encoding="utf-8")
         commit("c14c")
         assert stamp_state(root, load_stamps(root), "verify-tests", "integration")[0] == "失効", \
             "宣言前なのに code_roots の中の変更が失効させない"
         local.write_text(json.dumps({"code_roots": ["src/"], "ui_roots": ["src/ui/"],
                                      "code_excludes": ["src/notes.md"]}), encoding="utf-8")
-        assert main(["x", "record", "verify-tests", "green", "--scope", "integration"]) == 0
+        assert main(["x", "record", "verify-tests", "green", "--scope", "integration", "--evidence", "artifacts/ev.txt"]) == 0
         (root / "src/notes.md").write_text("n2", encoding="utf-8")
         commit("c14d")
         assert stamp_state(root, load_stamps(root), "verify-tests", "integration")[0] == "green", \
@@ -2248,7 +2732,7 @@ def selftest() -> int:
         assert stamp_state(root, load_stamps(root), "verify-tests", "integration")[0] == "失効", \
             "code_excludes の外の変更まで失効させなくなった(穴)"
         # 宣言を変えたら焼き込みで失効する(code_roots と同型)
-        assert main(["x", "record", "verify-tests", "green", "--scope", "integration"]) == 0
+        assert main(["x", "record", "verify-tests", "green", "--scope", "integration", "--evidence", "artifacts/ev.txt"]) == 0
         local.write_text(json.dumps({"code_roots": ["src/"], "ui_roots": ["src/ui/"]}),
                          encoding="utf-8")
         assert stamp_state(root, load_stamps(root), "verify-tests", "integration")[0] == "失効", \
@@ -2294,6 +2778,18 @@ def selftest() -> int:
                                      "code_excludes": ["src/ui/"]}), encoding="utf-8")
         assert code_excludes(root) == [], \
             "ui_roots と等しい code_excludes が通っている(qa が二度と失効しない)"
+        # **試験区分ごとの宣言の「親」も落とす**(C3-5)— 等号だけを見ていたので素通りしていた
+        local.write_text(json.dumps({"code_roots": ["src/"],
+                                     "scope_roots": {"unit": ["src/ui/components/"]},
+                                     "code_excludes": ["src/ui/"]}), encoding="utf-8")
+        assert code_excludes(root) == [], \
+            "scope_roots の親を code_excludes に書けている(その試験区分が二度と失効しない)"
+        # 兄弟(親でも等しくもない)は通る — ここまで落とすと本来の用途が消える
+        local.write_text(json.dumps({"code_roots": ["src/"],
+                                     "scope_roots": {"unit": ["src/ui/components/"]},
+                                     "code_excludes": ["src/vendor/"]}), encoding="utf-8")
+        assert code_excludes(root) == ["src/vendor/"], \
+            "置き場の親でも等しくもない code_excludes まで落としている"
         local.write_text(json.dumps({"code_roots": ["src/"],
                                      "scope_roots": {"unit": ["src/app/"]},
                                      "code_excludes": ["src/app/notes.md"]}), encoding="utf-8")
@@ -2308,7 +2804,7 @@ def selftest() -> int:
         # **欄を持たない古い鮮度スタンプでも、宣言を足したら失効する**(独立検査 B-1)
         local.write_text(json.dumps({"code_roots": ["src/"], "ui_roots": ["src/ui/"]}),
                          encoding="utf-8")
-        assert main(["x", "record", "verify-tests", "green", "--scope", "integration"]) == 0
+        assert main(["x", "record", "verify-tests", "green", "--scope", "integration", "--evidence", "artifacts/ev.txt"]) == 0
         st = load_stamps(root)
         st["latest"]["verify-tests:integration"].pop("code_excludes", None)   # 旧版の記録を模す
         (root / STATE).write_text(json.dumps(st, ensure_ascii=False), encoding="utf-8")
@@ -2320,37 +2816,49 @@ def selftest() -> int:
             "欄の無い古い記録が、code_excludes を足した後も green のまま(fail-open)"
         local.write_text(json.dumps({"code_roots": ["src/"], "ui_roots": ["src/ui/"]}),
                          encoding="utf-8")
-        assert main(["x", "record", "verify-tests", "green", "--scope", "integration"]) == 0
+        assert main(["x", "record", "verify-tests", "green", "--scope", "integration", "--evidence", "artifacts/ev.txt"]) == 0
         local.write_text(json.dumps({"code_roots": ["src/"], "ui_roots": ["src/ui/"]}),
                          encoding="utf-8")
-        assert main(["x", "record", "verify-tests", "green", "--scope", "integration"]) == 0
+        assert main(["x", "record", "verify-tests", "green", "--scope", "integration", "--evidence", "artifacts/ev.txt"]) == 0
         # --- inspection-17 判断9: critical の検証待ちが在る間、F2/F3 の green は --lens 必須
         (root / "docs/build-records/crit.md").write_text(
             f"---\nslug: crit\nstate: awaiting-verify\ncritical: true\ncommit: {head(root)}\n"
             "---\n\n## 影響範囲(closure)\n\n- docs/02-design/system.md\n- src/a.py\n",
             encoding="utf-8")
         commit("c15")
-        assert main(["x", "record", "verify-docs", "green"]) == 2, \
+        assert main(["x", "record", "verify-docs", "green", "--evidence", "artifacts/ev.txt"]) == 2, \
             "critical 検証待ちが在るのに --lens 無しの green が通った(判断9)"
         # --- inspection-19 V-2: 覆いを持つ run は、その覆いに掛かる critical だけを見る
         assert main(["x", "record", "verify-docs", "green",
-                     "--covers", "docs/issues/index.md"]) == 0, \
+                     "--covers", "docs/issues/index.md", "--evidence", "artifacts/ev.txt"]) == 0, \
             "クロージャの外だけを覆う run に --lens を要求した(V-2)"
         assert main(["x", "record", "verify-docs", "green",
-                     "--covers", "docs/02-design/system.md"]) == 2, \
+                     "--covers", "docs/02-design/system.md", "--evidence", "artifacts/ev.txt"]) == 2, \
             "クロージャに掛かる覆いなのに --lens を要求しなかった(V-2)"
         assert main(["x", "record", "verify-docs", "red"]) == 0, \
             "red にまで --lens を要求した(red は green の主張ではない)"
-        assert main(["x", "record", "verify-docs", "green", "--lens", "@review(codex)"]) == 0, \
+        assert main(["x", "record", "verify-docs", "green", "--lens", "@review(codex)", "--evidence", "artifacts/ev.txt"]) == 0, \
             "--lens 付きの green が通らない"
-        assert main(["x", "record", "verify-tests", "green", "--scope", "unit"]) == 0, \
+        assert main(["x", "record", "verify-tests", "green", "--scope", "unit", "--evidence", "artifacts/ev.txt"]) == 0, \
             "F4 の green に --lens を要求した(独立レビューは F2/F3 の機構)"
+        assert main(["x", "record", "verify-tests", "green", "--scope", "unit",
+                     "--mode", "o1", "--executor", "codex", "--review-engine", "none",
+                     "--review-reason", "免除", "--evidence", "artifacts/ev.txt"]) == 2, \
+            "明示モードの critical F4 がレビューなしで通った"
+        assert main(["x", "record", "verify-tests", "green", "--scope", "unit",
+                     "--mode", "o1", "--executor", "codex", "--review-engine", "claude",
+                     "--lens", "別文脈のClaude", "--evidence", "artifacts/ev.txt"]) == 0
+        assert load_stamps(root)["latest"]["verify-tests:unit"]["execution"]["review_engine"] == "claude"
+        assert main(["x", "record", "verify-docs", "red", "--mode", "o2",
+                     "--selected-mode", "o1", "--executor", "codex", "--review-engine", "none",
+                     "--review-reason", "不成立", "--degradation-reason", "認証切れ"]) == 0
+        assert load_stamps(root)["latest"]["verify-docs"]["execution"]["selected_mode"] == "o1"
         (root / "docs/build-records/crit.md").unlink()
         commit("c16")
-        assert main(["x", "record", "verify-impl", "green"]) == 0, \
+        assert main(["x", "record", "verify-impl", "green", "--evidence", "artifacts/ev.txt"]) == 0, \
             "critical が消えた後も --lens を要求した"
         # --- inspection-20 V-2: F2 は 03-impl のツール生成領域では失効しない(除外)
-        assert main(["x", "record", "verify-docs", "green"]) == 0
+        assert main(["x", "record", "verify-docs", "green", "--evidence", "artifacts/ev.txt"]) == 0
         (root / "docs/03-impl/callgraphs").mkdir(parents=True)
         (root / "docs/03-impl/callgraphs/mod.md").write_text("生成", encoding="utf-8")
         (root / "docs/03-impl/feature-graph.md").write_text("生成", encoding="utf-8")
@@ -2364,21 +2872,21 @@ def selftest() -> int:
         assert stamp_state(root, load_stamps(root), "verify-docs")[0] == "失効", \
             "03-impl の除外の外(index.md)の変更が F2 を失効させない"
         assert main(["x", "record", "verify-docs", "green",
-                     "--covers", "docs/03-impl/callgraphs/"]) == 2, \
+                     "--covers", "docs/03-impl/callgraphs/", "--evidence", "artifacts/ev.txt"]) == 2, \
             "除外された領域を --covers で覆えてしまった"
         # 除外領域の**親**を覆いに指定した run。除外ガードは素通りする(親は除外の外)が、
         # そのぶん未コミット判定にも除外が効かない — **安全側の非対称であり、意図している**。
         # 「記録できない」で止まるだけで、見ていないものが green になる経路は作らない。
         (root / "docs/03-impl/callgraphs/mod.md").write_text("未コミットの再生成", encoding="utf-8")
         assert main(["x", "record", "verify-docs", "green",
-                     "--covers", "docs/03-impl/"]) == 2, \
+                     "--covers", "docs/03-impl/", "--evidence", "artifacts/ev.txt"]) == 2, \
             "除外領域の親を覆いにすると、除外領域の未コミットが green を止めない(安全側が壊れた)"
         commit("c18a")
         assert main(["x", "record", "verify-docs", "green",
-                     "--covers", "docs/03-impl/"]) == 0, \
+                     "--covers", "docs/03-impl/", "--evidence", "artifacts/ev.txt"]) == 0, \
             "コミットしたのに、除外領域の親を覆う部分記録が通らない"
         # --- inspection-20 V-4: e2e_scripts_in: testing で system.md が e2e/qa の依存から外れる
-        assert main(["x", "record", "verify-docs", "green"]) == 0
+        assert main(["x", "record", "verify-docs", "green", "--evidence", "artifacts/ev.txt"]) == 0
         local.write_text(json.dumps({"code_roots": ["src/"], "ui_roots": ["src/ui/"],
                                      "e2e_scripts_in": "testing"}), encoding="utf-8")
         # 切り出し先が無いあいだは宣言を無視する(誤宣言の fail-closed)
@@ -2388,13 +2896,60 @@ def selftest() -> int:
         commit("c18b")
         assert e2e_scripts_in(root) == "testing", "切り出し後も宣言が効かない"
         assert main(["x", "record", "verify-tests", "green", "--scope", "e2e",
-                     "--scope", "qa"]) == 0
+                     "--scope", "qa", "--evidence", "artifacts/ev.txt"]) == 0
         (root / "docs/02-design/system.md").write_text("分割の散文を直した", encoding="utf-8")
         commit("c19")
         assert stamp_state(root, load_stamps(root), "verify-tests", "e2e")[0] == "green", \
             "台本を切り出した宣言があるのに system.md の変更が e2e を失効させた(V-4)"
-        assert stamp_state(root, load_stamps(root), "verify-tests", "qa")[0] == "green", \
-            "同上(qa)"
+        # qa は外さない ★(2026-09-15。inspection-28 C-21)— qa にとっての system.md は
+        # 台本の置き場ではなく「何を触って確かめるのか」の宣言なので、切り出しても依存に残る。
+        assert stamp_state(root, load_stamps(root), "verify-tests", "qa")[0] == "失効", \
+            "台本を切り出しても、qa は system.md の変更で失効しなければならない(C-21)"
+        assert main(["x", "record", "verify-tests", "green", "--scope", "qa", "--evidence", "artifacts/ev.txt"]) == 0
+        # --- inspection-28 A-7: green には証跡が要る(在ること・空でないことだけを見る)
+        assert main(["x", "record", "verify-docs", "green"]) == 2, \
+            "証跡なしの green を受理した(A-7)"
+        assert main(["x", "record", "verify-docs", "green",
+                     "--evidence", "artifacts/ない.txt"]) == 2, \
+            "実在しない証跡を受理した(A-7)"
+        (root / "artifacts/からっぽ.txt").write_text("", encoding="utf-8")
+        assert main(["x", "record", "verify-docs", "green",
+                     "--evidence", "artifacts/からっぽ.txt"]) == 2, \
+            "空の証跡を受理した(A-7)"
+        assert main(["x", "record", "verify-docs", "green",
+                     "--evidence", "/tmp/どこか.log"]) == 2, \
+            "リポジトリの外を指す証跡を受理した(A-7。記録は git で共有される)"
+        assert main(["x", "record", "verify-docs", "green",
+                     "--evidence", "../外.log"]) == 2, \
+            "`..` を含む証跡を受理した(A-7)"
+        assert main(["x", "record", "verify-docs", "red"]) == 0, \
+            "red に証跡を求めた(A-7。落ちたことの記録に証跡は要らない)"
+        assert main(["x", "record", "verify-docs", "green",
+                     "--evidence", "artifacts/ev.txt"]) == 0, "証跡つきの green が通らない"
+        assert load_stamps(root)["latest"]["verify-docs"]["evidence"] \
+            == ["artifacts/ev.txt"], "証跡が記録に残っていない(A-7)"
+
+        # --- inspection-28 A-20: 一時除外の期限は、出荷の瞬間に現在時刻と突き合わせる
+        q = root / "tests/quarantine.yml"
+        q.parent.mkdir(parents=True, exist_ok=True)
+        far = (datetime.now(timezone.utc) + timedelta(days=30)).strftime("%Y-%m-%d")
+        past = (datetime.now(timezone.utc) - timedelta(days=2)).strftime("%Y-%m-%d")
+        q.write_text(f'quarantined:\n  - test: "a/b.ts::まだ期限内"\n    due: {far}\n',
+                     encoding="utf-8")
+        assert quarantine_overdue(root) == ([], []), "期限内の一時除外を期限切れと言った"
+        q.write_text(f'quarantined:\n  - test: "a/b.ts::期限切れ"\n    due: {past}\n',
+                     encoding="utf-8")
+        over, bad = quarantine_overdue(root)
+        assert len(over) == 1 and not bad, "期限切れの一時除外を見つけられない(A-20)"
+        q.write_text('quarantined:\n  - test: "a/b.ts::期限なし"\n    since: 2026-09-01\n',
+                     encoding="utf-8")
+        assert len(quarantine_overdue(root)[0]) == 1, "due の無い一時除外を通した(fail-closed)"
+        q.write_text('quarantined:\n  - test: "a/b.ts::壊れた期限"\n    due: いつか\n',
+                     encoding="utf-8")
+        assert len(quarantine_overdue(root)[1]) == 1, "読めない due を通した(fail-closed)"
+        q.unlink()
+        assert quarantine_overdue(root) == ([], []), "宣言が無いのに期限切れと言った"
+
         (root / "docs/02-design/testing.md").write_text("台本を直した", encoding="utf-8")
         commit("c20")
         assert stamp_state(root, load_stamps(root), "verify-tests", "e2e")[0] == "失効", \
@@ -2402,13 +2957,13 @@ def selftest() -> int:
         assert stamp_state(root, load_stamps(root), "verify-tests", "qa")[0] == "失効", \
             "testing.md の変更が qa を失効させない(切り出し後はここが台本である)"
         assert main(["x", "record", "verify-tests", "green", "--scope", "e2e",
-                     "--scope", "qa"]) == 0
+                     "--scope", "qa", "--evidence", "artifacts/ev.txt"]) == 0
         local.write_text(json.dumps({"code_roots": ["src/"], "ui_roots": ["src/ui/"]}),
                          encoding="utf-8")
         assert stamp_state(root, load_stamps(root), "verify-tests", "e2e")[0] == "失効", \
             "e2e_scripts_in の宣言を戻したのに失効しない(焼き込み — D8 と同型)"
         # 欄を持たない古い鮮度スタンプも既定値 "system" と比べる(fail-open を作らない)
-        assert main(["x", "record", "verify-tests", "green", "--scope", "e2e"]) == 0
+        assert main(["x", "record", "verify-tests", "green", "--scope", "e2e", "--evidence", "artifacts/ev.txt"]) == 0
         st = load_stamps(root)
         st["latest"]["verify-tests:e2e"].pop("e2e_scripts_in", None)
         save_stamps(root, st)
@@ -2427,10 +2982,10 @@ def selftest() -> int:
                            cwd=root, capture_output=True)
 
         def _all_green() -> None:
-            assert main(["x", "record", "verify-docs", "green"]) == 0
-            assert main(["x", "record", "verify-impl", "green"]) == 0
+            assert main(["x", "record", "verify-docs", "green", "--evidence", "artifacts/ev.txt"]) == 0
+            assert main(["x", "record", "verify-impl", "green", "--evidence", "artifacts/ev.txt"]) == 0
             assert main(["x", "record", "verify-tests", "green", "--scope", "unit",
-                         "--scope", "integration", "--scope", "e2e", "--scope", "qa"]) == 0
+                         "--scope", "integration", "--scope", "e2e", "--scope", "qa", "--evidence", "artifacts/ev.txt"]) == 0
             _commit_state("stamps")    # 鮮度スタンプの書込みは専用の1コミットで畳む(flows.md §2)
 
         def _rec(name: str, decl: str) -> None:
@@ -2527,6 +3082,7 @@ def selftest() -> int:
           "critical 時の --lens 必須(範囲は覆いに合わせる)/"
           "F2 はツール生成領域では失効しない(除外。覆いとの相互作用は安全側)/"
           "e2e_scripts_in による台本の置き場の宣言/"
+          "監視範囲の外への改名(移動元の消滅で失効する。未コミット・コミット済みの両方)/"
           "リリース台帳(最初は 0.9.0・桁は宣言の最大値・雛形のままは拒む・未コミットは拒む)")
     return 0
 

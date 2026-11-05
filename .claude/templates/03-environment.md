@@ -6,7 +6,7 @@ source:
   - docs/02-design/environments.md
 summary: <1行>
 keywords: []
-# 層跨ぎ同名時は id が層を名乗る(00-auth / 01-auth)— 正は CLAUDE.md §7
+# 層跨ぎ同名時は id が層を名乗る(00-auth / 01-auth)— 正は `.claude/directions/core.md` §6
 # verified: verify 系フロー(/verify-docs、03層代表は /verify-impl)だけが書く
 ---
 

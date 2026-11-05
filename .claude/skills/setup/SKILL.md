@@ -12,7 +12,7 @@ argument-hint: (引数なし)
 **このスキルが用意するのは、判断を要しないものの全部である** — 空のディレクトリ、雛形の逐語複製、
 機械が導けるもの(`.gitkeep`、`build-index.py` が生成する索引、`colabtmux.conf` の
 `[project] name` = このディレクトリの名前)、**道具の導入**(§2.1)、
-そして**艦隊の下ごしらえ**(§2.2)。
+**テスト基盤の器**(§2.0)、そして**艦隊の下ごしらえ**(§2.2)。
 **判断を要する文字を1つも書かない**: 仕様ドキュメント(00〜03)の本文、コード、
 `callgraph-config.local.json` — **どれもここには属さず、このスキルは何も問わない。**
 
@@ -23,23 +23,48 @@ argument-hint: (引数なし)
 
 理由: 実行環境、lint / テストの正確なコマンド、解析する言語の構成は、
 **この時点ではまだ存在しないことがある。** 存在しないものについて問えば「未定」しか返らず、
-**推測すると SSOT に嘘が入る**(CLAUDE.md 原則1)。それらは**決まったときに、決まった場所で**
-書かれる(§3)。
+**推測すると SSOT に嘘が入る**(原則1)。それらは**決まったときに、決まった場所で**
+書かれる(このスキルの §3)。
 
 **このスキルが負う規範の節** — `.claude/directions/reading.md` のこのスキルの行。
 それは**床**である: 多く読むことは決して違反ではない。
 **読んでいない節から決めることが違反である**(原則9)。
 
+## 0.1 導入の入口 — どの順で打つか ★
+
+**2026-09-14 に `CLAUDE.md` から移した** — 始める人だけに要るもので、作業エージェントには
+関係がないからである(あちらは「全員が守るもの」だけを持つ)。
+
+| 状況 | 打つ順 |
+|---|---|
+| **コードも文書も無い** | `/setup` → `/build`(最初のタスクは 00〜02 に集中する — `03-impl.md`「★ 実装がまだ無いとき(グリーンフィールド)」)→ verify を1周 |
+| **コードは在るが文書が無い** | `/setup` → **`/relations all --apply --bootstrap`** → **`/retrofit`** → `/verify-impl all` → `/verify-docs all` |
+| **コードも文書も在るが、古い / 過剰** | `/setup` → **`/relations all --apply`**(`--bootstrap` を足すのは `docs/03-impl/relations/` が空**かつ**既存の 02 がモジュール分割を宣言していないときだけ。宣言済みなら素の `--apply` を人間が頼む。3つの場合分けは `/relations` §0)→ **`/retrofit`**(既存の文書は材料である)→ `/verify-impl all` → `/verify-docs all` |
+
+**中央エージェントが駆動するなら、この3つの前に `/mission` が来る** — 経路そのものは変わらず、
+中央エージェントが出す最初の作業指示になるだけである。
+
+**`/relations` は必ず `/retrofit` より先である** — 03-impl が無ければ、境界も呼び出しも契約も
+描けない。`/setup` は `01-requirements/system.md` と `02-design/environments.md` を作らない
+(コマンドが本当に在るようになってから書くものだからである)。
+
+**`/setup` にぶら下がる条件付きの1手** — `tests/` を初めて展開したときは、`tests/scripts/` の
+スクリプトと `tests/modules/` の依存の宣言が空で来るので、**`/test-env` が埋めるまでテストは
+1件も走らない**。`/setup` の後、テストが要る最初の周の前に打つ。そのプロジェクトに既に動く
+テスト環境が在るなら飛ばしてよい。
+
+---
+
 ## 1. いまの状態を確認する
 
-- `docs/` が既に在る → **既存ファイルを1バイトも変えない**が、§2 は走らせる:
+- `docs/` が既に在る → **既存の docs/ のファイルを1バイトも変えない**が、§2 は走らせる:
   `mkdir -p` と `.gitkeep` は既存のディレクトリに対して無害であり、**§2 以降の複写は、
   既に在るファイルを1つも上書きしない**(§2 は `cp -n`。§2.2 は在否と中身を見て、
   **既に在る本文には触らない** — 雛形を足すのは、colabtmux の管理ブロックしか無い
   `AGENTS.md` に対してだけである)。
   ブラウンフィールドのリポジトリには無関係な `docs/`(Sphinx、README)が在るのが普通で、
   **それを理由に §2 を飛ばすと骨格が作られず**、後のスキル
-  (`/relations` §3A、`/retrofit` §5)が書く場所を失う。既に在ったものを並べ、**§2.1 以降**へ進む。
+  (`/relations` §3A、`/retrofit` §5)が書く場所を失う。既に在ったものを並べ、**§2.0 以降**へ進む。
 - git リポジトリの中に居るかを確認する: `git rev-parse --show-toplevel`
   - 成功 → **`git init` をしない**(親の中にリポジトリを入れ子にしない)。最上位のパスを報告する。
   - 失敗 → `git init` を走らせる。**コミットしない**(最初のコミットに何を入れるかは人間が決める)。
@@ -68,9 +93,14 @@ cp -n .claude/templates/residual.md docs/residual.md
 cp -n .claude/templates/03-features.md docs/03-impl/features.md
 cp -n .claude/templates/docs-readme.md docs/README.md
 find docs -type d -empty -exec touch {}/.gitkeep \;
-python3 .claude/scripts/build-index.py
+python3 .claude/scripts/build-index.py --only-missing
 ```
 
+- **`build-index.py` は `--only-missing` で呼ぶ** ★ — **まだ無い index だけを作り、既に在る
+  index には1バイトも触らない。** オプションを落とすと、既存の index へ機械の欄を追記したり、
+  既に在る機械の欄を書き換えたりする — それは §1 の「既存の docs/ のファイルを1バイトも
+  変えない」を破る(2026-09-13)。**代償は、既に在る index が古いままここを通ること**である。
+  直すのは後続の通常の作業であり、初期設定はそれを待つ。
 - `.claude/state/stamps.json`(鮮度スタンプ)と `.claude/state/releases.json`(リリースの台帳。`flows.md` §9)と `.claude/state/ids.json`(採番の控え。`issues-pendings.md` §2.2)は **git で共有する**。`.gitignore` に入れない:
   記録の中身はどれも中身から決まる値なので、**どこでも同じ答えが出る**ように作られている
   (`flows.md` §2)。追跡すると `record` のたびにツリーが汚れるが、それは
@@ -81,13 +111,60 @@ python3 .claude/scripts/build-index.py
 - `docs/03-impl/feature-graph.md` は `cluster-features.py` が生成するので、**作ってはならない。**
 - 空のディレクトリは `.gitkeep` で git に残す(`infra/dev` などはしばらく空のままである)。
 
+## 2.0 テスト基盤の器 — 判断ゼロの範囲だけ
+
+- 配布物2の `sysdev-multi-templates-*.tar.gz` が手元(またはプロジェクト直下)に在れば、
+  **`tests` が存在しないときだけ**展開する。既存のディレクトリ・ファイル・シンボリックリンクは
+  上書きせず、既存のテスト基盤の有無を §3 で報告する。
+- tar が無ければこの段は何もせず、§3 に「テスト基盤は未導入 — 配布物2の tar を人間が
+  持ってくる」と書く(既に導入済みならその事実を書く)。質問はしない。
+- tar は既知の手元のパスを使う。候補が複数なら更新時刻が最新の1件を使う
+  (`make -C sysdev-multi deploy TO=<先>` と同じ選び方)。下の変数にそのパスを入れ、
+  プロジェクト直下で実行する。導入手順の案内は配布元 `sysdev-multi/install-notes.txt` の
+  「初回導入」だが、**そのファイルはこのプロジェクトには同梱されていない** ★ —
+  配布物1にも2にも入らない(配布元で `make dist` が印字するためのものである)。
+  **手元に無いなら、配布元を持っている人に頼んで渡してもらう。**
+  待てないなら、下の逐語のコマンドだけで初回展開はできる(除外の追記まで含まれている)。
+  **既存の .gitignore の本文は変えず、初回展開時の除外の追記だけを行う。**
+
+```bash
+# tests_tar に、見つかった配布物2の tar のパスを設定してから実行する
+if [ ! -e tests ] && [ ! -L tests ]; then
+  if tar -xzf "$tests_tar" -C . tests; then
+    if ! grep -qx 'artifacts/' .gitignore 2>/dev/null; then
+      # tar の読出しに成功してから追記する。既存の最終行とも連結しない。
+      if tests_ignore=$(tar -xzOf "$tests_tar" gitignore-root); then
+        printf '\n%s\n' "$tests_ignore" >> .gitignore
+      fi
+    fi
+  fi
+fi
+if [ -d tests/tools ]; then
+  ./tests/tools/test-runner --print-schema
+fi
+```
+
+- `--print-schema` が成功し、ラッパが同梱バイナリを実行できることを確認する。
+  展開・除外の追記・実行確認に失敗したら、理由を §3 に報告し、既存ファイルの修復はしない。
+- **続けて `./tests/tools/test-runner setup` を実行し、出力をそのまま §3 に貼る** ★ —
+  これは**何も書き換えず、埋まっていない設定を一覧にするだけ**のコマンドである。
+  **未解決が並ぶのは正常な状態で、そのとき終了コードは 1 になる** ★ — 雛形の
+  `adapters.yml` は全部コメントアウトで配られるので、**導入直後は必ずそうなる。**
+  **これを実行確認の失敗として報告しない**(上の行の「実行確認に失敗したら」は
+  `--print-schema` に掛かる)。**穴埋めもしない** — 埋めるのは `/build` である
+  (コードを書く作業の入口で、触るモジュールのぶんを埋める)。
+  **貼る目的は、埋める仕事が残っていることを導入の時点で見せること**である —
+  貼らないと、空のまま試験まで進み、**高価な検証一式が丸ごと空振りしてから**露見する。
+- **宣言ファイルの中身(adapters.yml のコマンド等)はここで書かない。** 雛形の逐語展開だけで、
+  プロジェクトの値を決めるのは判断である。`environments.md` と同じく、実物が在ってから書く。
+
 ## 2.1 解析の道具を用意する ★
 
 ```bash
 python3 .claude/scripts/setup-tools.py     # 依存の導入先はキット専用 venv(.claude/.venv)だけ
 ```
 
-**必ず走らせる。** Go / TypeScript / infra のコールグラフは、必須依存(tree-sitter・PyYAML)が
+**必ず走らせる。** `Go` / `TypeScript` / `Rust` / `infra` のコールグラフは、必須依存(tree-sitter・PyYAML)が
 無いと**起動時に終了コード2で止まる** — 正規表現への縮退経路は無い(`.claude/tools-readme.md` §0)。
 **プロジェクト側の環境にもホストにも何も入らない**ので、ここで走らせて壊れるものが無い。
 
@@ -102,7 +179,7 @@ python3 .claude/scripts/setup-tools.py     # 依存の導入先はキット専�
 - **解析しない言語の宣言(`callgraph-config.local.json` の `enabled: false`)はここで書かない** —
   それは判断である。§3 でそう伝える。
 
-## 2.2 艦隊の下ごしらえ — 雛形2つ ★
+## 2.2 艦隊の下ごしらえ — 雛形2つ + スキルのリンク ★
 
 **`colabtmux start` は、この2つのファイルが先に在ることを前提にする**(`orchestration.md` §1)。
 どちらも**雛形の逐語複製**であり、判断を1つも含まないので、ここで済ませる。
@@ -110,40 +187,67 @@ python3 .claude/scripts/setup-tools.py     # 依存の導入先はキット専�
 配車する経路)。だから**作る側と直す側の両方**を書いてある。
 
 ```bash
-# ① colabtmux.conf — 無ければ雛形から。名前はこのディレクトリの名前にする
-[ -f colabtmux.conf ] || python3 - <<'PY'
-import json, os, pathlib
-src = pathlib.Path(".claude/templates/colabtmux.conf").read_text(encoding="utf-8")
-out = src.replace('name = "PROJECT"', "name = " + json.dumps(os.path.basename(os.getcwd())), 1)
-pathlib.Path("colabtmux.conf.new").write_text(out, encoding="utf-8")
-os.replace("colabtmux.conf.new", "colabtmux.conf")   # 書けたときにだけ置き換わる
-PY
+# ① colabtmux.conf と AGENTS.md は複製しない — **配布物で置かれている**(2026-09-14)。
+#    どちらもプロジェクト固有の値を持たないので、新しい版を展開すれば一緒に上書きされる。
+#    (colabtmux.conf の [project] name は書いていない = ディレクトリ名が使われる)
+for f in colabtmux.conf AGENTS.md; do
+  [ -e "$f" ] || echo "$f がありません。配布物1(CLAUDE.md と .claude/)の展開が済んでいません"
+done
 
-# ② AGENTS.md — 無ければ雛形から。colabtmux の管理ブロックしか無いなら、雛形をその上へ足す
-if [ ! -f AGENTS.md ]; then
-  cp .claude/templates/AGENTS.md AGENTS.md
-elif [ -z "$(sed '/^<!-- colabtmux:begin/,/^<!-- colabtmux:end/d' AGENTS.md | tr -d '[:space:]')" ]; then
-  { cat .claude/templates/AGENTS.md; echo; cat AGENTS.md; } > AGENTS.md.new && mv AGENTS.md.new AGENTS.md
-fi
+# ② .codex/config.toml — **無いときだけ**雛形から作る。**既に在るものは1バイトも触らない。**
+#    あそこはプロジェクト専用 CODEX_HOME の置き場でもあり、ブラウザQAの接続先の許可リストや
+#    codex がこのプロジェクトを信頼した記録が入っている(2026-09-01 の移行)。
+#    上書きすると、それらが消えて codex が起動直後に信頼の問いで止まる。
+mkdir -p .codex
+cp -n .claude/templates/codex-config.toml .codex/config.toml
+
+# ③ .agents/skills/ のリンクは**配布物に入っている**(2026-09-14)。
+#    ここで打つのは、リンクが欠けていたときの張り直しだけである(何度打ってもよい)。
+mkdir -p .agents/skills
+for d in .claude/skills/*/; do
+  name=$(basename "$d")
+  [ -e ".agents/skills/$name" ] || ln -s "../../.claude/skills/$name" ".agents/skills/$name"
+done
 ```
 
-- **`[project] name` をディレクトリ名にするのは判断ではない** — colabtmux 自身が `--project` を
-  省いたときに使う値と同じである。**`PROJECT` のまま残すと、1つの Slack チャンネルに集まる
-  全プロジェクトが `[PROJECT]` と名乗る**(雛形の頭のコメント)。
-- **ここを `sed` で書かないこと** ★ — 置換文字列の中で `&` と `\` は特別な意味を持ち、区切りに
-  選んだ記号(`|` など)がディレクトリ名に現れれば `sed` 自体が失敗する。**しかもリダイレクトが
-  先にファイルを作るので、失敗すると 0 バイトの `colabtmux.conf` が残り、次に走らせても
-  `[ -f ]` が真になって永久に直らない**(2026-08-31 に `a|b` という名前で実測)。
-  上の Python は最後まで書けたときにだけ `os.replace` で置き換える。
-- **`AGENTS.md` に colabtmux の管理ブロック(`<!-- colabtmux:begin ... -->`)しか無いのは、
-  `colabtmux start` が先に走った跡である**(そのとき colabtmux はこのファイルをブロックだけの
-  内容で新規作成する)。雛形の中身を**ブロックの上へ**足す — 雛形自身がこの手順を書いている。
-  **ブロックの中は編集しない。** あれは colabtmux のもので、次の起動で書き戻る。
-- **本文が1行でも在る `AGENTS.md` には触らない** ★ — そのプロジェクトが自分で書いたものかも
-  しれず、前置きも上書きも破壊である。**判定は「管理ブロックを取り除いた残りが空白だけか」で
-  行う。** 「雛形の見出しが在るか」で判定してはならない(2026-08-31 に実測: 雛形と違う独自の
-  `AGENTS.md` に雛形が前置きされた)。雛形より古いことが気になるなら、それは `/kit-migrate` の
-  仕事であり、ここでは §3 でそう伝えるだけにする。
+- **③ のリンクは codex のためだけに在る** ★ — claude は `.claude/skills/` を直接読むので要らない。
+  codex が探すのは `$CWD/.agents/skills` から親をたどってリポジトリのルートまでで、
+  **リンク先を追う**(2026-09-14 に実測。`.agents/skills/<名前>` → `.claude/skills/<名前>` で
+  正本の `SKILL.md` がそのまま読み込まれた)。**`.claude/skills/` を複製しない** — 写しは
+  次にスキルを直した日からずれ、どちらが正かが分からなくなる。
+- **`colabtmux.conf` の `[project] name` は書かれていない** ★(2026-09-14)— 省くと colabtmux が
+  **このディレクトリの名前**を使うので、プロジェクトごとに直す必要が無い。
+  **この1点が、あのファイルを配布物にできた理由である**(固有の値が1つも無い)。
+  別の名前にしたいときだけ書き足す — ただし**書き足した行は次の上書き展開で消える。**
+- **`.codex/config.toml` は、無いときだけ作る** ★ — **既に在るものは1バイトも触らない。**
+  あそこはプロジェクト専用 `CODEX_HOME` の置き場でもあり、ブラウザQAの接続先の許可リスト
+  (`.claude/migrations/2026-09-01-browser-qa-allowlist-two-layers.md`)と、codex がこの
+  プロジェクトを信頼した記録が入っている。**上書きすると、信頼が消えて codex は起動直後に
+  問いで止まる** — このファイルを置く目的そのものが壊れる。
+- **`AGENTS.md` はもう複製しない** ★(2026-09-14)— **`CLAUDE.md` へのシンボリックリンク**で
+  あり、配布物に入っている。claude と codex が**同じバイトを起動時に読む**のはこのためで、
+  「`CLAUDE.md` を読め」という取りこぼしうる1行が要らなくなった。
+  **`colabtmux start` が先に走って、リンクを普通のファイルで置き換えてしまっていたら**
+  (管理ブロックだけの内容になる)、**配布物を展開し直せばリンクに戻る。**
+  **`colabtmux start` は起動のたびに管理ブロックを書き足す。どこへ書くかは
+  起こす道具で違う** ★(2026-09-16 に実測した。inspection-28 D-14)—
+  配布先を `colabtmux.conf` の `[agent_kind.<種別>] provision_target` で指定していなければ、
+  **codex は `AGENTS.md`、claude は道具が生やすスキルのファイル
+  (`.claude/skills/` の下に `colabtmux` という名前で作られる。**キットの持ち物ではない**)、
+  gemini は `GEMINI.md`** が既定である。
+  **`AGENTS.md` はリンクなので、codex 側の書込みはリンク先の `CLAUDE.md` に入る** —
+  だから**雛形の `colabtmux.conf` は codex の配布先を `.colabtmux/usage-codex.md` に指定してある**
+  (2026-10-31。状態の置き場所なので `.gitignore` 済み)。**ただしその指定が効くのは、colabtmux が
+  実際に読む設定に書かれているときだけである** — colabtmux は設定を状態の置き場所
+  (`.colabtmux/colabtmux.conf`)から読み、直下の雛形は読まない。そのファイルは最初の
+  `colabtmux start` が既定値で作るので、**`start` の後、codex を起こす前に**同じ1行を
+  `[agent_kind.codex]` へ書く(手順は移行 `2026-10-31-colabtmux-codex-provision-target`。
+  `python3 .claude/scripts/kit-migrate.py check` がそれを「要る」と出す)。
+  **最初の `start` を codex で打った場合は、その時点で既に混入している** — 下の1行で見て消す。
+  そのうえで**混入していないか1度だけ見る**:
+  `test -L AGENTS.md && ! grep -q 'colabtmux:begin' CLAUDE.md`。
+  **入っていたらその区間を消して配布物を展開し直す**(`CLAUDE.md` は全役が読むファイルであり、
+  道具の管理ブロックが混ざってよい場所ではない)。
 - **既に在る `colabtmux.conf` は上書きしない。** そのファイルはプロジェクトのものであり、
   中身の取捨は判断だからである。代わりに、この運用に要る3つの値が在るかだけを見て、
   欠けていたら §3 で名指す(**直すのは人間である**):
@@ -152,7 +256,7 @@ fi
 if [ -f colabtmux.conf ]; then
   for k in 'max_attempts' '[notify]' 'timeout_ms'; do
     grep -qF "$k" colabtmux.conf ||
-      echo "colabtmux.conf に $k が無い(雛形: .claude/templates/colabtmux.conf)"
+      echo "colabtmux.conf に $k が無い(雛形: colabtmux.conf)"
   done
 fi
 ```
@@ -160,20 +264,74 @@ fi
   この3つが要る理由は `orchestration.md` §1 が持つ(既定の `max_attempts` のままだと、
   **7分を超えて生成し続けた相手への配信が諦められる**)。
 
+## 2.3 許可済みの無介入準備と、環境固有の判断
+
+**モードの選択は人間、明示が無いときの既定は中央エージェントのエンジンで決まる**
+(claude なら a1、codex なら o1。2026-09-20。`orchestration.md` §1.2.1)。
+**/setup が中央のエンジンを選んだり替えたりしない** — どちらで立てるかは人間が決める。
+モデル制限(使うモデルを軽い層に固定する指示。同 §1.5)も人間の指示だけで入り、
+/setup は設定ファイルの既定値をそれに合わせて書き換えない。
+必要エンジンは `.claude/directions/orchestration.md` §1.2.1、起動前確認は
+`.claude/skills/mission/SKILL.md` §0 が正である。
+既存専用設定は `.claude/skills/setup/SKILL.md` §2.2 のとおり複写で上書きせず、許可されたキーの移行は
+`.claude/migrations/2026-09-18-operating-modes.md` に従う。
+
+| 機械で準備・確認するもの | 人間の指定が必要なもの |
+|---|---|
+| 実際の CODEX_HOME と正規化した作業/worktree パスの確定、TOML の構文・信頼値の読取り | 信頼してよいプロジェクトとパスの範囲。未承認リポジトリを一括で信頼しない |
+| 専用ホームの所有者・ディレクトリ700/設定・認証600の確認、git/配布物からの除外 | ホスト共有ホームへ書く権限と並行更新、管理側の強制設定 |
+| approval_policy=never の照合と、`danger-full-access` での一時書込み・通信の試験 | **外側の隔離**(ホスト・利用者・マウント・ソケット・資格情報・通信範囲)。砂箱がもう何も止めないので、ここは人間の引き受けである |
+| 設計が宣言したキャッシュをエージェント別一時領域へ向け、実コマンドでビルド・git・設定更新を試す | 未知のビルド道具の保存先・必須権限。$HOME 全体を開ける既定は作らない |
+| 版を固定し事前導入した MCP、必要ツールの自動承認、宣言と実設定の許可先の照合と通過/拒否の試験 | サーバの出所・版・接続先・資格情報・製品固有の起動/副作用の許可 |
+
+専用ホームなら `.codex/` を実行時ホームにすることを起動環境へ明示し、設定と認証が実際に
+そこから読まれることを確認する。CODEX_HOME は設定ファイルの置き場だけではなく認証・履歴・
+会話本文・キャッシュを含む。全文をログへ出したり配布したりしない。
+信頼準備は**許可された実際のパスだけ**を、実際の CODEX_HOME/config.toml の
+`[projects."<正規化した絶対パス>"]` の `trust_level = "trusted"` として追加する。
+パスを TOML の文字列として引用し、既存の信頼・認証・履歴・MCP・無関係キーを保持する。
+変更前後を TOML として検査し、書く直前に控えと現物が一致することを確かめる。
+許可範囲が無いなら書かず、初回対話か許可範囲の指定が必要と報告する。
+
+**エージェントとして起こす codex の経路は1つである** — `danger-full-access` / `never`
+(2026-09-20。`orchestration.md` §1.1.1)。`launch-agent.py` が必ずそれを渡すので、
+/setup が経路を選んだり、砂箱を狭める設定を書き足したりしない。
+**このモードは codex の側の制限を1つも掛けない**ので、**守るのは外側だけになる** —
+ホストの隔離・利用者・マウント・ソケット・資格情報・外部通信を確認し、
+**未確認なら未確認と報告する**(「砂箱が守っている」とは書けない)。
+拒否が残る場合は環境設計の保存先を調整し、必要操作の試験をやり直す。
+テンプレートに sandbox_mode を書かない方針は変えない(起動行のほうが強い)。
+use_legacy_landlock のフラグだけで可否を決めず、CLI 版と実測を記録する。
+
+起動・操作が要る確認は許可された環境で行い、実際の役の掲示板往復・画面QAのアプリ生存・
+MCP の通る先と拒む先まで確認した結果を中央へ返す。許可先の差異は設定全文や秘密ではなく
+差分だけを報告する。認証・利用枠・未知の宛先/必須操作・強制制限は未確認なら未確認と返す。
+未確認を無介入の成功保証へ読み替えない。人間の判断が要る部分を /setup が推測して埋めない。
+
 ## 3. 作ったものと、次の一手を報告する
 
 作ったディレクトリ・ファイル・git の状態を並べる。そのうえで次を述べる
-(**ここで所有を定義し直さない**: 導入経路の正は CLAUDE.md §5 であり、
+(**ここで所有を定義し直さない**: 導入経路の正は `.claude/directions/core.md` §5 であり、
 各スキルが自分の生成物を所有する):
 
 > `docs/01-requirements/system.md`(技術制約)と `docs/02-design/environments.md`
 > (lint/テスト/build の**厳密なコマンド**)は**まだありません**。
 > **コマンドが実在してから書く**もので、下の経路の中で作られます。
 >
+> テスト基盤: <初回展開済み・実行確認の結果 / 既存を保持 / 未導入 — 配布物2の tar を人間が持ってくる>(§2.0)。
+> 宣言ファイルのプロジェクト固有の値は、実物が在ってから書きます。ここでは雛形を配るだけです。
+>
+> **初回展開したときは、まだテストは1件も動きません。** `tests/scripts/` の
+> `bootstrap.sh`(依存を入れる手順)・`setup.sh` / `teardown.sh` / `reset.sh`(環境の起動・
+> 停止・作り直し)と、`tests/modules/` の依存の宣言は**空のまま配られます**。
+> これを書くのは **`/test-env`** です(`tests/environments-guide.md` も同じ)。
+> 言語ごとの実行コマンド(`tests/adapters.yml`)ほかの宣言ファイルを埋めるのは `/build` です。
+> **「既存を保持」でテストが既に動いている場合、この手順は要りません。**
+>
 > ツール依存の導入(`python3 .claude/scripts/setup-tools.py`。キット専用 venv に閉じます)は
 > **こちらで済ませました**(§2.1)。出力をそのまま報告に貼ります — **用意できなかったものが
 > あれば、その理由と「`python3 .claude/scripts/setup-tools.py` をもう一度打てば直る」ことを
-> 必ず添えます。** Go / TypeScript / infra は必須依存が無いとコールグラフの解析が
+> 必ず添えます。** `Go` / `TypeScript` / `Rust` / `infra` は必須依存が無いとコールグラフの解析が
 > **起動時に止まります**(終了コード2。縮退経路はありません)。
 > 精度が1段落ちるだけ(Tier3)で済むのは、外部依存を持たない shell / make です。
 > その言語を解析しない選択は `callgraph-config.local.json` の `enabled: false` で明示してください
@@ -184,9 +342,11 @@ fi
 > `colabtmux.conf` と `AGENTS.md` は用意しました(§2.2)。次に打つのはこの1行です:
 >
 > ```
-> colabtmux start -- claude --permission-mode auto --model opus --effort high \
->   --append-system-prompt-file .claude/roles/orchestrator.md
+> colabtmux start                 # 中央エージェントを claude で立てる
 > ```
+>
+> codex で立てるなら `colabtmux start --kind codex` です。どちらも
+> `colabtmux.conf` が `.claude/scripts/launch-agent.py` を呼び、役の規範を起動時に渡します。
 >
 > **`tmux attach` は要りません**(`start` がこの端末をそのまま繋ぎます)。
 > **あなたがこの `/setup` を自分で打ったのではなく、すでに動いている場から自動で走った場合は、

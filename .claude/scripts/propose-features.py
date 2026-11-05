@@ -216,7 +216,7 @@ def main(argv: list[str]) -> int:
             print("  - " + e)
         return 2
 
-    result = ft.cluster(cg, feats, cfg)
+    result = ft.cluster(cg, feats, cfg, root)
     if result.get("errors"):
         print("## 機能表とコールグラフが食い違っている(FT1)。先にこれを直す")
         for e in result["errors"]:

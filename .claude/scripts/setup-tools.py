@@ -11,7 +11,7 @@
     `.claude/.tools/` の中にだけ入れる(グローバルにも sudo でも入れない)。
   ・**任意ツール(--host-tools)はどれが無くても動かなくなることはない。** 精度が
     Tier2 → Tier3 と落ちるだけで、落ちたことは必ず報告される。
-  ・**必須依存(venv の tree-sitter・PyYAML)が無いときは違う。** Go / TypeScript / infra の
+  ・**必須依存(venv の tree-sitter・PyYAML)が無いときは違う。** Go / TypeScript / Rust / infra の
     解析は縮退せず、build-callgraphs.py が起動時に直し方を1行言って終了コード2で止まる
     (正規表現の縮退経路は存在しない — inspection-17 判断1)。
 

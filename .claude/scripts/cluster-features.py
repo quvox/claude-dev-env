@@ -21,7 +21,7 @@
     python3 .claude/scripts/cluster-features.py --check       # 鮮度検査(書き換えない)
     python3 .claude/scripts/cluster-features.py --format json # 中間表現(①を含む)
     python3 .claude/scripts/cluster-features.py --from cg.json # 抽出をやり直さない
-    python3 .claude/scripts/cluster-features.py --selftest     # 決定性の自己検査
+    python3 .claude/scripts/cluster-features.py --selftest     # 決定性と、抽出器が無い言語の入口の扱いの自己検査
 
 終了コード: 0=成功 1=機能表とコードが食い違う / --check で古い 2=使い方・解析エラー
 """
@@ -52,6 +52,64 @@ def load_callgraph(root: Path, cfg: dict, from_json: str | None) -> dict:
     return result
 
 
+def selftest_unsupported_lang() -> bool:
+    """抽出器が無い言語の入口は FT1 にせず「未検査」に数える(KIT-callgraph-ft1-unsupported-lang)。
+
+    **実データが要らない合成の検査**なので、機能表の無い環境でも必ず走る。
+    「抽出器が無い」は**設定で決まる**(今回出たシンボルでは決めない)。逆側 — 抽出器の在る言語で
+    入口が消えた、ファイルが無い、テストを入口にした、エンドポイントIDの誤り、同じ入口の重複 —
+    は従来どおり FT1 のまま。
+    """
+    import tempfile
+    cfg = {"languages": {"python": {"enabled": True, "extensions": [".py"]},
+                         "go": {"enabled": True, "extensions": [".go"]},
+                         "infra": {"enabled": True, "extensions": [".tf", ".yaml"]}},
+           "test_markers": ["/tests/"]}
+    # go は有効なのにシンボルが 0 件 — それでも .go の入口は FT1 の対象である
+    cg = {"languages": {"python": {"tier": 2, "edges": [], "endpoints": [], "symbols": [
+        {"id": "svc/app.py::handler", "file": "svc/app.py"}]}}}
+
+    def row(fid, entry):
+        return {"id": fid, "kind": "other", "entries": [entry], "module": "", "summary": ""}
+    ok = True
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        for rel in ("app/src/App.kt", "infra/main.tf", "tests/x.kt"):
+            (root / rel).parent.mkdir(parents=True, exist_ok=True)
+            (root / rel).write_text("", encoding="utf-8")
+        feats = [row("MODULE-py", "svc/app.py::handler"),
+                 row("MODULE-kt", "app/src/App.kt::handle"),
+                 row("MODULE-tf", "infra/main.tf::aws_s3_bucket.b")]
+        r = ft.cluster(cg, feats, cfg, root)
+        if r.get("errors") or r.get("skipped_entries") != [
+                "MODULE-kt: app/src/App.kt::handle", "MODULE-tf: infra/main.tf::aws_s3_bucket.b"]:
+            print(f"  NG  抽出器が無い言語の入口を FT1 にしている / 未検査に数えていない → "
+                  f"{r.get('errors')} {r.get('skipped_entries')}"); ok = False
+        elif "未検査: 入口 2 件" not in ft.render_graph(r, cfg):
+            print("  NG  未検査の入口が feature-graph に出ていない"); ok = False
+        for bad in ("svc/gone.py::handler",          # 抽出器の在る言語で消えた
+                    "svc/main.go::main",              # 抽出器は在るがシンボル 0 件
+                    "app/src/Gone.kt::x",        # 抽出器は無いがファイルも無い(消えた・綴りの誤り)
+                    "tests/x.kt::t",                  # テスト — 「機能ではない」の案内へ回す
+                    "POST /missing", "svc/Makefile::x"):
+            r2 = ft.cluster(cg, feats[:1] + [row("MODULE-x", bad)], cfg, root)
+            if not r2.get("errors") or r2.get("skipped_entries"):
+                print(f"  NG  `{bad}` を FT1 から外している → {r2.get('errors')} "
+                      f"{r2.get('skipped_entries')}"); ok = False
+        # root を省いたら照合する側へ倒す(実在を確かめられないのに黙って未検査にしない)
+        r4 = ft.cluster(cg, feats, cfg)
+        if r4.get("skipped_entries") or len(r4.get("errors", [])) != 2:
+            print(f"  NG  root を省いたのに未検査に回している → {r4.get('errors')} "
+                  f"{r4.get('skipped_entries')}"); ok = False
+        r3 = ft.cluster(cg, feats + [row("MODULE-dup", "app/src/App.kt::handle")], cfg, root)
+        if not any("重複" in e for e in r3.get("errors", [])):
+            print(f"  NG  未検査の入口の重複を FT1 にしていない → {r3.get('errors')}"); ok = False
+    if ok:
+        print("  OK  抽出器が無い言語の入口は未検査(FT1 にしない)/ 在る言語・消えたファイル・テスト・"
+              "エンドポイントID・重複は FT1 のまま")
+    return ok
+
+
 def run_selftest(root: Path, cfg: dict, cg: dict, feats: list[dict]) -> int:
     """2回実行して同一 / **入力順を入れ替えても同一**(design §8.3.1)。
 
@@ -59,8 +117,8 @@ def run_selftest(root: Path, cfg: dict, cg: dict, feats: list[dict]) -> int:
     決定性を壊す実装ミスが素通りする。
     """
     print("## 決定性の自己検査")
-    a = ft.render_graph(ft.cluster(cg, feats, cfg), cfg)
-    b = ft.render_graph(ft.cluster(cg, list(feats), cfg), cfg)
+    a = ft.render_graph(ft.cluster(cg, feats, cfg, root), cfg)
+    b = ft.render_graph(ft.cluster(cg, list(feats), cfg, root), cfg)
     if a != b:
         print("  NG  2回の実行で出力が違う")
         return 1
@@ -75,7 +133,7 @@ def run_selftest(root: Path, cfg: dict, cg: dict, feats: list[dict]) -> int:
                 rng.shuffle(data[key])
     if "boundaries" in shuffled_cg:
         rng.shuffle(shuffled_cg["boundaries"])
-    c = ft.render_graph(ft.cluster(shuffled_cg, shuffled, cfg), cfg)
+    c = ft.render_graph(ft.cluster(shuffled_cg, shuffled, cfg, root), cfg)
     if a != c:
         print("  NG  **入力順を入れ替えると出力が変わる**(探索順に依存している)")
         return 1
@@ -101,11 +159,11 @@ def main(argv: list[str]) -> int:
         elif a == "--selftest":
             selftest = True
         elif a in {"--format", "--from", "--out"} and i + 1 < len(args):
-            # **次がフラグなら「値の欠落」である。** `--out $CG_OUT --check` を引用符無しで
+            # **次がオプションなら「値の欠落」である。** `--out $CG_OUT --check` を引用符無しで
             # 書き、`$CG_OUT` が空だと `--out --check` になる。飲み込むと `--check` という名の
             # ディレクトリへ**書き込みが走る**(実測。独立レビュー B)。fail-closed にする。
             if args[i + 1].startswith("--"):
-                print(f"エラー: {a} の値が無い(次がフラグ)。"
+                print(f"エラー: {a} の値が無い(次がオプション)。"
                       f"`{a} <値>` の形で、値は**引用符で囲む**こと。")
                 return 2
             i += 1
@@ -123,7 +181,7 @@ def main(argv: list[str]) -> int:
             # `=` 形も同じ扱い(上と同じ理由)
             out_dir = a.split("=", 1)[1]
             if out_dir.startswith("--"):
-                print("エラー: --out= の値がフラグである(値の欠落)。"
+                print("エラー: --out= の値がオプションである(値の欠落)。"
                       "`--out=\"$CG_OUT\"` のように値を渡すこと(変数が空なら解決からやり直す)。")
                 return 2
         else:
@@ -140,6 +198,10 @@ def main(argv: list[str]) -> int:
     fcfg = ft.feature_cfg(cfg)
 
     feats, ferrors = ft.load_features(root, cfg)
+    if selftest:
+        print("## 未対応言語の入口の自己検査")
+        if not selftest_unsupported_lang():
+            return 1
     if selftest and (ferrors or not feats):
         # キット自身のリポジトリ等、機能表の無い環境で「写して作れ」と誤誘導しない
         print("対象なし: 機能表が無い/空のため、決定性の自己検査は実データで走らせられない。")
@@ -158,13 +220,16 @@ def main(argv: list[str]) -> int:
         return 2
 
     cg = load_callgraph(root, cfg, from_json)
-    result = ft.cluster(cg, feats, cfg)
+    result = ft.cluster(cg, feats, cfg, root)
+    skipped = result.get("skipped_entries", [])
     if result.get("errors"):
         print("## 機能表とコールグラフが食い違っている(FT1)")
         print("  **誤ったクラスタを出すより止める。** 機能表の入口を直すか、"
               "コードを直してから再実行する。")
         for e in result["errors"]:
             print("  - " + e)
+        if skipped:
+            print(f"  (ほかに抽出器が無い言語の入口 {len(skipped)} 件は未検査)")
         return 1
 
     #
@@ -232,7 +297,8 @@ def main(argv: list[str]) -> int:
     print(f"## {rel_out} を生成した")
     print(f"  機能 {c['features']} / 機能間の辺 {c['edges']}"
           f"(確定 {c['confirmed_edges']} / 候補 {c['candidate_edges']})"
-          f" / 共有関数 {c['shared']} / 未到達 {c['unreached']}")
+          f" / 共有関数 {c['shared']} / 未到達 {c['unreached']}"
+          + (f" / 未検査の入口 {len(skipped)}(抽出器が無い言語)" if skipped else ""))
 
     missing = ft.missing_entrypoints(cg, result["roots"], cfg)
     if missing:

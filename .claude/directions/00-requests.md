@@ -66,7 +66,7 @@ docs/00-requests/
 ## decisions/ — 決定台帳
 
 要求カテゴリごとに1ファイル。ID は `D0-<category>-nn`。**分割の引き金はサイズではない**
-(CLAUDE.md §7): 1つのカテゴリの中のサブトピックが**別々の作業指示の対象になった**ときに
+(`.claude/directions/core.md` §6): 1つのカテゴリの中のサブトピックが**別々の作業指示の対象になった**ときに
 `<category>-<subtopic>.md` へ切る。切るときに要るのは、切る候補と、新しいファイル名と、
 **いま現在そのパスを参照している文書**(`source:` frontmatter と本文の両方)である。
 そして**決して番号を振り直さない**: `D0-<category>-nn` はカテゴリに属していてファイル名には
@@ -123,11 +123,11 @@ docs/00-requests/
 ## Frontmatter(`examples/` 以外のすべてのファイル)
 
 `id` はファイル名と一致させる(01 に同じ名前のファイルが在るときは、`id` が層を名乗る —
-CLAUDE.md §7)。`source` は 00 の外を決して指さない(ここが最上層である)。
+`.claude/directions/core.md` §6)。`source` は 00 の外を決して指さない(ここが最上層である)。
 `request.md` は `source: []` を持ち、層の中での派生は起点を並べる
 (`acceptances.md` / `terminology.md` → `request.md`。雛形が示すとおり)。
 実物の frontmatter のコメントは**行まるごとだけ** — 値の後ろのインラインコメントは、
-このキットのパーサに**値の一部として読まれる**(CLAUDE.md §7)。
+このキットのパーサに**値の一部として読まれる**(`.claude/directions/core.md` §6)。
 
 ```yaml
 ---

@@ -231,12 +231,23 @@ def _adj(edges) -> dict[str, list[str]]:
 
 # --------------------------------------------------------------------------- クラスタリング
 
-def resolve_roots(features: list[dict], cg: dict) -> tuple[dict[str, set[str]], list[str]]:
-    """機能の入口をシンボルIDに解決する。FT1 の実体。"""
+def resolve_roots(features: list[dict], cg: dict, cfg: dict, root=None
+                  ) -> tuple[dict[str, set[str]], list[str], list[str]]:
+    """機能の入口をシンボルIDに解決する。FT1 の実体。(入口, エラー, 未検査の入口) を返す。
+
+    **抽出器が無い言語の入口はエラーにしない** — callgraph に無くて当然だからである。
+    `<機能ID>: <入口>` の形で3つ目に返し、呼び出し側が「未検査」として件数を出す。
+    判定は `base.unextracted_symbol`(設定とファイルの実在で決まる。**`root` を省くと1件も
+    飛ばさない** — 照合する側へ倒す)。
+    **重複の検査は飛ばさない** — 未検査の入口でも、2つの機能が同じ文字列を宣言すれば FT1 である。
+    """
     symbols = _symbols(cg)
     handlers = _endpoint_handlers(cg)
+    exts = base.symbol_extensions(cfg)
+    skipped_owner: dict[str, str] = {}
     roots: dict[str, set[str]] = {}
     errors: list[str] = []
+    skipped: list[str] = []
     owner: dict[str, str] = {}
 
     for f in features:
@@ -249,6 +260,13 @@ def resolve_roots(features: list[dict], cg: dict) -> tuple[dict[str, set[str]], 
                 got |= set(handlers[entry])
             elif entry in symbols:
                 got.add(entry)
+            elif base.unextracted_symbol(entry, exts, cfg, root):
+                if entry in skipped_owner and skipped_owner[entry] != f["id"]:
+                    errors.append(f"入口が重複している: {entry} を "
+                                  f"{skipped_owner[entry]} と {f['id']} が宣言している"
+                                  "(所有が一意でないとクラスタリングが定義できない)")
+                skipped_owner.setdefault(entry, f["id"])
+                skipped.append(f"{f['id']}: {entry}")
             else:
                 errors.append(
                     f"{f['id']}: 入口が callgraph に無い: {entry}"
@@ -261,7 +279,7 @@ def resolve_roots(features: list[dict], cg: dict) -> tuple[dict[str, set[str]], 
                               "(所有が一意でないとクラスタリングが定義できない)")
             owner[sym] = f["id"]
         roots[f["id"]] = got
-    return roots, errors
+    return roots, errors, sorted(skipped)
 
 
 def _reach(start: set[str], adj: dict[str, list[str]], all_roots: set[str]) -> set[str]:
@@ -281,11 +299,15 @@ def _reach(start: set[str], adj: dict[str, list[str]], all_roots: set[str]) -> s
     return seen
 
 
-def cluster(cg: dict, features: list[dict], cfg: dict) -> dict:
-    """①〜④ を返す。入力が同じなら出力も同じ(design §8.3.1)。"""
-    roots, errors = resolve_roots(features, cg)
+def cluster(cg: dict, features: list[dict], cfg: dict, root=None) -> dict:
+    """①〜④ を返す。入力が同じなら出力も同じ(design §8.3.1)。
+
+    `root` はリポジトリの根。抽出器が無い言語の入口を未検査に回すには、そのファイルの実在を
+    ここで確かめる(無ければ FT1。**省くと全部を照合する** — `base.unextracted_symbol`)。
+    """
+    roots, errors, skipped = resolve_roots(features, cg, cfg, root)
     if errors:
-        return {"errors": errors}
+        return {"errors": errors, "skipped_entries": skipped}
 
     e1, e2 = edge_sets(cg)
     adj_n, adj_w = _adj(e1), _adj(e1 | e2)
@@ -362,6 +384,8 @@ def cluster(cg: dict, features: list[dict], cfg: dict) -> dict:
         "unreached": unreached,      # ④
         "unreached_tier3": unreached_tier3,   # ④ のうち Tier 3 言語由来(偽陽性でありうる)
         "unreached_module_scope": unreached_module_scope,
+        # 抽出器が無い言語の入口(未検査)。その機能の辺・共有関数・到達は数えていない
+        "skipped_entries": skipped,
         "counts": {"features": len(features), "edges": len(edges),
                    "shared": len(shared), "unreached": len(unreached),
                    "unreached_module_scope": len(unreached_module_scope),
@@ -523,6 +547,15 @@ def render_graph(result: dict, cfg: dict) -> str:
         "- `候補` — 同名衝突などの**候補辺**を算入して初めて繋がる。"
         "経路が実在するとは限らないが、**取りこぼすよりは出す**",
         "",
+    ]
+    skipped = result.get("skipped_entries", [])
+    if skipped:
+        out += [
+            f"**未検査: 入口 {len(skipped)} 件は抽出器が無い言語のもので、callgraph に現れない** — "
+            "その入口から先の辺・共有関数・到達はこの文書に出ていない(「無い」ではない)。",
+            "",
+        ] + [f"- `{s}`" for s in skipped] + [""]
+    out += [
         "## 機能間の辺",
         "",
     ]

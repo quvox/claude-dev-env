@@ -1,6 +1,6 @@
 ---
 name: bulk-read
-description: 一括読取の委任先。多く読んで少なく返す。指定された範囲を読み、path:line と原文の逐語引用だけを返す。要約・判断・裁定は一切しない。CLAUDE.md §8 が委任を要求する読取はすべてこれに出す
+description: 一括読取の委任先。多く読んで少なく返す。指定された範囲を読み、path:line と原文の逐語引用だけを返す。要約・判断・裁定は一切しない。`CLAUDE.md` §1 が委任を要求する読取はすべてこれに出す
 model: sonnet
 effort: low
 tools: Read, Glob, Grep, Bash, WebFetch

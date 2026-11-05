@@ -25,6 +25,12 @@ DEFAULT_VENDOR_MARKERS = [
     "*.egg-link",
     "pyvenv.cfg",       # venv のルート(名前が任意でも pyvenv.cfg で検出できる)
     "modules.txt",       # Go: vendor/modules.txt(vendor/ 直下に置かれる)
+    # Rust: cargo が展開した依存クレートの1つ1つの直下に置かれる目印。依存の置き場
+    # (CARGO_HOME)をリポジトリの中に持つプロジェクトでは、ここで落とさないと第三者の
+    # クレートが数万ファイル解析に入る(2026-10-31 に実測: `.cargo-home/registry` に約2万)
+    ".cargo-ok",          # registry から展開したクレート
+    ".cargo_vcs_info.json",
+    ".cargo-checksum.json",  # `cargo vendor` の出力
 ]
 
 CONFIG = ".claude/scripts/callgraph-config.json"
@@ -461,6 +467,50 @@ def collect_files(root: Path, cfg: dict, extensions: list[str],
 def symbol_id(rel_path: str, qualified_name: str) -> str:
     """`<repo相対パス>::<修飾名>`。**行番号は含めない**(決定性のため)。"""
     return f"{rel_path}::{qualified_name}"
+
+
+def symbol_extensions(cfg: dict) -> set[str]:
+    """シンボルを出す抽出器が、設定で有効になっていて名乗る拡張子の集合。
+
+    **今回出たシンボルからは決めない** — それだと、抽出器の在る言語の最後のファイルを消した・
+    改名しただけで、その拡張子の入口が全部「抽出器が無い」に化ける(独立検査の反例)。
+    """
+    from . import EXTRACTORS, NO_SYMBOLS
+    out: set[str] = set()
+    for lang, spec in (cfg.get("languages") or {}).items():
+        if not spec.get("enabled") or lang not in EXTRACTORS or lang in NO_SYMBOLS:
+            continue
+        for e in (spec.get("extensions") or []):
+            out.add(e if e.startswith(".") else "." + e)
+    return out
+
+
+def unextracted_symbol(sid: str, exts: set[str], cfg: dict,
+                       root: Path | None = None) -> bool:
+    """`sid` が**抽出器の無い言語のファイル**を指すシンボルIDか(KIT-callgraph-ft1-unsupported-lang)。
+
+    そういう入口・`x-impl` は callgraph に無くて当然で、「実在しない」と言えば誤検出になる —
+    **見られていないのではなく、見る道具が無い**。呼び出し側は照合せず「未検査」として数える。
+    `exts` は `symbol_extensions(cfg)`。次のものは False を返し、従来どおり照合に回す:
+
+    - `::` を持たない(エンドポイントID)・ファイル名に拡張子が無い — 判定できない
+    - テスト・開発ツールの目印に当たる — FT1 が「機能ではない」と行き先を案内する相手である
+    - そのファイルが無い — 消えた・綴りを誤った入口は FT1 のまま。**`root` を渡さなければ
+      常に False**(実在を確かめられないなら照合する側へ倒す。省略で黙って未検査にしない)
+
+    「言語」より少し広い — 実在する `.toml` や `.md` を指す入口も、シンボルを出す抽出器が無い
+    ので未検査に入る。見る道具が無いことに変わりはないので、そう扱う。
+    """
+    if "::" not in sid:
+        return False
+    path = sid.split("::", 1)[0]
+    name = path.rsplit("/", 1)[-1]
+    if "." not in name or ("." + name.rsplit(".", 1)[-1]) in exts:
+        return False
+    if is_test(path, cfg.get("test_markers") or []) \
+            or is_test(path, cfg.get("tooling_markers") or []):
+        return False
+    return root is not None and (root / path).is_file()
 
 
 def normalize_path_pattern(path: str) -> str:

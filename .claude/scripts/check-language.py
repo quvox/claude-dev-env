@@ -324,24 +324,37 @@ def expand(root: Path, pattern: str) -> list[Path]:
 
 
 def targets(root: Path, conv_text: str, migrated) -> list[tuple[Path, str]]:
-    """(ファイル, 言語)。`migrated` が "all" でなければ、その一覧に在るものだけ。"""
-    out = []
+    """(ファイル, 言語)。`migrated` が "all" でなければ、その一覧に在るものだけ。
+
+    **同じファイルが2つの行に当たったら、後の行が勝つ** ★ — 表は上から広い順に並べ、
+    例外(より狭い指定)を後ろへ置く決まりである(`conventions.md` §3)。
+    こうしないと、例外のファイルが両方の言語で検査され、必ずどちらかが落ちる
+    (2026-09-14 に `directions/core.md` を英語の例外にしたときに実際に踏んだ)。
+    """
+    picked: dict[Path, str] = {}
     for pattern, lang in language_map(conv_text):
         for path in expand(root, pattern):
             rel = path.relative_to(root).as_posix()
             if migrated != "all" and rel not in migrated:
                 continue
-            out.append((path, lang))
-    return out
+            picked[path] = lang
+    return list(picked.items())
 
 
 def check_file(path: Path, lang: str, banned: list[str], root: Path,
                bare: list[tuple[str, re.Pattern[str]]] | None = None) -> list[tuple[str, str]]:
     rel = path.relative_to(root).as_posix()
     text = path.read_text(errors="replace")
-    lines = prose_lines(text, python=path.suffix == ".py")
+    # YAML も Python と同じく**コメントの本文だけ**を見る ★ — 設定の行そのもの
+    # (`unit: { suite: unit, forbid_skip: true }`)は地の文ではないのに、
+    # 素通しにすると LA2「英語の地の文」で全行が違反になる(2026-09-12 に実測)。
+    comment_only = path.suffix in (".py", ".yml", ".yaml")
+    lines = prose_lines(text, python=comment_only)
     out: list[tuple[str, str]] = []
     # Python と JSON は LA1/LA2 の対象外(理由は docstring)。禁止表記だけを見る。
+    # **YAML は対象に含める** ★ — 上で設定の行を落としてコメントの本文だけにしてあるので
+    # 誤検知しない。ここで外すと「コメントを導入先が読む」という対象化の理由が消え、
+    # 英語のコメントが素通りする(2026-09-12 に実測。外していた間は検知0件だった)。
     for n, body in ([] if path.suffix in (".py", ".json") else lines):
         for sent in sentences(body):
             if lang == JA and CJK.search(sent):

@@ -12,7 +12,8 @@
     "vendor_markers: このディレクトリ**直下**にこれらが在れば、そのディレクトリ自身を第三者ライブラリとみなして 全言語共通で解析対象から外す。規範・既知ディレクトリ名を入れてはならない理由は .claude/directions/callgraphs.md §5.3(cgx/base.py の _check_vendor_marker_overlap() が excludes との重複を検査する)。外したディレクトリは index.md に必ず表示される。",
     "tooling_markers / include_tooling: **開発環境を作るためのもの**(Makefile・CI 定義・compose・devcontainer 等)を解析対象から外す。test_markers / include_tests と同じ機構。照合規則は目印の形で決まる(両端 `/` はディレクトリセグメント、`/` を含む形は部分文字列、裸なら basename の接頭辞 — .claude/directions/callgraphs.md §5.9.1、実装は cgx/base.py is_test)。判定基準は .claude/directions/features.md §0.1。scripts/ tools/ bin/ を既定に入れないのは本番コードが置かれることがあるためで、必要なら callgraph-config.local.json の tooling_markers に足す(配列は和集合でマージされる)。外した件数は index.md に必ず表示される。",
     "features: propose-features.py の提案の閾値。**規範ではなく提案のためのパラメータ**(.claude/directions/features.md §4)。cluster-features.py の結果は閾値に依存しない。",
-    "resources: 共有データストア結合(P10)。kind_by_kwarg / kind_by_factory は SDK の語彙で資源の種別を決める表。env_patterns は「実資源に解決できなかった環境変数のうち資源とみなすもの」で、ここで絞らないと DEPLOY_ENV のような全モジュールが読む変数が『全機能が触る資源』になって信号が埋もれる(絞った件数は resources.md に必ず出る)。ubiquitous_ratio は広域共有資源の閾値で、**指摘の絞り込みにしか効かない**(資源表そのものは閾値に依存しない)。"
+    "resources: 共有データストア結合(P10)。kind_by_kwarg / kind_by_factory は SDK の語彙で資源の種別を決める表。env_patterns は「実資源に解決できなかった環境変数のうち資源とみなすもの」で、ここで絞らないと DEPLOY_ENV のような全モジュールが読む変数が『全機能が触る資源』になって信号が埋もれる(絞った件数は resources.md に必ず出る)。ubiquitous_ratio は広域共有資源の閾値で、**指摘の絞り込みにしか効かない**(資源表そのものは閾値に依存しない)。",
+    "excludes の `.cargo/` `.cargo-home/` と vendor_markers の `.cargo-ok` など3つ: Rust の依存の置き場(CARGO_HOME)をリポジトリの中に持つプロジェクトで、第三者のクレートを解析に入れないため(2026-10-31。名前が任意の置き場は vendor_markers の目印で捕まえる)。"
   ],
   "output_dir": "docs/03-impl/callgraphs",
   "internal_roots": [
@@ -20,6 +21,8 @@
   ],
   "source_roots": [],
   "excludes": [
+    ".cargo-home/",
+    ".cargo/",
     ".claude/",
     ".codex/",
     ".eggs/",
@@ -116,6 +119,12 @@
         ".go"
       ]
     },
+    "rust": {
+      "enabled": true,
+      "extensions": [
+        ".rs"
+      ]
+    },
     "typescript": {
       "enabled": true,
       "extensions": [
@@ -165,7 +174,10 @@
     "*.egg-info",
     "*.egg-link",
     "pyvenv.cfg",
-    "modules.txt"
+    "modules.txt",
+    ".cargo-ok",
+    ".cargo_vcs_info.json",
+    ".cargo-checksum.json"
   ],
   "resources": {
     "enabled": true,

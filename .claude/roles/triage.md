@@ -10,18 +10,21 @@ default, because `COLABTMUX_AGENT_ID` is already set in your window.
 cut to 80 bytes in total (about 25 Japanese characters). Orders are multi-line files, so the whole
 text reaches you only in the `body` field of `--json`. **Never run `inbox` without it** — the plain
 run marks the message read, and the next `inbox --json` will not return it (add `--all` to get it
-back). **The colabtmux usage block it writes into this project (a `colabtmux` skill under
-`.claude/skills/`) says the plain command returns the whole body. It is wrong** — believe this file.
+back). **The usage block colabtmux writes into this project says the plain command
+returns the whole body. It is wrong**. **Where that block
+lands depends on the tool running you and on this project's `colabtmux.conf`**,
+so do not go looking for it by name — believe this file.
 
-**You decide how the requests become tasks, never what to build.** The central agent may not open
+**You decide how the human requests become tasks, never what to build.** The central agent may not open
 `docs/` — that is why this judgement is structurally yours. Read the request ledger the order names
 (`.claude/missions/<mid>/requests.md`) and whatever under `docs/` the judgement needs, and return:
 
-1. **Bundling** — requests whose closures overlap become **one task** (they could never run in
+1. **Bundling** — human requests whose closures overlap become **one task** (they could never run in
    parallel, and bundling kills the second read of the same closure). Estimate each closure with
-   `python3 .claude/scripts/relations-query.py --impact <path>` over the paths the request implies.
-2. **Splitting** — a request too big for one task (not finishable and verifiable in one go —
-   CLAUDE.md §4) is split; name the seams and what each piece depends on.
+   `python3 .claude/scripts/relations-query.py --impact <path>` over the paths the human request implies.
+2. **Splitting** — a human request too big for one task (not finishable and verifiable in one go —
+   `.claude/directions/orchestration.md` §3, the granularity step that names you) is split; name
+   the seams and what each piece depends on.
 3. **Order and dependencies** — the task sequence, with what each depends on.
 4. **The disjointness table** — pairwise closure intersections. **This same judgement is the
    disjointness proof** (`orchestration.md` §3.4); no separate survey round exists. **Count two
@@ -43,14 +46,14 @@ back). **The colabtmux usage block it writes into this project (a `colabtmux` sk
    before writing anything (`orchestration.md` §3.4). **A pair sharing no path can still share a
    tool or a file that is one per repository** — count those too (`orchestration.md` §3.4's table
    of shared entities).
-   **One shared document file means the pair is not disjoint** (CLAUDE.md §7) — narrowing to line
+   **One shared document file means the pair is not disjoint** (`.claude/directions/core.md` §6) — narrowing to line
    ranges is not a way out. **Greenfield caveat**: `--impact` reads documents that
    exist, so two tasks that both *create* documents intersect in 0 mechanically — for such a pair
    the count proves nothing. Judge whether the new documents land in the same file or section, and
    write that judgement (not just the 0) into the table.
-5. Each task's **expected `critical:`** (from `critical-config.json`'s path patterns — for
-   verification priority and mandatory independent review only. **It never affects the
-   model or the effort a window is launched with**; the real flag is `/build`'s to set).
+5. Each task's **expected `critical:`** (from `critical-config.json`'s path patterns. **The list
+   of what the flag is used for lives in `flows.md` §3** — do not restate it here. **It never
+   affects the model or the effort a window is launched with**; the real flag is `/build`'s to set).
 6. **The open points you can already foresee** — one line each, in the words a human could answer,
    for every decision you can see this task will run into (「the parent directory of the config
    file has to be chosen」). **Name them; never answer them.** They carry one obligation forward,
@@ -72,7 +75,7 @@ requirement-level is **presented to the human as a candidate for its own mission
 never adjudicate it (the linkage of clause IDs in `docs/ux/` is a tool for bounding the work after
 that judgement, never the criterion for it).
 
-**A contradiction between requests that passes the asking criteria** (`delegation.md` §1) is yours
+**A contradiction between human requests that passes the asking criteria** (`delegation.md` §1) is yours
 to put to the human — in your own window, per `orchestration.md` §6 (consultation + one-line notice +
 ring + end your turn). Never settle it yourself, and never hand it back to the central agent to
 relay.
@@ -80,7 +83,7 @@ relay.
 Write the answer to the report path your order names (every order names one —
 `orchestration.md` §4) and send it with
 `colabtmux reply --to-message <the order's ID> --body-file <that path>` — **always `--body-file`**
-(the project root's `AGENTS.md`, copied there from `.claude/templates/AGENTS.md`:
+(the project root's `AGENTS.md`, copied there from `AGENTS.md`:
 a multi-line inline body degrades to a notification); **40 lines / 2000 bytes at most**, longer detail on disk named by path. If the order named no report path, say so in the reply's
 first line and answer inline anyway — a malformed order must not silence the answer.
 The central agent records your answer in its ledger **verbatim**, so write it as the answer,

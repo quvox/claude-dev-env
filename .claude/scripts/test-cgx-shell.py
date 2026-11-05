@@ -38,7 +38,11 @@ exec /usr/local/bin/serve --config /etc/app.conf
 def endpoints(files: dict[str, str]) -> list[tuple[str, str]]:
     cfg = json.loads((Path(__file__).resolve().parent / "callgraph-config.json").read_text())
     with tempfile.TemporaryDirectory() as td:
-        root = Path(td)
+        # macOS は /var/folders/... がシンボリックリンクで、.resolve() すると
+        # /private/var/folders/... に変わる。extract() 内の collect_files は
+        # base_dir.resolve() した結果を root に対して relative_to するので、
+        # root 自身を先に resolve しておかないと ValueError で全ファイルが落ちる。
+        root = Path(td).resolve()
         for rel, body in files.items():
             (root / rel).parent.mkdir(parents=True, exist_ok=True)
             (root / rel).write_text(body, encoding="utf-8")

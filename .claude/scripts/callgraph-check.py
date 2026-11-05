@@ -44,6 +44,78 @@ from cgx import base       # noqa: E402
 from cgx import features as ft  # noqa: E402
 
 
+def code_exists(root, cfg) -> bool:
+    """製品コードが既に在るか ★(2026-09-15。inspection-28 A-8)。
+
+    **「実装前だから空」と「見られていないから空」を分けるためだけに使う。**
+    見るのは `flow-config(.local).json` の `code_roots` の下に、
+    対象の言語の拡張子を持つファイルが1つでも在るかである。
+    **宣言が無ければ False を返す**(宣言していないものを「在る」とは言わない —
+    その状態はデプロイゲートが別に red にしている)。
+    """
+    import json as _json
+    # **設定の読み方は `stamps.py` の規則と同じである** ★(2026-09-15 の2巡目)—
+    # **local が有効な値を持てばそこで確定し、base では上書きしない。**
+    # 逆向き(後から読んだ base が勝つ)にすると、古い base が local を隠して
+    # **実装が在るのに「実装前」と誤判定する**し、local の「宣言しない」も潰す。
+    roots: list[str] = []
+    for name in ("flow-config.local.json", "flow-config.json"):
+        f = root / ".claude/scripts" / name
+        if not f.is_file():
+            continue
+        try:
+            v = _json.loads(f.read_text(encoding="utf-8")).get("code_roots")
+        except (OSError, ValueError):
+            continue
+        if isinstance(v, list) and all(isinstance(s, str) for s in v):
+            roots = [s for s in v if s]
+            break
+    if not roots:
+        return False
+    # **有効にした言語の拡張子だけを見る** ★(2026-09-15 の2巡目)—
+    # 全部の言語を見ると、**抽出器が無い言語だけのプロジェクト**で
+    # 「実装が在るのに地図が空」と判定して止めてしまう。あれは見られていないのではなく
+    # **見る道具が無い**のであって、この検査が止める話ではない。
+    # 同じ理由で、**既定の拡張子へ倒す救済もしない**(宣言を読めないなら False)。
+    exts = set()
+    for lang, spec in (cfg.get("languages") or {}).items():
+        if not spec.get("enabled"):
+            continue
+        for e in (spec.get("extensions") or []):
+            exts.add(e if e.startswith(".") else "." + e)
+    if not exts:
+        return False
+    # **テストは製品コードに数えない** ★(2026-09-15 の2巡目)— 抽出器も
+    # `include_tests: false` のときテストを解析対象から外すので、ここで数えると
+    # **テストだけを先に書いたプロジェクトを「実装が在る」と誤認して止める。**
+    # 印は抽出器と同じもの(`test_markers`)を使う。
+    markers = [] if cfg.get("include_tests") else (cfg.get("test_markers") or [])
+    # **除外の判定は抽出器と同じものを使う** ★(2026-09-15 の2巡目)—
+    # 自前で拡張子だけを見ると、`node_modules/` のような持ち込みのコードしか無い
+    # プロジェクトを「実装が在る」と誤判定して、実装前の周を止める。
+    excludes = list(cfg.get("excludes") or []) + list(cfg.get("vendor_markers") or [])
+
+    def skip(rel: str) -> bool:
+        return (any(mk in rel for mk in markers)
+                or any(ex in rel for ex in excludes))
+
+    for r in roots:
+        base = root / r
+        if not base.exists():
+            continue
+        if base.is_file():
+            if base.suffix in exts and not skip("/" + base.as_posix()):
+                return True
+            continue
+        for f in base.rglob("*"):
+            if not (f.is_file() and f.suffix in exts):
+                continue
+            if skip("/" + f.relative_to(root).as_posix()):
+                continue
+            return True
+    return False
+
+
 def _load_builder():
     spec = importlib.util.spec_from_file_location("build_callgraphs", _HERE / "build-callgraphs.py")
     mod = importlib.util.module_from_spec(spec)          # type: ignore[arg-type]
@@ -56,7 +128,8 @@ def _load_builder():
 # 「CG1〜CG7」は7件あるように読め、「CG1〜CG6」は CG7 を落とす。どちらも嘘になる。
 # 意味・重大度・既定の対処は `.claude/directions/callgraphs.md` §6 が正(ここには書かない)。
 CHECKS: dict[str, str] = {
-    "FT1": "機能表の入口が callgraph に実在するか(**これが落ちたら以降は検査しない**)",
+    "FT1": "機能表の入口が callgraph に実在するか(**これが落ちたら以降は検査しない**。"
+           "抽出器が無い言語の入口は未検査として件数を出す)",
     "FT2": "callgraph のエントリポイントが、いずれかの機能の入口になっているか ★機能の取りこぼし",
     "FT3": "機能表の機能ID と relations/MODULE-*.md が 1:1 か",
     "FT4": "機能表の 所属 が 02 のモジュール分割定義に実在するか",
@@ -265,7 +338,15 @@ def run_checks(root: Path, cfg: dict, cg: dict,
     }
 
     # --- FT1。**落ちたら以降は検査しない**(誤ったクラスタで指摘を出す方が有害)
-    result = ft.cluster(cg, feats, cfg)
+    # 抽出器が無い言語の入口は FT1 にせず未検査として数え、notes に列挙する
+    # (判定は `base.unextracted_symbol`。CG1 の impl の飛ばし方とは別の判定)
+    result = ft.cluster(cg, feats, cfg, root)
+    skipped_list = result.get("skipped_entries", [])
+    skipped_entries = len(skipped_list)
+    skipped_fids = {s.split(":", 1)[0] for s in skipped_list}
+    if skipped_list:
+        notes.append(f"機能表の入口 {skipped_entries} 件は抽出器が無い言語のため未検査"
+                     "(callgraph に現れないので辿っていない): " + " / ".join(skipped_list))
 
     if result.get("errors"):
         for e in result["errors"]:
@@ -282,7 +363,8 @@ def run_checks(root: Path, cfg: dict, cg: dict,
         return findings, {"relations": len(docs), "symbols": len(symbols),
                           "owned_symbols": len(owner), "effective_edges": 0,
                           "declared_edges": 0, "endpoints": len(endpoints), "tiers": tiers,
-                          "skipped_impl": skipped_impl, "folded_symbols": 0,
+                          "skipped_impl": skipped_impl, "skipped_entries": skipped_entries,
+                          "folded_symbols": 0,
                           "unresolved_symbols": len(has_unresolved), "features": len(feats),
                           "from_table": from_table, "notes": notes, "aborted": True}
 
@@ -319,6 +401,13 @@ def run_checks(root: Path, cfg: dict, cg: dict,
 
     # --- CG2 到達不能(候補辺も算入した上で到達しない = 「無い」の主張は広く)
     for sid in result["unreached"]:
+        if owner.get(sid) in skipped_fids:
+            # 入口が未検査の機能が impl で所有するシンボル。辿っていないだけで「到達しない」とは言えない
+            add("CG2", "低", sid,
+                f"どの入口からも到達しない(所有する {owner[sid]} の入口は抽出器が無い言語のため"
+                "未検査 — 辿っていないだけでありうる)",
+                "到達不能コード候補。**削ってよいかは決めない**(動的呼び出しの可能性)")
+            continue
         add("CG2", "低", sid, "どの入口からも到達しない",
             "到達不能コード候補。**削ってよいかは決めない**(動的呼び出しの可能性)")
 
@@ -452,6 +541,7 @@ def run_checks(root: Path, cfg: dict, cg: dict,
         "effective_edges": len(machine), "declared_edges": len(declared),
         "candidate_edges": counts["candidate_edges"], "shared_symbols": counts["shared"],
         "endpoints": len(endpoints), "tiers": tiers, "skipped_impl": skipped_impl,
+        "skipped_entries": skipped_entries,
         "folded_symbols": sum(len(v) for v in result["members"].values()),
         "unresolved_symbols": len(has_unresolved), "notes": notes, "aborted": False,
         "coupled_resources": counts.get("coupled_resources", 0),
@@ -514,11 +604,25 @@ def main(argv: list[str]) -> int:
         cg, build_notes = builder.run_extractors(root, cfg, langs, None)
         notes.extend(build_notes)
 
-    if not cg.get("languages"):
+    # **「空」は、言語の入れ物の有無ではなく中身で決める** ★(2026-09-15 の2巡目)—
+    # 抽出器は対象が0件でも `languages[<言語>]` の入れ物を作るので、
+    # 入れ物の有無で見ると**この判定は決して発火しない。**
+    symbols_found = sum(len((d or {}).get("symbols") or [])
+                        for d in (cg.get("languages") or {}).values())
+    if not symbols_found:
         print("## コールグラフ整合検査")
         print("  コールグラフが空(抽出器が無い、または対象コードが無い)。**実装前のため未検査**。")
         print("  新規開発では relations を先に書き、実装後にこの検査を走らせる"
               "(.claude/directions/callgraphs.md §6)。")
+        # **入口の取りこぼしを見る2本(FT2 と FT5)が動いていない** ★
+        # (2026-09-15。inspection-28 A-8)。実装が既に在るのに空なら、それは
+        # 「まだ書いていない」ではなく「見られていない」である — **合格として返さない。**
+        # 実装がまだ無いときだけ 0 を返す(そこは本当に検査するものが無い)。
+        if code_exists(root, cfg):
+            print("  **NG 実装が在るのにコールグラフが空である** — 抽出器の設定か対象の宣言を"
+                  "見直すこと。**未検査のまま合格にはしない**"
+                  "(入口の取りこぼしを見る FT2 と FT5 が1度も動いていない)。")
+            return 1
         return 0
 
     docs = load_relations(root)
@@ -553,6 +657,9 @@ def main(argv: list[str]) -> int:
     print(f"  Tier: {', '.join(f'{k}={v}' for k, v in sorted(stats['tiers'].items()))}")
     if stats["skipped_impl"]:
         print(f"  抽出器が無い言語のため検査を飛ばした impl: {stats['skipped_impl']} 件")
+    if stats.get("skipped_entries"):
+        print(f"  抽出器が無い言語のため検査を飛ばした機能表の入口: {stats['skipped_entries']} 件"
+              " — その機能の辺・到達は未検査(「無い」ではない)")
     if stats["unresolved_symbols"]:
         print(f"  未解決の呼び出しを持つシンボル: {stats['unresolved_symbols']} 件"
               " — この範囲では「経路が無い」と断定しない(CG3 を『低』に落とす)")
@@ -563,7 +670,9 @@ def main(argv: list[str]) -> int:
               "降格は辺単位で、正確に解析できた言語どうしの辺は落とさない(inspection-17 判断2)")
 
     if not findings:
-        print("\n合格: 機能表・コールグラフ・機能間連携仕様書に不整合なし。")
+        print("\n合格: 機能表・コールグラフ・機能間連携仕様書に不整合なし。"
+              + ("(抽出器が無い言語の入口・impl は未検査)"
+                 if stats["skipped_impl"] or stats.get("skipped_entries") else ""))
         return 0
 
     print(f"\n### 所見 {len(findings)} 件")

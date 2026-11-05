@@ -93,7 +93,7 @@ def default_branches(cwd=None):
 
     **最初に当たった1つで打ち切らない** ★ — リモートは名前順に出るので、`origin` より前に
     並ぶリモート(`archive` / `backup` / フォーク元)が在ると、**そちらの既定枝が答えになり
-    本流の既定枝が丸ごと外れる**。保護は**緩めるより広げるほうが安全**なので全部足す。
+    主に使う共有先(ふつうは `origin`)の既定枝が丸ごと外れる**。保護は**緩めるより広げるほうが安全**なので全部足す。
 
     **取れた名前が実在するかまで確かめる** — `git symbolic-ref` は**指す先が消えていても
     終了コード 0 で名前を返す**(サーバ側で既定枝を改名した後の古いクローンがこれである)。
@@ -117,14 +117,14 @@ def default_branches(cwd=None):
                f"refs/remotes/{r}/{name}", cwd=cwd)[0] == 0:
             names.add(name)
             known = True
-    code, out = git("config", "--local", "--get", "init.defaultBranch", cwd=cwd)
+    # **保存場所によらず「特定できた」とは数えない** ★(2026-09-15。inspection-28 C-8)—
+    # このリポジトリ自身の設定(`--local`)であっても、あれは `git init` のときに読まれる値で
+    # あって、**いま実際に使っている枝名の記録ではない**(init の後に改名しても残る)。
+    # 数えると「守れていない」という唯一の合図が黙って消える。
+    # **値そのものは保護の側へ足す**(保護は緩めるより広げるほうが安全である)。
+    code, out = git("config", "--get", "init.defaultBranch", cwd=cwd)
     if code == 0 and out:
         names.add(out)
-        known = True                      # このリポジトリ自身の設定なら事実である
-    else:
-        code, out = git("config", "--get", "init.defaultBranch", cwd=cwd)
-        if code == 0 and out:
-            names.add(out)                # 値は使うが、**「特定できた」とは数えない**
     return names, known
 
 
@@ -366,7 +366,7 @@ def selftest():
         check("trunk から移った", current_branch(cwd=dst), W)
 
     with tempfile.TemporaryDirectory() as td:
-        # **`origin` より前に並ぶリモートに、本流の既定枝を上書きさせない** ★
+        # **`origin` より前に並ぶリモートに、`origin` の既定枝を上書きさせない** ★
         # リモートは名前順に出るので、最初に当たった1つで打ち切ると `archive` が勝つ。
         up = os.path.join(td, "up"); os.makedirs(up)
         repo(up, branch="trunk"); commit(up)

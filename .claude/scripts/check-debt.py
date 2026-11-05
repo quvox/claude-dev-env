@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """検証負債の計器。**数えて出すだけで、何も拒まない**(`/build` の入口で読む)。
 
-フロー分離は「検証をあとで払う」設計である(及第ライン — CLAUDE.md §4)。負債がどれだけ
+フロー分離は「検証をあとで払う」設計である(及第ライン — `.claude/directions/core.md` §4)。負債がどれだけ
 溜まっているかは見えていなければならないが、**着手を止める判断はこのスクリプトが持たない** —
 拒む役は及第ライン(デプロイゲート `stamps.py check`)だけが持つ(規範:
 .claude/directions/flows.md §4)。ゆえにここには超過という概念が無く、設定に値も無い。
@@ -435,13 +435,13 @@ def selftest() -> int:
             f"広く倒れている試験区分を数えていない: {out}"
         assert "義務ではない" in out, f"宣言が義務でないことを言っていない: {out}"
         (root / ".claude/scripts/flow-config.local.json").unlink()
-        # 撤廃した旗は使い方エラーになる(黙って無視して通さない)
+        # 撤廃したオプションは使い方エラーになる(黙って無視して通さない)
         for gone in ("--repair", "--override", "--for-issue"):
             assert run(gone)[0] == 2, f"撤廃した {gone} が受け付けられた"
         os.chdir(previous)
     print("OK check-debt: 何も拒まない/件数・鮮度スタンプの古さ・全数の鮮度・未回答シートの表示/"
           "置き場の宣言漏れは数えるだけ/"
-          "滞留降格/壊れたstate/撤廃した旗/red は最終 green の表示を消さない")
+          "滞留降格/壊れたstate/撤廃したオプション/red は最終 green の表示を消さない")
     return 0
 
 

@@ -2,7 +2,7 @@
 """キット内参照の実在検査。**規範を再構築すると、スクリプトとスキルの参照が黙って死ぬ**。
 
 実測: CLAUDE.md の全面再構築(停止条件つき規範化)の後、キット内に
-「CLAUDE.md §9」(存在しない節。エラーメッセージの案内先)が4箇所、
+「`CLAUDE.md` §2」(存在しない節。エラーメッセージの案内先)が4箇所、
 「.claude/directions/layer-fit.md」(統合で消えたファイル)が3箇所、
 「task-memo.md §3.3」「issues-pendings.md §1.1」(改番で消えた小節)などが残った。
 どれも**利用者が最も規範を必要とする瞬間(検査に落ちた時)に行き止まりを見せる**参照であり、
@@ -55,7 +55,16 @@ def kit_texts(root):
       「いま直す対象」として名指す表が腐ったまま残っていた(inspection-21 C-11)。
     """
     files = [root / "CLAUDE.md", root / ".claude" / "tools-readme.md"]
-    for pat in ("agents/*.md", "directions/*.md", "templates/*.md", "skills/*/SKILL.md", "roles/*.md"):
+    # skills/*/references/*.md も見る ★ — スキル本体から引かれる参照資料で、
+    # 本体と同じ読み手が読む。対象から外していた間、11本の参照先が1つも
+    # 確かめられていなかった(inspection-26 F-18)。
+    # migrations/*.md も同じ理由で見る。**ただし副作用が1つある** —
+    # 移行の記録は「引っ越し前の名前」を書く場所なので、後日そのファイルを
+    # 消すと、歴史として正しい記述が参照切れとして挙がる。そのときは記録を
+    # 書き換えず、**その行をバッククォートから外して普通の文にする**
+    # (パス参照として読ませない)。
+    for pat in ("agents/*.md", "directions/*.md", "templates/*.md", "skills/*/SKILL.md",
+                "skills/*/references/*.md", "roles/*.md", "migrations/*.md"):
         files += sorted((root / ".claude").glob(pat))
     files += sorted(p for p in (root / ".claude" / "scripts").rglob("*.py")
                     if "__pycache__" not in p.parts and p.name != "check-kit-refs.py")
@@ -223,8 +232,11 @@ def check(root):
         return 2
     ctext = claude.read_text(errors="replace")
     csecs = {m.group(1) for m in re.finditer(r'^## (\d+)\.', ctext, re.M)}
-    # 原則の数は §2 の番号付き項目から数える(書き写すと正が2つになる)
-    body2 = ctext.split("## 2.", 1)[-1].split("\n## ", 1)[0]
+    # 原則の数は core.md §2 の番号付き項目から数える(書き写すと正が2つになる)。
+    # **2026-09-14 に CLAUDE.md から core.md へ移した** — CLAUDE.md は全役が読むものだけを持つ。
+    core = root / ".claude/directions/core.md"
+    coretext = core.read_text(errors="replace") if core.is_file() else ""
+    body2 = coretext.split("## 2.", 1)[-1].split("\n## ", 1)[0]
     nprin = max((int(m.group(1)) for m in re.finditer(r'^(\d+)\. \*\*', body2, re.M)), default=0)
 
     out, hcache = [], {}
@@ -290,9 +302,9 @@ def selftest():
             "## 1. A\n## 2. P\n1. **a.**\n2. **b.**\n## 3. B\n", encoding="utf-8")
         (root / ".claude" / "directions" / "x.md").write_text("## 1. a\n### 1.2 b\n", encoding="utf-8")
         ok = (root / ".claude" / "scripts" / "ok.py")
-        ok.write_text("# CLAUDE.md §3 と 原則2 と .claude/directions/x.md §1.2\n", encoding="utf-8")
+        ok.write_text("# `.claude/directions/core.md` §3 と 原則2 と .claude/directions/x.md §1.2\n", encoding="utf-8")
         assert check(root) == 0, "正しい参照が違反になった"
-        ok.write_text("# CLAUDE.md §9 / 原則12 / .claude/directions/gone.md / x.md §3.3\n",
+        ok.write_text("# `CLAUDE.md` §2 / 原則12 / .claude/directions/gone.md / x.md §3.3\n",
                       encoding="utf-8")
         assert check(root) == 1, "死んだ参照を見逃した"
         # **`.claude/` を前置した形**。この形が解決できないと、キットの § 参照の大半が

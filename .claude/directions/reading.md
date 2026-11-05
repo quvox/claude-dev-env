@@ -10,7 +10,7 @@
   瞬間 — 分類できない例外、導けない書式、2つの規則の衝突 — そのファイルの該当する節を開いて
   読む。** 多く読むことは決して違反ではない。**読んでいない節から決めることが違反である。**
 - **これが覆うのは `.claude/directions/` だけである。** どの `docs/` の文書を読むか —
-  クロージャ、鮮度スタンプ以降の差分、母集団 — は**各 SKILL.md と CLAUDE.md §8 の持ち物**である。
+  クロージャ、鮮度スタンプ以降の差分、母集団 — は**各 SKILL.md と `CLAUDE.md` §1 の持ち物**である。
   ここに書いたことがそれらを狭めることは無い。
 - **`.claude/templates/` も床の上に在り、意図的にここへ並べていない。** 作る文書・作り直す文書の
   雛形は、書く前に読む(原則9)。各層の規範が自分の雛形を名指しているので、ここに並べると
@@ -23,11 +23,16 @@
   `check-language.py` が、シートに出たキット内部語は `check-sheet.py` SH12 が見る。
 - **スキルの SKILL.md が、この表より多くの節を名指してよい。** そうしているとき、その名指しも
   また床である。この表がスキルを上書きすることは決して無い。
-- **読む量に意図的な*上限*を持つスキルは、この表に載せない**(§4)。その上限は予算ではなく
-  正しさの性質なので、それが強制されている場所に置いてある。
+- **この表が言うのは「最低限どの節を読むか」だけである。読んではならない範囲を決めるのは
+  この表ではなく、§4 が名指した場所である。** だから読む量に意図的な*上限*を持つスキルが
+  この表に行を持っていても、矛盾ではない — この表が覆うのは `.claude/directions/` の節だけで
+  (上の2つ目)、§4 の上限はそれとは別の軸で掛かるからである。**その軸は1つではない** —
+  読んでよい範囲を狭めるもの(`docs/` 配下や製品コードを開かない)も、受け取ってよい情報を
+  狭めるもの(呼び出し側の所見や期待する判定を渡さない)も在る。**どれが掛かるかは §4 が持つ。**
+  その上限は予算ではなく正しさの性質なので、それが強制されている場所に置いてある。
 - `CLAUDE.md` そのものは常に全文を読む — 束縛の要約であり、そのように寸法が決めてある。
   `principles.md` / `conventions.md` は**節単位で**、判断が詳細に掛かったときに読む
-  (どの節が何を所有しているかは CLAUDE.md §2 と §7 が名指す)。
+  (どの節が何を所有しているかは `.claude/directions/core.md` §2 と §6 が名指す)。
 
 ## 2. 表
 
@@ -39,11 +44,15 @@
 | `/build` | `flows.md` §2, §3, §6 / `build-record.md` §1, §2, §3 / `delegation.md` §1, §2, §3 / `baseline.md` §1, §2 / `issues-pendings.md` §1, §8 / `relations.md` §3, §4 / `00-requests.md` 「decisions/ — 決定台帳」 / `01-requirements.md` 「01 と 02/03 の境目 — **この境目はこのファイルが所有する**」 / `02-design.md` 「★ 要件カバレッジ — 条項単位で、`充足` 欄つき(この規則はこのファイルが所有する)」 / `03-impl.md` 「★ 実装がまだ無いとき(グリーンフィールド)— 鏡ではなく、これから作るものの記述」 / `conventions.md` §2 / 書く層それぞれの `directions/<layer>.md` 「ファイル構成」, 「終える前の自己点検」 |
 | `/verify-docs` | `flows.md` §2, §5 / `issues-pendings.md` §1, §2, §8 / `build-record.md` §1 / `conventions.md` §1 + 走らせる検査を所有する節だけ(自己制限。`.claude/skills/verify-docs/SKILL.md` が正) |
 | `/verify-impl` | `flows.md` §2, §5 / `relations.md` §3, §4, §7 / `callgraphs.md` §3, §6 / `features.md` §0.1, §2, §5 / `build-record.md` §1, §2 / `baseline.md` §1(**`check-baseline-verdicts.py` が出す疑いを裁定するので、判定の記録先と、見る者どうしの分担が要る**), §2(**記録の 該当 / 非該当 を突き合わせるので、適用条件の表が要る**)/ `03-impl.md` 「Frontmatter」 |
-| `/verify-tests` | `flows.md` §2, §5 / `issues-pendings.md` §1, §3 / `build-record.md` §1, §2(**誰が何の主張を反証するかの表**)/ `03-impl.md` 「tests/」 |
+| `/verify-tests` | `flows.md` §2, §5 / `issues-pendings.md` §1, §3 / `build-record.md` §1, §2(**誰が何の主張を反証するかの表**)/ `03-impl.md` 「tests/」 / `delegation.md` §2.4(**版がビルドと揃わない実行を green にしないので**) |
+| `/test-design` | `delegation.md` §1, §2, §2.2 / `03-impl.md` 「tests/」 |
+| `/test-runner-usage` | `02-design.md` 「environments.md」 / `delegation.md` §2 |
+| `/test-env` | `02-design.md` 「environments.md」 / `delegation.md` §2 |
 | `/setup` | `features.md` §3 |
 | `/relations` | `relations.md` §1, §2, §3, §4, §5, §6, §7 / `callgraphs.md` §3, §5, §6 / `features.md` §0.1, §2, §3, §5 |
 | `/mission` | `orchestration.md` §1, §2, §3, §4, §5, §6, §7 |
-| `/dependabot` | `issues-pendings.md` §1(**振り分けに入る前に落ちる例外がこのスキルのことである。正はそこ**)/ `delegation.md` §1 / `flows.md` §7.1(**枝を切らない判断をここでするので**)|
+| `/dependabot` | `issues-pendings.md` §1(**振り分けに入る前に落ちる例外がこのスキルのことである。正はそこ**)/ `delegation.md` §1, §2.3(**目標の版を選ぶので**)/ `flows.md` §7.1(**枝を切らない判断をここでするので**)|
+| `/project-desc` | `conventions.md` §1(**来歴の印 — 書かない節を見分けるので**), §2, §4(**この資料が写しであることの扱い**)/ `delegation.md` §1.1(**資料まるごとが人間に読ませるものなので**)/ `00-requests.md` 「decisions/ — 決定台帳」(**区分と却下した案の読み分け**) |
 | `/kit-improve` | なし(キットの外は触らない)。**ただし `baseline.md` を触るなら `baseline.md` §4, §5**(項目の足しかたと、この一覧を他所でどう語ってよいか)|
 | `/kit-migrate` | `flows.md` §2, §7.1 / `issues-pendings.md` §1, §2.1 + **当てる移行が名指した節だけ**(自己制限。`.claude/skills/kit-migrate/SKILL.md` が正) |
 **`/retrofit` は意図的にこの表に無い。** 層をまるごと書き直すので、その母集団は
@@ -81,11 +90,14 @@
 
 これらは予算の上限では**なく**、決してそう扱ってはならない:
 
-- **`/browser-qa`** — 「読むのは4つだけ」「これ以上は読まない。実装を読むと、実装が想定した経路を
-  なぞってしまう」。この上限こそが、このレーンを探索的にしているものである。多く読むと結果が
-  壊れる。唯一の正: `.claude/skills/browser-qa/SKILL.md`。
+- **`/browser-qa` と `/cli-qa`** — 「読むのは4つだけ」「これ以上は読まない。実装を読むと、
+  実装が想定した経路(呼び方)をなぞってしまう」。この上限こそが、このレーンを探索的に
+  しているものである。多く読むと結果が壊れる。**2つは同じ試験区分(qa)の別の実体である**
+  (画面とサブコマンド)。唯一の正: `.claude/skills/browser-qa/SKILL.md` と
+  `.claude/skills/cli-qa/SKILL.md`。
 - **独立レビュー**(`@review` / Codex / サブエージェント)— 対象・範囲・検査項目・出力様式を
   受け取り、**呼び出し側の所見も期待する判定も決して受け取らない**。唯一の正:
   `.claude/skills/verify-docs/SKILL.md` §2。
 - **中央エージェント**(`/mission`)— `docs/` 配下も製品コードも、いっさい開いてはならない。
-  唯一の正: CLAUDE.md §9 と `orchestration.md` §2。
+  唯一の正: `orchestration.md` §2(2026-09-15 に `CLAUDE.md` §2 の参照を外した —
+  あの節は全役に共通することを書く場所であり、この禁止を持っていない)。

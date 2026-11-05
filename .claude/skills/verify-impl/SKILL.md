@@ -11,7 +11,7 @@ allowed-tools: Read, Glob, Grep, Bash, Write, Edit, Task
 
 **目的**: **どのタスクの外でも、独立した文脈で**、コードと `03-impl` と `02-design` が
 一致していることを確かめる — **意図と実装の突き合わせ**であり、このキットの中心そのものである
-(CLAUDE.md §1)。F1 のタスク内整合確認は似て見えるが、**1つのクロージャに閉じた自己点検**である。
+(`.claude/directions/core.md` §1)。F1 のタスク内整合確認は似て見えるが、**1つのクロージャに閉じた自己点検**である。
 このフローは、**その自己点検には見えないものをリポジトリ全体で捕まえるために在る。**
 無人・問いゼロ・3チャネル出力・完走時に鮮度スタンプ(**対象が0件の run は記録しない** —
 あちらの §2 と同じ) — `/verify-docs` と同じ常在の規則である
@@ -56,14 +56,31 @@ python3 .claude/scripts/guard-branch.py --verify
 読まれる**(inspection-21 V-11)。
 
 再生成の宛先は SSOT である — タスクの装置が無いので段階の側は存在しない。
-変わっていないモジュールは同じバイト列に再生成されるので、**実効の費用は差分ぶんである**:
+変わっていないモジュールは同じバイト列に再生成されるので、**書き出しの費用は差分ぶんである**。
+**地図の JSON は1回だけ書き出し、以降は `--from` で渡す** ★(2026-09-15。inspection-28 B-4。2026-09-23 に JSON を渡す形へ直した)—
+`cluster-features.py` と `callgraph-check.py` は **`--from` を渡さないと自分でコードを
+解析し直す。** 上のコマンド列はそれを渡す形にしてある。**渡し忘れると、同じコードの解析を
+この1回の検証の中で何度も払う**(何倍になるかは**未確認**である — 実測が無い)。
+**`--from` が取るのは地図の JSON ファイルであって、SSOT のディレクトリではない** ★
+(2026-09-23 の実測: `--from "$CG_SSOT"` と書いていた頃は、ディレクトリを JSON として読もうとして
+2本とも落ちた)。JSON は `build-callgraphs.py --format json` が標準出力へ出すだけで、
+`--out` の書き込みとは別の1回である — **地図の解析は `build-callgraphs.py` の2回に減るが、
+1回にはなっていない**(残っている費用。2回目を消す口はまだ無い)。
+**`check-contracts.py` には渡す口が無い** ★ — あれは契約の定義も読むので、
+**いまは自分で解析する。** ここは残っている費用であり、消せていない。
+**何を違反と見るかは道具ごとのままである** — 共有するのは読み取りの結果だけで、判定は混ぜない。
 
 ```bash
 python3 .claude/scripts/build-facts.py check           # ★ いちばん先。機械の欄の差分ゼロと、参照先の実在
 CG_SSOT=$(python3 .claude/scripts/resolve-callgraph-out.py --ssot)
 python3 .claude/scripts/build-callgraphs.py --out "$CG_SSOT"
-python3 .claude/scripts/cluster-features.py --out "$CG_SSOT"
-python3 .claude/scripts/callgraph-check.py             # コード ⇄ 機能間連携仕様書(重大度「高」ゼロが green の条件)
+# ★ 以降は --from で、いま作った地図を読ませる(2026-09-15。inspection-28 B-4)—
+#    渡さないと、それぞれが自分でコードを解析し直す(同じ解析を何度も払う)。
+#    **渡すのは JSON のファイル**であって "$CG_SSOT"(ディレクトリ)ではない(2026-09-23)
+mkdir -p artifacts
+python3 .claude/scripts/build-callgraphs.py --format json > artifacts/verify-impl-cg.json
+python3 .claude/scripts/cluster-features.py --from artifacts/verify-impl-cg.json --out "$CG_SSOT"
+python3 .claude/scripts/callgraph-check.py --from artifacts/verify-impl-cg.json   # コード ⇄ 機能間連携仕様書(重大度「高」ゼロが green の条件)
 python3 .claude/scripts/check-contracts.py             # 契約(OpenAPI)⇄ 設計 ⇄ コード
 python3 .claude/scripts/check-relations.py             # 機能間連携仕様書集合の内部整合
 python3 .claude/scripts/relations-query.py --health    # 構造の健全性(肥大・循環・到達不能)
@@ -80,7 +97,19 @@ python3 .claude/scripts/relations-query.py --health    # 構造の健全性(肥�
 
 **機能表に足すべき行の候補はここでは出さない** — 機能表の行は人間の合意事項であり
 (`.claude/directions/features.md` §7)、このフローは人間に問えないので、受け取っても行き先が無い。
-入口の取りこぼしは同じ run の `callgraph-check.py` の FT2 が見る(inspection-21 V-4)。
+入口の取りこぼしは同じ run の `callgraph-check.py` が見る — **見るのは2本である** ★
+(2026-09-15。inspection-28 A-8)。**FT2** は外から呼ばれる口(エンドポイント)の取りこぼしを、
+**FT5** は**口を持たない入口**(画面の操作を受け取る関数のような)の取りこぼしを見る。
+**FT5 のほうを落とすと、まとめて登録した書き方の下で足した関数が、どの検査にも掛からずに
+静かに積み上がる**(実測: 画面1枚で入口の宣言が23のまま実装が37になり、14件が
+どの入口からも到達しないものに化けていた)。
+**この2本が「未検査」と報告されたら、それは合格ではない** ★ — 呼び出し関係を組み立て
+られなかったとき、`callgraph-check.py` は **FT2〜FT5 を検査せずにその旨だけを報告する。**
+**実装が既に在るのに地図が空なら、そこで落ちる**(2026-09-15。inspection-28 A-8)—
+**「まだ書いていない」と「見られていない」を分けている**ので、実装前の周は今までどおり通る。
+**落ちた run は `red` にする**(組み立てられない原因を直してから回し直す)。
+**何が未検査だったかを報告に逐語で書く。**
+(inspection-21 V-4)
 
 各検査が何を意味し、既定の対処が何かは、**それを所有する節に在る**(書き写さない) —
 `callgraph-check.py` は `.claude/directions/callgraphs.md` §6、`check-contracts.py` は
@@ -169,13 +198,17 @@ python3 .claude/scripts/relations-query.py --health    # 構造の健全性(肥�
    コミットして打ち直す**(依存の外の汚れは record を止めない — `flows.md` §2)。
    そのうえで昇格の周を回す:
    ```bash
-   python3 .claude/scripts/stamps.py record verify-impl <green|red>   # all なら --full を添える
+   python3 .claude/scripts/stamps.py record verify-impl <green|red> --evidence artifacts/verify-impl.log   # all なら --full を添える
    # critical: true の awaiting-verify 記録が在る run では、green に --lens <実際に走った独立レビューの名前>
-   # が必須(record が拒む — CLAUDE.md §6 の機械接続。inspection-17 判断9)。red に --lens は不要
+   # が必須(record が拒む — `.claude/directions/core.md` §5 の機械接続。inspection-17 判断9)。red に --lens は不要
    python3 .claude/scripts/stamps.py promote
    # promote が「遷移 N 件」(N>0)を報告したら、その書込みをコミットして残す(flows.md §2)
    git add docs/build-records && git commit -m "promote: awaiting-verify → verified" -- docs/build-records
    ```
+   **`green` には `--evidence <path>` が要る** ★(2026-09-15。inspection-28 A-7)— 走らせた
+   結果を `artifacts/` の下へ書き出し、そのパスを渡す(複数可)。**実在して中身が在る
+   ことだけを機械が見る** — 中身が本物かどうかは見ない。それでも、後から人間や別の
+   エージェントが**現物を開いて確かめられる**ようになる。`red` には要らない。
    **鮮度スタンプ自身のコミットはここでは打たない** — コミットするのは**1周の終わりに1回だけ**
    である(`flows.md` §2)。
    **リポジトリの一部に範囲を絞った run は、全体ではなくその一部を記録する**:

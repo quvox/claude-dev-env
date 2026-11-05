@@ -144,7 +144,7 @@ def selftest() -> int:
         code, out = run()
         assert code == 0, "残務3行で拒んだ"
         assert "残務: 3 行" in out, f"残務を数えていない: {out}"
-        # 撤廃した旗は使い方エラーになる(黙って無視して通さない)
+        # 撤廃したオプションは使い方エラーになる(黙って無視して通さない)
         for gone in ("--sweep-task", "--override", "--for-issue"):
             assert run(gone)[0] == 2, f"撤廃した {gone} が受け付けられた"
         # 台帳そのものが欠けているのを「0件」と読まない(fail-closed。数の話ではない)
@@ -168,7 +168,7 @@ def selftest() -> int:
         assert run()[0] == 2, "issues/ 欠落が空バックログとして通った"
         shutil.move(str(root / "_i"), str(issues))
         os.chdir(previous)                              # 一時ディレクトリを掴んだまま抜けない
-    print("OK check-backlog: 何も拒まない/課題票と残務の件数表示/撤廃した旗/台帳欠落は fail-closed")
+    print("OK check-backlog: 何も拒まない/課題票と残務の件数表示/撤廃したオプション/台帳欠落は fail-closed")
     return 0
 
 

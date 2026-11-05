@@ -21,6 +21,7 @@
 | 誰が・どういう流れで使うか | `01-requirements/usecases.md` |
 | 全体構成・データの流れ・外部との境界 | `02-design/architecture.md` |
 | 画面はどう見えるか・どう遷移するか | `ux/policy.md`(基調)、`ux/flows.md`(画面一覧と流れ)、`ux/screens/`(画面ごと) |
+| どんなサブコマンドが在り、何ができるか | `ux/flows.md`(コマンド一覧)、`ux/commands/`(サブコマンドごと)★ 2026-09-15 に足した |
 | なぜこの画面はこうなのか(ユーザテストの経緯) | `ux/reviews/`(第N回ごとの指摘と処置) |
 | どう分割され、どう繋がる設計か | `02-design/system.md`(分割)、`02-design/relations.md`(想定連携) |
 | 実際にどう実装されているか | `03-impl/relations/MODULE-*.md`(機能単位の鏡)、`03-impl/index.md`(目次と進捗) |

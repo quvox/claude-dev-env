@@ -197,6 +197,7 @@ grep -l 'requirements:.*FR-auth-01'            docs/03-impl/relations/   # requi
 | 02 | 設計判断・設計項目 | `DSN-<area>-nn` | `02-design/*.md` |
 | 02 | モジュール | `MOD-<slug>` | `02-design/system.md` の モジュール分割定義 |
 | ux | 画面 | `SCR-nn` | `docs/ux/flows.md` の画面一覧(`SCR-nn` の台帳。規範は `ux.md` — UX 文書は検証連鎖の外に居る) |
+| ux | コマンドの面 | `CMD-nn` | `docs/ux/flows.md` のコマンド一覧(`CMD-nn` の台帳。同上)★ 2026-09-15 に足した(inspection-28 C-5)— 操作面は画面とコマンドの2種類である |
 | 02 | 想定機能連携 | `PLAN-<feature-slug>` | `02-design/relations.md` |
 | 02/03 | 契約 | `CTR-<name>` | `02-design/contracts/` と `03-impl/contracts/` で**同一ID** |
 | 03 | 機能間連携仕様書 | `MODULE-<feature-slug>` | `03-impl/relations/` |
@@ -276,7 +277,7 @@ python3 .claude/scripts/check-relations.py
 for s in .claude/scripts/*.py; do printf '%-24s %s\n' "$(basename $s)" "$(grep -c -- '--format' $s)"; done
 ```
 
-`--format json` と `--format=json` は、その旗を取るところではどちらも受け付ける。
+`--format json` と `--format=json` は、そのオプションを取るところではどちらも受け付ける。
 **結果を報告で要約するときは、実行したコマンドを逐語で書く**
 (読み手がそれを再実行できることが、この道具立ての価値の半分である)。
 

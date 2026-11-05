@@ -760,7 +760,7 @@ def main(argv: list[str]) -> int:
     if rounds > SHEET_ROUND_WARN:
         print(f"  警告  決定シートを {rounds} 回まわしている(目安 {SHEET_ROUND_WARN} 回)。"
               "問いが尽きないのはタスクが大きすぎる兆候である —— **02-design の分割定義を"
-              "見直すこと**(CLAUDE.md §4)。判定は落とさない")
+              "見直すこと**(`.claude/directions/core.md` §4)。判定は落とさない")
     print(f"  OK  論点 {n} 件が確認済み(雛形の例示ブロックの残りなし)")
     return 0
 

@@ -8,6 +8,11 @@
     python3 .claude/scripts/doc-health.py --as-of=YYYY-MM-DD          # 残務から落ちる候補を並べる(書かない)
     python3 .claude/scripts/doc-health.py --as-of=YYYY-MM-DD --sweep --record=docs/histories/<履歴>.md
                                                        # 候補を docs/residual.md から落とす(--record 必須)
+    python3 .claude/scripts/doc-health.py --append-residual="- YYYY-MM-DD <path:節> <一文>"
+                                                       # 残務へ1行、錠の下で追記する(同じ鍵が在れば何も書かない)
+    python3 .claude/scripts/doc-health.py --resolve-residual="<落とす行の逐語>" \
+        --verdict="<直した | 不要と裁定(理由)>" --record=docs/histories/<履歴>.md
+                                                       # 解消した1行を、記録を残してから落とす(同じ錠)
     python3 .claude/scripts/doc-health.py --rotate     # 残務が 50 行以上ならローテーションする
     python3 .claude/scripts/doc-health.py --next-issue-id    # 課題票の次の番号を錠の下で払い出す(印字するだけ)
     python3 .claude/scripts/doc-health.py --next-pending-id  # 棚上げ(P-nnn)の次の番号を同じく払い出す
@@ -591,12 +596,26 @@ def sweep_residual(root: Path, as_of: str, apply: bool, record: Path | None = No
     path = root / RESIDUAL_IN
     if not path.is_file():
         return 0, []
-    leftovers, _ = collect_residual(root)
-    cands = sweep_candidates(root, leftovers)
-    if not apply or not cands:
-        return len(leftovers), cands
+    if not apply:
+        leftovers, _ = collect_residual(root)
+        return len(leftovers), sweep_candidates(root, leftovers)
     if record is None:
         raise ValueError("apply には record(履歴ファイル)が要る")
+    # **落とすときは、数えるところから書き戻すところまでを錠の中に置く** ★
+    # (2026-09-13。追記 `--append-residual` と押し出し `--rotate` と同じ錠である)。
+    # 外に置くと、**数えた後・書き戻す前**に入った追記を、古い本文で上書きして消す。
+    # 行番号で落とす仕組みなので、そのあいだに行が増えると落とす行もずれる。
+    with _lock(root):
+        return _sweep_locked(root, path, as_of, record)
+
+
+def _sweep_locked(root: Path, path: Path, as_of: str, record: Path
+                  ) -> tuple[int, list[tuple[int, str, str]]]:
+    """`sweep_residual` の中身。**錠を持った状態でだけ呼ぶ。**"""
+    leftovers, _ = collect_residual(root)
+    cands = sweep_candidates(root, leftovers)
+    if not cands:
+        return len(leftovers), cands
 
     # 1) 先に履歴へ追記する
     lines = [f"\n## 残務から落とした行({as_of} 実行)\n",
@@ -860,6 +879,113 @@ def _carry_new_lines(snapshot: str, current: str) -> list[str]:
     return [l for l in cur_lines if l.strip() and l not in snap_set]
 
 
+def append_residual(root: Path, line: str) -> tuple[str, int]:
+    """残務の行を1本、**錠の下で**追記する。戻り値は (結果, 追記後の行数)。
+
+    結果は `"追記"` か `"重複"` のどちらかである。
+
+    **読取りから書戻しまでを `_lock` で包む** ★(2026-09-12 の検査 A2-6)。包まないと、
+    押し出し(`_rotate_locked`)が**複写してから元を空にするまで**のあいだに足した行が、
+    押し出し先にも新しい台帳にも残らない。2026-09-05 に `_carry_new_lines` で区間を
+    「再読から書込みまで」に縮めたが、**錠を取らない書き手が居るかぎり区間は消えない** —
+    書き手が全員この関数を通れば、区間そのものが無くなる(規範: issues-pendings.md §2.1)。
+
+    **鍵の重複もここで見る。** 規範は「同じ鍵が在るなら何も書かない」と定めているが、
+    各フローが grep してから書く形だと、**その grep と書込みのあいだ**で同じ競合が起きる。
+    """
+    path = root / RESIDUAL_IN
+    if not path.is_file():
+        raise SystemExit(f"エラー: 残務の台帳が無い: {RESIDUAL_IN}"
+                         "(/setup が作るもの。issues-pendings.md §2.1)")
+    entry = line.strip()
+    if not LEFTOVER_RE.match(entry):
+        raise SystemExit("エラー: 残務の行の形が違う。"
+                         "`- <YYYY-MM-DD> <path:節> <一文>` で渡す"
+                         "(日付が先頭なのは飾りではない。issues-pendings.md §2.1)")
+    with _lock(root):
+        leftovers, _ = collect_residual(root)
+        key = leftover_key(entry)
+        if any(leftover_key(existing) == key for existing in leftovers):
+            return "重複", len(leftovers)
+        raw_text = path.read_text(encoding="utf-8")
+        raw_lines = raw_text.splitlines()
+        masked_lines = mask_comments(raw_text).splitlines()
+        # 節の範囲を出す。**判定はマスクした側である** — コメントの中の `##` で切ると、
+        # 書いた行がコメントの内側へ落ちて誰からも見えなくなる(_rotate_locked と同じ理由)。
+        start = end = None
+        for i, masked in enumerate(masked_lines):
+            stripped = masked.strip()
+            if start is None:
+                if re.match(r"^##\s+残務", stripped):
+                    start = i
+                continue
+            if stripped.startswith("## "):
+                end = i
+                break
+        if start is None:
+            raise ValueError("残務の見出し(## 残務)が見つからない: " + str(path))
+        if end is None:
+            end = len(raw_lines)
+        # 空の台帳の印(「なし」)は、行が1本でも入った時点で落とす。
+        body = [x for x in raw_lines[start + 1:end] if x.strip() and x.strip() != "なし"]
+        body.append(entry)
+        out = raw_lines[:start + 1] + [""] + body + [""] + raw_lines[end:]
+        path.write_text("\n".join(out).rstrip("\n") + "\n", encoding="utf-8")
+    return "追記", len(leftovers) + 1
+
+
+def resolve_residual(root: Path, key_line: str, verdict: str, record: Path
+                     ) -> tuple[str, int]:
+    """解消した残務の1行を、記録を残してから台帳から落とす。**追記・押し出しと同じ錠を取る。**
+
+    **直接 `docs/residual.md` を開いて消さない** ★(2026-09-13 の検査 A2-6)—
+    錠を取らない書き手が1つでも居れば、その書き手が読んでから書き戻すまでのあいだに
+    入った追記が、古い本文で上書きされて消える。**追記だけを錠に入れても塞がらない。**
+
+    `key_line` は落とす行の逐語(先頭の `- ` は在っても無くてもよい)。
+    `verdict` は「直した」「不要と裁定(理由)」のような、**なぜ落とすか**である。
+    戻り値は (結果, 残った行数)。結果は `削除` か `不在`(その行が無かった)。
+    """
+    path = root / RESIDUAL_IN
+    if not path.is_file():
+        raise SystemExit(f"エラー: 残務の台帳が無い: {RESIDUAL_IN}"
+                         "(/setup が作るもの。issues-pendings.md §2.1)")
+    if not verdict.strip():
+        raise SystemExit("エラー: --resolve-residual には --verdict=<なぜ落とすか> が要る"
+                         "(理由の無い削除は、記録から見て事故と区別が付かない)")
+    raw = key_line.strip()
+    want = leftover_key(raw if raw.startswith("- ") else "- " + raw)
+    with _lock(root):
+        leftovers, _ = collect_residual(root)
+        hit = [x for x in leftovers if leftover_key(x) == want]
+        if not hit:
+            return "不在", len(leftovers)
+        record.parent.mkdir(parents=True, exist_ok=True)
+        with record.open("a", encoding="utf-8") as handle:   # **記録が先、削除が後**
+            handle.write(f"\n## 残務から落とした行(解消)\n")
+            for x in hit:
+                body = x.strip()
+                handle.write(f"{body if body.startswith('- ') else '- ' + body}\n"
+                             f"  - 判定: {verdict.strip()}\n")
+        raw_text = path.read_text(encoding="utf-8")
+        raw_lines = raw_text.splitlines()
+        masked_lines = mask_comments(raw_text).splitlines()
+        out, in_leftovers, dropped = [], False, 0
+        for line, masked in zip(raw_lines, masked_lines):
+            stripped = masked.strip()
+            if re.match(r"^##\s+残務", stripped):
+                in_leftovers = True
+            elif stripped.startswith("## "):
+                in_leftovers = False
+            if (in_leftovers and re.match(r"^-\s+\d{4}-\d{2}-\d{2}\b", stripped)
+                    and leftover_key(stripped) == want):
+                dropped += 1
+                continue
+            out.append(line)
+        path.write_text("\n".join(out).rstrip("\n") + "\n", encoding="utf-8")
+    return "削除", len(leftovers) - dropped
+
+
 def health(rows: list[Reverification], histories: list[HistoryRow], parse_errors: int,
            staleness: list[Staleness]) -> str:
     candidates = sum(row.status == "再検証候補" for row in rows)
@@ -874,7 +1000,7 @@ def health(rows: list[Reverification], histories: list[HistoryRow], parse_errors
         f"- 履歴: {len(histories)}", f"- 文書・IDを索引化できない履歴: {unindexed}",
         f"- 履歴の解析警告: {broken_history}",
         f"- critical復旧記録の警告: {recovery_warnings}",
-        # 件数の推移(CLAUDE.md §3 の「issue 純増」)は、生成物 docs/reverification.md 自身の
+        # 件数の推移(`.claude/directions/core.md` §3 の「issue 純増」)は、生成物 docs/reverification.md 自身の
         # git 履歴が持つ。ここで今日の日付を使うと生成物の決定性が壊れるので使わない。
         f"- 鮮度確認の候補(棚上げ): {len(pendings)}(最古 {oldest(pendings)})",
         f"- 鮮度確認の候補(課題票): {len(issues)}(最古 {oldest(issues)})",
@@ -1120,7 +1246,7 @@ def selftest() -> int:
                 (root / "docs/histories/2026-06-01-p.md").write_text(
                     "---\nid: p\n---\n帰着: P-020 を解消した\n")
                 assert next_id(root, "pending") == "021"
-                # 旗は単独でしか打てない
+                # オプションは単独でしか打てない
                 assert main(["doc-health.py", "--next-issue-id", "--check"]) == 2
                 # --- 控えの破損は黙って数え直さず、失敗する(2026-09-05 の独立確認) ---
                 ids = root / IDS_STATE
@@ -1149,10 +1275,53 @@ def selftest() -> int:
                 assert _carry_new_lines(snap, snap) == []
                 assert _carry_new_lines(snap, snap + "- c\n") == ["- c"]
                 assert _carry_new_lines("- a\n- b\n", "- a\n- x\n- b\n") == ["- x"]
+                # --- 追記は錠の下の1経路に集約する(2026-09-12 の検査 A2-6) ---
+                res = root / RESIDUAL_IN
+                res.write_text("# 残務\n\n## 残務(文書整合ほか)\n\nなし\n")
+                assert main(["doc-health.py",
+                             "--append-residual=- 2026-09-12 docs/a.md:§1 表の穴"]) == 0
+                got = res.read_text()
+                assert "- 2026-09-12 docs/a.md:§1 表の穴" in got, got
+                assert "なし" not in got, "空の印が残った"
+                # 同じ鍵は何も書かない — 日付が違っても(鍵は path:節 と一文である)
+                assert main(["doc-health.py",
+                             "--append-residual=- 2026-09-20 docs/a.md:§1 表の穴。"]) == 0
+                assert len(collect_residual(root)[0]) == 1, collect_residual(root)[0]
+                # 形の違う行は受け取らない / 他のオプションと混ぜない
+                try:
+                    append_residual(root, "表の穴")
+                    raise AssertionError("形の違う行を受け取った")
+                except SystemExit as e:
+                    assert "形が違う" in str(e), e
+                assert main(["doc-health.py",
+                             "--append-residual=- 2026-09-12 docs/b.md:§1 x",
+                             "--check"]) == 2
+                # --- 解消した行を落とす(削除も同じ錠を通る。2026-09-13 の検査 A2-6) ---
+                res.write_text("# h\n\n## 残務\n\n- 2026-09-12 docs/a.md:§1 穴\n"
+                               "- 2026-09-12 docs/b.md:§2 別の穴\n")
+                hist = root / "docs/histories/resolve.md"
+                what, left = resolve_residual(root, "2026-09-12 docs/a.md:§1 穴",
+                                              "直した", hist)
+                assert (what, left) == ("削除", 1), (what, left)
+                assert "判定: 直した" in hist.read_text(encoding="utf-8")
+                assert "docs/a.md" not in res.read_text(encoding="utf-8")
+                assert "docs/b.md" in res.read_text(encoding="utf-8")
+                assert resolve_residual(root, "2026-09-12 docs/zzz.md:§9 無い",
+                                        "直した", hist)[0] == "不在"
+                try:                              # 理由の無い削除は受け取らない
+                    resolve_residual(root, "2026-09-12 docs/b.md:§2 別の穴", " ", hist)
+                    raise AssertionError("理由の無い削除を受け取った")
+                except SystemExit as e:
+                    assert "--verdict" in str(e), e
+                assert main(["doc-health.py",            # 記録先の無い削除は 2
+                             "--resolve-residual=- 2026-09-12 docs/b.md:§2 別の穴",
+                             "--verdict=直した"]) == 2
+                res.write_text(before)
         finally:
             os.chdir(previous)
     print("OK doc-health: upstream-moved/history-reverse-index/critical-recovery/"
-          "staleness-worklist/legacy/deterministic/leftover-sweep/rotate/next-id")
+          "staleness-worklist/legacy/deterministic/leftover-sweep/rotate/next-id/"
+          "residual-resolve")
     return 0
 
 
@@ -1162,30 +1331,60 @@ def main(argv: list[str]) -> int:
     if any(arg in ("-h", "--help") for arg in argv[1:]):
         print(__doc__); return 0
     args = list(argv[1:])
-    as_of = record = ""
+    as_of = record = append = resolve = verdict = ""
     for arg in list(args):
         if arg.startswith("--as-of="):
             as_of = arg.split("=", 1)[1]; args.remove(arg)
         elif arg.startswith("--record="):
             record = arg.split("=", 1)[1]; args.remove(arg)
+        elif arg.startswith("--append-residual="):
+            append = arg.split("=", 1)[1]; args.remove(arg)
+        elif arg.startswith("--resolve-residual="):
+            resolve = arg.split("=", 1)[1]; args.remove(arg)
+        elif arg.startswith("--verdict="):
+            verdict = arg.split("=", 1)[1]; args.remove(arg)
     flags = set(args)
     if (flags - {"--check", "--health", "--sweep", "--rotate",
                   "--next-issue-id", "--next-pending-id"} or len(flags) != len(args)):
         print(__doc__); return 2
     for solo in ("--next-issue-id", "--next-pending-id"):
         if solo in flags and (flags != {solo} or as_of or record):
-            print(f"エラー: {solo} は単独で打つ(他の旗や --as-of / --record と混ぜない)。", file=sys.stderr)
+            print(f"エラー: {solo} は単独で打つ(他のオプションや --as-of / --record と混ぜない)。", file=sys.stderr)
             return 2
     if "--next-issue-id" in flags:
         print(next_id(Path.cwd(), "issue")); return 0
     if "--next-pending-id" in flags:
         print(next_id(Path.cwd(), "pending")); return 0
-    if "--rotate" in flags and (flags != {"--rotate"} or as_of or record):
-        # **他の旗と混ぜられない。** 混ぜられると、先に見る --rotate が return したところで
+    if "--rotate" in flags and (flags != {"--rotate"} or as_of or record or append):
+        # **他のオプションと混ぜられない。** 混ぜられると、先に見る --rotate が return したところで
         # --sweep や --check が黙って落ちる(引数の検証だけは通るので、呼び手からは
         # 「要求どおり打って 0 が返った」ようにしか見えない)。
-        print("エラー: --rotate は単独で打つ(他の旗や --as-of / --record と混ぜない)。"
+        print("エラー: --rotate は単独で打つ(他のオプションや --as-of / --record / --append-residual と混ぜない)。"
               "ローテーションは掃除でも生成でもない別の操作である"
+              "(issues-pendings.md §2.1)", file=sys.stderr)
+        return 2
+    if resolve and (flags or as_of or append):
+        # 追記と同じ理由。**`--record=` だけは要る**(記録が先、削除が後)。
+        print("エラー: --resolve-residual は --record= とだけ組む"
+              "(他のオプションや --as-of / --append-residual と混ぜない)。"
+              "落とした行の記録先が要る(issues-pendings.md §2.1)", file=sys.stderr)
+        return 2
+    if resolve:
+        if not record:
+            print("エラー: --resolve-residual には --record=<履歴ファイル> が要る"
+                  "(記録が先、削除が後である)", file=sys.stderr)
+            return 2
+        what, left = resolve_residual(Path.cwd(), resolve, verdict, Path(record))
+        print(f"{what}: 残り {left} 行")
+        return 0 if what == "削除" else 1
+    if verdict:
+        print("エラー: --verdict は --resolve-residual と組んでだけ打つ", file=sys.stderr)
+        return 2
+    if append and (flags or as_of or record):
+        # 上と同じ理由。追記も掃除でも生成でもローテーションでもない別の操作である。
+        print("エラー: --append-residual は単独で打つ"
+              "(他のオプションや --as-of / --record と混ぜない)。"
+              "追記を済ませてから、必要なら --rotate を打つ"
               "(issues-pendings.md §2.1)", file=sys.stderr)
         return 2
     if as_of:
@@ -1206,12 +1405,25 @@ def main(argv: list[str]) -> int:
         return 2
     root = find_root(Path.cwd())
     if (root / "docs").is_dir():
-        # **入口が3つ(生成 / 掃き出し / ローテーション)在るので、関所は手前に1つ置く。**
+        # **入口が4つ(生成 / 掃き出し / 追記 / ローテーション)在るので、関所は手前に1つ置く。**
         # 入口ごとに違う扱いにすると、方針ではなく偶然になる(2026-08-25 の独立検査 L-1)。
         gap = residual_ledger_gap(root)
         if gap:
             print("エラー: " + gap, file=sys.stderr)
             return 2
+    if append:
+        # **追記も退避と同じ錠の下で行う** ★ — 錠を取らない追記は、複写から書戻しまでの
+        # あいだに消える(2026-09-12 の検査 A2-6。issues-pendings.md §2.1 (1))。
+        verdict, total = append_residual(root, append)
+        if verdict == "重複":
+            print(f"残務 {total} 行 / 同じ鍵が既に在るので何も書かなかった"
+                  "(issues-pendings.md §2.1 (1))")
+            return 0
+        print(f"残務 {total} 行 / 追記: {append.strip()}")
+        if total >= RESIDUAL_ROTATE_AT:
+            print(f"→ {RESIDUAL_ROTATE_AT} 行以上。続けて `--rotate` を打つ"
+                  "(issues-pendings.md §2.1 (2))")
+        return 0
     if "--rotate" in flags:
         # **ローテーションは掃除でも生成でもない。** 1行も落とさないので --record も基準日も要らず、
         # 残務へ書いたフローが自分で打つ(issues-pendings.md §2.1 (2))。

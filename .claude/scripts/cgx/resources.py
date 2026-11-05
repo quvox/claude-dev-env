@@ -285,7 +285,9 @@ def couplings(cluster: dict, cg: dict, cfg: dict) -> dict:
     rcfg = cfg_of(cfg)
     resources = cg.get("resources", [])
     closure = cluster.get("closure", {})
-    total_features = len(cluster.get("features", [])) or 1
+    # 分母は**辿れた機能だけ**。入口が抽出器の無い言語で未検査の機能(closure が空)を数えると、
+    # 辿れた機能の大半が触る資源でも広域共有の比率に届かず、CG7 の抑止が効かなくなる
+    total_features = sum(1 for fid in cluster.get("features", []) if closure.get(fid)) or 1
 
     sym_feats: dict[str, set[str]] = defaultdict(set)
     for fid, syms in sorted(closure.items()):

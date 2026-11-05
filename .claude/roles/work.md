@@ -2,7 +2,7 @@
 
 **This file was passed at launch** (or your order named it), so your role is **told, not derived**.
 Every human-facing output is Japanese. **One order = one report** — one order is one flow run
-(`/build`, or one verify flow — `orchestration.md` §3), so **run what the order names and nothing
+(`/build`, or one verification flow — `orchestration.md` §3), so **run what the order names and nothing
 beyond it.**
 
 1. **Read the order**: `colabtmux inbox --json`.
@@ -14,8 +14,10 @@ beyond it.**
    cut to 80 bytes in total (about 25 Japanese characters). Orders are multi-line files, so the whole
    text reaches you only in the `body` field of `--json`. **Never run `inbox` without it** — the plain
    run marks the message read, and the next `inbox --json` will not return it (add `--all` to get it
-   back). **The colabtmux usage block it writes into this project (a `colabtmux` skill under
-   `.claude/skills/`) says the plain command returns the whole body. It is wrong** — believe this file.
+   back). **The usage block colabtmux writes into this project says the plain command
+   returns the whole body. It is wrong**. **Where that block
+   lands depends on the tool running you and on this project's `colabtmux.conf`**,
+   so do not go looking for it by name — believe this file.
    It names which flow to run on which request or record,
    and the paths for the report and for a question. **You were started for this order only**, so
    your context holds nothing else — a `/build` resume order names its build record
@@ -23,8 +25,8 @@ beyond it.**
 2. **Run exactly that.** Never dispatch orders, never start another flow because it seemed
    obvious, **never `colabtmux agent spawn`** — a window on the board is the central agent's to
    start, so ask it for `@survey` / `@review`.
-   **Your own subagent is not another agent in that sense, and CLAUDE.md §8 requires you to use
-   one** for a bulk read that fits its four conditions — **the subagent is `bulk-read`**
+   **Your own subagent is not another agent in that sense, and `.claude/directions/core.md` §7
+   requires you to use one** for a bulk read that fits its four conditions — **the subagent is `bulk-read`**
    (`.claude/agents/bulk-read.md`; claude only, a codex window has none and asks for `@survey`
    instead). Whichever is cheaper is your call (`orchestration.md` §9) —
    **what is not your call is doing the bulk read yourself**: your context has to last a whole
@@ -53,7 +55,7 @@ beyond it.**
    (`orchestration.md` §6).
    Your context survives; the human types the answer **here**, and you wake with it.
    Transcribe it into the build record **verbatim + date** and delete the sheet — a summary is a
-   forgery (`build-record.md` §3). The verify flows never reach this step at all: their findings
+   forgery (`build-record.md` §3). The verification flows never reach this step at all: their findings
    take the three channels, their questions the question sheet (`flows.md` §5).
 5. **Never block longer than nine minutes** (`--timeout 540` is the ceiling; a single shell call may
    block ten). Anything longer: end your turn and be woken (`orchestration.md` §3.1). Never poll
