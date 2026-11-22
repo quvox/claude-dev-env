@@ -48,7 +48,7 @@ graph TB
 | リソース | 種別 | 用途 | 誰が作るか |
 |---|---|---|---|
 | `claude-dev-net` | ネットワーク | Claude コンテナと docker-proxy の通信。**全プロジェクトで共有**(分離しない) | `MODULE-cli-common-ensure-infrastructure` / `MODULE-makefile-network` |
-| `claude-dev-auth` | ボリューム | 認証の共有(Claude 直下 / Codex は `codex/` サブディレクトリ) | 同上 / `MODULE-makefile-volumes` |
+| `claude-dev-auth` | ボリューム | 認証の共有(Claude 直下 / Codex は `codex/`・agy は `gemini/` サブディレクトリ) | 同上 / `MODULE-makefile-volumes` |
 | `claude-dev-config` | ボリューム | シェル設定の共有 | 同上 |
 | `claude-dev-history` | ボリューム | コマンド履歴の永続化 | 同上 |
 | `claude-dev-chrome-<name>` | ボリューム | Chrome プロファイル。**コンテナごとに分離**(共有すると同時起動でプロファイルが壊れる) | `MODULE-cli-start` |
@@ -83,7 +83,7 @@ graph TB
 
 | シークレット | 保管場所 | 参照方法 |
 |---|---|---|
-| Claude / Codex の認証 | ボリューム `claude-dev-auth` | 起動時に**プロジェクトディレクトリ配下**(`/workspace/.claude/` `/workspace/.codex/`)へコピーし、30 秒ごとに書き戻す。コンテナのホーム(`~/.claude` / `~/.codex` / `~/.claude.json`)はそのコピー先への symlink である(`CTR-cli-container` / `D0-auth-03`) |
+| Claude / Codex / agy の認証 | ボリューム `claude-dev-auth` | 起動時に**プロジェクトディレクトリ配下**(`/workspace/.claude/` `/workspace/.codex/` `/workspace/.gemini/`)へコピーし、30 秒ごとに書き戻す。コンテナのホーム(`~/.claude` / `~/.codex` / `~/.gemini` / `~/.claude.json`)はそのコピー先への symlink である。agy のトークンは所有者だけが読み書きできる権限(`600`)で置く(`CTR-cli-container` / `D0-auth-03`) |
 | SSH 秘密鍵 | **ホスト側に置いたまま**。コンテナへは渡さない | プロジェクト専用 ssh-agent のソケットのみ転送する |
 
 値そのものはどのドキュメントにも書かない。
@@ -115,4 +115,4 @@ graph TB
 | コンテナ名がディレクトリ名だけで決まる | 別パスの同名ディレクトリが同一セッション扱いになる | なし |
 | 空きポートの選定から起動までが原子的でない | 同時起動でポート競合が起きうる(再試行で吸収する) | なし |
 | `claude-dev-net` を共有している | プロジェクト間でネットワーク的な到達性がある(単一共有 docker-proxy 前提の帰結。`D0-env-05`) | なし |
-| `logout` / `reset` は共有ボリューム全体を空にする | Claude と Codex の認証が同時に消える(`D0-auth-01` の帰結) | なし |
+| `logout` / `reset` は共有ボリューム全体を空にする | Claude・Codex・agy の認証が同時に消える(`D0-auth-01` の帰結) | なし |

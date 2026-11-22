@@ -204,6 +204,7 @@ graph LR
 | `NODE_DEFAULT_LINE` | nvm の `default` エイリアスが指す系列(PATH には出ない) | `24` | 任意 | 同上 |
 | `CLAUDE_VERSION` | 同梱する Claude Code。**CI が具体バージョンへ解決して渡す** | `latest` | 実質必須(CI から) | 配布ステージ `claude-cli` / `claude-vnc` の冒頭 |
 | `CODEX_VERSION` | 同梱する Codex CLI。**CI が具体バージョンへ解決して渡す** | `latest` | 実質必須(CI から) | 同上 |
+| `AGY_VERSION` | 同梱する agy(Google Antigravity CLI)。**CI と `make update-claude` が配布元の更新情報(manifest)から具体バージョンへ解決して渡す**。公式インストーラは版を選べず常に最新を入れるので、この値は**キャッシュキーと、導入された版との一致の検査**にだけ使う(`latest` 以外で一致しなければビルドを失敗させる — `FR-env-09-14`)。導入先は `~/.local/bin/agy`(Claude Code と同じ)で、`/usr/local/bin/agy` へのシンボリックリンクで非対話シェル・`docker exec` からも解決する(`FR-env-12-15`)。自己更新は止めない(`FR-env-12-16`) | `latest` | 実質必須(CI から) | 同上(導入層は MCP サーバーの後、同梱外部バイナリの設置より前) |
 | `CHROME_DEVTOOLS_MCP_VERSION` | 同梱するブラウザ操作用 MCP サーバー(`chrome-devtools-mcp`)。**CI が具体バージョンへ解決して渡す** | `latest` | 実質必須(CI から) | 同上 |
 | `container`(ENV) | コンテナ内であることのマーカー | `docker` | 必須 | `base` ステージのコンテナ設定部 |
 
@@ -215,7 +216,8 @@ graph LR
 | 事象 | 原因 | 回避方法 |
 |---|---|---|
 | **同梱した MCP サーバーが更新されない** | `CHROME_DEVTOOLS_MCP_VERSION=latest` のまま渡すと、エージェント CLI と同じ理由で導入層が永久にヒットして中身だけ凍結する | CI の prepare ジョブで具体バージョンへ解決してから build-arg で渡す(`infra/local/ghcr.md`) |
-| 同梱エージェント CLI が更新されない | `CLAUDE_VERSION=latest` / `CODEX_VERSION=latest` のまま渡すと**文字列が変わらずキャッシュキーとして機能せず**、導入層が永久にヒットして中身だけ凍結する(2026-07 に実際に発生) | CI の prepare ジョブで具体バージョンへ解決してから build-arg で渡す(`infra/local/ghcr.md`) |
+| 同梱エージェント CLI が更新されない | `CLAUDE_VERSION=latest` / `CODEX_VERSION=latest` / `AGY_VERSION=latest` のまま渡すと**文字列が変わらずキャッシュキーとして機能せず**、導入層が永久にヒットして中身だけ凍結する(2026-07 に実際に発生) | CI の prepare ジョブで具体バージョンへ解決してから build-arg で渡す(`infra/local/ghcr.md`) |
+| **agy の導入層が「版が指定と一致しません」で失敗する** | 版の解決(prepare ジョブ・`make update-claude`)と導入(公式インストーラは常に最新)のあいだに agy の新版が出た。または arm64 の配布元の版が amd64 とずれている(CI は amd64 の manifest で解決する) | ワークフロー・`make update-claude` を再実行する(版を解決し直す)。**過去の版を指定して焼き直す手段は無い**(`D0-dist-07` 項2)— 戻すときは古いイメージのタグを使う |
 | 取得が毎回フルダウンロードになる | 時刻由来の値をレイヤーチェーンに入れると、内容が変わらない日も全層が失効する | レイヤーチェーンに入れてよいのは**内容由来**の値だけ(`DSN-dist-01`)。時刻はラベルに置く |
 | VNC 層まで再ビルドされる | エージェント CLI の導入や同梱外部バイナリの設置を `base` の途中に置くと、`FROM base` の `vnc-base` まで失効が波及する | 導入・設置は終端ステージの最終レイヤーにのみ置く |
 | **`node` と打つと nvm ではなく fnm 側の Node が動く** | **仕様である。** nvm はシェル初期化で `--no-use` で読み込まれ、PATH を書き換えない(`FR-env-12-2` の経路を守るため) | nvm 側を使うときは `nvm use 26` のように系列を明示する |

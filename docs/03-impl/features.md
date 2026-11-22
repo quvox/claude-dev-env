@@ -43,6 +43,8 @@ keywords: [機能表, 境界, claude-dev, Makefile, docker-proxy]
 | MODULE-cli-list | tool | dispatch list @ claude-dev::main, dispatch list @ claude-dev-mac::main | MOD-cli-list | 実行中セッションの一覧と noVNC URL を表示する |
 | MODULE-cli-login | tool | dispatch login @ claude-dev::main, dispatch login @ claude-dev-mac::main | MOD-cli-login | Claude の OAuth ログインをコンテナ内で実行する |
 | MODULE-cli-login-codex | tool | dispatch login-codex @ claude-dev::main, dispatch login-codex @ claude-dev-mac::main | MOD-cli-login-codex | Codex のデバイス認証ログインを実行し認証情報を共有ボリュームへ置く |
+| MODULE-cli-login-gemini | tool | dispatch login-gemini @ claude-dev::main, dispatch login-gemini @ claude-dev-mac::main | MOD-cli-login-gemini | agy の Google 認証を実行し認証トークンを共有ボリュームへ置く |
+| MODULE-cli-version | tool | dispatch --version @ claude-dev::main, dispatch --version @ claude-dev-mac::main | MOD-cli-version | claude-dev 自身の版をリリースの記録から読んで名乗る |
 | MODULE-cli-logout | tool | dispatch logout @ claude-dev::main, dispatch logout @ claude-dev-mac::main | MOD-cli-logout | Claude と Codex の認証情報を削除する |
 | MODULE-cli-ports | tool | dispatch ports @ claude-dev::main, dispatch ports @ claude-dev-mac::main | MOD-cli-ports | コンテナのポートフォワード一覧を表示する |
 | MODULE-cli-pull | tool | dispatch pull @ claude-dev::main, dispatch pull @ claude-dev-mac::main | MOD-cli-pull | GHCR からビルド済みイメージを取得する(既定タグ latest) |
@@ -106,7 +108,7 @@ keywords: [機能表, 境界, claude-dev, Makefile, docker-proxy]
 | `claude-dev::is_running` / `claude-dev-mac::is_running` | 8 | 昇格 | 「セッションが動いているか」の判定はこのシステムの状態モデルそのもの |
 | `claude-dev::image_exists` / `claude-dev-mac::image_exists` | 7 | 昇格 | `require_setup` を昇格させても `ensure_docker_proxy_container` から到達するのでファンイン2が残る |
 | `claude-dev::require_setup` / `claude-dev-mac::require_setup` | 6 | 昇格 | セットアップ未実施時の停止条件。6機能に共通の事前条件ゲート |
-| `claude-dev::acquire_lock` / `release_lock`(および macOS 版の同名対) | 6 | 昇格 | 共有資源(共有ボリューム・docker-proxy)を触る6機能を直列化する排他の実体。`start` / `stop` / `logout` / `reset` / `login` / `login-codex` が同じキー体系(`CTR-cli-container` の「排他(ロックキー)」)に依存する |
+| `claude-dev::acquire_lock` / `release_lock`(および macOS 版の同名対) | 7 | 昇格 | 共有資源(共有ボリューム・docker-proxy)を触る7機能を直列化する排他の実体。`start` / `stop` / `logout` / `reset` / `login` / `login-codex` / `login-gemini` が同じキー体系(`CTR-cli-container` の「排他(ロックキー)」)に依存する |
 | `claude-dev::container_exists` / `claude-dev-mac::container_exists` | 5 | 昇格 | 停止中コンテナを含む存在判定。`is_running` と別概念で、stop/logout の分岐条件 |
 | `claude-dev::net_other_running_containers` / `claude-dev-mac::net_other_running_containers` | 3 | 昇格 | 共有 docker-proxy と共有ネットワークを止めてよいかの判定(`FR-env-01` 受入基準9)の実体。`stop` / `logout` / `reset` が同じ集合に依存し、**数え落とすと稼働中の他プロジェクトから Docker が使えなくなる**。判定を管理ラベルにもイメージにも依存させない理由(`D0-env-10`)を1箇所に置く |
 | `claude-dev::resolve_container_user` / `claude-dev-mac::resolve_container_user` | 3 | 昇格 | docker exec の実行ユーザ決定。権限に関わる判断を含む |

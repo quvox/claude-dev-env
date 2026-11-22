@@ -30,7 +30,7 @@ verified:
 
 | モジュールID | 責務 | 対応要件 | 依存 | 詳細設計 | relations の接頭辞 |
 |---|---|---|---|---|---|
-| MOD-cli-common | ホスト CLI の共有基盤。コンテナ名の導出、稼働・存在・イメージの判定、インフラ(ネットワーク・共有ボリューム)の用意、SSH 鍵の選択と保存、noVNC URL の組み立て、実行ユーザの解決、**共有資源を触る6コマンドの排他ロックの取得・解放・残骸の引き継ぎ**(`D0-env-08` 項6 / `DSN-env-02`)、**compose 一意化名の導出**(`DSN-env-03`)、**管理ラベル `claude-dev.project-dir` の読み取り**、**セッション由来の資源の列挙**(`DSN-env-04`)、**共有資源の遊休判定に使う集合の算出**、**`logout` / `reset` が共有する削除結果の記録と中断の遅延**(`D0-env-08` 項5) | FR-env-01, FR-env-02, FR-env-03, FR-env-04, FR-env-07, FR-env-09, FR-env-10, FR-env-11, NFR-ops-02, NFR-ops-03, NFR-ops-05, NFR-scale-01, SR-01, SR-10, SR-11, SR-12, SR-20 | — | なし | `MODULE-cli-common-*` |
+| MOD-cli-common | ホスト CLI の共有基盤。コンテナ名の導出、稼働・存在・イメージの判定、インフラ(ネットワーク・共有ボリューム)の用意、SSH 鍵の選択と保存、noVNC URL の組み立て、実行ユーザの解決、**共有資源を触る7コマンドの排他ロックの取得・解放・残骸の引き継ぎ**(`D0-env-08` 項6 / `DSN-env-02`)、**compose 一意化名の導出**(`DSN-env-03`)、**管理ラベル `claude-dev.project-dir` の読み取り**、**セッション由来の資源の列挙**(`DSN-env-04`)、**共有資源の遊休判定に使う集合の算出**、**`logout` / `reset` が共有する削除結果の記録と中断の遅延**(`D0-env-08` 項5) | FR-env-01, FR-env-02, FR-env-03, FR-env-04, FR-env-07, FR-env-09, FR-env-10, FR-env-11, NFR-ops-02, NFR-ops-03, NFR-ops-05, NFR-scale-01, SR-01, SR-10, SR-11, SR-12, SR-20 | — | なし | `MODULE-cli-common-*` |
 | MOD-cli-setup | イメージをビルドし、ネットワークと共有ボリュームを作る初回セットアップ | FR-env-01, FR-env-09, SR-01, NFR-ops-05 | MOD-cli-common | なし | `MODULE-cli-setup` |
 | MOD-cli-start | 開発コンテナの起動(既定はブラウザ確認あり)。再接続・VM モード・認証受け渡し・鍵転送・ポート割当・**プロジェクト環境ファイルの読み取りと環境変数の受け渡し**(`DSN-env-05`)を含む | FR-env-01〜08, FR-env-11, FR-env-12, FR-env-14, NFR-avail-02, NFR-scale-01, NFR-sec-01, NFR-ops-02, SR-04, SR-14, SR-20, NFR-ops-05 | MOD-cli-common, MOD-entrypoint | なし | `MODULE-cli-start` |
 | MOD-cli-stop | セッションの停止と、**そのセッションが作った資源(セッション由来のコンテナ・ネットワーク・名前付きボリュームと、それらのコンテナが抱えていた名前無しのボリューム。経路が `docker run` か `docker compose` かを問わない。ボリュームは削除の明示があるときにだけ消し、無ければ残っている名前付きボリュームの名前と削除する方法を表示する)**の片付け。遊休なら docker-proxy と SSH ブリッジも停止する。**セッション由来の資源は所有者ラベル(`DSN-env-04` の規則 D)で、compose 資源は加えて一意化した compose プロジェクト名(`DSN-env-03`)で引く** | FR-env-01, FR-env-07, NFR-ops-02, SR-20, NFR-ops-05 | MOD-cli-common | なし | `MODULE-cli-stop` |
@@ -39,7 +39,9 @@ verified:
 | MOD-cli-list | 実行中セッションの一覧と noVNC URL を表示する | FR-env-01, FR-env-11, NFR-ops-02, SR-20, NFR-ops-05 | MOD-cli-common | なし | `MODULE-cli-list` |
 | MOD-cli-login | Claude の OAuth ログインをコンテナ内で実行し共有ボリュームへ保存する | FR-env-03, NFR-ops-02, SR-03, SR-15, SR-20, NFR-ops-05 | MOD-cli-common | なし | `MODULE-cli-login` |
 | MOD-cli-login-codex | Codex のデバイス認証を実行し共有ボリュームの `codex/` へ保存する | FR-env-03, FR-env-12, NFR-scale-02, NFR-ops-02, SR-03, SR-15, SR-20, NFR-ops-05 | MOD-cli-common | なし | `MODULE-cli-login-codex` |
-| MOD-cli-logout | Claude と Codex の認証情報を共有ボリュームごと削除する | FR-env-03, NFR-scale-02, NFR-ops-02, SR-20, NFR-ops-05 | MOD-cli-common | なし | `MODULE-cli-logout` |
+| MOD-cli-login-gemini | agy の Google 認証を一時コンテナで実行し、認証トークンを共有ボリュームの `gemini/` へ保存する | FR-env-03, FR-env-12, NFR-scale-02, NFR-ops-02, SR-03, SR-15, SR-20, NFR-ops-05 | MOD-cli-common | なし | `MODULE-cli-login-gemini` |
+| MOD-cli-version | claude-dev 自身の版をリリースの記録から読んで名乗る(`--version` / `-v`) | FR-env-01, SR-20 | — | なし | `MODULE-cli-version` |
+| MOD-cli-logout | Claude・Codex・agy の認証情報を共有ボリュームごと削除する | FR-env-03, NFR-scale-02, NFR-ops-02, SR-20, NFR-ops-05 | MOD-cli-common | なし | `MODULE-cli-logout` |
 | MOD-cli-forward | 指定ポートのホスト側フォワードを動的に追加する | FR-env-06, NFR-scale-01, NFR-ops-02, SR-20, NFR-ops-05 | MOD-cli-common | なし | `MODULE-cli-forward` |
 | MOD-cli-unforward | 指定ポートのフォワードを解除する | FR-env-06, NFR-ops-02, SR-20, NFR-ops-05 | MOD-cli-common | なし | `MODULE-cli-unforward` |
 | MOD-cli-ports | フォワード一覧と noVNC URL を表示する | FR-env-06, FR-env-11, NFR-ops-02, SR-20, NFR-ops-05 | MOD-cli-common | なし | `MODULE-cli-ports` |
@@ -224,6 +226,10 @@ verified:
 | FR-env-01-34 | MOD-cli-stop | 完全 | -(設計判断を要さない)。**`reset` 側の担い手は `FR-env-01-26` の根拠欄と同じ** |
 | FR-env-01-35 | MOD-cli-list | 完全 | DSN-env-01 |
 | FR-env-01-36 | MOD-cli-list | 完全 | -(設計判断を要さない) |
+| FR-env-01-37 | MOD-cli-version | 完全 | -(設計判断を要さない) |
+| FR-env-01-38 | MOD-cli-version | 完全 | -(設計判断を要さない) |
+| FR-env-01-39 | MOD-cli-version | 完全 | -(設計判断を要さない) |
+| FR-env-01-40 | MOD-cli-common | 完全 | -(設計判断を要さない。水準は `docs/ux/policy.md`「画面を使える手段(BR-13)」) |
 | FR-env-02-1 | MOD-entrypoint | 完全 | -(設計判断を要さない) |
 | FR-env-02-2 | MOD-cli-start | 完全 | -(設計判断を要さない) |
 | FR-env-02-3 | MOD-cli-start | 完全 | -(設計判断を要さない) |
@@ -255,6 +261,12 @@ verified:
 | FR-env-03-22 | MOD-cli-reset | 完全 | -(設計判断を要さない) |
 | FR-env-03-23 | MOD-cli-logout | 完全 | -(設計判断を要さない) |
 | FR-env-03-24 | MOD-cli-logout | 完全 | DSN-env-04(所有者ラベルの照合値は所有者の Claude コンテナにしか無いため、`logout` がそれを削除すると `stop` では引けなくなる。規則 D と `CTR-cli-container`「削除対象の決め方」が持つ) |
+| FR-env-03-25 | MOD-cli-login-gemini | 完全 | -(設計判断を要さない) |
+| FR-env-03-26 | MOD-cli-start | 完全 | DSN-auth-01 |
+| FR-env-03-27 | MOD-entrypoint | 完全 | DSN-auth-01 |
+| FR-env-03-28 | MOD-entrypoint | 完全 | -(設計判断を要さない) |
+| FR-env-03-29 | MOD-cli-start | 完全 | -(設計判断を要さない) |
+| FR-env-03-30 | MOD-entrypoint | 完全 | -(設計判断を要さない) |
 | FR-env-04-1 | MOD-cli-start | 完全 | -(設計判断を要さない) |
 | FR-env-04-2 | MOD-cli-start | 完全 | -(設計判断を要さない) |
 | FR-env-04-3 | MOD-cli-ssh-keys | 完全 | -(設計判断を要さない) |
@@ -316,6 +328,9 @@ verified:
 | FR-env-09-9 | MOD-cli-pull | 完全 | -(設計判断を要さない) |
 | FR-env-09-10 | MOD-cli-pull | 完全 | -(設計判断を要さない) |
 | FR-env-09-11 | MOD-cli-pull | 完全 | -(設計判断を要さない) |
+| FR-env-09-12 | (モジュール外)`03-impl/environments/images.md` / `03-impl/infra/local/ghcr.md` | 完全 | DSN-dist-01 |
+| FR-env-09-13 | (モジュール外)`03-impl/infra/local/ghcr.md` | 完全 | -(設計判断を要さない) |
+| FR-env-09-14 | (モジュール外)`03-impl/environments/images.md` | 完全 | -(設計判断を要さない) |
 | FR-env-10-1 | MOD-makefile | 完全 | -(設計判断を要さない) |
 | FR-env-10-2 | MOD-cli-start | 完全 | -(設計判断を要さない) |
 | FR-env-10-3 | (モジュール外)`03-impl/environments/images.md` / `03-impl/infra/local/ghcr.md` | 完全 | -(設計判断を要さない) |
@@ -344,6 +359,9 @@ verified:
 | FR-env-12-11 | MOD-entrypoint | 完全 | DSN-dist-02 |
 | FR-env-12-13 | (モジュール外)`03-impl/environments/images.md` / `03-impl/infra/local/ghcr.md` | 完全 | DSN-dist-01(MCP サーバーをエージェント CLI と同じ扱いで終端レイヤーに置き、版は CI が解決した具体値をキャッシュキーにする) |
 | FR-env-12-14 | MOD-entrypoint | 完全 | DSN-dist-02(既存の設定を書き換えず、書かれていないものだけを追記する扱いを MCP の登録にも当てる) |
+| FR-env-12-15 | (モジュール外)`03-impl/environments/images.md` | 完全 | -(設計判断を要さない) |
+| FR-env-12-16 | (モジュール外)`03-impl/environments/images.md` | 完全 | -(設計判断を要さない) |
+| FR-env-12-17 | MOD-entrypoint | 完全 | -(設計判断を要さない) |
 | FR-env-13-1 | (モジュール外)`03-impl/environments/images.md` | 完全 | DSN-dist-01(同梱物の導入を配布ステージの終端レイヤーに置く一般原則。同梱外部バイナリの設置もこの原則の適用である) |
 | FR-env-13-2 | (モジュール外)`03-impl/environments/images.md` | 完全 | -(設計判断を要さない) |
 | FR-env-13-3 | (モジュール外)`03-impl/environments/images.md` | 完全 | DSN-dist-01(アーキテクチャ別の置き分けは設置層の中で解決し、ステージ構成を増やさない) |
@@ -370,10 +388,10 @@ verified:
 | NFR-ops-03 | MOD-makefile, MOD-cli-common | 完全 | -(設計判断を要さない) |
 | NFR-ops-05 | MOD-cli-common, 各 MOD-cli-*, MOD-entrypoint | 完全 | -(設計判断を要さない)。担い手が単一モジュールに収まらないため非機能要件として1行で持つ |
 | NFR-scale-01 | MOD-cli-start, MOD-cli-common, MOD-cli-forward | 完全 | DSN-env-03 |
-| NFR-scale-02 | MOD-cli-login-codex, MOD-cli-logout, MOD-entrypoint | 完全 | DSN-auth-01 |
+| NFR-scale-02 | MOD-cli-login-codex, MOD-cli-login-gemini, MOD-cli-logout, MOD-entrypoint | 完全 | DSN-auth-01 |
 | SR-01 | MOD-cli-common, MOD-cli-setup | - | SR-01(技術前提。充足は適用外)。前提コマンドの検査とインフラ作成が Docker の存在に依存する |
 | SR-02 | MOD-entrypoint, MOD-firewall, MOD-docker-proxy, (モジュール外)`03-impl/environments/images.md` | - | SR-02(技術前提。充足は適用外)。OS 依存はホスト CLI 側に閉じる(`DSN-mod-02`) |
-| SR-03 | MOD-cli-login, MOD-cli-login-codex, MOD-cli-common, (モジュール外)`03-impl/environments/images.md` | - | SR-03(技術前提。充足は適用外)。認証は共有ボリューム経由のみ。イメージへ焼き込まない |
+| SR-03 | MOD-cli-login, MOD-cli-login-codex, MOD-cli-login-gemini, MOD-cli-common, (モジュール外)`03-impl/environments/images.md` | - | SR-03(技術前提。充足は適用外)。認証は共有ボリューム経由のみ。イメージへ焼き込まない |
 | SR-04 | MOD-cli-start, MOD-docker-proxy, (担い手)`02-design/environments.md`「Codex実行設定」 | - | SR-04(技術前提。充足は適用外)。`--security-opt` を付けない=既定の confinement を維持する |
 | SR-05 | (担い手)`00-requests/request.md`「やらないこと」2 | - | SR-05(技術前提。充足は適用外)。利用前提。設計上の実装物を持たない |
 | SR-10 | MOD-cli-common, MOD-makefile | - | SR-10(技術前提。充足は適用外)。前提コマンド検査と `make setup` の対象環境 |
@@ -381,7 +399,7 @@ verified:
 | SR-12 | MOD-cli-common | - | SR-12(技術前提。充足は適用外)。不足コマンドを列挙して導入方法を案内する |
 | SR-13 | (モジュール外)`03-impl/infra/local/ghcr.md` | - | SR-13(技術前提。充足は適用外)。マルチアーキ配布は CI が担う(`DSN-mod-05`) |
 | SR-14 | MOD-vm-mode, MOD-cli-start | - | SR-14(技術前提。充足は適用外)。`/dev/kvm` の有無で分岐する。macOS では提供しない |
-| SR-15 | MOD-cli-login, MOD-cli-login-codex | - | SR-15(技術前提。充足は適用外)。認証方式の選択そのもの |
+| SR-15 | MOD-cli-login, MOD-cli-login-codex, MOD-cli-login-gemini | - | SR-15(技術前提。充足は適用外)。認証方式の選択そのもの |
 | SR-20 | MOD-cli-common, 各 MOD-cli-*, MOD-makefile, MOD-portsync, MOD-vm-mode, MOD-entrypoint, MOD-firewall, MOD-container-tools | - | SR-20(技術前提。充足は適用外)。Bash 実装のモジュール群 |
 | SR-21 | MOD-docker-proxy | - | SR-21(技術前提。充足は適用外)。Go 実装は docker-proxy の1モジュールである |
 | SR-24 | (モジュール外)`03-impl/environments/images.md` | - | SR-24(技術前提。充足は適用外)。マルチステージと終端レイヤー(`DSN-dist-01` / `DSN-mod-05`) |
@@ -444,8 +462,9 @@ verified:
 | E2E-02 | UC-02 | `claude-dev forward` → 8100 番台の割当と SSH トンネル → クライアントのブラウザで表示 → `claude-dev ports` で確認 | 対象(Must) |
 | E2E-03 | UC-03 | コンテナ内で危険な `docker run` → 拒否 / `/workspace` bind の許可 / **`CTR-docker-api` が拒否条件と定めない要求の透過**。**あわせて、作成されたコンテナ・ネットワーク・名前付きボリュームに所有者ラベルが付いていることを確認する**(`FR-env-07` 受入基準11) | 対象(Must) |
 | E2E-06 | UC-06 | `claude-dev login-codex` → デバイス認証 → 別プロジェクトで `start` → 再ログイン不要で `codex` が起動し、**シェルコマンドが成功して `/workspace` を読み書きできる**。landlock の疎通確認が通り、読み取り専用の明示指定で読み取りが成功する。トークン更新が次のコンテナへ引き継がれる。**あわせて codex の設定にブラウザ操作用 MCP サーバーが登録され、既に書かれている登録は変わらないことを確認する**(`FR-env-12-13` / `FR-env-12-14`) | 対象(Must) |
+| E2E-07 | UC-07 | `claude-dev login-gemini` → URL をクライアント PC のブラウザで開いて認証しコードを貼り付ける → 別プロジェクトで `start` → 再ログイン不要で `agy` が起動する。トークン更新が次のコンテナへ引き継がれる。ブラウザ確認あり/なしの両方のイメージで `agy` が名前だけで起動する。`logout` で agy の認証も消える(Google への実ログインが要るため手動で行う。手順は `03-impl/tests/e2e.md`) | 対象(Must) |
 
-**全 UC がカバーされている**(UC-01〜UC-03 / UC-06 → E2E-01〜E2E-03 / E2E-06)。上流の UC を
+**全 UC がカバーされている**(UC-01〜UC-03 / UC-06〜UC-07 → E2E-01〜E2E-03 / E2E-06〜E2E-07)。上流の UC を
 持たない E2E シナリオは作らない。**`E2E-04` / `E2E-05` は 2026-08-08 に廃止した**
 (オーケストレーターの削除にともない `UC-04` / `UC-05` が消えたため)。**番号は再利用しない。**
 

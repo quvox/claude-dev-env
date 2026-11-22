@@ -5,7 +5,7 @@ module: MOD-cli-common
 kind: function-call
 sync: sync
 impl: claude-dev::ensure_infrastructure, claude-dev-mac::ensure_infrastructure
-callers: MODULE-cli-login, MODULE-cli-login-codex, MODULE-cli-start
+callers: MODULE-cli-login, MODULE-cli-login-codex, MODULE-cli-login-gemini, MODULE-cli-start
 callees: なし
 contracts: CTR-cli-container
 design: DSN-mod-01, DSN-mod-02, DSN-auth-01
@@ -34,7 +34,7 @@ summary: docker network と共有 3 ボリュームを冪等に作成する
 
 ## 呼び出され方
 
-- 契機: `start` / `login` / `login-codex` が処理の前段で呼ぶ。
+- 契機: `start` / `login` / `login-codex` / `login-gemini` が処理の前段で呼ぶ。
 - 前提条件: `docker` が実行できること。
 - 引数: なし。
 
@@ -53,7 +53,7 @@ summary: docker network と共有 3 ボリュームを冪等に作成する
 | 種別 | 内容 |
 |---|---|
 | 戻り値 | 常に 0(すべての docker 呼び出しを `|| true` で握りつぶす) |
-| 永続化 | docker network `claude-dev-net`、docker volume `claude-dev-auth` / `claude-dev-history` / `claude-dev-config`。`claude-dev-auth` は claude 認証(直下)と codex 認証(`codex/`)を同居させる |
+| 永続化 | docker network `claude-dev-net`、docker volume `claude-dev-auth` / `claude-dev-history` / `claude-dev-config`。`claude-dev-auth` は claude 認証(直下)と codex 認証(`codex/`)と agy の認証トークン(`gemini/`)を同居させる |
 | 発火するイベント | なし |
 | ログ | なし(docker の出力はすべて破棄する) |
 

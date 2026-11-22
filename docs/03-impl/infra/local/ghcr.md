@@ -76,6 +76,7 @@ graph LR
 | `REGISTRY` | ワークフローの環境変数 | `ghcr.io` | 必須 |
 | `CLAUDE_VERSION` | `prepare` ジョブが `latest` チャネルから解決。手動実行時は入力で上書きできる | 解決値 | 必須 |
 | `CODEX_VERSION` | `prepare` ジョブが npm registry から解決。手動実行時は入力で上書きできる | 解決値 | 必須 |
+| `AGY_VERSION` | `prepare` ジョブが agy の配布元の更新情報(`…/manifests/linux_amd64.json`。公式インストーラが引く先と同じ URL)から解決する。数字と点以外が1文字でも在るか `MAJOR.MINOR.PATCH` でなければ失敗する(`FR-env-09-13`)。**手動実行の入力は設けない**(公式インストーラが版を選べないため、最新以外を指定してもビルドが失敗する — `D0-dist-07` 項2) | 解決値 | 必須 |
 | `CHROME_DEVTOOLS_MCP_VERSION` | `prepare` ジョブが npm registry から解決。手動実行時は入力で上書きできる | 解決値 | 必須 |
 | `IMAGE_VERSION` | **CI は渡さない**(Dockerfile 側の既定 `local` のまま)。ビルド時刻(JST)から作るタイムスタンプは `labels` 入力でイメージのラベルへ直接付ける — build-arg にするとレイヤーチェーンが毎日失効するため(`ghcr-images.yml` の `labels:` の直上コメント) | `local`(Dockerfile の既定) | 使わない |
 
@@ -89,7 +90,7 @@ graph LR
 |---|---|
 | 取得 | `claude-dev pull` |
 | ローカルで作り直す(配布に依存しない) | `make build` |
-| 切り戻し | ワークフローを手動実行し、`claude_version` / `codex_version` / `chrome_devtools_mcp_version` に既知の良い版を指定する |
+| 切り戻し | ワークフローを手動実行し、`claude_version` / `codex_version` / `chrome_devtools_mcp_version` に既知の良い版を指定する。**agy だけは版を指定できない** — agy の不具合で戻すときは、古いイメージのタグ(`claude-dev pull <TAG>`)を使う |
 
 ### 取得(pull)が失敗したときの切り分け
 

@@ -6,7 +6,7 @@ source: []
 summary: >
   Claude Code を Docker コンテナで動かす隔離開発環境を、レビュー前コードをホストから隔離し
   チーム全員が同一構成を使えるようにするために提供する。信頼できる社内開発用途に限定。
-keywords: [claude-dev, Docker開発環境, 隔離, 配布, CodexCLI]
+keywords: [claude-dev, Docker開発環境, 隔離, 配布, CodexCLI, agy]
 verified:
   at: 2026-09-11
   version: 1.6.0
@@ -42,7 +42,7 @@ verified:
 |---|---|---|
 | RQ-env-01 | ホスト CLI によるコンテナのライフサイクル管理・ポートフォワード・認証・SSH 鍵転送 | Linux は `claude-dev`、macOS は `claude-dev-mac` |
 | RQ-env-02 | 開発ツール入りコンテナイメージ(VNC あり/なし)と、noVNC 経由のブラウザ確認 | クライアント PC のブラウザからコンテナ内 Chrome を見る |
-| RQ-env-03 | エージェント CLI の同梱(Claude Code と OpenAI Codex CLI)と、認証のホスト共有 | プロジェクト間で再ログインを不要にする |
+| RQ-env-03 | エージェント CLI の同梱(Claude Code と OpenAI Codex CLI と Google Antigravity CLI(`agy`))と、認証のホスト共有 | プロジェクト間で再ログインを不要にする。agy の認証で共有するのは、agy が保存する Google の認証トークンだけとする(2026-11-23 決定シート) |
 | RQ-env-04 | ホストの Docker を制限付きで使うための Docker Socket Proxy | 生ソケットを渡さずに `docker` を使えるようにする |
 | RQ-env-05 | 重い Docker 案件向けの VM モード(オプトイン) | QEMU+virtiofs、VM 内ネイティブ Docker |
 | RQ-env-06 | macOS(Docker Desktop)対応 | OS 依存はホスト CLI に閉じる |
@@ -67,7 +67,7 @@ verified:
 
 - 開発者は任意のプロジェクトディレクトリで `claude-dev start` と打つ。プロジェクト専用のコンテナが
   立ち上がり、カレントディレクトリが `/workspace` に見え、認証もファイアウォールも設定済みで、
-  tmux の中で `claude` や `codex` がすぐ動く。ホストの秘密鍵ファイルも Docker 生ソケットも
+  tmux の中で `claude` や `codex` や `agy` がすぐ動く。ホストの秘密鍵ファイルも Docker 生ソケットも
   コンテナには入っていない。
 - Web アプリを作ったら `claude-dev forward 5173` で必要なときだけポートを開き、クライアント PC の
   ブラウザで確認する。コンテナ内の Chrome を noVNC 越しに見ることもできる。
@@ -78,7 +78,8 @@ verified:
 - 実行環境: Linux サーバ(Ubuntu 22.04+ / Debian 12+ 推奨)または macOS + Docker Desktop。
   Docker Engine 24+。
 - 認証: Claude Pro / Max プラン(OAuth)、および Codex 利用時は OpenAI 側アカウント
-  (`codex login --device-auth` によるデバイス認証)。API キー・トークンはイメージに焼き込まず
+  (`codex login --device-auth` によるデバイス認証)、agy 利用時は Google アカウント
+  (`claude-dev login-gemini` による認証)。API キー・トークンはイメージに焼き込まず
   環境変数等で注入する。
 - 外部 CLI(`claude` 等)と各ツールは変化が速い。採用・更新時に公式ドキュメントで最新仕様を確認する。
 - OS 依存はホスト CLI に閉じる。コンテナ内資産(イメージ・entrypoint・firewall・docker-proxy)は
