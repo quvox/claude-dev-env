@@ -3,8 +3,9 @@
 # Claude コンテナ エントリポイント
 # =============================================================================
 # 1. /workspace の所有者 UID/GID にコンテナユーザーを合わせる
-# 2. ~/.claude → /workspace/.claude・~/.codex → /workspace/.codex にシンボリックリンク
-#    認証ファイルを共有ボリューム（~/.claude-shared/、codex は同 codex/）からコピー
+# 2. ~/.claude → /workspace/.claude・~/.codex → /workspace/.codex・~/.gemini → /workspace/.gemini
+#    にシンボリックリンク。認証ファイルを共有ボリューム（~/.claude-shared/、codex は同 codex/、
+#    agy は同 gemini/）からコピー
 # 3. ファイアウォール設定
 # 4. tmux 起動
 # =============================================================================
@@ -193,7 +194,13 @@ fi
 #   認証ファイル auth.json だけを共有ボリュームの codex/ サブディレクトリ経由で共有する
 #   （config.toml・セッション履歴は共有せずコンテナ固有。D-27）。
 #
-# 共有対象: claude=.credentials.json, .claude.json / codex=auth.json のみ
+#   agy（Antigravity CLI）も同じ形にする。~/.gemini/ は /workspace/.gemini/ へのシンボリックリンクとし、
+#   認証ファイル antigravity-cli/antigravity-oauth-token だけを共有ボリュームの gemini/
+#   サブディレクトリ経由で共有する（settings.json・会話履歴は共有せずコンテナ固有）。
+#   agy はキーリング（Linux では D-Bus の Secret Service）が無い環境ではこのファイルへトークンを
+#   保存する。コンテナには D-Bus も keyring も無いので、このファイルだけで認証が成立する。
+#
+# 共有対象: claude=.credentials.json, .claude.json / codex=auth.json / agy=antigravity-oauth-token のみ
 # =============================================================================
 SHARED_CLAUDE="$USER_HOME/.claude-shared"
 LOCAL_CLAUDE="/workspace/.claude"
@@ -203,11 +210,18 @@ AUTH_FILES=".credentials.json .claude.json"
 SHARED_CODEX="$SHARED_CLAUDE/codex"
 LOCAL_CODEX="/workspace/.codex"
 CODEX_AUTH_FILES="auth.json"
+# agy の認証も同じボリュームの gemini/ に相乗りする。パスは ~/.gemini からの相対（共有側にも
+# 同じ階層を作る）。agy 自身が ~/.gemini/antigravity-cli/ 配下に置くファイルの名前である。
+SHARED_GEMINI="$SHARED_CLAUDE/gemini"
+LOCAL_GEMINI="/workspace/.gemini"
+GEMINI_AUTH_FILES="antigravity-cli/antigravity-oauth-token"
 
 # 共有ボリュームの所有権
 chown "$USERNAME":"$USERNAME" "$SHARED_CLAUDE" 2>/dev/null || true
 mkdir -p "$SHARED_CODEX" 2>/dev/null || true
 chown "$USERNAME":"$USERNAME" "$SHARED_CODEX" 2>/dev/null || true
+mkdir -p "$SHARED_GEMINI/antigravity-cli" 2>/dev/null || true
+chown "$USERNAME":"$USERNAME" "$SHARED_GEMINI" "$SHARED_GEMINI/antigravity-cli" 2>/dev/null || true
 
 # /workspace/.claude/ ディレクトリを確保
 mkdir -p "$LOCAL_CLAUDE"
@@ -256,6 +270,27 @@ for f in $CODEX_AUTH_FILES; do
     if [ -f "$LOCAL_CODEX/$f" ]; then
         chown "$USERNAME":"$USERNAME" "$LOCAL_CODEX/$f"
         chmod 600 "$LOCAL_CODEX/$f"
+    fi
+done
+
+# --- agy（~/.gemini → /workspace/.gemini）も同じ形に整える ---
+mkdir -p "$LOCAL_GEMINI/antigravity-cli"
+chown "$USERNAME":"$USERNAME" "$LOCAL_GEMINI" "$LOCAL_GEMINI/antigravity-cli"
+
+# ~/.gemini が実ディレクトリの場合は中身を退避してから削除（ln -sfn は実ディレクトリを置き換えられない）
+if [ -d "$USER_HOME/.gemini" ] && [ ! -L "$USER_HOME/.gemini" ]; then
+    cp -an "$USER_HOME/.gemini/." "$LOCAL_GEMINI/" 2>/dev/null || true
+    rm -rf "$USER_HOME/.gemini"
+fi
+
+ln -sfn "$LOCAL_GEMINI" "$USER_HOME/.gemini"
+chown -h "$USERNAME":"$USERNAME" "$USER_HOME/.gemini"
+
+# 認証ファイルのパーミッション修正（claude-dev start でコピー済み）
+for f in $GEMINI_AUTH_FILES; do
+    if [ -f "$LOCAL_GEMINI/$f" ]; then
+        chown "$USERNAME":"$USERNAME" "$LOCAL_GEMINI/$f"
+        chmod 600 "$LOCAL_GEMINI/$f"
     fi
 done
 
@@ -590,7 +625,7 @@ fi
 
 # --- バックグラウンド: 認証ファイルの変更を共有ボリュームに書き戻し ---
 # トークンリフレッシュ等で認証ファイルが更新された場合に他コンテナへ伝播する
-# （claude / codex 双方を同じループ・同じ間隔で見る。D-27）
+# （claude / codex / agy を同じループ・同じ間隔で見る。D-27）
 (
     while true; do
         sleep 30
@@ -608,6 +643,15 @@ fi
                     mkdir -p "$SHARED_CODEX" 2>/dev/null || true
                     cp "$LOCAL_CODEX/$f" "$SHARED_CODEX/$f" 2>/dev/null || true
                     chmod 600 "$SHARED_CODEX/$f" 2>/dev/null || true
+                fi
+            fi
+        done
+        for f in $GEMINI_AUTH_FILES; do
+            if [ -f "$LOCAL_GEMINI/$f" ]; then
+                if ! cmp -s "$LOCAL_GEMINI/$f" "$SHARED_GEMINI/$f" 2>/dev/null; then
+                    mkdir -p "$SHARED_GEMINI/$(dirname "$f")" 2>/dev/null || true
+                    cp "$LOCAL_GEMINI/$f" "$SHARED_GEMINI/$f" 2>/dev/null || true
+                    chmod 600 "$SHARED_GEMINI/$f" 2>/dev/null || true
                 fi
             fi
         done

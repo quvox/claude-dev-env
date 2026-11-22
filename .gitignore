@@ -62,6 +62,8 @@
 /.claude-dev.yaml
 # codex の設定と資格情報(auth.json)。丸ごと追跡しない。
 .codex
+# agy(Antigravity CLI)の設定・会話履歴・資格情報(antigravity-oauth-token)。丸ごと追跡しない。
+.gemini
 
 # macOS の AppleDouble メタデータ(仕様ドキュメントではない)
 ._*

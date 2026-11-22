@@ -59,7 +59,7 @@ help:
 	@echo "  make build-docker-proxy Docker Socket Proxy イメージをビルド"
 	@echo ""
 	@echo "メンテナンス:"
-	@echo "  make update-claude  Claude Code のみ高速更新（Go/Rust 等はキャッシュ利用）"
+	@echo "  make update-claude  Claude Code / agy のみ高速更新（Go/Rust 等はキャッシュ利用）"
 	@echo "  make upgrade        全イメージを完全再ビルドで更新（--no-cache）"
 	@echo "  make status         状態確認"
 	@echo "  make clean        全リセット（コンテナ・ボリューム・イメージ削除）"
@@ -176,12 +176,15 @@ login:
 # メンテナンス
 # =============================================================================
 
-## Claude Code のみ高速更新（Go/Rust/Playwright 等はキャッシュ利用）
+## Claude Code / Antigravity CLI（agy）のみ高速更新（Go/Rust/Playwright 等はキャッシュ利用）
 # latest チャネルを具体バージョンへ解決し build-arg CLAUDE_VERSION で渡す（D-26）。
 # 値そのものが終端レイヤーのキャッシュキーになるため、新版が無ければキャッシュヒットで
 # 即終わり、新版があれば必ず失効する。解決に失敗したとき latest の文字列へフォールバック
 # すると、キャッシュヒットして「更新したつもりで何も変わらない」状態（CI で実際に起きた
 # 凍結と同型）になるため、フォールバックせずエラーで中断する。
+# agy も同じ方針で、公式のリリース manifest（公式 install.sh が引く先）から最新の具体
+# バージョンを解決し build-arg AGY_VERSION で渡す。これを渡さないと、claude に新版が無い日は
+# agy の導入層もキャッシュヒットして agy だけ更新されない。codex の版は渡さない（従来どおり）。
 update-claude:
 	@set -e; \
 	claude_version=$$(curl -fsSL https://downloads.claude.ai/claude-code-releases/latest) || { \
@@ -193,13 +196,30 @@ update-claude:
 		[0-9]*.[0-9]*.[0-9]*) ;; \
 		*) echo "❌ 解決結果が MAJOR.MINOR.PATCH 形式ではありません: $$claude_version"; exit 1 ;; \
 	esac; \
-	echo "📦 Claude Code $$claude_version へ更新中（キャッシュ利用で高速ビルド）..."; \
+	case "$$(uname -m)" in \
+		x86_64|amd64) agy_platform=linux_amd64 ;; \
+		arm64|aarch64) agy_platform=linux_arm64 ;; \
+		*) echo "❌ 未対応のアーキテクチャです（agy は amd64 / arm64 のみ）: $$(uname -m)"; exit 1 ;; \
+	esac; \
+	agy_version=$$(curl -fsSL "https://antigravity-cli-auto-updater-974169037036.us-central1.run.app/manifests/$$agy_platform.json" \
+		| sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p') || agy_version=""; \
+	agy_ok=0; \
+	case "$$agy_version" in \
+		""|*[!0-9.]*) ;; \
+		*) if printf '%s\n' "$$agy_version" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$$'; then agy_ok=1; fi ;; \
+	esac; \
+	if [ "$$agy_ok" -ne 1 ]; then \
+		echo "❌ Antigravity CLI（agy）の最新バージョンを解決できませんでした（MAJOR.MINOR.PATCH の形ではありません）"; \
+		echo "   バージョンを解決できないままビルドすると更新されないため中断します"; exit 1; \
+	fi; \
+	echo "📦 Claude Code $$claude_version / agy $$agy_version へ更新中（キャッシュ利用で高速ビルド）..."; \
 	docker build -t $(IMG_CLAUDE) \
 		--target claude-cli \
 		--build-arg USERNAME=$(CUSER) \
 		--build-arg USER_UID=$$(id -u) \
 		--build-arg USER_GID=$$(id -g) \
 		--build-arg CLAUDE_VERSION=$$claude_version \
+		--build-arg "AGY_VERSION=$$agy_version" \
 		-f $(BASE_DIR)/.devcontainer/Dockerfile.claude $(BASE_DIR); \
 	echo "✅ Claude ベースイメージ更新完了"; \
 	echo ""; \
@@ -210,6 +230,7 @@ update-claude:
 		--build-arg USER_UID=$$(id -u) \
 		--build-arg USER_GID=$$(id -g) \
 		--build-arg CLAUDE_VERSION=$$claude_version \
+		--build-arg "AGY_VERSION=$$agy_version" \
 		-f $(BASE_DIR)/.devcontainer/Dockerfile.claude $(BASE_DIR); \
 	echo "✅ Claude VNC イメージ更新完了"
 	@echo ""

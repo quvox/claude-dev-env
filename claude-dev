@@ -531,8 +531,8 @@ image_version() {
 # =============================================================================
 # 排他ロック（MODULE-cli-common-lock / CTR-cli-container「排他（ロックキー）」）
 # =============================================================================
-# 共有ボリュームまたは docker-proxy を触る 6 コマンド（start / stop / logout /
-# reset / login / login-codex）を直列化する。キーは 2 段:
+# 共有ボリュームまたは docker-proxy を触る 7 コマンド（start / stop / logout /
+# reset / login / login-codex / login-gemini）を直列化する。キーは 2 段:
 #   プロジェクト単位 = 対象コンテナ名 / 共有資源単位 = 固定文字列 shared
 # 両方を取る操作は「プロジェクト単位 → 共有資源単位」の固定順で取る。待たない。
 LOCK_DIR="${DEV_DIR}/locks"
@@ -957,7 +957,7 @@ setup)
     echo "✅ セットアップ完了！"
     echo ""
     echo "次のステップ:"
-    echo "  1. claude-dev login          # Claude（codex も使うなら claude-dev login-codex）"
+    echo "  1. claude-dev login          # Claude（codex は login-codex、agy は login-gemini）"
     echo "  2. cd /path/to/your/project"
     echo "  3. claude-dev start"
     echo ""
@@ -1102,6 +1102,72 @@ login-codex)
     ;;
 
 # -----------------------------------------------------------------------------
+# Gemini（Antigravity CLI = agy）ログイン
+#   agy の認証は ~/.gemini/antigravity-cli/antigravity-oauth-token（OAuth トークンの JSON。
+#   OS のキーリングが無い環境ではこのファイルに保存される）のみを共有する。
+#   claude / codex と同じ claude-dev-auth ボリュームの gemini/ サブディレクトリに相乗りさせるため、
+#   ボリューム・logout・reset の分岐は増えない。
+#   ~/.gemini の他のファイル（settings.json・会話履歴等）は共有しない（コンテナ固有）。
+# -----------------------------------------------------------------------------
+login-gemini)
+    require_setup
+    ensure_infrastructure
+    # 共有ボリュームの gemini/ へ認証を書く経路。login / login-codex と同じキーを使う
+    # （認証は同じボリュームに同居するため。キーを分けると排他が成立しない）。
+    # 対話認証の全区間で保持する。
+    acquire_lock shared login-gemini shared || exit 1
+    echo "📋 Gemini（Antigravity CLI = agy）ログイン"
+    echo ""
+    echo "agy が起動します。Google OAuth を選ぶと認証 URL が表示されるので、ブラウザ（手元の PC）で開いて"
+    echo "認証を完了し、表示された認証コードを agy へ貼り付けてください。"
+    echo "ログインできたら agy を終了してください（Ctrl+C を 2 回）。"
+    echo ""
+
+    # SSH_CONNECTION を渡すのは、agy が SSH 越しの環境を検出すると「URL を別の端末で開き、
+    # 表示されたコードを貼り付ける」方式（コールバック不要）になるため。コンテナ内にはブラウザが
+    # 無く、ホストのブラウザへ戻るコールバックの経路も無いので、常にこの方式へ寄せる。
+    docker run --rm -it \
+        --network "$NETWORK" \
+        --entrypoint bash \
+        -e "TERM=${TERM:-xterm-256color}" \
+        -e "LANG=en_US.UTF-8" \
+        -e "CUSER=$CUSER" \
+        -e "CHOME=$CHOME" \
+        -e "SSH_CONNECTION=127.0.0.1 0 127.0.0.1 22" \
+        -v "${VOL_AUTH}:${CHOME}/.claude-shared" \
+        "$IMG_CLAUDE" \
+        -c '
+            # 共有側は entrypoint のバックグラウンド同期（root 実行）で root 所有になりうるため、
+            # ここで所有権を戻してからユーザー権限で読み書きする（login / login-codex と同じ流儀）
+            mkdir -p "$CHOME/.claude-shared/gemini/antigravity-cli"
+            chown -R "$CUSER":"$CUSER" "$CHOME/.claude-shared" 2>/dev/null || true
+            rm -rf "$CHOME/.gemini"
+            mkdir -p "$CHOME/.gemini/antigravity-cli"
+            chown -R "$CUSER":"$CUSER" "$CHOME/.gemini"
+
+            # 既存の認証は引き継がない。引き継ぐと agy がログイン済みで起動して認証画面が出ず、
+            # 別アカウントへ変えられない。キャンセルしたとき（新しいトークンが無いとき）は
+            # 共有側の既存の認証をそのまま残す。
+            su "$CUSER" -s /bin/bash -l -c "
+                agy || true
+
+                # ログイン後: 認証ファイルを共有ボリュームに永続化
+                _tok=~/.gemini/antigravity-cli/antigravity-oauth-token
+                if [ -f \"\$_tok\" ]; then
+                    cp \"\$_tok\" ~/.claude-shared/gemini/antigravity-cli/antigravity-oauth-token
+                    chmod 600 ~/.claude-shared/gemini/antigravity-cli/antigravity-oauth-token
+                else
+                    echo \"⚠️  認証ファイルができていません（ログインを完了せずに終了した可能性があります）。共有ボリュームは変更していません。\"
+                fi
+            "
+        '
+
+    release_lock shared shared
+    echo "✅ Gemini ログイン処理完了"
+    echo "   次回以降の claude-dev start で全プロジェクトのコンテナに共有されます"
+    ;;
+
+# -----------------------------------------------------------------------------
 # ログイン情報削除
 # -----------------------------------------------------------------------------
 logout)
@@ -1181,10 +1247,10 @@ logout)
         _unmanaged_notice="ℹ️  ${NETWORK} への問い合わせに失敗したため、管理ラベルを持たないコンテナの列挙はできませんでした。"$'\n'
     fi
 
-    # カレントディレクトリのプロジェクト配下にコピーされた認証（3ファイルだけ）。
+    # カレントディレクトリのプロジェクト配下にコピーされた認証（4ファイルだけ）。
     # ディレクトリと settings.json / host-hooks.json は認証ではないので消さない。
     _authfiles=()
-    for _f in "$(pwd)/.claude/.credentials.json" "$(pwd)/.claude/.claude.json" "$(pwd)/.codex/auth.json"; do
+    for _f in "$(pwd)/.claude/.credentials.json" "$(pwd)/.claude/.claude.json" "$(pwd)/.codex/auth.json" "$(pwd)/.gemini/antigravity-cli/antigravity-oauth-token"; do
         [ -f "$_f" ] && _authfiles+=("$_f")
     done
 
@@ -1254,7 +1320,7 @@ logout)
         echo "⚠️  以下を削除します:"
         for _t in "${_targets[@]}"; do echo "   - コンテナ: ${_t}"; done
         for _f in "${_authfiles[@]}"; do echo "   - ファイル: ${_f}"; done
-        echo "   - 共有ボリューム ${VOL_AUTH} の認証情報（Claude Code と Codex CLI の両方が消えます）"
+        echo "   - 共有ボリューム ${VOL_AUTH} の認証情報（Claude Code・Codex CLI・Antigravity CLI の全てが消えます）"
         if [ "$_targets_query_ok" = "0" ]; then
             echo "   （管理ラベルを持つコンテナの一覧は引けていません。引けていないコンテナは削除されません）"
         fi
@@ -1376,7 +1442,7 @@ logout)
     if [ ${#_authfiles[@]} -gt 0 ]; then
         echo "ℹ️  他のディレクトリにコピーされた認証には触れていません（本システムはその場所を記録していません）。"
     fi
-    echo "   再ログイン: claude-dev login / claude-dev login-codex"
+    echo "   再ログイン: claude-dev login / claude-dev login-codex / claude-dev login-gemini"
     release_lock shared shared
     ;;
 
@@ -1510,14 +1576,16 @@ start)
         exit 1
     fi
 
-    # 認証ファイルを共有ボリュームから /workspace/.claude/・/workspace/.codex/ にコピー
-    # （codex 認証は共有ボリュームの codex/ に置かれる。未ログインなら何もコピーせず起動できる）
-    mkdir -p "${PROJECT_DIR}/.claude" "${PROJECT_DIR}/.codex"
+    # 認証ファイルを共有ボリュームから /workspace/.claude/・.codex/・.gemini/ にコピー
+    # （codex 認証は共有ボリュームの codex/、agy 認証は gemini/ に置かれる。
+    #   未ログインなら何もコピーせず起動できる）
+    mkdir -p "${PROJECT_DIR}/.claude" "${PROJECT_DIR}/.codex" "${PROJECT_DIR}/.gemini"
     docker run --rm \
         --entrypoint bash \
         -v "${VOL_AUTH}:/auth:ro" \
         -v "${PROJECT_DIR}/.claude:/target" \
         -v "${PROJECT_DIR}/.codex:/target-codex" \
+        -v "${PROJECT_DIR}/.gemini:/target-gemini" \
         "$IMG_CLAUDE" -c '
             for f in .credentials.json .claude.json; do
                 [ -f "/auth/$f" ] && cp "/auth/$f" "/target/$f"
@@ -1525,7 +1593,14 @@ start)
             for f in auth.json; do
                 [ -f "/auth/codex/$f" ] && cp "/auth/codex/$f" "/target-codex/$f"
             done
-            chown -R '"$(id -u):$(id -g)"' /target/ /target-codex/
+            for f in antigravity-cli/antigravity-oauth-token; do
+                if [ -f "/auth/gemini/$f" ]; then
+                    mkdir -p "/target-gemini/$(dirname "$f")"
+                    cp "/auth/gemini/$f" "/target-gemini/$f"
+                    chmod 600 "/target-gemini/$f"
+                fi
+            done
+            chown -R '"$(id -u):$(id -g)"' /target/ /target-codex/ /target-gemini/
         '
 
     # ホストの ~/.claude/settings.json から hooks / env 設定を抽出してコピー
@@ -1556,12 +1631,12 @@ start)
         fi
     fi
 
-    # .gitignore に .claude / .codex が含まれていなければ追加
+    # .gitignore に .claude / .codex / .gemini が含まれていなければ追加
     # プロジェクト環境ファイルを読む（FR-env-14）。読めなくても起動は止めない。
     load_project_env_file "$PROJECT_DIR"
 
     if [ -f "${PROJECT_DIR}/.gitignore" ]; then
-        _ig_list=(.claude .codex)
+        _ig_list=(.claude .codex .gemini)
         [ -n "$PROJECT_ENV_FILE_REL" ] && _ig_list+=("$PROJECT_ENV_FILE_REL")
         for _ig in "${_ig_list[@]}"; do
             if ! grep -qxF "$_ig" "${PROJECT_DIR}/.gitignore" && ! grep -qxF "${_ig}/" "${PROJECT_DIR}/.gitignore"; then
@@ -1575,14 +1650,14 @@ start)
     elif [ -d "${PROJECT_DIR}/.git" ]; then
         # 新規作成も追記と同じく握る（FR-env-14-4 / NFR-avail-03）。
         # set -e 下では単純コマンドの失敗がそのまま終了になるので、明示的に握る。
-        if printf '%s\n%s\n' '.claude' '.codex' > "${PROJECT_DIR}/.gitignore" 2>/dev/null; then
+        if printf '%s\n%s\n%s\n' '.claude' '.codex' '.gemini' > "${PROJECT_DIR}/.gitignore" 2>/dev/null; then
             if [ -n "$PROJECT_ENV_FILE_REL" ]; then
                 if ! printf '%s\n' "$PROJECT_ENV_FILE_REL" >> "${PROJECT_DIR}/.gitignore" 2>/dev/null; then
                     echo "⚠️  .gitignore へ '${PROJECT_ENV_FILE_REL}' を追記できませんでした（起動は続けます）。手動で追記してください。"
                 fi
             fi
         else
-            echo "⚠️  .gitignore を作成できませんでした（起動は続けます）。'.claude' / '.codex' を手動で追記してください。"
+            echo "⚠️  .gitignore を作成できませんでした（起動は続けます）。'.claude' / '.codex' / '.gemini' を手動で追記してください。"
         fi
     fi
     # 追跡から外せたかを確かめる。外せなくても起動は止めない（FR-env-14-4）。
@@ -2646,6 +2721,34 @@ reset)
     ;;
 
 # -----------------------------------------------------------------------------
+# 版の名乗り（BR-12 / FR-env-01-37〜39）
+#   版の値の持ち主はリリース台帳 .claude/state/releases.json の1箇所だけで、
+#   stamps.py release --current が読む（ここに版の文字列を書かない）。
+#   終了コード: 0=版を印字 / 1=まだ1度もリリースしていない / 2=台帳が壊れている。
+#   python3 の例外も 1 で終わるので、1 は「未リリース」の文言を伴うときだけ未リリースと読む。
+# -----------------------------------------------------------------------------
+--version|-v)
+    if ! command -v python3 >/dev/null 2>&1; then
+        echo "claude-dev: 版を読めません（python3 が見つかりません）" >&2
+        exit 1
+    fi
+    _ver_rc=0
+    _ver_err=""
+    _ver_out=$(cd "$BASE_DIR" && python3 .claude/scripts/stamps.py release --current 2>/dev/null) || _ver_rc=$?
+    if [ "$_ver_rc" -ne 0 ]; then
+        _ver_err=$(cd "$BASE_DIR" && python3 .claude/scripts/stamps.py release --current 2>&1 >/dev/null) || true
+    fi
+    if [ "$_ver_rc" -eq 0 ] && printf '%s\n' "$_ver_out" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+        echo "claude-dev $_ver_out"
+    elif [ "$_ver_rc" -eq 1 ] && [ -z "$_ver_out" ] && printf '%s' "$_ver_err" | grep -q "まだ1度もリリースしていない"; then
+        echo "claude-dev 未リリース"
+    else
+        echo "claude-dev: 版を読めません（リリースの記録 ${BASE_DIR}/.claude/state/releases.json を確認してください: ${_ver_err:-終了コード ${_ver_rc}}）" >&2
+        exit 1
+    fi
+    ;;
+
+# -----------------------------------------------------------------------------
 # ヘルプ
 # -----------------------------------------------------------------------------
 help|*)
@@ -2657,7 +2760,8 @@ claude-dev - Claude Code 安全開発環境
   claude-dev pull [TAG]          GHCR からビルド済みイメージを取得（ビルドの代わり。既定 latest）
   claude-dev login               Claude の OAuth ログイン
   claude-dev login-codex         Codex のデバイス認証ログイン（codex login --device-auth）
-  claude-dev logout [--yes]      認証情報を削除（Claude / Codex 双方。--yes で確認を省く）
+  claude-dev login-gemini        Gemini（Antigravity CLI = agy）の Google OAuth ログイン
+  claude-dev logout [--yes]      認証情報を削除（Claude / Codex / agy 全て。--yes で確認を省く）
 
 開発:
   claude-dev start               カレントディレクトリで環境を起動（VNC + Chrome 付き）
@@ -2680,6 +2784,7 @@ SSH 鍵（カレントプロジェクトの .claude-dev.yaml）:
 メンテナンス:
   claude-dev upgrade             全イメージを更新（--no-cache 再ビルド）
   claude-dev firewall            ファイアウォールルール確認
+  claude-dev --version (-v)      claude-dev 自身の版を表示
   claude-dev reset [--yes] [--volumes]  全削除（コンテナ・イメージ・共有ボリューム。--yes で確認を省く、
                                  --volumes でセッション由来のボリュームも削除）
 

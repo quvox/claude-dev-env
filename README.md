@@ -1,11 +1,11 @@
-# claude-dev — Claude Code / Codex CLI の隔離開発環境
+# claude-dev — Claude Code / Codex CLI / Antigravity CLI の隔離開発環境
 
-エージェント CLI（Claude Code・OpenAI Codex CLI）を、**承認待ちで止まらず・コンテナで隔離して・
+エージェント CLI（Claude Code・OpenAI Codex CLI・Google Antigravity CLI）を、**承認待ちで止まらず・コンテナで隔離して・
 SSH が切れても動き続ける**状態で使うための Docker 開発環境です。**Linux サーバ**と
 **macOS（Docker Desktop）**で動きます。
 
 任意のプロジェクトディレクトリで `claude-dev start` と打つと、そのディレクトリ専用のコンテナが
-立ち上がり、tmux の中で `claude` や `codex` がすぐ動きます。
+立ち上がり、tmux の中で `claude` や `codex`、`agy` がすぐ動きます。
 
 ```bash
 cd ~/repos/my-project
@@ -97,7 +97,7 @@ claude                # → 承認待ちなしの Claude Code
 ├── Claude コンテナ（プロジェクトごとに 1 つ、同時に何個でも）
 │   ├── my-project        /workspace ← ホストの ~/repos/my-project
 │   │   ├─ tmux           セッション永続化（prefix: Ctrl-_）
-│   │   ├─ claude / codex エージェント CLI
+│   │   ├─ claude / codex / agy エージェント CLI
 │   │   ├─ Chrome + noVNC ブラウザ確認（--no-vnc で省ける）
 │   │   └─ firewall       ブラックリスト型の外向き通信制御
 │   └── another-project   別コンテナ。互いのファイルも鍵も見えない
@@ -105,7 +105,7 @@ claude                # → 承認待ちなしの Claude Code
 ├── claude-dev-docker-proxy   全コンテナで共有。Docker API を検査して危険な操作を拒否する
 ├── claude-dev-net            コンテナ間ネットワーク
 │
-├── claude-dev-auth (volume)          認証情報（Claude / Codex）※全プロジェクトで共有
+├── claude-dev-auth (volume)          認証情報（Claude / Codex / agy）※全プロジェクトで共有
 ├── claude-dev-config (volume)        共有シェル設定
 ├── claude-dev-history (volume)       コマンド履歴
 └── claude-dev-chrome-<name> (volume) Chrome プロファイル ※コンテナごと
@@ -125,7 +125,7 @@ OS による違いは**ホスト側 CLI の中だけ**に閉じてあります�
 | OS | Ubuntu 22.04+ / Debian 12+ | macOS（Apple Silicon / Intel） |
 | ランタイム | Docker Engine 24+ | Docker Desktop |
 | 必須ツール | `jq` `git` `make` | `jq` `socat`（`brew install jq socat`）、`git`、`make`（Xcode CLT） |
-| アカウント | Claude Pro / Max（OAuth）。Codex を使うなら OpenAI アカウント | 同左 |
+| アカウント | Claude Pro / Max（OAuth）。Codex を使うなら OpenAI アカウント、agy を使うなら Google アカウント | 同左 |
 
 - macOS の `socat` は **SSH agent 転送に必須**です（Docker Desktop では Unix ソケットを直接
   マウントできないため、TCP ブリッジを立てます）。
@@ -192,6 +192,7 @@ SSH 転送なしで始まり、以後は聞かれません。
 ```
 claude          # Claude Code（承認待ちなし）
 codex           # OpenAI Codex CLI
+agy             # Google Antigravity CLI
 docker ps       # 検査つきの中継越しに Docker が使える
 ```
 
@@ -225,10 +226,24 @@ tmux の prefix は **`Ctrl-_`**（Ctrl とアンダースコア）です。マ�
     起動できず、**失敗が静かに起きる**ためです。隔離はコンテナ境界が担います。読み取り専用を
     明示した呼び出しだけは landlock バックエンドで成立します
     （[docs/02-design/architecture.md](docs/02-design/architecture.md) `DSN-dist-02`）。
+- **`agy`** — Google Antigravity CLI（Gemini）。使う前に一度だけホスト側で
+  `claude-dev login-gemini` を実行してください。agy が起動するので **Google OAuth** を選ぶと
+  認証 URL が表示されます。手元のブラウザで開いて認証し、表示された**認証コードを agy へ貼り付け**
+  て、ログインできたら agy を終了（Ctrl+C を 2 回）します。認証は共有ボリュームに入るので、**別のプロジェクトでも
+  ログインし直す必要はありません**。
+  - 共有するのは `~/.gemini/antigravity-cli/antigravity-oauth-token`（OAuth トークン。
+    agy が OS のキーリングを使えない環境でトークンを保存するファイル。権限 600）だけです。
+    `~/.gemini` の他のファイル（設定・会話履歴）は、プロジェクトの `.gemini/` に置かれる
+    コンテナ固有のものです。
+  - `login-gemini` は既存の認証を引き継がず、毎回ログイン画面から始めます（別アカウントへ
+    変えられます）。ログインを完了せずに終えると、共有ボリュームの既存の認証は変わりません。
+  - agy は自己更新します（バックグラウンドで新版を取得）。コンテナ内でそれを止めたいときは
+    `AGY_CLI_DISABLE_AUTO_UPDATE=true` を環境変数に設定してください（`env_file`、7.2 節）。
+    イメージ側の版は 9 節の手順で更新します。
 - **`claude-dev code`** — ホスト側から、稼働中コンテナの**新しい tmux ウィンドウ**で Claude Code を
   起動します。
 
-認証（Claude / Codex）は共有ボリュームからコピーされ、トークンが更新されると 30 秒周期で共有側へ
+認証（Claude / Codex / agy）は共有ボリュームからコピーされ、トークンが更新されると 30 秒周期で共有側へ
 書き戻されます。**プロジェクトをまたいでログイン状態が引き継がれます。**
 
 ### 6.2 Web アプリをブラウザで確認する
@@ -389,7 +404,8 @@ echo $API_BASE_URL     # → https://staging.example.com
   claude-dev pull [TAG]               GHCR からビルド済みイメージを取得（既定 latest）
   claude-dev login                    Claude の OAuth ログイン
   claude-dev login-codex              Codex のデバイス認証ログイン
-  claude-dev logout [--yes]           認証情報を削除（Claude / Codex 双方）
+  claude-dev login-gemini             Gemini（Antigravity CLI = agy）の Google OAuth ログイン
+  claude-dev logout [--yes]           認証情報を削除（Claude / Codex / agy 全て）
 
 開発
   claude-dev start                    カレントディレクトリで起動（VNC + Chrome 付き）
@@ -414,6 +430,7 @@ SSH 鍵
 メンテナンス
   claude-dev upgrade                  全イメージを --no-cache で再ビルド
   claude-dev firewall                 ファイアウォールルールを表示
+  claude-dev --version (-v)           claude-dev 自身の版を表示（まだリリースしていなければ「未リリース」）
   claude-dev reset [--yes] [--volumes] 全削除して初期状態へ戻す
   claude-dev help                     ヘルプ
 ```
@@ -429,7 +446,7 @@ make install          CLI を /usr/local/bin/claude-dev へ登録するだけ
 make uninstall        その登録を解除
 make build            全イメージをビルド
 make build-claude / build-claude-vnc / build-docker-proxy   個別ビルド
-make update-claude    Claude Code だけを高速更新（他はキャッシュ利用）
+make update-claude    Claude Code と agy だけを高速更新（他はキャッシュ利用）
 make upgrade          全イメージを --no-cache で再ビルド
 make login            OAuth ログイン
 make status           イメージ・稼働セッション・docker-proxy・ボリュームの状態確認
@@ -459,8 +476,9 @@ claude-dev stop  my-project
 cd ~/repos/my-project && claude-dev start
 ```
 
-自分でビルドする場合は `make build`（初回）、`make update-claude`（Claude Code だけ差し替え。
-Go/Rust/Playwright 等の層はキャッシュを使うので再ビルドしません）、`make upgrade`（全イメージを作り直し）を
+自分でビルドする場合は `make build`（初回）、`make update-claude`（Claude Code と agy だけ差し替え。
+Go/Rust/Playwright 等の層はキャッシュを使うので再ビルドしません。agy は公式のリリース manifest から
+最新版を引いて版を固定するため、新版が無ければキャッシュが効いて即終わります）、`make upgrade`（全イメージを作り直し）を
 使い分けます。
 
 ---
@@ -551,7 +569,9 @@ vm status | vm shell | vm restart | vm rebuild | vm portsync | vm down | vm logs
 
 `.github/workflows/ghcr-images.yml` が毎日 03:30 JST に走り、`prepare` → `build`（アーキ別）→
 `merge`（マルチアーキ manifest 作成）の順でイメージを push します。手動実行時は同梱する
-Claude Code / Codex CLI のバージョンを指定できます。
+Claude Code / Codex CLI のバージョンを指定できます（agy は公式 install.sh が版を指定できないため、
+毎回リリース manifest の最新版を解決して同梱し、指定入力はありません。agy の不具合で戻したいときは、
+古いイメージのタグを `claude-dev pull <TAG>` で取得してください）。
 
 ---
 
@@ -565,6 +585,7 @@ Claude Code / Codex CLI のバージョンを指定できます。
 | env ファイルの値が見えない | 相対パスで書いているか、予約名を使っていないかを確認してください。起動時のメッセージに、採用しなかった名前と行番号が出ます |
 | `--vm` が「/dev/kvm が必要」で止まる | ベアメタルか、ネスト仮想化を有効にしたインスタンスが必要です。macOS では VM モード自体が使えません |
 | noVNC が開けない | リモートサーバの場合は SSH トンネルが必要です。ポートは `claude-dev ports` で確認できます |
+| agy が「not signed in」と言う / 認証が切れた | `claude-dev login-gemini` をやり直してください。起動中のコンテナへは反映されないので `stop` → `start` します（認証は起動時に共有ボリュームからコピーされます） |
 | Codex のコマンドが毎回失敗する | `~/.codex/config.toml` の既定 3 鍵が入っているか確認してください（6.1 節） |
 | 全部やり直したい | `claude-dev reset --yes`（初期状態へ戻す）または `make clean` |
 
