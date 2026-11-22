@@ -1,12 +1,12 @@
 ---
 slug: agy-gemini-image
-state: building
+state: awaiting-verify
 critical: true
 origin: derived
 issue: なし
 started: 2026-11-23T01:37:21+09:00
-updated: 2026-11-23T01:37:21+09:00
-commit: -
+updated: 2026-11-23T08:20:00+09:00
+commit: 7c40a6a3c569a2ee5aaff80d2a72c2b72665cf5b
 summary: Antigravity CLI(agy)を配布イメージへ同梱して更新経路に載せ、Google(gemini)の認証を claude / codex と同じ形で共有する
 ---
 
@@ -78,8 +78,8 @@ summary: Antigravity CLI(agy)を配布イメージへ同梱して更新経路に
 
 ## 主張
 
-- 触ったモジュールのテスト: `scripts/test-cli-version.sh` 20件 成功 / 失敗0(版の名乗り。欠陥注入で4件が赤になることを確認済み)。login-gemini・認証の共有は自動テストを持たない(実機の E2E-07 手順を書いた。**実ログインは未実施**)
-- lint / build: `bash -n` 4本 OK(claude-dev / claude-dev-mac / entrypoint / test-cli-version)。shellcheck は未導入で走らせていない。`make -n update-claude` OK。ワークフロー YAML の構文 OK。イメージの全ビルドはしていない — 代わりに既存イメージへ agy の導入手順を当てて 1.5.14 の導入・版の一致・`/usr/local/bin/agy` の解決を確認した
+- 触ったモジュールのテスト: `scripts/test-cli-version.sh` → 「結果: 成功 24 / 失敗 0」(版の名乗り。欠陥注入で赤を確認済み)。書き戻しの判定と一時コンテナの判定は切り出して確かめた(段5 の進捗メモ)。login-gemini・認証の共有の実ログイン経路は自動テストを持たず、**実ログインは未実施**(E2E-07 の実機手順を書いた)
+- lint / build: `bash -n` を claude-dev / claude-dev-mac / scripts/entrypoint-claude.sh / scripts/test-cli-version.sh に → 4本とも出力なし(OK)。shellcheck は未導入で走らせていない。`make -n update-claude` OK。`yaml.safe_load(ghcr-images.yml)` OK。イメージの全ビルドはしていない — 既存イメージへ agy の導入手順を当てて `agy 1.5.14` / 版の一致 / `/usr/local/bin/agy` の解決を確認
 - 資格情報の混入検査(secret_scan): **未設定**(このリポジトリには `tests/` の宣言ファイル自体が無い。埋めるのはテスト基盤を入れるタスク)。代わりに差分へ既知のトークン形の grep を当てて 0 件
 - 版がビルドと揃った環境で走ったか: 未宣言(`02-design/environments.md` に版の固定の見出しが無い。版の名乗りのテストはホストの python3 で走らせた)
 - 外部挙動の変化: あり(後方互換。agy の同梱・`login-gemini` サブコマンド・版の表示を足した)
@@ -149,6 +149,8 @@ summary: Antigravity CLI(agy)を配布イメージへ同梱して更新経路に
   UX 文書の検索: 改訂した FR-env-01-16 / FR-env-03-20 — SCR-01 の該当(7コマンド)を直した。
   独立レビューを review-230649 へ直接依頼(メッセージ 5)。返りを待って記録を閉じる。
 - 2026-11-23 08:10 レビュー(メッセージ 6)の所見6件を裁定し、F1/F2/F4/F5/F6 を直した(下の節)。書き戻しの判定と一時コンテナの判定を切り出して確かめた(新しい共有側を上書きしない / 644 の元でも 600 で作る / リンクの先へ書かない)。テスト 24/24、`bash -n` 4本、YAML、check-ux 0、check-ssot 新規違反なし。
+
+- 2026-11-23 08:20 段5 閉じ: 索引を更新、記録を awaiting-verify にした(commit 7c40a6a)。
 
 ## 直さなかった指摘(独立レビュー・探索的QA)
 
