@@ -267,6 +267,7 @@ verified:
 | FR-env-03-28 | MOD-entrypoint | 完全 | -(設計判断を要さない) |
 | FR-env-03-29 | MOD-cli-start | 完全 | -(設計判断を要さない) |
 | FR-env-03-30 | MOD-entrypoint | 完全 | -(設計判断を要さない) |
+| FR-env-03-31 | MOD-cli-start | 完全 | -(設計判断を要さない。entrypoint も同じ判定で共有をやめる) |
 | FR-env-04-1 | MOD-cli-start | 完全 | -(設計判断を要さない) |
 | FR-env-04-2 | MOD-cli-start | 完全 | -(設計判断を要さない) |
 | FR-env-04-3 | MOD-cli-ssh-keys | 完全 | -(設計判断を要さない) |

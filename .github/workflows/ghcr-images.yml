@@ -105,7 +105,6 @@ jobs:
           # amd64 の manifest で解決する。arm64 の manifest の版がずれていると Dockerfile の照合で
           # arm64 ビルドが失敗する（再実行すれば解決し直される）。
           agy_version="$(curl -fsSL https://antigravity-cli-auto-updater-974169037036.us-central1.run.app/manifests/linux_amd64.json | sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')"
-          echo "同梱バージョン（リリース manifest 解決）: agy ${agy_version}"
           # 数字と点以外（改行を含む）が1文字でも在れば拒む。grep は行ごとに照合するので、
           # 複数行の値の1行だけが形に合っても通ってしまい、GITHUB_OUTPUT へ別の行を書き込める。
           case "${agy_version}" in
@@ -116,6 +115,8 @@ jobs:
             echo "::error::agy のリリース manifest の解決結果が MAJOR.MINOR.PATCH 形式ではありません"
             exit 1
           fi
+          # ログへ出すのは検査を通った後だけ（外から受け取った値の行がワークフローコマンドとして解釈されないように）
+          echo "同梱バージョン（リリース manifest 解決）: agy ${agy_version}"
           echo "agy_version=${agy_version}" >> "$GITHUB_OUTPUT"
 
           # 同梱する chrome-devtools MCP のバージョン（D0-dist-06 項2）:

@@ -72,6 +72,8 @@ for cli in claude-dev claude-dev-mac; do
             "壊れた台帳は失敗（未リリースと読まない）"
         check "$cli" "$arg" '{"releases":[{"version":"1.2"}]}' 1 '' \
             "3つ組でない版は名乗らない"
+        check "$cli" "$arg" '{"releases":[{"version":"01.2.3"}]}' 1 '' \
+            "先頭が 0 の桁を持つ版は名乗らない"
     done
 done
 

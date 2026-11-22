@@ -30,6 +30,7 @@ summary: agy(Google Antigravity CLI)を配布イメージへ同梱して更新�
 - 配布イメージ2種へ agy を公式インストーラで導入し、CI と `make update-claude` が配布元の更新情報から版を解決して渡す(版は日次ビルド時点の最新に固定。過去の版の焼き直しは不可)
 - `claude-dev login-gemini` で取った agy の認証トークン1本を共有ボリューム `gemini/` に置き、`start` のコピー・30秒の書き戻し・`logout` の削除・排他(7コマンド)へ載せた
 - `claude-dev --version` / `-v` がリリース台帳から版を読み、無ければ「未リリース」と表示する
+- 独立レビュー(review-230649)の所見で、agy の書き戻しを「手元のほうが新しいときだけ」にし、`.gemini` がシンボリックリンクなら認証を置かない(FR-env-03-31)、トークンを作る瞬間から 600、CI のログ出力を検査の後へ、版の各桁の先頭 0 を拒む、を足した
 
 ## 更新した仕様ドキュメント
 
@@ -41,7 +42,7 @@ summary: agy(Google Antigravity CLI)を配布イメージへ同梱して更新�
 | R-01 | docs/00-requests/decisions/dist.md | 1.5.0 → 1.6.0 | D0-dist-07(同梱・版・認証・ログイン導線・自己更新を止めない・範囲)を新設 |
 | R-01 | docs/00-requests/decisions/auth.md | 1.3.1 → 1.4.0 | D0-auth-03 の共有ファイルとコピー先に agy |
 | R-01 | docs/00-requests/decisions/env.md | 1.7.0 → 1.8.0 | D0-env-08 項4(logout の削除対象)と項6(排他の7コマンド)に login-gemini / agy |
-| R-01, R-02 | docs/01-requirements/functional.md | 1.24.0 → 1.25.0 | FR-env-01-16 を7コマンドに、FR-env-01-37〜40(版の名乗り・キーボードだけで完了)、FR-env-03-25〜30、FR-env-09-12〜14 と 09-7 から agy を除外、FR-env-12-15〜17 |
+| R-01, R-02 | docs/01-requirements/functional.md | 1.24.0 → 1.25.0 | FR-env-01-16 を7コマンドに、FR-env-01-37〜40(版の名乗り・キーボードだけで完了)、FR-env-03-25〜31、FR-env-09-12〜14 と 09-7 から agy を除外、FR-env-12-15〜17 |
 | R-01 | docs/01-requirements/usecases.md | 1.7.1 → 1.8.0 | UC-07 と UC-01 代替フロー A6 |
 | R-01 | docs/01-requirements/system.md | 1.3.0 → 1.4.0 | SR-15 に Google アカウント、依存に Google と agy の配布元 |
 | R-01, R-02 | docs/02-design/system.md | 2.21.0 → 2.22.0 | MOD-cli-login-gemini・MOD-cli-version、カバレッジ行、E2E-07 |
@@ -102,6 +103,7 @@ summary: agy(Google Antigravity CLI)を配布イメージへ同梱して更新�
 |---|---|---|
 | 知見 | 今回限り(先行実装の検査で見つけた形の検査の穴。直した箇所に判断として記録済み) | 外から受け取った版の文字列を `case` の `[0-9]*` や行ごとの `grep` だけで確かめると、`1.2.3; …` や複数行の値が通る。文字種と形の両方を確かめる |
 | 新規の課題票 | なし | — |
+| 残務 | docs/residual.md | claude / codex の書き戻しが新しい認証を古いもので戻しうる・`.claude` / `.codex` がリンクだと先へ書く(独立レビューが見つけた既存の型)ほか、update-claude の codex の版・ホストの agy の複写・manifest の URL の二重記述 |
 | 棚上げ | なし | — |
 | 気づき | (申し送り)構築記録の申し送りへ | check-sheet の SH10 が「ログイン」の中の「ログ」に当たって誤検出する(キットの道具の側。`/kit-improve`) |
 | 解消した課題票 | なし | — |

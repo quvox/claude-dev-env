@@ -75,7 +75,9 @@ UID/GID 追従(FR-env-02)、認証共有(FR-env-03)、firewall の適用(FR-env-
    `codex --version` が作った実 `~/.codex` があるため、この退避は初回起動で必ず通る**。
    共有側(`~/.claude-shared/codex`)はこの段より前に `mkdir -p` + `chown` で用意する
    (`login-codex` を一度も実行していなくても同期ループが書き戻せるように)。
-   **agy も同じ形にする**(2026-11-23): `/workspace/.gemini/antigravity-cli` を確保し、`~/.gemini` が実ディレクトリ
+   **agy も同じ形にする**(2026-11-23)。ただし `/workspace/.gemini`・その中の `antigravity-cli`・トークンのどれかが
+   シンボリックリンクなら**共有をやめ**(`FR-env-03-31`)、`~/.gemini` はコンテナ内の実ディレクトリのまま残す。共有するときは
+   `/workspace/.gemini/antigravity-cli` を確保し、`~/.gemini` が実ディレクトリ
    (イメージのビルド時に公式インストーラが作りうる)なら中身を `cp -an` で退避して削除し、`~/.gemini → /workspace/.gemini`
    の symlink を張る。認証トークン `antigravity-cli/antigravity-oauth-token` は所有権を整えて `chmod 600` する
    (`FR-env-03-30`)。設定と履歴は共有せずプロジェクトに残す(`FR-env-03-28`)。共有側 `~/.claude-shared/gemini/antigravity-cli`
@@ -112,8 +114,9 @@ UID/GID 追従(FR-env-02)、認証共有(FR-env-03)、firewall の適用(FR-env-
     `/workspace/.codex/auth.json` を `~/.claude-shared/codex/auth.json` と比べ、差分があれば
     `mkdir -p` → `cp` → `chmod 600` する。**ループは root で走るため共有側は root 所有になる**
     (そのため `MODULE-cli-login-codex` が書き込み前に `chown -R` する)。agy の認証トークンも同じループで
-    `~/.claude-shared/gemini/antigravity-cli/antigravity-oauth-token` と比べ、差分があれば `mkdir -p` → `cp` → `chmod 600` する
-    (`FR-env-03-27`。`MODULE-cli-login-gemini` も書き込み前に `chown -R` する)。
+    `~/.claude-shared/gemini/antigravity-cli/antigravity-oauth-token` と比べ、**差分があり、かつ手元のほうが新しい(または共有側が無い)
+    ときだけ** `mkdir -p` → `umask 077` で `cp` → `chmod 600` する。手元の権限も毎回 `600` に戻す
+    (`FR-env-03-27` / `-30`。`MODULE-cli-login-gemini` も書き込み前に `chown -R` する)。
 14. **firewall の起動**: `/usr/local/bin/init-firewall.sh` を実行する(失敗は無視する)。
 15. **VM モードの起動**(`CLAUDE_DEV_VM=1` のとき): root のうちに `install -d -o $USERNAME` で
     `~/.claude-dev-vm` と `/run/vm` を用意し、`su "$USERNAME" -c /usr/local/bin/vm-up.sh` を実行する。
@@ -280,6 +283,7 @@ UID/GID 追従(FR-env-02)、認証共有(FR-env-03)、firewall の適用(FR-env-
 | 10 | 登録の有無を `jq -e` の真偽ではなく `has()` で判定する。`jq -e` は値が `null` / `false` のとき終了コード 1 を返し、「書いてあるのに未登録」と読み違える | FR-env-11-9 / 課題票 099 |
 | 8 | codex への登録を `ensure_codex_mcp_entry` という**別関数**にし、ブラウザ確認ありの初期化からだけ呼ぶ。既定3鍵は VNC の有無に関わらず要るが、ブラウザ操作の登録は接続先(`:9222`)が在るときだけ意味を持つ。読み直して検証してから置き換える流儀は既定3鍵と同一にする | D0-dist-06 / D0-dist-04 項6 |
 | 9 | agy も claude / codex と同じ形(`~/.gemini → /workspace/.gemini` の symlink、認証トークン1本だけをコピーと書き戻し)に揃える。共有ファイルのパスは `~/.gemini` からの相対(`antigravity-cli/antigravity-oauth-token`)で持ち、共有側にも同じ階層を作る | D0-dist-07 / D0-auth-03 |
+| 10 | agy の書き戻しは**手元のほうが新しいときだけ**にする(独立レビュー review-230649 の F1。内容の差だけで書き戻すと、`login-gemini` で入れ直した共有側を稼働中のコンテナが 30 秒以内に古いトークンへ戻し、DS-01 のアカウント切り替えが黙って失敗する)。リンクなら共有しない(同 F2)。コピーは `umask 077`(同 F4) | DS-01 / FR-env-03-27 / -30 / -31 |
 
 - [DS-05] MCP サーバーの登録名を `chrome-devtools` のまま据え置く(同梱物に替えても名前を変えない) — 理由: 名前は利用者の `.mcp.json` と `.claude.json` の `enabledMcpjsonServers` に既に書かれており、変えると既存プロジェクトで有効化が外れる。中身の入れ替えは名前を変えずにできる / 見直す条件: 同じ名前で別の MCP サーバーを登録したい要望が出たとき
 - [DS-05] 実行時に採用した値を**1本のファイル(`/etc/claude-dev/runtime.env`)へ、採用した地点で1行ずつ追記する**(全部を最後にまとめて書かない / 対話シェル用の `/etc/claude-dev/vm.env` に相乗りさせない) — 理由: 採用の判定は VM の起動成否と socat の成否という**別々の分岐の中**にあり、まとめて書く形にすると「採用したかどうか」をもう一度判定し直すことになって、判定が2箇所へ散る。`vm.env` は rc から source される対話シェル用で、読む相手も載る値の範囲も違う / 見直す条件: 実行時に決まる変数が増えて、採用の判定が1箇所に集まったとき
@@ -298,6 +302,7 @@ UID/GID 追従(FR-env-02)、認証共有(FR-env-03)、firewall の適用(FR-env-
 | `use_legacy_landlock` は codex 0.148.0 時点でも deprecated のまま撤去されていない(2026-08-20 に `codex features list` で実測) | 撤去されるとこのコンテナでサンドボックスを張る手段が無くなる(3鍵目だけを欠いた設定では `codex sandbox -- /bin/true` も `-c sandbox_mode=read-only` も exit 1 になることを 2026-08-20 に実測した)。退避先は添付方式で、検知は E2E-06 の疎通確認 | なし |
 | **既定3鍵を置く `/workspace/.codex/config.toml` は、ホストのプロジェクトディレクトリそのものである** | 同じディレクトリでホスト側の `codex` を起こすと同じ3鍵が効く(2026-08-20 実測)。ホスト側の codex はサンドボックスと承認なしで走り、`sandbox_mode = "workspace-write"` を要求する起動は exit 101 で panic する | なし(閾値の外: 置き場所は `AC-06` と `CTR-cli-container` が定めたものであり、変えるには 00 の合意が要る。`docs/pendings.md` の残務に1行残した) |
 | 認証同期ループが root で走るため共有側が root 所有になる | `login-codex` / `login-gemini` 側で `chown -R` して補っている | なし |
+| **agy の書き戻しは更新時刻で新旧を決めるので、`login-gemini` の後に、稼働中の別コンテナの agy が古いアカウントのトークンを更新すると、それが新しい側として共有へ書き戻される** | ログインし直した直後は戻らないが、古いコンテナを動かし続けると古いアカウントへ戻りうる | なし(閾値の外: アカウントを見分ける手段を持たない。切り替えたら古いコンテナを `stop` → `start` する。claude / codex のループは内容の差だけで書き戻す既存の形のまま — 残務) |
 | **`~/.gemini` が `/workspace/.gemini` を指すため、プロジェクトに Gemini CLI 用の `.gemini/` が在るとそこへ agy の設定・履歴が混ざり、`.gitignore` にも `.gemini` が足される** | プロジェクトで `.gemini/` を版管理していると追跡から外れる(`.claude/` と同じ扱いである) | なし(閾値の外: `~/.claude` → `/workspace/.claude` と同じ形を選んだ帰結。Gemini CLI は同梱しない — `D0-dist-07` 見直す条件(b)) |
 | **稼働中の tmux サーバの環境は後から変えられない** | コンテナを起動した後に環境変数を足しても、既に立っている tmux サーバとその配下には入らない | なし(閾値の外: `claude-dev start` でコンテナを作り直せば揃う。稼働中に足すことは `tmux set-environment -g` で人手でできるが、それは製品の経路ではない) |
 | 起動シーケンスが1本の長いスクリプト | 段階ごとの単体テストができず、検証は実機確認に依存する | なし |

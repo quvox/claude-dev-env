@@ -53,3 +53,5 @@
 - 2026-11-23 Makefile:update-claude `make update-claude` は Claude Code と agy の版を解決して渡すが、Codex CLI の版(CODEX_VERSION)は渡さない既存の癖のまま。Claude Code に新版が無い日でも codex の導入層は更新されない(手元の更新に codex を含めたいなら直す。構築記録 agy-gemini-image の DS-01)
 - 2026-11-23 claude-dev:start ホストの ~/.local/bin を起動のたびにコンテナへ丸ごと運ぶ既存の取り込みが、ホストに agy(約 273MB の単体バイナリ)が在るとそれも毎回運ぶ。entrypoint は cp -a --update=none なのでイメージの agy は上書きされない(FR-env-12-17)が、コピーの時間と容量が無駄になる。取り込みから既知の同梱 CLI を除くかは未判断
 - 2026-11-23 .github/workflows/ghcr-images.yml:prepare agy の版を解決する配布元の更新情報の URL(公式 install.sh が引く Cloud Run の URL)が、ワークフローと Makefile の2箇所に手で書かれている。Google が URL を変えると両方が同時に壊れる(版の解決に失敗してビルドが止まる側に倒れる)。install.sh から URL を読み出す形にするか、1箇所に寄せるかは未判断
+- 2026-11-23 scripts/entrypoint-claude.sh:認証の書き戻し claude と codex の書き戻しループは内容が違うだけで手元→共有へ書くので、ログインし直した直後の新しい認証を、稼働中の別コンテナの古い認証が 30 秒以内に上書きして戻しうる(agy は手元のほうが新しいときだけ書く形に直した。独立レビュー review-230649 F1 の既存の型)
+- 2026-11-23 claude-dev:start 認証コピー プロジェクトの .claude / .codex がシンボリックリンクだと、起動時の認証コピーがリンクの先(.gitignore が効かない場所でありうる)へ認証を書く。agy の .gemini はリンクなら置かない形にした(FR-env-03-31。独立レビュー review-230649 F2 の既存の型)

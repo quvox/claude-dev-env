@@ -274,25 +274,39 @@ for f in $CODEX_AUTH_FILES; do
 done
 
 # --- agy（~/.gemini → /workspace/.gemini）も同じ形に整える ---
-mkdir -p "$LOCAL_GEMINI/antigravity-cli"
-chown "$USERNAME":"$USERNAME" "$LOCAL_GEMINI" "$LOCAL_GEMINI/antigravity-cli"
-
-# ~/.gemini が実ディレクトリの場合は中身を退避してから削除（ln -sfn は実ディレクトリを置き換えられない）
-if [ -d "$USER_HOME/.gemini" ] && [ ! -L "$USER_HOME/.gemini" ]; then
-    cp -an "$USER_HOME/.gemini/." "$LOCAL_GEMINI/" 2>/dev/null || true
-    rm -rf "$USER_HOME/.gemini"
-fi
-
-ln -sfn "$LOCAL_GEMINI" "$USER_HOME/.gemini"
-chown -h "$USERNAME":"$USERNAME" "$USER_HOME/.gemini"
-
-# 認証ファイルのパーミッション修正（claude-dev start でコピー済み）
-for f in $GEMINI_AUTH_FILES; do
-    if [ -f "$LOCAL_GEMINI/$f" ]; then
-        chown "$USERNAME":"$USERNAME" "$LOCAL_GEMINI/$f"
-        chmod 600 "$LOCAL_GEMINI/$f"
+# /workspace/.gemini やその中の認証の置き場がシンボリックリンクなら、共有しない（FR-env-03-31）。
+# リンクの先はプロジェクトの .gitignore の .gemini が効かない場所でありうるので、そこへ agy に
+# トークンを書かせない。~/.gemini はコンテナ内の実ディレクトリのまま残す（agy は未ログインで使える）。
+GEMINI_SHARE=1
+for _p in "$LOCAL_GEMINI" "$LOCAL_GEMINI/antigravity-cli" "$LOCAL_GEMINI/$GEMINI_AUTH_FILES"; do
+    if [ -L "$_p" ]; then
+        GEMINI_SHARE=0
+        echo "⚠️  $_p がシンボリックリンクなので、agy の認証を共有しません（このコンテナの agy は未ログインです）"
+        break
     fi
 done
+
+if [ "$GEMINI_SHARE" = 1 ]; then
+    mkdir -p "$LOCAL_GEMINI/antigravity-cli"
+    chown "$USERNAME":"$USERNAME" "$LOCAL_GEMINI" "$LOCAL_GEMINI/antigravity-cli"
+
+    # ~/.gemini が実ディレクトリの場合は中身を退避してから削除（ln -sfn は実ディレクトリを置き換えられない）
+    if [ -d "$USER_HOME/.gemini" ] && [ ! -L "$USER_HOME/.gemini" ]; then
+        cp -an "$USER_HOME/.gemini/." "$LOCAL_GEMINI/" 2>/dev/null || true
+        rm -rf "$USER_HOME/.gemini"
+    fi
+
+    ln -sfn "$LOCAL_GEMINI" "$USER_HOME/.gemini"
+    chown -h "$USERNAME":"$USERNAME" "$USER_HOME/.gemini"
+
+    # 認証ファイルのパーミッション修正（claude-dev start でコピー済み）
+    for f in $GEMINI_AUTH_FILES; do
+        if [ -f "$LOCAL_GEMINI/$f" ]; then
+            chown "$USERNAME":"$USERNAME" "$LOCAL_GEMINI/$f"
+            chmod 600 "$LOCAL_GEMINI/$f"
+        fi
+    done
+fi
 
 # --- settings.json はコンテナローカル（共有しない）---
 if [ ! -f "$LOCAL_CLAUDE/settings.json" ]; then
@@ -646,15 +660,24 @@ fi
                 fi
             fi
         done
-        for f in $GEMINI_AUTH_FILES; do
-            if [ -f "$LOCAL_GEMINI/$f" ]; then
-                if ! cmp -s "$LOCAL_GEMINI/$f" "$SHARED_GEMINI/$f" 2>/dev/null; then
-                    mkdir -p "$SHARED_GEMINI/$(dirname "$f")" 2>/dev/null || true
-                    cp "$LOCAL_GEMINI/$f" "$SHARED_GEMINI/$f" 2>/dev/null || true
-                    chmod 600 "$SHARED_GEMINI/$f" 2>/dev/null || true
+        # agy: 共有するときだけ。書き戻すのは**手元のほうが新しいとき**に限る（FR-env-03-27）。
+        # 内容が違うだけで書き戻すと、`login-gemini` で共有側に入れた新しいトークン（別アカウントを含む）を、
+        # 稼働中の別コンテナの古いトークンが 30 秒以内に上書きして元へ戻してしまう。
+        # コピーは作る瞬間から所有者だけが読める権限にし（umask 077）、手元の権限も毎回 600 に戻す
+        # （agy が自分で書き直したときの権限に任せない — FR-env-03-30）。
+        if [ "$GEMINI_SHARE" = 1 ]; then
+            for f in $GEMINI_AUTH_FILES; do
+                if [ -f "$LOCAL_GEMINI/$f" ] && [ ! -L "$LOCAL_GEMINI/$f" ]; then
+                    chmod 600 "$LOCAL_GEMINI/$f" 2>/dev/null || true
+                    if ! cmp -s "$LOCAL_GEMINI/$f" "$SHARED_GEMINI/$f" 2>/dev/null \
+                        && { [ ! -f "$SHARED_GEMINI/$f" ] || [ "$LOCAL_GEMINI/$f" -nt "$SHARED_GEMINI/$f" ]; }; then
+                        mkdir -p "$SHARED_GEMINI/$(dirname "$f")" 2>/dev/null || true
+                        ( umask 077; cp "$LOCAL_GEMINI/$f" "$SHARED_GEMINI/$f" ) 2>/dev/null || true
+                        chmod 600 "$SHARED_GEMINI/$f" 2>/dev/null || true
+                    fi
                 fi
-            fi
-        done
+            done
+        fi
     done
 ) &
 

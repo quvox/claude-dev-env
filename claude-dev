@@ -1154,7 +1154,7 @@ login-gemini)
                 # ログイン後: 認証ファイルを共有ボリュームに永続化
                 _tok=~/.gemini/antigravity-cli/antigravity-oauth-token
                 if [ -f \"\$_tok\" ]; then
-                    cp \"\$_tok\" ~/.claude-shared/gemini/antigravity-cli/antigravity-oauth-token
+                    ( umask 077; cp \"\$_tok\" ~/.claude-shared/gemini/antigravity-cli/antigravity-oauth-token )
                     chmod 600 ~/.claude-shared/gemini/antigravity-cli/antigravity-oauth-token
                 else
                     echo \"⚠️  認証ファイルができていません（ログインを完了せずに終了した可能性があります）。共有ボリュームは変更していません。\"
@@ -1579,13 +1579,23 @@ start)
     # 認証ファイルを共有ボリュームから /workspace/.claude/・.codex/・.gemini/ にコピー
     # （codex 認証は共有ボリュームの codex/、agy 認証は gemini/ に置かれる。
     #   未ログインなら何もコピーせず起動できる）
-    mkdir -p "${PROJECT_DIR}/.claude" "${PROJECT_DIR}/.codex" "${PROJECT_DIR}/.gemini"
+    # agy のトークンは、プロジェクトの .gemini がシンボリックリンクなら置かない（FR-env-03-31）。
+    # リンクの先は .gitignore の .gemini が効かない場所でありうるため、トークンが追跡外の
+    # 無視されないファイルとして書かれ、コミットされうる。起動は続ける（agy は未ログインになる）。
+    _gem_args=()
+    if [ -L "${PROJECT_DIR}/.gemini" ]; then
+        echo "⚠️  ${PROJECT_DIR}/.gemini がシンボリックリンクなので、agy の認証をコピーしません（agy は未ログインで起動します）"
+    else
+        mkdir -p "${PROJECT_DIR}/.gemini"
+        _gem_args=(-v "${PROJECT_DIR}/.gemini:/target-gemini")
+    fi
+    mkdir -p "${PROJECT_DIR}/.claude" "${PROJECT_DIR}/.codex"
     docker run --rm \
         --entrypoint bash \
         -v "${VOL_AUTH}:/auth:ro" \
         -v "${PROJECT_DIR}/.claude:/target" \
         -v "${PROJECT_DIR}/.codex:/target-codex" \
-        -v "${PROJECT_DIR}/.gemini:/target-gemini" \
+        "${_gem_args[@]}" \
         "$IMG_CLAUDE" -c '
             for f in .credentials.json .claude.json; do
                 [ -f "/auth/$f" ] && cp "/auth/$f" "/target/$f"
@@ -1593,14 +1603,22 @@ start)
             for f in auth.json; do
                 [ -f "/auth/codex/$f" ] && cp "/auth/codex/$f" "/target-codex/$f"
             done
-            for f in antigravity-cli/antigravity-oauth-token; do
-                if [ -f "/auth/gemini/$f" ]; then
+            # agy: マウントしたときだけ。途中の階層やファイルがシンボリックリンクなら置かない
+            # （リンクの先へ書かない）。作る瞬間から所有者だけが読める権限にする（umask 077）。
+            if [ -d /target-gemini ]; then
+                for f in antigravity-cli/antigravity-oauth-token; do
+                    [ -f "/auth/gemini/$f" ] || continue
+                    if [ -L "/target-gemini/$(dirname "$f")" ] || [ -L "/target-gemini/$f" ]; then
+                        echo "⚠️  .gemini/$f（またはその親）がシンボリックリンクなので、agy の認証をコピーしません"
+                        continue
+                    fi
                     mkdir -p "/target-gemini/$(dirname "$f")"
-                    cp "/auth/gemini/$f" "/target-gemini/$f"
+                    ( umask 077; cp "/auth/gemini/$f" "/target-gemini/$f" )
                     chmod 600 "/target-gemini/$f"
-                fi
-            done
-            chown -R '"$(id -u):$(id -g)"' /target/ /target-codex/ /target-gemini/
+                done
+                chown -R '"$(id -u):$(id -g)"' /target-gemini/
+            fi
+            chown -R '"$(id -u):$(id -g)"' /target/ /target-codex/
         '
 
     # ホストの ~/.claude/settings.json から hooks / env 設定を抽出してコピー
@@ -2738,7 +2756,7 @@ reset)
     if [ "$_ver_rc" -ne 0 ]; then
         _ver_err=$(cd "$BASE_DIR" && python3 .claude/scripts/stamps.py release --current 2>&1 >/dev/null) || true
     fi
-    if [ "$_ver_rc" -eq 0 ] && printf '%s\n' "$_ver_out" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+    if [ "$_ver_rc" -eq 0 ] && printf '%s\n' "$_ver_out" | grep -qE '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'; then
         echo "claude-dev $_ver_out"
     elif [ "$_ver_rc" -eq 1 ] && [ -z "$_ver_out" ] && printf '%s' "$_ver_err" | grep -q "まだ1度もリリースしていない"; then
         echo "claude-dev 未リリース"

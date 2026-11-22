@@ -24,7 +24,7 @@ summary: claude-dev 自身の版をリリースの記録から読んで名乗る
 
 1. `python3` が無ければ、版を読めないことと理由を stderr へ出して終了コード 1。
 2. リポジトリの直下(`BASE_DIR`)で `python3 .claude/scripts/stamps.py release --current` を走らせる。
-3. 終了コード 0 で標準出力が `major.minor.revision` なら `claude-dev <版>` を出して 0。
+3. 終了コード 0 で標準出力が `major.minor.revision`(各桁は先頭に 0 を持たない)なら `claude-dev <版>` を出して 0。
 4. 終了コード 1 で、標準エラーが「まだ1度もリリースしていない」なら `claude-dev 未リリース` を出して 0。
 5. それ以外(台帳が壊れている・3つ組でない・python の例外)は、読めなかったことと理由を stderr へ出して 1。
 

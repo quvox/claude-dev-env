@@ -18,7 +18,7 @@ keywords: [テスト]
 |---|---|---|---|---|
 | FR-env-01-37 | 正常系 | unit | `scripts/test-cli-version.sh`「台帳の先頭の版を3つ組で名乗る」(`--version` / `-v`、Linux 版・macOS 版) | 実装済み |
 | FR-env-01-38 | 境界値 | unit | `scripts/test-cli-version.sh`「台帳が無ければ / 空なら「未リリース」」 | 実装済み |
-| FR-env-01-39 | 異常系 | unit | `scripts/test-cli-version.sh`「壊れた台帳は失敗」「3つ組でない版は名乗らない」 | 実装済み |
+| FR-env-01-39 | 異常系 | unit | `scripts/test-cli-version.sh`「壊れた台帳は失敗」「3つ組でない版は名乗らない」「先頭が 0 の桁を持つ版は名乗らない」 | 実装済み |
 
 ## 契約の結合テスト
 

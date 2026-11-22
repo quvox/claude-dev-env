@@ -92,7 +92,7 @@ verified:
 | 22 | FR-env-09-12(正常系) | CI 成果物の検証を自動化していない。日次ビルド後に人が、prepare ジョブのログ「同梱バージョン(リリース manifest 解決): agy <版>」と、配布イメージの `docker run --rm --entrypoint /bin/sh <イメージ> -lc 'agy --version'` の出力が一致することを確認する | 自動化の予定は無い(方針を変える場合は 02 の `DSN-test-01` から見直す) |
 | 23 | FR-env-09-13(異常系) | 版の形の検査は `.github/workflows/ghcr-images.yml` の prepare ジョブと `Makefile` の `update-claude` にある。2026-11-23 に同じ判定の式を手で切り出して `1.5.14`(通る)/ 空 / `1.5` / `1.5.14; touch x` / 2行の値 / `1.5.14a`(すべて拒む)を確かめた。ワークフローそのものの自動テストは無い | 同上 |
 | 24 | FR-env-09-14(異常系) | `--build-arg AGY_VERSION=0.0.1` を付けて配布イメージをビルドし、agy の導入層が「agy の版が指定と一致しません」で非0終了することを確認する | 同上 |
-| 25 | FR-env-12-15(正常系) | 両イメージで `docker run --rm --entrypoint /bin/sh <イメージ> -c 'command -v agy && agy --version'`(非対話・非ログインのシェル)が `/usr/local/bin/agy` と版を出して 0 で終わることを確認する。2026-11-23 に既存イメージへ導入手順を当てて同じ観測をした(1.5.14) | 同上 |
+| 25 | FR-env-12-15(正常系) | 両イメージで `docker run --rm --entrypoint /bin/sh <イメージ> -c 'command -v agy && agy --version'`(非対話・非ログインのシェル)が `/usr/local/bin/agy` と版を出して 0 で終わることを確認する。2026-11-23 に既存イメージへ導入手順を当てて同じ観測をした(`agy --version` の出力は飾りのない `1.5.14` の1行。Dockerfile の照合はこの形を前提にしている) | 同上 |
 | 26 | FR-env-12-16(正常系) | イメージと entrypoint に `AGY_CLI_DISABLE_AUTO_UPDATE` を置いていないこと(`grep`)と、env ファイルに書いた値がコンテナ内で見えること(`FR-env-14` の確認手順)で確かめる | 同上 |
 
 ## テスト設計の判断

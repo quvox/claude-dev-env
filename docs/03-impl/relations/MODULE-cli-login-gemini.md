@@ -40,7 +40,8 @@ agy の認証トークンは専用ボリュームを作らず `claude-dev-auth` 
    表示されたコードを端末へ貼り付け、ログインできたら agy を終了する
    (Linux 版は「ブラウザ(手元の PC)」と案内、mac 版はローカルブラウザ前提の文言)。
 7. 終了後、`~/.gemini/antigravity-cli/antigravity-oauth-token` があれば共有ボリュームの
-   `gemini/antigravity-cli/` へコピーして `chmod 600` する。無ければ「共有ボリュームは変更していない」と表示する。
+   `gemini/antigravity-cli/` へ `umask 077` でコピーして `chmod 600` する(共有側の更新時刻が新しくなるので、
+   稼働中の別コンテナの書き戻しはこれを古いトークンで上書きしない — `MODULE-entrypoint-claude` 判断10)。無ければ「共有ボリュームは変更していない」と表示する。
 8. ロックを解放する(`trap` により異常終了時も解放される)。
 
 ## 呼び出され方
