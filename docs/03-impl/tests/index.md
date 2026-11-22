@@ -21,7 +21,7 @@
 | [cli-reset](cli-reset.md) | MOD-cli-reset | 0 / **5** / 0 | 1.5.0 | 2026-08-19 | MOD-cli-reset(環境の初期化)の受入基準⇄テスト対応 |
 | [cli-setup](cli-setup.md) | MOD-cli-setup | 0 / **1** / 0 | 1.1.1 | 2026-08-12 | MOD-cli-setup(初回セットアップ)の受入基準⇄テスト対応 |
 | [cli-ssh-keys](cli-ssh-keys.md) | MOD-cli-ssh-keys | 0 / **5** / 0 | 1.1.1 | 2026-08-12 | MOD-cli-ssh-keys(転送する SSH 鍵の選択と解除)の受入基準⇄テスト対応 |
-| [cli-start](cli-start.md) | MOD-cli-start | 0 / **54** / 0 | 1.8.0 | 2026-11-23 | MOD-cli-start(開発コンテナの起動)の受入基準⇄テスト対応 |
+| [cli-start](cli-start.md) | MOD-cli-start | 0 / **55** / 0 | 1.8.0 | 2026-11-23 | MOD-cli-start(開発コンテナの起動)の受入基準⇄テスト対応 |
 | [cli-stop](cli-stop.md) | MOD-cli-stop | 0 / **21** / 0 | 1.8.1 | 2026-08-19 | MOD-cli-stop(コンテナの停止)の受入基準⇄テスト対応 |
 | [cli-unforward](cli-unforward.md) | MOD-cli-unforward | 0 / **3** / 0 | 1.2.1 | 2026-08-12 | MOD-cli-unforward(ポートフォワードの解除)の受入基準⇄テスト対応 |
 | [cli-upgrade](cli-upgrade.md) | MOD-cli-upgrade | 0 / **1** / 0 | 1.1.1 | 2026-08-12 | MOD-cli-upgrade(CLI とイメージの更新)の受入基準⇄テスト対応 |
