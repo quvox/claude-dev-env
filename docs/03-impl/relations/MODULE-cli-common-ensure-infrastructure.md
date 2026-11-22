@@ -1,6 +1,6 @@
 ---
 id: MODULE-cli-common-ensure-infrastructure
-updated: 2026-08-12
+updated: 2026-11-23
 module: MOD-cli-common
 kind: function-call
 sync: sync

@@ -1,7 +1,7 @@
 ---
 id: env
-version: 1.7.0
-updated: 2026-08-19
+version: 1.8.0
+updated: 2026-11-23
 source:
   - docs/00-requests/request.md
 summary: 開発環境・実行環境の構成に関する決定事項(D0-env-*)

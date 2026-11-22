@@ -1,6 +1,6 @@
 ---
 id: MODULE-cli-logout
-updated: 2026-08-12
+updated: 2026-11-23
 module: MOD-cli-logout
 kind: tool
 sync: sync

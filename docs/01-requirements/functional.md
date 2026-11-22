@@ -1,7 +1,7 @@
 ---
 id: functional
-version: 1.24.0
-updated: 2026-08-22
+version: 1.25.0
+updated: 2026-11-23
 source:
   - docs/00-requests/request.md
   - docs/00-requests/acceptances.md

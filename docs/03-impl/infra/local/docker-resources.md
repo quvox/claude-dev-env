@@ -1,7 +1,7 @@
 ---
 id: local-docker-resources
-version: 1.2.0
-updated: 2026-08-07
+version: 1.3.0
+updated: 2026-11-23
 source:
   - docs/02-design/architecture.md
 summary: ホスト上に作られる Docker リソース(ネットワーク・ボリューム・コンテナ)の一覧と命名規則

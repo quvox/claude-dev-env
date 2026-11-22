@@ -1,6 +1,6 @@
 ---
 id: MODULE-cli-reset
-updated: 2026-09-06
+updated: 2026-11-23
 module: MOD-cli-reset
 kind: tool
 sync: sync

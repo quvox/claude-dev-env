@@ -1,7 +1,7 @@
 ---
 id: request
-version: 1.6.0
-updated: 2026-08-19
+version: 1.7.0
+updated: 2026-11-23
 source: []
 summary: >
   Claude Code を Docker コンテナで動かす隔離開発環境を、レビュー前コードをホストから隔離し

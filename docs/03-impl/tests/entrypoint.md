@@ -1,7 +1,7 @@
 ---
 id: entrypoint
-version: 1.5.0
-updated: 2026-08-22
+version: 1.6.0
+updated: 2026-11-23
 scope: MOD-entrypoint
 source:
   - docs/01-requirements/functional.md

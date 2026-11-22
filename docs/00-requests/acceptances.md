@@ -1,7 +1,7 @@
 ---
 id: acceptances
-version: 1.6.1
-updated: 2026-08-19
+version: 1.7.0
+updated: 2026-11-23
 source:
   - docs/00-requests/request.md
 summary: 利用者視点の受け入れ基準(AC-04 と AC-05 は廃止した欠番)。前提・操作・期待する結果・不合格の条件で書く

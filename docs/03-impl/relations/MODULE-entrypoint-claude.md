@@ -1,6 +1,6 @@
 ---
 id: MODULE-entrypoint-claude
-updated: 2026-08-22
+updated: 2026-11-23
 module: MOD-entrypoint
 kind: tool
 sync: sync

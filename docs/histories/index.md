@@ -88,10 +88,11 @@
 | [2026-09-06-releases-decision.md](2026-09-06-releases-decision.md) | 2026-09-06 | docs/build-records/releases-decision.md | 00 | リリース台帳(.claude/state/releases.json)を新設するかを人間に問い、A(まだ外へ出していない)の裁定により新設せずに閉じた | - | - | なし | 適用外 | - |
 | [2026-09-11-verify-docs-all.md](2026-09-11-verify-docs-all.md) | 2026-09-11 | なし(taskless — flow: verify-docs) | 02 | F2 文書整合(全数)。共有ボリュームの本数を 4本→3本 へコードに合わせて戻し、E2E 台本 ID の写しと課題票の起点層を直し、00〜02 の21文書へ合格証を発行した | docs/00-requests/decisions/env.md<br>docs/02-design/architecture.md<br>docs/02-design/environments.md<br>docs/03-impl/infra/local/docker-resources.md<br>docs/03-impl/tests/e2e.md | D0-env-08<br>E2E-01<br>E2E-06 | なし | 適用外 | - |
 | [2026-09-11-verify-impl-all.md](2026-09-11-verify-impl-all.md) | 2026-09-11 | なし(taskless — flow: verify-impl) | 03 | F3 実装整合(全数)。事実の生成器の検査を塞いでいた引用の綴りを直し、再生成は差分ゼロだった | - | - | なし | 適用外 | - |
+| [2026-11-23-agy-gemini-image.md](2026-11-23-agy-gemini-image.md) | 2026-11-23 | docs/build-records/agy-gemini-image.md | 00 | agy(Google Antigravity CLI)を配布イメージへ同梱して更新経路に載せ、Google の認証トークンを claude / codex と同じ形で共有する。claude-dev に版の名乗りを足す | docs/00-requests/acceptances.md<br>docs/00-requests/decisions/auth.md<br>docs/00-requests/decisions/dist.md<br>docs/00-requests/decisions/env.md<br>docs/00-requests/request.md<br>docs/00-requests/terminology.md<br>docs/01-requirements/functional.md<br>docs/01-requirements/system.md<br>docs/01-requirements/usecases.md<br>docs/02-design/architecture.md<br>docs/02-design/contracts/cli-container.md<br>docs/02-design/environments.md<br>docs/02-design/relations.md<br>docs/02-design/system.md<br>docs/03-impl/contracts/cli-container.md<br>docs/03-impl/environments/images.md<br>docs/03-impl/index.md<br>docs/03-impl/infra/local/docker-resources.md<br>docs/03-impl/infra/local/ghcr.md<br>docs/03-impl/relations/MODULE-cli-start.md<br>docs/03-impl/tests/cli-common.md<br>docs/03-impl/tests/cli-login-gemini.md | AC-09<br>D0-auth-03<br>D0-dist-07<br>D0-env-08<br>DSN-auth-01<br>DSN-dist-01<br>E2E-07<br>FR-env-01-16<br>FR-env-01-37<br>FR-env-03-25<br>FR-env-09-12<br>FR-env-12-15<br>MOD-cli-login-gemini<br>MOD-cli-version<br>MODULE-cli-common-lock<br>MODULE-cli-login-gemini<br>MODULE-cli-logout<br>MODULE-cli-reset<br>MODULE-cli-start<br>MODULE-cli-version<br>MODULE-entrypoint-claude<br>MODULE-makefile-update-claude<br>PLAN-cli-login-gemini<br>PLAN-cli-version<br>RQ-env-03<br>SR-15<br>UC-01<br>UC-07 | なし | 記録済み | - |
 
 ## 集計
 
-- 履歴数: 82
+- 履歴数: 83
 - 文書・IDを索引化できない履歴: 5
 - 解析警告: 0
 - critical復旧記録の警告: 0

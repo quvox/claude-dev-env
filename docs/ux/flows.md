@@ -1,6 +1,6 @@
 ---
 id: ux-flows
-updated: 2026-09-11
+updated: 2026-11-23
 summary: 画面一覧(SCR-nn の台帳)と、ホスト CLI の主要な操作の流れ
 ---
 

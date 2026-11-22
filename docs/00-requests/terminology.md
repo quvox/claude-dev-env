@@ -1,7 +1,7 @@
 ---
 id: terminology
-version: 1.7.0
-updated: 2026-08-19
+version: 1.8.0
+updated: 2026-11-23
 source:
   - docs/00-requests/request.md
 summary: 本システムで使う語の定義・英語表記(識別子)・使ってはいけない言い方
@@ -28,7 +28,7 @@ verified:
 | claude-dev | ホスト側 CLI。コンテナのライフサイクル・認証・ポート・SSH 鍵を操作する。Linux は `claude-dev`、macOS は `claude-dev-mac`(`make install` が OS を判定して symlink を統一する) | | | `claude-dev` / `claude-dev-mac` | 「CLIツール」単独表記 |
 | Claude コンテナ | プロジェクトごとに起動する開発用コンテナ。ブラウザ確認あり(`claude-dev-claude-vnc`)/なし(`claude-dev-claude`) | | | `claude-dev-<project>` | — (「プロジェクトコンテナ」は同義。文脈で使い分ける) |
 | Codex CLI | OpenAI 製のコーディングエージェント CLI(npm パッケージ `@openai/codex`、コマンド名 `codex`)。Claude コンテナに同梱し、`codex login --device-auth` で認証する。認証ファイルは `~/.codex/auth.json` | | | `codex` | 本文で `codex` と書く(コマンド名を指すときのみ可) |
-| agy | Google 製のコーディングエージェント CLI(Google Antigravity CLI。コマンド名 `agy`。Google の Gemini を使う)。Claude コンテナに同梱し、`claude-dev login-gemini` で認証する。共有する認証は agy が保存する Google の認証トークン `~/.gemini/antigravity-cli/antigravity-oauth-token` 1本だけ(`D0-dist-07`) | | Gemini CLI(`gemini` コマンド。別の製品で、同梱しない) | `agy` | 「gemini」単独(製品名・モデル名・Gemini CLI のどれか分からない)。認証の話では「agy の Google 認証」と書く |
+| agy | Google 製のコーディングエージェント CLI(Google Antigravity CLI。コマンド名 `agy`。Google の Gemini を使う)。Claude コンテナに同梱し、`claude-dev login-gemini` で認証する。共有する認証は agy が保存する Google の認証トークン `~/.gemini/antigravity-cli/antigravity-oauth-token` 1本だけ(`D0-dist-07`) | コンテナ内の `agy` コマンド(実体 `~/.local/bin/agy`、`/usr/local/bin/agy` から参照)/ `claude-dev login-gemini` で得た認証トークン | Gemini CLI(`gemini` コマンド。別の製品で、同梱しない) | `agy` | 「gemini」単独(製品名・モデル名・Gemini CLI のどれか分からない)。認証の話では「agy の Google 認証」と書く |
 | Codex サンドボックス | Codex CLI がシェルコマンドを実行する際に張る自前の隔離機構。強度は `config.toml` の `sandbox_mode`(`read-only` / `workspace-write` / `danger-full-access`)で決まる。Linux には bubblewrap(既定。Claude コンテナ内では起動できない)と landlock(`features.use_legacy_landlock` で選ぶ。読み取り専用のみ実用)の 2 バックエンドがある | | | `sandbox_mode` | bubblewrap / bwrap / landlock は実装名。方針を語るときは「Codex サンドボックス」と書く |
 | docker-proxy | Docker Socket Proxy。生ソケットを直接使わせず、危険な Docker API を拒否する Go 製リバースプロキシ。全 Claude コンテナで共有する | | | `claude-dev-docker-proxy` | 「プロキシ」単独 |
 | forward プロキシ | `claude-dev forward` が立てる `fwd-<name>-<port>` の socat コンテナ。Web アプリのポート中継用 | | | `fwd-<name>-<port>` | docker-proxy と混同する書き方 |

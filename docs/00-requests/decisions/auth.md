@@ -1,7 +1,7 @@
 ---
 id: auth
-version: 1.3.1
-updated: 2026-08-12
+version: 1.4.0
+updated: 2026-11-23
 source:
   - docs/00-requests/request.md
 summary: 認証情報の保管・共有・破棄に関する決定事項(D0-auth-*)

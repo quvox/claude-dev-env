@@ -1,7 +1,7 @@
 ---
 id: 02-system
-version: 2.21.0
-updated: 2026-09-06
+version: 2.22.0
+updated: 2026-11-23
 source:
   - docs/01-requirements/functional.md
   - docs/01-requirements/non-functional.md

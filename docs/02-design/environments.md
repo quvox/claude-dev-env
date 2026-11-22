@@ -1,7 +1,7 @@
 ---
 id: environments
-version: 1.7.1
-updated: 2026-09-11
+version: 1.8.0
+updated: 2026-11-23
 source:
   - docs/01-requirements/system.md
   - docs/02-design/architecture.md

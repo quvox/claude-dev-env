@@ -1,6 +1,6 @@
 ---
 id: features
-updated: 2026-08-11
+updated: 2026-11-23
 summary: claude-dev 開発環境の機能一覧と入口。CLI サブコマンド・Makefile ターゲット・常駐スクリプト・Go バイナリの入口を列挙する
 keywords: [機能表, 境界, claude-dev, Makefile, docker-proxy]
 # version / verified は持たない(relations 層の代表として docs/03-impl/index.md が持つ)

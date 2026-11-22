@@ -1,6 +1,6 @@
 ---
 id: MODULE-cli-common-require-setup
-updated: 2026-08-10
+updated: 2026-11-23
 module: MOD-cli-common
 kind: function-call
 sync: sync

@@ -1,7 +1,7 @@
 ---
 id: relations
-version: 1.12.0
-updated: 2026-08-20
+version: 1.13.0
+updated: 2026-11-23
 source:
   - docs/01-requirements/functional.md
   - docs/01-requirements/usecases.md

@@ -1,7 +1,7 @@
 ---
 id: cli-start
-version: 1.7.0
-updated: 2026-08-20
+version: 1.8.0
+updated: 2026-11-23
 scope: MOD-cli-start
 source:
   - docs/01-requirements/functional.md

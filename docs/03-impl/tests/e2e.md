@@ -1,7 +1,7 @@
 ---
 id: e2e
-version: 1.18.0
-updated: 2026-08-22
+version: 1.19.0
+updated: 2026-11-23
 scope: E2E
 source:
   - docs/02-design/system.md

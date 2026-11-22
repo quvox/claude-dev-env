@@ -1,7 +1,7 @@
 ---
 id: architecture
-version: 1.10.0
-updated: 2026-09-11
+version: 1.11.0
+updated: 2026-11-23
 source:
   - docs/01-requirements/functional.md
   - docs/01-requirements/non-functional.md

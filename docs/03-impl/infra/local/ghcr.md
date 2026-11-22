@@ -1,7 +1,7 @@
 ---
 id: local-ghcr
-version: 1.3.1
-updated: 2026-08-22
+version: 1.4.0
+updated: 2026-11-23
 source:
   - docs/02-design/architecture.md
 summary: 配布イメージの公開先 GHCR の構成(リポジトリ・タグ・マルチアーキ・認証の置き場所)

@@ -1,7 +1,7 @@
 ---
 id: container-images
-version: 1.4.0
-updated: 2026-09-01
+version: 1.5.0
+updated: 2026-11-23
 source:
   - docs/02-design/environments.md
 summary: 配布イメージ(claude-cli / claude-vnc)のステージ構成・言語ランタイムの版管理・ビルド引数・キャッシュの効かせ方

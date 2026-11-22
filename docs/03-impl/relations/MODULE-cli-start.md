@@ -1,6 +1,6 @@
 ---
 id: MODULE-cli-start
-updated: 2026-08-20
+updated: 2026-11-23
 module: MOD-cli-start
 kind: tool
 sync: sync

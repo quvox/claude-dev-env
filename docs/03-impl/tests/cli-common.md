@@ -1,7 +1,7 @@
 ---
 id: cli-common
-version: 1.4.2
-updated: 2026-08-12
+version: 1.5.0
+updated: 2026-11-23
 scope: MOD-cli-common
 source:
   - docs/01-requirements/functional.md

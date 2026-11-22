@@ -10,7 +10,7 @@ contracts: CTR-cli-container
 design: DSN-env-02, DSN-mod-02, DSN-mod-03
 requirements: FR-env-01, FR-env-03
 tests: なし(未実装。シェル実装のため自動テストランナーが無く実機確認で代替する)
-updated: 2026-08-04
+updated: 2026-11-23
 summary: 共有資源を触る7コマンドを直列化するロックを取得・解放し、残骸を引き継ぐ
 ---
 

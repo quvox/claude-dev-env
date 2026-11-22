@@ -1,7 +1,7 @@
 ---
 id: 01-system
-version: 1.3.0
-updated: 2026-08-18
+version: 1.4.0
+updated: 2026-11-23
 source:
   - docs/00-requests/request.md
   - docs/00-requests/decisions/sec.md

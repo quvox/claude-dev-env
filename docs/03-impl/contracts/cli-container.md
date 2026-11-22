@@ -1,7 +1,7 @@
 ---
 id: cli-container
-version: 1.13.0
-updated: 2026-08-20
+version: 1.14.0
+updated: 2026-11-23
 source:
   - docs/02-design/contracts/cli-container.md
 kind: other

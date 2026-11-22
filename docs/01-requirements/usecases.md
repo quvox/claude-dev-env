@@ -1,7 +1,7 @@
 ---
 id: usecases
-version: 1.7.1
-updated: 2026-08-20
+version: 1.8.0
+updated: 2026-11-23
 source:
   - docs/00-requests/acceptances.md
   - docs/01-requirements/functional.md
