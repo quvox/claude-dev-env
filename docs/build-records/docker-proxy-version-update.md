@@ -1,12 +1,12 @@
 ---
 slug: docker-proxy-version-update
-state: building
+state: awaiting-verify
 critical: false
 origin: derived
 issue: なし
 started: 2026-11-23T09:37:05+09:00
-updated: 2026-11-23T09:37:05+09:00
-commit: -
+updated: 2026-11-23T09:39:26+09:00
+commit: b0a55393bebc184d4c2d61e7a8211ebcecd648ee
 summary: docker-proxy のビルド用 Go(go.mod の go 行と golang 基底)と実行用 alpine 基底を、公式配布情報で引いた最新の安定版へ上げる
 ---
 
@@ -33,7 +33,7 @@ summary: docker-proxy のビルド用 Go(go.mod の go 行と golang 基底)と�
 - lint / build: green(`cd docker-proxy && go vet ./...` → 出力なし・終了0(開発イメージとビルド段の両方)/ `docker build -t t2-verify:docker-proxy -f .devcontainer/Dockerfile.docker-proxy .` → `exit=0`。出荷物の確認: 実行段の `/etc/alpine-release` → `3.24.4`、取り出した実行ファイルに `go version` → `go1.27.4`、起動 → `Docker socket not found at /var/run/docker.sock`(ソケット無しの既存の終了経路。rc=1))
 - 資格情報の混入検査(secret_scan): 未設定(このリポジトリには `tests/` の宣言ファイル自体が無い。埋めるのはテスト基盤を入れるタスク)
 - 版がビルドと揃った環境で走ったか: 未宣言(`02-design/environments.md` に版の固定の見出しが無い = 移行 `2026-11-05-build-test-version-pin` が未適用)。見比べられた範囲では一致 — テストはビルド段と同じ `golang:1.27.4-alpine3.24` の中で走らせ、`go version` が出荷物の `go1.27.4` と一致。製品の依存は無い(go.sum なし)
-- 外部挙動の変化: なし(検査ロジックは不変。docker-proxy の 45 件の単体テストが新しい処理系で全件 green。変わるのはイメージの処理系と OS の版だけ)
+- 外部挙動の変化: なし
 - 認証・決済・不可逆・個人情報・監査への接触: なし
 - E2E・全件テスト・ブラウザQA: 実施していない(/verify-tests に委ねる — 及第ライン)
 
@@ -85,6 +85,7 @@ summary: docker-proxy のビルド用 Go(go.mod の go 行と golang 基底)と�
 - 2026-11-23 09:38 go.mod・Dockerfile.docker-proxy・images.md を書き換え。実行前の作業ツリーの指紋をスクラッチに控えて、vet / テスト(開発イメージ・ビルド段の両方)/ イメージのビルド(タグ t2-verify:docker-proxy)を実行。すべて green。実行後の指紋は一致(docs/ の外は動いていない)
 - 2026-11-23 09:40 段4: images.md の3本の DS-04 の行と Dockerfile・go.mod を突き合わせて一致。`MODULE-docker-proxy-serve` の impl / tests / 実装上の判断は版に触れておらず、継続(変更なし)。docs/residual.md・pendings.md・issues に、このクロージャで解消できる項目は無い
 - 2026-11-23 09:41 履歴を書き、images.md を 1.7.0 に上げた
+- 2026-11-23 09:43 作業コミット cedbe54・履歴と索引 b0a5539。awaiting-verify へ切り替え。検査ロジックは不変で、45 件の単体テストが新しい処理系で全件 green のため外部挙動の変化は「なし」と判定
 
 ## 直さなかった指摘(独立レビュー・探索的QA)
 
