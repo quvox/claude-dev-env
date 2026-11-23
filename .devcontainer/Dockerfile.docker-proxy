@@ -4,7 +4,7 @@
 # Claude コンテナから Docker API を安全に利用するためのリバースプロキシ。
 # リクエストボディを検査し、ホストバインドマウント・privileged 等を拒否する。
 # =============================================================================
-FROM golang:1.24-alpine AS builder
+FROM golang:1.27.4-alpine3.24 AS builder
 
 WORKDIR /app
 COPY docker-proxy/go.mod ./
@@ -12,7 +12,7 @@ RUN go mod download
 COPY docker-proxy/*.go ./
 RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /docker-proxy .
 
-FROM alpine:3.21
+FROM alpine:3.24
 # イメージバージョン（CI は YYYYMMDDHHmm、ローカルビルドは既定 local）。claude-dev start が表示する。
 ARG IMAGE_VERSION=local
 LABEL io.github.quvox.claude-dev.version="${IMAGE_VERSION}" \

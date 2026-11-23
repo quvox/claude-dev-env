@@ -1,6 +1,6 @@
 ---
 id: container-images
-version: 1.6.0
+version: 1.7.0
 updated: 2026-11-23
 source:
   - docs/02-design/environments.md
@@ -51,6 +51,14 @@ graph LR
 レイヤーをそのバイナリ層だけに限定するためである。`vnc-base` は `base` に連なるため、`base` の途中を失効させると VNC の高コスト層
 まで巻き込んで再ビルド・再取得になる(`DSN-dist-01` / `NFR-perf-01`)。同梱外部バイナリの設置層も
 同じ理由で終端に置く(次の節)。
+
+docker-proxy のイメージは別の Dockerfile(`.devcontainer/Dockerfile.docker-proxy`)の2段で作る —
+ビルド段(`golang:<Go の版>-alpine<alpine の minor>`)で `CGO_ENABLED=0` の実行ファイルを作り、
+実行段(`alpine:<alpine の minor>`)にその1つと CA 証明書だけを置く。
+
+- [DS-04] ビルド段の Go を**開発イメージ(`Dockerfile.claude` の `GO_VERSION`)と同じ patch** に揃え、基底のタグを patch まで名指す(2026-11-23 時点で `golang:1.27.4-alpine3.24`)— 理由: docker-proxy の単体テスト(`cd docker-proxy && go test ./...`)は開発イメージの中で走るので、テストした処理系と出荷物を作る処理系を一致させるにはこの2か所が同じ版でなければならない(`delegation.md` §2.4)。minor までの名指し(以前の `golang:1.24-alpine`)では再ビルドのたびに patch が黙って動く / 見直す条件: docker-proxy のテストを開発イメージ以外(CI など)で走らせるようになったとき
+- [DS-04] `docker-proxy/go.mod` の `go` 行を**ビルド段の処理系と同じ系列**へ上げる(2026-11-23 に `go 1.22` → `go 1.27`)— 理由: docker-proxy は外部の依存を持たず、利用者が単体でビルドする経路も無い(ビルドは上の基底の中だけ)ので、引き上げで困る利用者が居ない。旧い `go` 行のままだと標準ライブラリの既定の振る舞い(GODEBUG)が旧い系列のものに据え置かれ、処理系を上げた意味が半分になる / 見直す条件: docker-proxy を他のモジュールから import されるライブラリとして配るとき
+- [DS-04] 実行段の基底は**最新の安定版の alpine の minor** を名指し、patch は名指さない(2026-11-23 時点で `alpine:3.24`)。ビルド段の alpine も同じ minor にする — 理由: 実行段に在るのは静的リンクの実行ファイル1つと CA 証明書だけで、処理系を持たないので §2.4 の一致の対象外であり、patch を追わせれば再ビルドのたびに OS の修正が入る。ビルド段と minor を揃えるのは、版を見る場所を1つにするため / 見直す条件: 実行段に処理系や共有ライブラリを足すとき、使っている minor がサポート終了に近づいたとき
 
 ## 言語ランタイムのバージョン管理(pyenv / fnm / nvm)
 
