@@ -34,7 +34,7 @@ env:
 
 jobs:
   # --- タグ(YYYYMMDDHHmm, JST)・小文字オーナー名・同梱エージェント CLI
-  #     （Claude Code / Codex CLI）の具体バージョンを 1 度だけ算出し後続で一貫利用
+  #     （Claude Code / Codex CLI / Antigravity CLI）の具体バージョンを 1 度だけ算出し後続で一貫利用
   #     （6 つの build ジョブが個別に latest を引くと、解決タイミング差で amd64/arm64 に
   #     別バージョンが入りうるため）---
   prepare:
@@ -44,6 +44,7 @@ jobs:
       owner: ${{ steps.meta.outputs.owner }}
       claude_version: ${{ steps.meta.outputs.claude_version }}
       codex_version: ${{ steps.meta.outputs.codex_version }}
+      agy_version: ${{ steps.meta.outputs.agy_version }}
       chrome_devtools_mcp_version: ${{ steps.meta.outputs.chrome_devtools_mcp_version }}
     steps:
       - id: meta
@@ -94,6 +95,29 @@ jobs:
             fi
           fi
           echo "codex_version=${codex_version}" >> "$GITHUB_OUTPUT"
+
+          # 同梱する Antigravity CLI（agy）のバージョン:
+          # 公式 install.sh が引くリリース manifest（アーキ別 JSON）から最新の具体バージョンを
+          # 解決する。AGY_VERSION=latest のまま渡すと文字列が変化せずキャッシュキーとして機能しない
+          # ため、claude / codex と同じく必ず解決してから渡す。
+          # 手動入力（workflow_dispatch の入力）は設けない: 公式 install.sh は版を指定できず常に
+          # 最新版を入れるため、最新以外を指定してもビルドが失敗する（切り戻しの手段にならない）。
+          # amd64 の manifest で解決する。arm64 の manifest の版がずれていると Dockerfile の照合で
+          # arm64 ビルドが失敗する（再実行すれば解決し直される）。
+          agy_version="$(curl -fsSL https://antigravity-cli-auto-updater-974169037036.us-central1.run.app/manifests/linux_amd64.json | sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')"
+          # 数字と点以外（改行を含む）が1文字でも在れば拒む。grep は行ごとに照合するので、
+          # 複数行の値の1行だけが形に合っても通ってしまい、GITHUB_OUTPUT へ別の行を書き込める。
+          case "${agy_version}" in
+            ""|*[!0-9.]*) agy_ok=0 ;;
+            *) if echo "${agy_version}" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then agy_ok=1; else agy_ok=0; fi ;;
+          esac
+          if [ "${agy_ok}" -ne 1 ]; then
+            echo "::error::agy のリリース manifest の解決結果が MAJOR.MINOR.PATCH 形式ではありません"
+            exit 1
+          fi
+          # ログへ出すのは検査を通った後だけ（外から受け取った値の行がワークフローコマンドとして解釈されないように）
+          echo "同梱バージョン（リリース manifest 解決）: agy ${agy_version}"
+          echo "agy_version=${agy_version}" >> "$GITHUB_OUTPUT"
 
           # 同梱する chrome-devtools MCP のバージョン（D0-dist-06 項2）:
           # codex と同じ方針。手動入力があればそれを採用し、空なら npm registry の
@@ -154,7 +178,7 @@ jobs:
           # /workspace 所有者へ追従。docs/10_ghcr-images.md「pull して使う運用」）。
           # docker-proxy はこれらの ARG を宣言しないため無視される（警告のみ）。
           #
-          # CLAUDE_VERSION / CODEX_VERSION / CHROME_DEVTOOLS_MCP_VERSION は build-arg で
+          # CLAUDE_VERSION / CODEX_VERSION / AGY_VERSION / CHROME_DEVTOOLS_MCP_VERSION は build-arg で
           # 渡してよい——内容由来の値であり、かつ参照する層が配布ステージの終端レイヤーに
           # 限られるため、失効の波及先が各バイナリ層だけに留まる
           # （D0-dist-03 / D0-dist-04 / D0-dist-06 / DSN-dist-01）。
@@ -164,6 +188,7 @@ jobs:
             USER_GID=1000
             CLAUDE_VERSION=${{ needs.prepare.outputs.claude_version }}
             CODEX_VERSION=${{ needs.prepare.outputs.codex_version }}
+            AGY_VERSION=${{ needs.prepare.outputs.agy_version }}
             CHROME_DEVTOOLS_MCP_VERSION=${{ needs.prepare.outputs.chrome_devtools_mcp_version }}
           # バージョン(日次で変わるタイムスタンプ)は build-arg=IMAGE_VERSION として
           # Dockerfile の LABEL 経由でレイヤーチェーンに載せると、その層以降の

@@ -502,10 +502,10 @@ ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 
 # =============================================================================
 # 配布ステージ: claude-cli / claude-vnc
-#   （エージェント CLI = Claude Code / Codex CLI を終端レイヤーで導入）
+#   （エージェント CLI = Claude Code / Codex CLI / Antigravity CLI を終端レイヤーで導入）
 # =============================================================================
 # エージェント CLI の導入 RUN は「配布ステージの最終レイヤー」にのみ置く。キャッシュキーは
-# 具体バージョン（CI が claude=latest チャネル / codex=npm registry を解決した値）＝内容由来の
+# 具体バージョン（CI が claude=latest チャネル / codex=npm registry / agy=公式リリース manifest を解決した値）＝内容由来の
 # 値にし、時刻由来の cache-bust（旧 CLAUDE_CACHE_BUST）は使わない。新版が出た日だけこの層が
 # 失効し、base / vnc-base の高コスト層は再ビルド・再 push・再 pull されない
 # （D-26 / D-27 / 02-design 判断4）。
@@ -519,6 +519,10 @@ ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 #     実体は fnm の node-versions 配下に入り PATH 解決が fnm 初期化に依存するため、root で
 #     /usr/local/bin/codex ランチャーを生成し、非対話シェル（bash -c）や docker exec からも
 #     解決できるようにする（要件 core/12-2。chromium-browser / claude-dev-chrome と同じ流儀）。
+#   - agy（Antigravity CLI）は単体ネイティブバイナリ（amd64/arm64）。公式 install.sh が
+#     ~/.local/bin/agy へ置くので、claude と同じくユーザー権限で導入し、/usr/local/bin/agy へ
+#     symlink を張って非対話シェルからも解決できるようにする。install.sh は版を指定できない
+#     ため、AGY_VERSION は CI が解決した値を渡すキャッシュキー兼 導入後の照合値として使う。
 #   - 導入後は base 末尾と同じ状態（WORKDIR /workspace・USER root）へ戻す（entrypoint は root 実行前提）。
 #   - ENTRYPOINT / ENV / LABEL は親ステージから継承するので再宣言しない。
 #   - 2 ステージに同一の RUN を重複させている。共通化のため中間ステージを挟むと、その層が
@@ -532,6 +536,7 @@ FROM base AS claude-cli
 ARG USERNAME=devuser
 ARG CLAUDE_VERSION=latest
 ARG CODEX_VERSION=latest
+ARG AGY_VERSION=latest
 ARG CHROME_DEVTOOLS_MCP_VERSION=latest
 
 USER $USERNAME
@@ -549,6 +554,17 @@ RUN export PATH="${USER_HOME}/.local/share/fnm:$PATH" \
     && eval "$($USER_HOME/.local/share/fnm/fnm env)" \
     && npm install -g "chrome-devtools-mcp@${CHROME_DEVTOOLS_MCP_VERSION}" \
     && chrome-devtools-mcp --version
+# Antigravity CLI（agy）。Google 公式の単体ネイティブバイナリ（Go 製。Node 非依存）で、
+# 公式 install.sh が ~/.local/bin/agy へ置く（チェックサム検証つき）。install.sh は版指定を
+# 受け付けず常に最新版を入れるため、AGY_VERSION は「CI / make が解決した具体バージョンを
+# 渡してキャッシュキーにする」ためのもので、latest 以外が渡されたときは導入された版と
+# 一致するか照合し、食い違えば失敗させる（ピン留めのつもりで別の版が入るのを防ぐ）。
+# 照合の失敗は解決から導入までの間に新版が出たときに起きうる。再実行すれば解決し直される。
+RUN curl -fsSL https://antigravity.google/cli/install.sh | bash \
+    && agy_installed="$("${USER_HOME}/.local/bin/agy" --version)" \
+    && echo "agy ${agy_installed}" \
+    && { [ "${AGY_VERSION}" = "latest" ] || [ "${agy_installed}" = "${AGY_VERSION}" ] \
+         || { echo "agy の版が指定と一致しません（指定 ${AGY_VERSION} / 導入 ${agy_installed}）" >&2; exit 1; }; }
 WORKDIR /workspace
 USER root
 
@@ -572,6 +588,15 @@ RUN FNM_DEFAULT_BIN="${USER_HOME}/.local/share/fnm/aliases/default/bin" \
         "$FNM_DEFAULT_BIN" "$FNM_DEFAULT_BIN" > /usr/local/bin/chrome-devtools-mcp \
     && chmod 755 /usr/local/bin/chrome-devtools-mcp \
     && /usr/local/bin/chrome-devtools-mcp --version
+
+# agy 共通ランチャー: ~/.local/bin/agy への symlink を /usr/local/bin に置く。
+# claude と同じく実体は ~/.local/bin にあるが、PATH へ ~/.local/bin を足すのは対話シェルの
+# rc だけなので、bash -c / docker exec からは解決できない（gcloud と同じ symlink 流儀）。
+# agy は単体バイナリで node を使わないため、codex のような PATH 補正ランチャーは要らない。
+# agy 自身の自己更新（~/.local/bin/agy の置き換え）にも symlink は追従する。
+RUN [ -x "${USER_HOME}/.local/bin/agy" ] \
+    && ln -sf "${USER_HOME}/.local/bin/agy" /usr/local/bin/agy \
+    && /usr/local/bin/agy --version
 
 # --- 同梱外部バイナリの設置（externals/）---
 # 保守者が externals/ へ手で置いたファイルを /usr/local/bin へ設置する（FR-env-13 / D0-dist-05）。
@@ -598,6 +623,7 @@ FROM vnc-base AS claude-vnc
 ARG USERNAME=devuser
 ARG CLAUDE_VERSION=latest
 ARG CODEX_VERSION=latest
+ARG AGY_VERSION=latest
 ARG CHROME_DEVTOOLS_MCP_VERSION=latest
 
 USER $USERNAME
@@ -615,6 +641,17 @@ RUN export PATH="${USER_HOME}/.local/share/fnm:$PATH" \
     && eval "$($USER_HOME/.local/share/fnm/fnm env)" \
     && npm install -g "chrome-devtools-mcp@${CHROME_DEVTOOLS_MCP_VERSION}" \
     && chrome-devtools-mcp --version
+# Antigravity CLI（agy）。Google 公式の単体ネイティブバイナリ（Go 製。Node 非依存）で、
+# 公式 install.sh が ~/.local/bin/agy へ置く（チェックサム検証つき）。install.sh は版指定を
+# 受け付けず常に最新版を入れるため、AGY_VERSION は「CI / make が解決した具体バージョンを
+# 渡してキャッシュキーにする」ためのもので、latest 以外が渡されたときは導入された版と
+# 一致するか照合し、食い違えば失敗させる（ピン留めのつもりで別の版が入るのを防ぐ）。
+# 照合の失敗は解決から導入までの間に新版が出たときに起きうる。再実行すれば解決し直される。
+RUN curl -fsSL https://antigravity.google/cli/install.sh | bash \
+    && agy_installed="$("${USER_HOME}/.local/bin/agy" --version)" \
+    && echo "agy ${agy_installed}" \
+    && { [ "${AGY_VERSION}" = "latest" ] || [ "${agy_installed}" = "${AGY_VERSION}" ] \
+         || { echo "agy の版が指定と一致しません（指定 ${AGY_VERSION} / 導入 ${agy_installed}）" >&2; exit 1; }; }
 WORKDIR /workspace
 USER root
 
@@ -638,6 +675,15 @@ RUN FNM_DEFAULT_BIN="${USER_HOME}/.local/share/fnm/aliases/default/bin" \
         "$FNM_DEFAULT_BIN" "$FNM_DEFAULT_BIN" > /usr/local/bin/chrome-devtools-mcp \
     && chmod 755 /usr/local/bin/chrome-devtools-mcp \
     && /usr/local/bin/chrome-devtools-mcp --version
+
+# agy 共通ランチャー: ~/.local/bin/agy への symlink を /usr/local/bin に置く。
+# claude と同じく実体は ~/.local/bin にあるが、PATH へ ~/.local/bin を足すのは対話シェルの
+# rc だけなので、bash -c / docker exec からは解決できない（gcloud と同じ symlink 流儀）。
+# agy は単体バイナリで node を使わないため、codex のような PATH 補正ランチャーは要らない。
+# agy 自身の自己更新（~/.local/bin/agy の置き換え）にも symlink は追従する。
+RUN [ -x "${USER_HOME}/.local/bin/agy" ] \
+    && ln -sf "${USER_HOME}/.local/bin/agy" /usr/local/bin/agy \
+    && /usr/local/bin/agy --version
 
 # --- 同梱外部バイナリの設置（externals/）---
 # 保守者が externals/ へ手で置いたファイルを /usr/local/bin へ設置する（FR-env-13 / D0-dist-05）。

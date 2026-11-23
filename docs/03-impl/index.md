@@ -1,7 +1,7 @@
 ---
 id: index
-version: 1.39.0
-updated: 2026-09-11
+version: 1.40.0
+updated: 2026-11-23
 source:
   - docs/02-design/system.md
   - docs/02-design/relations.md
@@ -22,7 +22,7 @@ verified:
 | 項目 | 値 |
 |---|---|
 | 機能間連携仕様書の本数 | 61 |
-| 網羅しているモジュール | MOD-cli-common, MOD-cli-setup, MOD-cli-start, MOD-cli-stop, MOD-cli-attach, MOD-cli-code, MOD-cli-list, MOD-cli-login, MOD-cli-login-codex, MOD-cli-logout, MOD-cli-forward, MOD-cli-unforward, MOD-cli-ports, MOD-cli-ssh-keys, MOD-cli-firewall, MOD-cli-pull, MOD-cli-upgrade, MOD-cli-reset, MOD-makefile, MOD-entrypoint, MOD-firewall, MOD-docker-proxy, MOD-portsync, MOD-vm-mode, MOD-container-tools(25モジュール) |
+| 網羅しているモジュール | MOD-cli-common, MOD-cli-setup, MOD-cli-start, MOD-cli-stop, MOD-cli-attach, MOD-cli-code, MOD-cli-list, MOD-cli-login, MOD-cli-login-codex, MOD-cli-login-gemini, MOD-cli-version, MOD-cli-logout, MOD-cli-forward, MOD-cli-unforward, MOD-cli-ports, MOD-cli-ssh-keys, MOD-cli-firewall, MOD-cli-pull, MOD-cli-upgrade, MOD-cli-reset, MOD-makefile, MOD-entrypoint, MOD-firewall, MOD-docker-proxy, MOD-portsync, MOD-vm-mode, MOD-container-tools(27モジュール) |
 | `check-relations.py` 最終結果 | 合格(2026-08-20 の F3 実装整合フロー(`/verify-impl all`)で再実行。61 ファイル / 61 ID。対称性・参照実在・impl パス・必須項目・機能表との 1:1 すべて問題なし) |
 | コードとの乖離として未解決のもの | **1 件** — `docs/issues/097`(CLI の `help\|*)` 分岐が実在するのに機能表にも relations にも無い。`claude-dev:2651` / `claude-dev-mac:2693`)。**2026-08-11 に原因を実測した**: シェル抽出器の決定 D「catch-all(`*` を含むラベル)は入口にしない」が**ラベル全体を落とす**ため、`help` の側も巻き添えで入口から外れる(`.claude/scripts/cgx/shell_regex.py:169`)。したがって機能表に行を足すと FT1 が重大度「高」で落ちる。解消にはコード側で `help)` と `*)` を分けるか抽出器を直すかが要り、どちらも `task-promote-shared-helpers` の範囲外だった。**戻り値の記述の食い違い4件は 2026-08-11 に修正して 0 件になった**(`MODULE-cli-logout` / `-reset` / `-start` / `-stop` の終了コード 130 の区間)。機能の欠落として数えていた 1 件(macOS のコントローラ生存判定が無い。issue `003`。対象ごと消えたため issue も削除した)は、`orchestrate` サブコマンドごと消えた。本文の叙述レベルの食い違いとして数えていた 17 件も、対象が `MODULE-orchestrator-*` の relations だけだったため対象ごと消えた(**2026-08-11 に実測して 0 件であることを確認し、これを追跡していた issue を閉じた**。「本文で `ctx` 等の定型引数を省略してよいかの規約が無い」という規約側の欠落だけが残るので、`docs/pendings.md` の残務が持つ)。**この集計そのものを維持する責任は本節にある**(以前は別の issue が追跡していたが、追跡先を本節へ一本化した) |
 | 実装の欠陥として起票済み(コードは未修正) | **4件**(**2026-08-20 の `fix-start-auxiliary-halts-and-tmux-runtime-env` の完了時点**)。数え方は「`03-impl` のいずれかの `## 既知の制限` から参照されている `type: modify` / `type: bug` の issue」のうち、**本システムが未修正のもの**とする: `005`(docker-proxy が解釈できないボディを検査せず中継する)/ `010`(forward のホストポート選択の競合)/ `028`(名前の一意性が `NFR-scale-01` を満たさない)/ `055`(受入基準17 が停止中のラベル無しコンテナの列挙まで求めるが 02 は稼働中しか列挙できないとする)。**`106`(`~/.local/bin` のコピーと `~/.ssh/config` の加工が `set -e` の下で握られておらず、読めないと `start` が起動まで到達しない)は 2026-08-20 の `fix-start-auxiliary-halts-and-tmux-runtime-env` でコードを直して解消し、issue を削除した**ので 5件 → 4件になった(`MODULE-cli-start.md` の「既知の制限」からの参照も同時に外した)。**同タスクが `002`(`.claude-dev.yaml` の全面上書き。経緯は `docs/histories/2026-08-19-stop-cleanup-and-project-env.md`。issue は同日に削除した)をコードごと修正して外した**ので 5件 → 4件になり、**同タスクの範囲外だった同型の残り2箇所を `106` として起票した**ので 5件 になった。同タスクの3回の `/doc-check ssot` が検出した実装欠陥5件(`reset` が `--volumes` を解析しない / 既存の `.gitignore` へ書き込めない / `.gitignore` を新規作成できない / 読み取り権限の無い env ファイル / 壊れた `settings.json`)は、**いずれも同じタスクの中でコードを直して解消したので issue を残していない**(`.claude/directions/issues-pendings.md` §1 の行1)。**`102`(colabtmux が bwrap の非ゼロを理由に codex を起こさない)は 2026-08-20 に人間の裁定で削除した** — もともとどの `03-impl` の「既知の制限」からも参照されておらず、数え方の定義によりこの数に入っていなかったので、削除でこの数は変わらない(経緯は `docs/histories/2026-08-20-delete-issue-102-per-human-adjudication.md`)。**2026-08-08 のオーケストレーター削除で 10 件が対象の実装ごと消え、21 件から 11 件になった(2026-08-11 に `055` の数え漏れを加えて 12 件)。****2026-08-11 の `task-fix-logout-zero-target-path` で3件を修正して外し、同タスクが検出した3件を加えたので 11 件になった。続く `task-fix-logout-records-and-marker` でその3件を修正して外し `101` を加えたので 9 件になった。続く `task-issue-sweep` が5件を修正して外したので 5件 になっていた。** **`046`(list / make status / make clean の数え落とし)は 2026-08-20 の `fix-session-list-undercount` で修正し、issue を削除した**(どの「既知の制限」からも参照されていなかったため、この数は変わらない)。**2026-08-20 に起票した `110`(同梱物 `externals/arm64/colabtmux` が macOS 向けの Mach-O で arm64 配布イメージの中で起動しない。`AC-07` の不合格条件に当たる severity 「高」の bug)は、同日に人間の裁定で削除した** — **`closes_when` の3項目はどれも満たしていない**が、人間が「externals については今は何もしなくてよい。issue も閉じて」と裁定したことだけを根拠に閉じた(経緯は `docs/histories/2026-08-20-delete-issue-110-per-human-adjudication.md`)。担い手が `03-impl/environments/images.md` でありモジュールを持たない(`DSN-mod-05`)ため、どの `## 既知の制限` からも参照されておらず、**上の数え方の定義によりこの数に入っていなかったので、削除でこの数は変わらない**。**同梱物が darwin 向けのビルドである事実は残っている**(2026-08-20 実測。コードも同梱物も未修正である)。**この集計そのものを維持する責任は本節にある** |
@@ -81,10 +81,10 @@ CG3/CG4、`check-relations.py`、`check-contracts.py` で確認した。
 
 | ファイル | version | 更新 | 概要 |
 |---|---|---|---|
-| [container-images](environments/images.md) | 1.4.0 | 2026-09-01 | 配布イメージ(claude-cli / claude-vnc)のステージ構成・言語ランタイムの版管理・ビルド引数・キャッシュの効かせ方 |
-| [features](features.md) | - | 2026-08-11 | claude-dev 開発環境の機能一覧と入口。CLI サブコマンド・Makefile ターゲット・常駐スクリプト・Go バイナリの入口を列挙する |
-| [local-docker-resources](infra/local/docker-resources.md) | 1.2.0 | 2026-08-07 | ホスト上に作られる Docker リソース(ネットワーク・ボリューム・コンテナ)の一覧と命名規則 |
-| [local-ghcr](infra/local/ghcr.md) | 1.3.1 | 2026-08-22 | 配布イメージの公開先 GHCR の構成(リポジトリ・タグ・マルチアーキ・認証の置き場所) |
+| [container-images](environments/images.md) | 1.5.0 | 2026-11-23 | 配布イメージ(claude-cli / claude-vnc)のステージ構成・言語ランタイムの版管理・ビルド引数・キャッシュの効かせ方 |
+| [features](features.md) | - | 2026-11-23 | claude-dev 開発環境の機能一覧と入口。CLI サブコマンド・Makefile ターゲット・常駐スクリプト・Go バイナリの入口を列挙する |
+| [local-docker-resources](infra/local/docker-resources.md) | 1.3.0 | 2026-11-23 | ホスト上に作られる Docker リソース(ネットワーク・ボリューム・コンテナ)の一覧と命名規則 |
+| [local-ghcr](infra/local/ghcr.md) | 1.4.0 | 2026-11-23 | 配布イメージの公開先 GHCR の構成(リポジトリ・タグ・マルチアーキ・認証の置き場所) |
 
 件数: 4
 

@@ -1,6 +1,6 @@
 ---
 id: MODULE-cli-logout
-updated: 2026-08-12
+updated: 2026-11-23
 module: MOD-cli-logout
 kind: tool
 sync: sync
@@ -56,8 +56,9 @@ summary: Claude と Codex の認証情報を共有ボリュームごと削除す
      起動したコンテナを取りこぼし、かつラベルを持たない他人の資源を巻き込むため)。
 5. **カレントディレクトリのプロジェクト配下の認証コピー**を削除対象に加える
    (`FR-env-03` 受入基準20)。対象は `$(pwd)/.claude/.credentials.json` /
-   `$(pwd)/.claude/.claude.json` / `$(pwd)/.codex/auth.json` の**3ファイルだけ**である。
-   ディレクトリ(`.claude/` `.codex/`)は消さない(`settings.json` や `host-hooks.json` など
+   `$(pwd)/.claude/.claude.json` / `$(pwd)/.codex/auth.json` /
+   `$(pwd)/.gemini/antigravity-cli/antigravity-oauth-token`(agy。2026-11-23 に追加)の**4ファイルだけ**である。
+   ディレクトリ(`.claude/` `.codex/` `.gemini/`)は消さない(`settings.json` や `host-hooks.json` など
    認証以外のものが入っている)。**他のディレクトリのコピーには触れない**
    (どこにあるかを本システムは知らず、知る手段も持たない)。
    存在しないファイルは対象から外す(`FR-env-03` 受入基準21)。
@@ -255,7 +256,7 @@ summary: Claude と Codex の認証情報を共有ボリュームごと削除す
 | 種別 | 内容 |
 |---|---|
 | 戻り値 | **0**(**削除を行った場合は**すべての削除対象が消えたことを確認したときだけ)。**1**: ロックを取得できない / 端末が無く `--yes` も無い / **削除できなかった資源が1件以上ある**。**130**: **受けた区間で決まり、3つに分かれる**。(i) 手順3 の `acquire_lock` から `destructive_arm_interrupt`(`claude-dev:1131`)まで = **即座に 130**(`acquire_lock` は取得を試みる前に `trap '_release_all_locks; exit 130' INT TERM` を張る。`claude-dev:452`。取得に失敗して終わる経路もこの区間に入る)。(ii) そこから最後の `destructive_abort_if_interrupted`(`claude-dev:1206`)まで = **遅延中断**で、進行中の1件を終えてから次の検査点で 130。(iii) **それ以降は 130 にならない** — 旗が立つだけで再検査が無いため、手順11 の結果表示とロック解放を経て 0 または 1 で終わる。**0**: 削除対象が0件、または確認プロンプトで `y`/`Y` 以外を入力した(何も削除しない)。**削除対象0件の経路(手順6)が 0 を返すのは、共有ボリュームが空であることを印で確認できたときだけである**(確認できなかった場合はこの経路に入らず、手順7 の確認を経て手順8〜11 へ進む) |
-| 永続化 | 共有ボリューム `claude-dev-auth` の中身(claude の `.credentials.json` / `.claude.json` と codex の `codex/auth.json`)を削除する。**管理ラベル `claude-dev.managed=1` を持つ Claude コンテナ**を削除する(ラベルを持たないものは残す)。**遊休のときだけ** `claude-dev-docker-proxy` を削除する。**カレントディレクトリの認証3ファイル**(`.claude/.credentials.json` / `.claude/.claude.json` / `.codex/auth.json`)を削除する(**ディレクトリと `settings.json` / `host-hooks.json` は残す**)。ロックのシンボリックリンク `${HOME}/.claude-dev/locks/shared.lock` を作成・削除する。**`fwd-*` 中継コンテナと共有ネットワークには触れない** |
+| 永続化 | 共有ボリューム `claude-dev-auth` の中身(claude の `.credentials.json` / `.claude.json` と codex の `codex/auth.json` と agy の `gemini/antigravity-cli/antigravity-oauth-token`)を削除する。**管理ラベル `claude-dev.managed=1` を持つ Claude コンテナ**を削除する(ラベルを持たないものは残す)。**遊休のときだけ** `claude-dev-docker-proxy` を削除する。**カレントディレクトリの認証3ファイル**(`.claude/.credentials.json` / `.claude/.claude.json` / `.codex/auth.json`)を削除する(**ディレクトリと `settings.json` / `host-hooks.json` は残す**)。ロックのシンボリックリンク `${HOME}/.claude-dev/locks/shared.lock` を作成・削除する。**`fwd-*` 中継コンテナと共有ネットワークには触れない** |
 | 発火するイベント | なし |
 | ログ | 標準出力へ削除対象の一覧・確認プロンプト・削除した資源の列挙・残したラベル無しコンテナの名前・docker-proxy を残した理由・他ディレクトリのコピーに触れていない旨。削除失敗の列挙と中断の報告、ロックの取得失敗は stderr |
 
@@ -289,7 +290,7 @@ summary: Claude と Codex の認証情報を共有ボリュームごと削除す
 |---|---|
 | 他プロジェクトのセッションが稼働中 | **管理ラベルを持つものは確認のうえ削除する**(削除対象として名前を列挙してから同意を求める)。**ラベルを持たないものは削除せず名前を表示して残す** |
 | `logout` と `start` | **同じキーのロックで直列化される**。`start` は認証コピーからコンテナ作成の確定まで保持するので、**認証が空のまま起動する経路は閉じた**(`docs/histories/2026-08-04-fix-destructive-scope.md`) |
-| `logout` と `login` / `login-codex` | **同じキーのロックで直列化される**。ログインは対話の全区間で保持するため、その間 `logout` は取得できずに終了コード 1 で終わる |
+| `logout` と `login` / `login-codex` / `login-gemini` | **同じキーのロックで直列化される**。ログインは対話の全区間で保持するため、その間 `logout` は取得できずに終了コード 1 で終わる |
 | **ラベルを持たないコンテナを残したまま `logout` した** | **保護されない。** コンテナ内の同期ループが 30 秒ごとに認証を共有ボリュームへ書き戻すため、**最大 30 秒で認証が復活する**。ロックはホスト CLI のプロセス間だけで有効でコンテナ内のループには届かない。**この可能性を警告として表示する**(確実に消すには先に `claude-dev stop <name>` で止める) |
 | 利用者が直接 `docker rm -f` する | **保護されない** |
 

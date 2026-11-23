@@ -4,22 +4,22 @@ module: MOD-cli-common
 kind: function-call
 sync: sync
 impl: claude-dev::acquire_lock, claude-dev::release_lock, claude-dev-mac::acquire_lock, claude-dev-mac::release_lock
-callers: MODULE-cli-login, MODULE-cli-login-codex, MODULE-cli-logout, MODULE-cli-reset, MODULE-cli-start, MODULE-cli-stop
+callers: MODULE-cli-login, MODULE-cli-login-codex, MODULE-cli-login-gemini, MODULE-cli-logout, MODULE-cli-reset, MODULE-cli-start, MODULE-cli-stop
 callees: なし
 contracts: CTR-cli-container
 design: DSN-env-02, DSN-mod-02, DSN-mod-03
 requirements: FR-env-01, FR-env-03
 tests: なし(未実装。シェル実装のため自動テストランナーが無く実機確認で代替する)
-updated: 2026-08-04
-summary: 共有資源を触る6コマンドを直列化するロックを取得・解放し、残骸を引き継ぐ
+updated: 2026-11-23
+summary: 共有資源を触る7コマンドを直列化するロックを取得・解放し、残骸を引き継ぐ
 ---
 
 # MODULE-cli-common-lock 排他ロックの取得と解放
 
 ## 目的
 
-共有ボリュームまたは docker-proxy を触る6コマンド(`start` / `stop` / `logout` / `reset` /
-`login` / `login-codex`)の相互の競合を防ぐ(FR-env-01 受入基準 16・17・18)。
+共有ボリュームまたは docker-proxy を触る7コマンド(`start` / `stop` / `logout` / `reset` /
+`login` / `login-codex` / `login-gemini`)の相互の競合を防ぐ(FR-env-01 受入基準 16・17・18)。
 キーの体系(プロジェクト単位と共有資源単位の2段)は契約 `CTR-cli-container` の「排他(ロックキー)」が正。
 
 ## 処理の流れ
@@ -90,12 +90,12 @@ summary: 共有資源を触る6コマンドを直列化するロックを取得�
 
 ## 呼び出され方
 
-- 契機: `start` / `stop` / `logout` / `reset` / `login` / `login-codex` の各分岐が、
+- 契機: `start` / `stop` / `logout` / `reset` / `login` / `login-codex` / `login-gemini` の各分岐が、
   共有資源への削除も作成も行う前に呼ぶ。
 - 前提条件: `${HOME}` が書き込み可能であること。
 - 引数の型・制約: `<key>` はコンテナ名(`MODULE-cli-common-container-name` の戻り値、または
   `stop` の引数 `NAME`)または固定文字列 `shared`。**`[A-Za-z0-9._-]` 以外を含むキーは受理しない**。
-  `<操作名>` は `start` / `stop` / `logout` / `reset` / `login` / `login-codex` のいずれか。
+  `<操作名>` は `start` / `stop` / `logout` / `reset` / `login` / `login-codex` / `login-gemini` のいずれか。
   受理する値の正は契約 `CTR-cli-container` の「排他(ロックキー)」と「ロックキーとして使える文字」。
 - 認可: CLI を実行できるホストユーザ。ロックはそのユーザのホームディレクトリ配下にあるため、
   **別ユーザが同じ Docker デーモンを操作する場合は保護されない**(契約が範囲外と明記している)。
@@ -168,5 +168,5 @@ summary: 共有資源を触る6コマンドを直列化するロックを取得�
   「ロックを元に戻せませんでした」を出して知らせる**(黙って進まない)。成立には
   「残骸がある」「2プロセスが同時に引き取る」「さらに第三のプロセスがその2システムコールの
   間に取得する」の3つが同時に要る。
-- **`login` / `login-codex` が保持する間は `shared` を取れない**(利用者がブラウザで認証を
+- **`login` / `login-codex` / `login-gemini` が保持する間は `shared` を取れない**(利用者がブラウザで認証を
   終えるまで)。これは意図した振る舞いであり、他の操作は理由を表示して非0で終わる(固まらない)。

@@ -1,7 +1,7 @@
 ---
 id: architecture
-version: 1.10.0
-updated: 2026-09-11
+version: 1.11.0
+updated: 2026-11-23
 source:
   - docs/01-requirements/functional.md
   - docs/01-requirements/non-functional.md
@@ -97,6 +97,7 @@ graph TD
 |---|---|---|---|
 | Anthropic API | プロンプト(Claude Code 経由) | 応答 | エージェント側の失敗として扱う |
 | OpenAI API | プロンプト(codex 経由) | 応答 | codex を使わない利用者の起動を妨げない |
+| Google(agy) | プロンプト(agy 経由) | 応答 | agy を使わない利用者の起動を妨げない |
 | GHCR | 認証(CI 側) | 配布イメージ | 取得失敗は非0終了。ローカルビルドで代替できる |
 | npm registry / Claude Code リリース配布 | なし | 最新バージョン文字列(CI の prepare) | CI の失敗として扱う。手動バージョン指定で回避する |
 | GitHub Meta API | なし | 許可する IP レンジ | 名前解決へフォールバックし、それも失敗した場合は当該通信が不許可になる |
@@ -130,12 +131,12 @@ graph TD
      シェル設定・コマンド履歴。全コンテナで共有する。
   2. **プロジェクトディレクトリ**(`/workspace`): ソースコード、`.claude-dev.yaml`、
      **プロジェクト環境ファイル**(用語集。`.claude-dev.yaml` が場所を指す)、
-     **認証・設定の実体**(`/workspace/.claude/` `/workspace/.codex/`。コンテナのホームからは
+     **認証・設定の実体**(`/workspace/.claude/` `/workspace/.codex/` `/workspace/.gemini/`。コンテナのホームからは
      symlink で参照する。下の表と `DSN-auth-01` を参照)。
 
   | エンティティ | 置き場所 | 所有 | 共有範囲 |
   |---|---|---|---|
-  | 認証ファイル(Claude / Codex) | 共有ボリューム → **プロジェクトディレクトリ配下(`/workspace/.claude/` `/workspace/.codex/`)へコピー**。ホームからは symlink で参照 | entrypoint(コピーは CLI) | 全コンテナ |
+  | 認証ファイル(Claude / Codex / agy) | 共有ボリューム → **プロジェクトディレクトリ配下(`/workspace/.claude/` `/workspace/.codex/` `/workspace/.gemini/`)へコピー**。ホームからは symlink で参照 | entrypoint(コピーは CLI) | 全コンテナ |
   | セッション・設定(`settings.json` / `config.toml` 等) | プロジェクトディレクトリ | entrypoint | コンテナ固有 |
   | `.claude-dev.yaml`(SSH 鍵の指定と**プロジェクト環境ファイルの場所**) | プロジェクトディレクトリ | ホスト CLI(**利用者も手で編集する。CLI は自分が担当する節だけを書き換え、他のキーとその配下の行を保存する** — `CTR-cli-container`) | プロジェクト固有 |
   | **プロジェクト環境ファイル**(コンテナへ渡す環境変数の実体) | プロジェクトディレクトリ | **利用者**(CLI は読むだけで内容を書き換えない) | プロジェクト固有。**版管理の追跡から外す**(`D0-sec-11`) |
@@ -160,7 +161,7 @@ sequenceDiagram
   U->>CLI: claude-dev start
   CLI->>EP: コンテナ起動(マウント・環境変数)
   EP->>EP: UID/GID 追従・認証コピー・firewall・MCP/VNC・tmux
-  U->>CLI: tmux 内で claude / codex を実行
+  U->>CLI: tmux 内で claude / codex / agy を実行
   CLI->>DP: コンテナ内からの docker 利用(検査・許可/拒否)
 ```
 
@@ -205,7 +206,8 @@ sequenceDiagram
 ### DSN-auth-01 認証はコピーと定期書き戻しで共有する(ホームからの参照は symlink)
 
 - 判断: 認証ファイルは起動時に**プロジェクトディレクトリ配下へ**コピーし(ホームからは symlink で参照する)、30 秒ごとの同期ループで共有ボリュームへ
-  書き戻す。Claude Code と Codex CLI で同一方式・同一の同期ループを使う。
+  書き戻す。Claude Code と Codex CLI と agy で同一方式・同一の同期ループを使う(agy は 2026-11-23 に加えた。
+  共有するのは Google の認証トークン1本で、`~/.gemini` はディレクトリ単位の symlink で `/workspace/.gemini` を指す)。
 - 理由: Claude Code は認証ファイルをアトミックに書き込む(一時ファイル → rename)ため symlink が
   壊れる。Codex の `auth.json` はその場書き換えで symlink でも壊れないが、**方式を2つ持たない**
   ことを優先する(同期ループ・`logout`・`reset` の分岐を増やさない)。トークンリフレッシュで内容が
@@ -213,7 +215,7 @@ sequenceDiagram
 - 却下した案: symlink 共有 — 壊れる。ホストの認証ファイルを直接マウント — ホストの資格情報を
   コンテナへ渡す経路を作ることになる。同期せず起動時コピーのみ — リフレッシュされたトークンが
   失われ、次回起動で再ログインになる。
-- 影響する要件: FR-env-03(受け入れ基準2・3・7・8)
+- 影響する要件: FR-env-03(受け入れ基準2・3・7・8・26・27)
 
 ### DSN-dist-01 エージェント CLI の導入は「内容由来キー」で配布ステージの終端レイヤーに置く
 
@@ -222,8 +224,9 @@ sequenceDiagram
   **中身が入れ替わりうる同梱物は、すべて終端ステージの末尾側に置く**(`base` / `vnc-base` には
   決して置かない。同梱物どうしの順序は下の項が定める — 差し替えの頻度が読めないものほど後ろ)。
   対象は3種類ある。
-  1. **エージェント CLI**(Claude Code / Codex CLI): キャッシュキーには CI が解決した具体
-     バージョンを使う。
+  1. **エージェント CLI**(Claude Code / Codex CLI / agy): キャッシュキーには CI が解決した具体
+     バージョンを使う。**agy は配布元の導入手段が版を選べないため、渡した版はキャッシュキーと
+     「導入された版との一致の検査」にだけ使う**(一致しなければビルドを失敗させる — `FR-env-09-14`)。
   1'. **エージェントが使う MCP サーバー**(chrome-devtools MCP。`D0-dist-06` / `FR-env-12-13`):
      **エージェント CLI とまったく同じ扱いとする** — CI が解決した具体バージョンをキャッシュキー
      とし、両方の終端ステージへ等しく置く。導入層はエージェント CLI の導入層と同じ位置

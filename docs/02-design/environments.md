@@ -1,7 +1,7 @@
 ---
 id: environments
-version: 1.7.1
-updated: 2026-09-11
+version: 1.8.0
+updated: 2026-11-23
 source:
   - docs/01-requirements/system.md
   - docs/02-design/architecture.md
@@ -35,7 +35,7 @@ verified:
 1. リポジトリを取得する。
 2. `make setup` を実行する(`.env` の作成 → ネットワーク作成 → 共有ボリューム作成 →
    イメージのビルド → CLI の導入 の順に進む)。
-3. `make login` で Claude の認証を済ませる。Codex を使う場合は `claude-dev login-codex` も実行する。
+3. `make login` で Claude の認証を済ませる。Codex を使う場合は `claude-dev login-codex` も、agy を使う場合は `claude-dev login-gemini` も実行する。
 4. 任意のプロジェクトディレクトリで `claude-dev start` を実行する。
 
 | 用途 | コマンド |
@@ -44,6 +44,7 @@ verified:
 | CLI の導入 / 除去 | `make install` / `make uninstall` |
 | 認証(Claude) | `make login` |
 | 認証(Codex) | `claude-dev login-codex` |
+| 認証(agy) | `claude-dev login-gemini` |
 | 配布イメージの取得 | `claude-dev pull` |
 | 状態の確認 | `make status` |
 

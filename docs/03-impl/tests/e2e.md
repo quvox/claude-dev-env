@@ -1,12 +1,12 @@
 ---
 id: e2e
-version: 1.18.0
-updated: 2026-08-22
+version: 1.19.0
+updated: 2026-11-23
 scope: E2E
 source:
   - docs/02-design/system.md
   - docs/01-requirements/usecases.md
-summary: E2Eシナリオ E2E-01〜E2E-03 と E2E-06 ⇄ テスト対応
+summary: E2Eシナリオ ⇄ テスト対応(E2E-04 と E2E-05 は廃止した欠番)
 keywords: [テスト, E2E]
 verified:
   at: 2026-08-22
@@ -26,6 +26,7 @@ verified:
 | E2E-02 | UC-02 | `claude-dev forward` → 8100 番台の割当と SSH トンネル → クライアントのブラウザで表示 → `claude-dev ports` で確認 | 手順のみ(同 E2E-02) | 未検証(テスト未実装) |
 | E2E-03 | UC-03 | コンテナ内で危険な `docker run` → 拒否 / `/workspace` bind の許可 / 拒否条件に当たらない要求の透過 / **作られたコンテナとネットワークに所有者ラベルが付くこと** | 手順のみ(同 E2E-03)。判定ロジックは `cd docker-proxy && go test ./...` が単体で検証済み。**条項ごとに単体でどこまで検証済みかは `03-impl/tests/docker-proxy.md` が正である** | 未検証(テスト未実装) |
 | E2E-06 | UC-06 | `claude-dev login-codex` → デバイス認証 → 別プロジェクトで `start` → 再ログイン不要で `codex` が起動し、シェルコマンドが成功して `/workspace` を読み書きできる。landlock の疎通確認が通り、読み取り専用の明示指定で読み取りが成功する | `scripts/e2e6-codex.sh`(実機で実行する検証スクリプト。自動テストランナーからは呼ばれない) | 未検証(テスト未実装) |
+| E2E-07 | UC-07 | `claude-dev login-gemini` → URL をブラウザで開いて認証しコードを貼り付ける → 別プロジェクトで `start` → 再ログイン不要で `agy` が起動 → トークン更新の伝播 → 両イメージで `agy` が名前だけで起動 → `logout` で agy の認証も消える | 手順のみ(同 E2E-07) | 未検証(テスト未実装) |
 
 ## 通過する機能(トレーサビリティ)
 
@@ -35,6 +36,7 @@ verified:
 | E2E-02 | MODULE-cli-forward → MODULE-cli-common-container-name / MODULE-cli-common-is-running。確認は MODULE-cli-ports、解除は MODULE-cli-unforward |
 | E2E-03 | MODULE-docker-proxy-serve(コンテナ内の docker クライアントから見た経路。起動は MODULE-cli-start の `ensure_docker_proxy_container`)。**手順5 の所有者ラベルの付与も同じ機能が行う** |
 | E2E-06 | MODULE-cli-login-codex → **MODULE-cli-common-lock** → MODULE-cli-start → MODULE-entrypoint-claude(codex 認証のコピーと既定設定の補完) |
+| E2E-07 | MODULE-cli-login-gemini → **MODULE-cli-common-lock** → MODULE-cli-start → MODULE-entrypoint-claude(agy の認証トークンのコピーと書き戻し)→ MODULE-cli-logout |
 
 ## テスト環境
 
@@ -751,9 +753,51 @@ verified:
    - **不合格の条件**: 既定3鍵のどれかが書き換わる、`config.toml` が読めなくなる、
      または追記に失敗して起動が止まる。
 
+### E2E-07
+
+前提: サーバへ SSH で入っており、ブラウザはクライアント PC にしかない。Google アカウントを持っている。
+**トークンの中身を画面に出さない**(以下の確認はファイルの有無と権限だけを見る)。
+
+1. **ログイン**(`FR-env-03-25`): ホストで `claude-dev login-gemini` を実行する。agy で Google の認証を選び、
+   表示された URL をクライアント PC のブラウザで開いて認証し、表示されたコードを端末へ貼り付ける。
+   ログインできたら agy を終了する。「Gemini ログイン処理完了」が出て終了コード 0 であること。
+   共有ボリュームの確認: `docker run --rm -v claude-dev-auth:/a alpine stat -c '%a %n' /a/gemini/antigravity-cli/antigravity-oauth-token`
+   が `600` を出すこと(`FR-env-03-30`)。
+2. **認証を完了せず終える**(`FR-env-03-12`): もう一度 `claude-dev login-gemini` を実行し、認証せずに agy を終了する。
+   「共有ボリュームは変更していません」が出て、手順1 のトークンが残っている(手順3 で再ログインなしに使える)こと。
+3. **別プロジェクトで使う**(`FR-env-03-26`): 別のディレクトリで `claude-dev start` し、窓の中で `agy` を実行して、
+   ログインを求められずに作業を依頼できること。`ls -l /workspace/.gemini/antigravity-cli/antigravity-oauth-token` が
+   `-rw-------` であること。`readlink ~/.gemini` が `/workspace/.gemini` であること。`.gitignore` に `.gemini` が足されていること。
+4. **名前だけで起動する**(`FR-env-12-15`): 両イメージで
+   `docker run --rm --entrypoint /bin/sh claude-dev-claude -c 'command -v agy && agy --version'` と
+   同じく `claude-dev-claude-vnc` が `/usr/local/bin/agy` と版を出すこと。
+5. **トークン更新の伝播**(`FR-env-03-27`): 手順3 のコンテナで agy を使い続け、トークンが更新されたあと
+   (`/workspace/.gemini/antigravity-cli/antigravity-oauth-token` の更新時刻が変わったあと)30 秒以上待ち、
+   `cmp` で共有側と同じになっていること。さらに別のディレクトリで `start` して再ログインが不要なこと。
+6. **設定・履歴はコンテナ固有**(`FR-env-03-28`): 手順3 のプロジェクトの `/workspace/.gemini/` に在る認証トークン以外の
+   ファイルが、手順5 の別プロジェクトの `/workspace/.gemini/` に現れないこと。
+7. **ホストの agy に上書きされない**(`FR-env-12-17`): ホストの `~/.local/bin/agy` を持つ状態で `start` し、
+   窓の中で `agy --version` がイメージに同梱した版(`docker run … agy --version` と同じ)であること。
+8. **未ログインで起動できる**(`FR-env-03-29`): `claude-dev logout --yes` のあと別のディレクトリで `start` し、
+   起動が完了して `/workspace/.gemini/antigravity-cli/antigravity-oauth-token` が無いこと。
+9. **ログアウト**(AC-09。`FR-env-03-20`): 手順3 のディレクトリで `claude-dev logout` を実行し、確認の列挙に
+   `.gemini/antigravity-cli/antigravity-oauth-token` が含まれ、`y` のあとそのファイルと共有側の `gemini/` の中身が消えること。
+10. **非 TTY**(`FR-env-03-13`): `claude-dev login-gemini </dev/null` が非0で終わり、ロックが残らない
+    (続けて `claude-dev login-gemini` を実行してロックの保持を理由に失敗しない)こと。
+
+11. **リンクの先へ書かない**(`FR-env-03-31`): 新しいディレクトリで `mkdir docs && ln -s docs .gemini` としてから `claude-dev start` し、
+    「シンボリックリンクなので、agy の認証をコピーしません」が出て起動が完了し、`docs/` にトークンが無いこと。
+12. **ログインし直した直後に古いトークンへ戻らない**(`FR-env-03-27`): 手順3 のコンテナを動かしたまま `claude-dev login-gemini` で
+    ログインし直し、60 秒待ってから共有側のトークンがログイン直後のものと同じ(`cmp`)であること。
+
+**不合格の条件**: 別プロジェクトでログインを求められる / 更新したトークンが伝わらない / トークンの権限が `600` でない /
+一方のイメージにしか `agy` が無い / `logout` のあとも agy の認証が残る。
+
 ## テスト設計の判断
 
 <!-- 実機確認の手順そのものをどう組んだかの判断。何を確認するか(受入基準)は 01 が正である。 -->
+
+- [DS-01] **E2E-07 は自動スクリプトを作らず、実機の手順だけを持つ** — 理由: Google への実ログインが要り、無人では回せない(`scripts/e2e6-codex.sh` が担う codex の作業確認と違い、agy は依頼の成否を機械で判定する手段も持たない)/ 見直す条件: 無人で通せる認証の手段ができたとき
 
 - [DS-01] セッション由来の資源の確認を **`stop` 側(手順8-14)と `reset` 側(手順8-15)に分ける** — 理由: `reset` は所有者を問わず消すので、`stop` が「別セッションの資源を消さないこと」を確かめるために立てた2つ目のセッションを、同じ手順の中では生かしておけない / 見直す条件: `reset` の削除範囲が所有者付きへ変わり、同じ前提で連続して流せるようになったとき
 - [DS-01] 手順8-14 を**7つの部分手順に割り**、対応表の識別子が**実際に確認する単位**を名指す形にする。1回のコマンド実行で複数の条項を観測できる部分手順は分割せず、**記号付きの期待結果((a)(b)…)を識別子に添えて条項ごとに分ける**(部分手順3 は 1 回の `claude-dev stop aaa` で `FR-env-01-22` を (a)(c) で、`FR-env-01-26` を (b) で観測するため、これを2つの部分手順に割ると同じコマンドを2度流すだけになる) — 理由: `03-impl/tests/cli-stop.md` の識別子欄が確認単位を名指すので、粒度が粗いと「その手順では実際には確認しない条項」を表が受け入れてしまう / 見直す条件: 1つの**記号付き期待結果**が2条項以上を兼ねるようになったとき(そのときは識別子欄が確認単位を一意に指せなくなる)
@@ -782,10 +826,11 @@ verified:
 | 2 | E2E-02 | 同上。加えてクライアント PC のブラウザ操作を含む | 同上 |
 | 3 | E2E-03 | 判定ロジックは単体テストで検証済み。経路全体(コンテナ → proxy → Engine)の確認に実 Docker を要する | 同上 |
 | 4 | E2E-06 | 検証スクリプト `scripts/e2e6-codex.sh` はあるが、自動テストランナーからは呼ばれない(実機で人が実行する) | 同上 |
+| 5 | E2E-07 | Google への実ログインが要り、無人では回せない(Codex のログインと同じ事情)。実機で人が下の手順を実行する | 無人で通せる認証の手段ができたとき |
 
 ## 対象外としたシナリオ
 
 | E2E ID | 対応 UC | 対象外とする理由 |
 |---|---|---|
-| なし | — | 残る全 UC(UC-01〜UC-03 / UC-06)が E2E-01〜E2E-03 / E2E-06 に対応しており、対象外としたシナリオは無い |
+| なし | — | 残る全 UC(UC-01〜UC-03 / UC-06〜UC-07)が E2E-01〜E2E-03 / E2E-06〜E2E-07 に対応しており、対象外としたシナリオは無い |
 

@@ -6,6 +6,7 @@
 
 | slug | 状態 | critical | 更新 | 概要 |
 |---|---|---|---|---|
+| agy-gemini-image | building | true | 2026-11-23T01:37:21+09:00 | Antigravity CLI(agy)を配布イメージへ同梱して更新経路に載せ、Google(gemini)の認証を claude / codex と同じ形で共有する |
 | bundle-chrome-devtools-mcp | verified | false | 2026-09-01T05:56:12+00:00 | chrome-devtools MCP を配布イメージへピン留めで同梱し、claude と codex の双方から実行時ダウンロードなしで使えるようにする |
 | cleanup-retired-changeset-kit-records | verified | false | 2026-08-20T05:43:36+00:00 | 規約刷新で廃止された変更指示系スクリプト・規範に紐づくキットパッチ・残務・issue を後始末する |
 | delete-issue-102-per-human-adjudication | verified | false | 2026-08-20T05:43:36+00:00 | 人間の裁定により issue 102 を削除し、102 を参照している索引・03 層の集計・残務行を整合させる |
@@ -22,6 +23,6 @@
 | releases-decision | awaiting-verify | false | 2026-09-06T09:36:00+09:00 | リリース台帳 .claude/state/releases.json を新設するかを人間に問い、その答えのとおりに閉じる |
 | repair-entrypoint-config-writes | verified | false | 2026-09-01T05:56:12+00:00 | 起動処理が /workspace 配下の設定を書くときの一時ファイルと chown を安全な形へ揃え、登録の有無の判定を値の真偽からキーの有無へ直す |
 
-件数: 15
+件数: 16
 
 <!-- END GENERATED: build-index.py -->
