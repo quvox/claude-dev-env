@@ -7,7 +7,7 @@ issue: なし
 started: 2026-11-23T09:18:04+09:00
 updated: 2026-11-23T09:34:20+09:00
 commit: 6d81429fecfb3fa0cf4589c0b3dddc771e574868
-summary: 開発イメージ(Dockerfile.claude)の Go・Python・Node・nvm・noVNC を公式配布情報で引いた最新の安定版へ上げ、CI の部品を確認する
+summary: 開発イメージ(Dockerfile.claude)の Go・Python・Node・nvm・noVNC・terraform を公式配布情報で引いた最新の安定版へ上げ、CI の部品が最新メジャーであることを確かめた
 ---
 
 # dev-image-version-update — 開発イメージと CI の部品の版更新
@@ -29,7 +29,7 @@ summary: 開発イメージ(Dockerfile.claude)の Go・Python・Node・nvm・noV
 ## 主張
 
 - 触ったモジュールのテスト: **このタスクが触ったイメージのビルド定義には自動テストが無い**(`docs/03-impl/tests/images.md` は全件が「未検証(テスト未実装)」で実機確認で代替すると定めている)。代わりに、ビルドしたイメージを起動して確かめた(claude-cli / claude-vnc の両方で同じ結果):
-  `docker run --rm -u devuser --entrypoint /bin/bash t1-verify:<tag> -c 'export PS1=x; source /etc/bash.bashrc; terraform version; pnpm --version; node --version; python --version; go version; pyenv versions; nvm ls; fnm list'`
+  `docker run --rm -u devuser --entrypoint /bin/bash t1-verify:claude-cli -c 'export PS1=x; source /etc/bash.bashrc; terraform version; pnpm --version; node --version; python --version; go version; pyenv versions; nvm ls; fnm list'`
   → `Terraform v1.17.2` / `12.21.0`(取得の表示なし = 焼き込み済み)/ `v26.13.1` / `Python 3.13.18` / `go version go1.27.4 linux/amd64` / pyenv `3.11.18`・`* 3.13.18`・`3.14.10`・`3.15.2` / nvm `v22.23.5`・`v24.22.3`・`v26.13.1`・`default -> 26` / fnm `v22.23.5`・`v24.22.3`・`v26.13.1 default`。
   ランチャーの退行なし(シェル初期化の無い root の `bash -c`): `codex --version; chrome-devtools-mcp --version; agy --version` → `codex-cli 0.171.0` / `1.13.0` / `1.5.14`(`FR-env-12-2` の経路は無傷)。
   noVNC: `websockify --web /usr/share/novnc 6080 localhost:5999` を立てて `curl` → `vnc.html 200` / `index 200` / `rfb.js 200`、`package.json` は `"version": "1.7.0"`。
@@ -90,13 +90,24 @@ summary: 開発イメージ(Dockerfile.claude)の Go・Python・Node・nvm・noV
 - [DS-04] nvm v0.41.0・noVNC v1.7.0 へ上げる — 理由: §2.3 / 見直す条件: 上げた版で導入か画面表示が壊れたとき
 - [DS-04] 基底 ubuntu:24.04 を据え置く — 理由: 24.04 は LTS の標準サポート中。26.04 は coreutils(uutils)と sudo(sudo-rs)が Rust 実装へ置き換わっており、版の更新ではなくコンテナ内のあらゆるコマンドの振る舞いが変わる種類の変更である(エントリポイントの sudo・iptables 周りを含む)。ビルドが通っても E2E なしでは安全を言えない / 見直す条件: 人間が基底 OS の更新を明示したとき、または 24.04 の標準サポート終了(2029-04)が近づいたとき
 - [DS-04] CI の actions は全件が最新メジャー(@vN は最新の小版へ追従する)なので変えない。arm64 実行機 `ubuntu-24.04-arm` は amd64 側 `ubuntu-latest`(= 24.04)と揃えて据え置く — 理由: 実行機の OS はイメージの中身に影響せず、amd64 / arm64 の実行機を揃えるほうが差の原因を減らせる / 見直す条件: GitHub が ubuntu-latest を 26.04 へ切り替えたとき
-- 2026-11-23 09:25 Dockerfile.claude の版を更新し、claude-vnc / claude-cli の検証用ビルド(タグ t1-verify:*)を開始
-- 2026-11-23 09:31 1回目のビルドが pnpm の導入部で失敗(`/bin/sh: 1: corepack: not found` — Node 25 以降は corepack を同梱しない)。CPython 4本と nvm の3系列(v22.23.5 / v24.22.3 / v26.13.1)はここまでで導入・照合済み
+- 2026-11-23 09:18 Dockerfile.claude の版を更新し、claude-vnc / claude-cli の検証用ビルド(タグ t1-verify:*)を開始
+- 2026-11-23 09:24 1回目のビルドが pnpm の導入部で失敗(`/bin/sh: 1: corepack: not found` — Node 25 以降は corepack を同梱しない)。CPython 4本と nvm の3系列(v22.23.5 / v24.22.3 / v26.13.1)はここまでで導入・照合済み
 - [DS-06] pnpm の導入の前に `npm install -g corepack@latest` を足す — 理由: fnm の既定を 26 系にしたことで消えた既存の道具を、既存の導入手順(corepack 経由)を保ったまま補う。新しい依存ではなく、Node 24 までは同梱されていたものである / 見直す条件: pnpm を corepack 以外の方法で入れると決めたとき
-- 2026-11-23 09:33 修正して再ビルドを開始
-- 2026-11-23 09:40 2回目のビルドは成功。起動確認で2点を見つけた: ① terraform が v1.9.8 で入っている(最新は 1.17.2 — https://releases.hashicorp.com/terraform/index.json と https://checkpoint-api.hashicorp.com/v1/check/terraform で確認)。`index.json` の versions が版の順に並んでいないのに `last` を取っていたのが原因で、**基準コミット c007dc2 の既存イメージ(claude-dev-claude:latest)も v1.9.8 だった = 元からの不具合**。② pnpm 12 は初回起動時に本体を取りにいく(`Downloading the pnpm 12.21.0 binary`)
+- 2026-11-23 09:25 修正して再ビルドを開始
+- 2026-11-23 09:28 2回目のビルドは成功。起動確認で2点を見つけた: ① terraform が v1.9.8 で入っている(最新は 1.17.2 — https://releases.hashicorp.com/terraform/index.json と https://checkpoint-api.hashicorp.com/v1/check/terraform で確認)。`index.json` の versions が版の順に並んでいないのに `last` を取っていたのが原因で、**基準コミット c007dc2 の既存イメージ(claude-dev-claude:latest)も v1.9.8 だった = 元からの不具合**。② pnpm 12 は初回起動時に本体を取りにいく(`Downloading the pnpm 12.21.0 binary`)
 - [DS-04] terraform の版の解決を、正式版(X.Y.Z)だけを数値で並べ替えて最大を取る形に直す — 理由: 更新指示の対象であり、今の解決方法では最新が入らない / 見直す条件: HashiCorp が index.json の形を変えたとき
 - [DS-04] pnpm の導入の `RUN` の最後で `pnpm --version` を1回打ち、本体をイメージに焼き込む — 理由: 利用者の初回起動を配布元への到達に依存させない / 見直す条件: pnpm が初回取得をやめたとき
-- 2026-11-23 09:42 修正して3回目のビルドを開始(実行前の作業ツリーの指紋をスクラッチに控えた)
-- 2026-11-23 09:50 3回目のビルドが成功(claude-vnc / claude-cli)。起動確認(主張の節)はすべて期待どおり。実行前の作業ツリーの指紋と実行後の指紋は一致(docs/ の外は動いていない)
-- 2026-11-23 09:52 作業コミット 08d074d。履歴・残務の解消(images.md の `source:` の行を「直した」)・索引の再生成
+- 2026-11-23 09:29 修正して3回目のビルドを開始(実行前の作業ツリーの指紋をスクラッチに控えた)
+- 2026-11-23 09:33 3回目のビルドが成功(claude-vnc / claude-cli)。起動確認(主張の節)はすべて期待どおり。実行前の作業ツリーの指紋と実行後の指紋は一致(docs/ の外は動いていない)
+- 2026-11-23 09:34 作業コミット 08d074d。履歴・残務の解消(images.md の `source:` の行を「直した」)・索引の再生成
+- 2026-11-23 09:35 構築記録ゲートの指摘(節の欠落・差し込み記号)を直した。`check-baseline-verdicts.py` はリポジトリ直下に CLAUDE.md が無いため根の検出に失敗し(`前提エラー: docs/build-records が無い`)、走らなかった
+
+## 直さなかった指摘(独立レビュー・探索的QA)
+
+- なし
+
+## 申し送り
+
+- T2(docker-proxy の Go と基底): **Go は 1.27.4**(https://go.dev/dl/?mode=json、2026-11-23 確認)に揃える。
+- 人間へ: 基底 OS(ubuntu:24.04 → 26.04)と `pyenv global` の系列(3.13 → 3.14/3.15)は据え置いた。上げるなら指示があれば別タスクで行う。
+- `check-baseline-verdicts.py` がこのリポジトリで走らない(根の判定が CLAUDE.md の在り処に依存)。キットの側の事情で、このタスクでは直していない。
