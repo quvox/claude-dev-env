@@ -34,8 +34,8 @@ summary: docker-proxy のビルド用 Go を 1.27.4(go.mod の go 行は 1.27)�
 
 | 理由ID | 対象 | 内容 | コミット |
 |---|---|---|---|
-| R-01 | .devcontainer/Dockerfile.docker-proxy | ビルド段と実行段の基底の版 | (作業コミット) |
-| R-01 | docker-proxy/go.mod | `go` 行 | (作業コミット) |
+| R-01 | .devcontainer/Dockerfile.docker-proxy | ビルド段と実行段の基底の版 | cedbe54 |
+| R-01 | docker-proxy/go.mod | `go` 行 | cedbe54 |
 
 ## 実施した移行
 
