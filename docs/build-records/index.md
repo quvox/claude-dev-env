@@ -6,11 +6,13 @@
 
 | slug | 状態 | critical | 更新 | 概要 |
 |---|---|---|---|---|
-| agy-gemini-image | building | true | 2026-11-23T01:37:21+09:00 | Antigravity CLI(agy)を配布イメージへ同梱して更新経路に載せ、Google(gemini)の認証を claude / codex と同じ形で共有する |
+| agy-gemini-image | awaiting-verify | true | 2026-11-23T08:20:00+09:00 | Antigravity CLI(agy)を配布イメージへ同梱して更新経路に載せ、Google(gemini)の認証を claude / codex と同じ形で共有する |
 | bundle-chrome-devtools-mcp | verified | false | 2026-09-01T05:56:12+00:00 | chrome-devtools MCP を配布イメージへピン留めで同梱し、claude と codex の双方から実行時ダウンロードなしで使えるようにする |
 | cleanup-retired-changeset-kit-records | verified | false | 2026-08-20T05:43:36+00:00 | 規約刷新で廃止された変更指示系スクリプト・規範に紐づくキットパッチ・残務・issue を後始末する |
 | delete-issue-102-per-human-adjudication | verified | false | 2026-08-20T05:43:36+00:00 | 人間の裁定により issue 102 を削除し、102 を参照している索引・03 層の集計・残務行を整合させる |
 | delete-issue-110-per-human-adjudication | verified | false | 2026-08-20T06:26:50+00:00 | 人間の裁定により issue 110 を削除し(closes_when は未充足)、110 を参照している 03 層の集計文と生成索引を整合させる |
+| dev-image-version-update | awaiting-verify | false | 2026-11-23T09:34:20+09:00 | 開発イメージ(Dockerfile.claude)の Go・Python・Node・nvm・noVNC・terraform を公式配布情報で引いた最新の安定版へ上げ、CI の部品が最新メジャーであることを確かめた |
+| docker-proxy-version-update | awaiting-verify | false | 2026-11-23T09:39:26+09:00 | docker-proxy のビルド用 Go(go.mod の go 行と golang 基底)と実行用 alpine 基底を、公式配布情報で引いた最新の安定版へ上げる |
 | docs-ux-migrate | awaiting-verify | false | 2026-09-06T09:41:00+09:00 | 移行 2026-08-28-docs-ux を当て、02-design/system.md の UI設計節の中身を docs/ux/ へ引っ越す |
 | document-codex-sandbox-preconditions | verified | true | 2026-08-20T05:43:36+00:00 | コンテナで codex を起こす側が前提にしてよい環境を実測して 02 に明文化し、bwrap の非ゼロを故障と読む誤りを断つ |
 | facts-json-close | verified | false | 2026-09-11T11:52:08+00:00 | 事実の宣言 docs/facts.json を、宣言する事実0件として置き、移行 2026-08-27-facts-json を閉じる |
@@ -23,6 +25,6 @@
 | releases-decision | awaiting-verify | false | 2026-09-06T09:36:00+09:00 | リリース台帳 .claude/state/releases.json を新設するかを人間に問い、その答えのとおりに閉じる |
 | repair-entrypoint-config-writes | verified | false | 2026-09-01T05:56:12+00:00 | 起動処理が /workspace 配下の設定を書くときの一時ファイルと chown を安全な形へ揃え、登録の有無の判定を値の真偽からキーの有無へ直す |
 
-件数: 16
+件数: 18
 
 <!-- END GENERATED: build-index.py -->
