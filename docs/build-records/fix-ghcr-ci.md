@@ -32,13 +32,13 @@ summary: 日次ビルド(GHCR)の arm64 の claude-vnc が、Playwright の Chro
 - lint / build: green(`docker buildx build --check -f .devcontainer/Dockerfile.claude .` → `Check complete, no warnings found.` / 実際のワークフロー: `gh workflow run ghcr-images.yml --ref work/2026-11-24-fix-ghcr-ci` → run 45425605050 `success`(prepare・build 6本・merge 3本がすべて success。agy は解決・導入とも 1.5.16。公開タグ `202611250026` と `latest`))
 - 資格情報の混入検査(secret_scan): 未設定(このリポジトリには `tests/` の宣言ファイル自体が無い。埋めるのはテスト基盤を入れるタスク)
 - 版がビルドと揃った環境で走ったか: 未宣言(`02-design/environments.md` に版の固定の見出しが無い)。見比べられた範囲では一致 — 最終の確認は配布物を作るワークフローそのもので行った。手元の再現は Playwright の版(chromium v1255)を CI のログと一致させた
-- 外部挙動の変化: あり(後方互換)— arm64 の配布イメージでヘッドレス用ランチャー `chromium-browser` と `CHROME_PATH` 等が再び入る。日次ビルドが再び公開できるようになった
+- 外部挙動の変化: あり(後方互換。arm64 の配布イメージでヘッドレス用ランチャー `chromium-browser` と `CHROME_PATH` 等が再び入る。日次ビルドが再び公開できるようになった)
 - 認証・決済・不可逆・個人情報・監査への接触: なし
 - E2E・全件テスト・ブラウザQA: 実施していない(/verify-tests に委ねる — 及第ライン)
 
 ## 基本要件の点検
 
-- R1: BR-01 / BR-03 / BR-05 / BR-06 / BR-07 / BR-09 / BR-10 / BR-11 / BR-13 — このタスクはイメージのビルド定義の中で、導入済みの Chromium の実行ファイルを探す条件だけを広げる。アカウント・識別子・不可逆な操作・秘密の生成・認可・秘密の突き合わせ・ブラウザからの状態変更・保存先・画面のどれも作らず変えない
+- R1: BR-01 / BR-03 / BR-05 / BR-06 / BR-07 / BR-09 / BR-10 / BR-11 / BR-13 — このタスクはイメージのビルド定義の中で、導入済みの Chromium の実行ファイルを探す条件だけを広げる。アカウント・識別子・不可逆な操作・秘密の生成・認可・秘密の突き合わせ・ブラウザからの状態変更・保存先・画面のどれも作らず変えない(計器の疑い2件を照らし直した: `Dockerfile.claude:17` の `USERNAME=` はビルド時のイメージ内ユーザー名の既定値で、利用者が決める識別子の入口ではなく今回触れていない。`:69` の `rm -rf` はビルド中の apt の一時ファイルの掃除で、利用者の操作で起きる破壊的操作ではない。どちらも非該当のまま)
 
 | ID | 判定 | 理由 | 落とし先 |
 |---|---|---|---|
