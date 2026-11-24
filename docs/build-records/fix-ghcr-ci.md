@@ -52,11 +52,11 @@ summary: 日次ビルド(GHCR)の arm64 の claude-vnc が、Playwright の Chro
 
 ## 決定シート(回答済み)
 
-- 問いなし
+- 論点1(修正をマージ前に作業ブランチから実際のワークフローで確かめるか。手動起動は全部通れば `latest` を公開する)— 回答 2026-11-25(このウィンドウ): 「起動していいよ」→ A(作業ブランチを指定して手動起動する)を採る。概念の明確化は「曖昧さなし」1件のみ。
 
 ## 質問キュー(出口のシートの種)
 
-- なし
+- なし(論点1は回答済み — 決定シート(回答済み)へ転記した)
 
 ## 調査メモ
 
@@ -75,6 +75,8 @@ summary: 日次ビルド(GHCR)の arm64 の claude-vnc が、Playwright の Chro
 - 2026-11-24 23:40 [DS-02] ヘッドレス用ランチャーの層も Chromium が見つからなければビルドを止める(GUI 用と揃える)— 理由: 見つからないと黙って通り、arm64 でランチャーと環境変数が欠けたイメージが作られていた / 見直す条件: Chromium を入れない派生イメージを作るとき。開示先 `docs/03-impl/environments/images.md`。
 - 2026-11-24 23:45 再現と修正の確認(実物の置き場で): amd64 は手元で `PLAYWRIGHT_BROWSERS_PATH=<scratch> npx -y playwright@latest install chromium`(chromium v1255 → `chromium-1255/chrome-linux64/chrome`)、arm64 は CI と同じ配布 zip `…/cft/159.0.8154.6/linux-arm64/chrome-linux-arm64.zip` を展開(`chrome-linux-arm64/chrome`)。Dockerfile から2つの RUN の本体をそのまま抜き出し、`ubuntu:24.04` の中でその木をマウントして実行: 修正前 = arm64 の GUI 用 `rc=1`(CI と同じ文言)・ヘッドレス用 `rc=0` だがランチャー無し / 修正後 = amd64・arm64 とも両方 `rc=0` で正しいパスのランチャー / 空の木 = 修正後は両方 `rc=1`(止まる)。不具合の再現は修正前に落ち修正後に通ることで足りるので欠陥注入を重ねない。
 - 2026-11-24 23:50 影響: `merge` ジョブは `needs: [prepare, build]` で、build の1本の失敗で毎回 skipped — 2026-09-09 以降(最後の success は run 34279906129、2026-09-08)、docker-proxy を含むどのイメージも GHCR へ公開されていない。初回の失敗 run 34404788223 も同じ原因(chromium-1243 の時点で既に当たらない)。
+- 2026-11-24 23:58 段4 タスク内整合確認: images.md の記述(ランチャー2つ・`chrome-linux*/chrome` の探索・見つからなければ止める)とコードが一致。差異なし。Dockerfile は relations の外で鏡の文書は無い。`docs/ux/` はクロージャ外。images.md を 1.7.0 → 1.8.0。
+- 2026-11-24 23:59 出口のシートを提示(論点1件: 実際のワークフローでの確認をいま作業ブランチから走らせるか)。回答待ち。
 
 ## 直さなかった指摘(独立レビュー・探索的QA)
 

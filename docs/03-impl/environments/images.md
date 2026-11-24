@@ -1,7 +1,7 @@
 ---
 id: container-images
-version: 1.7.0
-updated: 2026-11-23
+version: 1.8.0
+updated: 2026-11-24
 source:
   - docs/02-design/environments.md
   - docs/02-design/architecture.md
