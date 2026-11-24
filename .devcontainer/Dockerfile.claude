@@ -241,7 +241,11 @@ RUN GC_ARCH=$(uname -m); case "$GC_ARCH" in aarch64|arm64) GC_ARCH=arm ;; esac \
 USER root
 
 # --- Playwright Chromium ラッパー + 環境変数（ヘッドレステスト用）---
-RUN CHROMIUM_PATH=$(find ${USER_HOME}/.cache/ms-playwright -name "chrome" \( -path "*/chrome-linux/chrome" -o -path "*/chrome-linux64/chrome" \) 2>/dev/null | head -1) \
+# 実行ファイルの置き場は Playwright の版とアーキで名前が違う: amd64 は chrome-linux64/、
+# arm64 は chrome-linux-arm64/（Chrome for Testing へ移った版から）、古い版は chrome-linux/。
+# どれにも当たるよう chrome-linux*/ で探す。見つからなければビルドを止める — 黙って通すと、
+# ランチャーと環境変数が欠けたイメージが配られる（arm64 で実際に起きた。2026-11-24）。
+RUN CHROMIUM_PATH=$(find ${USER_HOME}/.cache/ms-playwright -name "chrome" -path "*/chrome-linux*/chrome" 2>/dev/null | head -1) \
     && if [ -n "$CHROMIUM_PATH" ]; then \
         { echo '#!/bin/bash'; \
           echo 'export DBUS_SESSION_BUS_ADDRESS=disabled:'; \
@@ -264,6 +268,8 @@ RUN CHROMIUM_PATH=$(find ${USER_HOME}/.cache/ms-playwright -name "chrome" \( -pa
             echo "export PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=\"${CHROMIUM_PATH}\""; \
             echo "export PUPPETEER_EXECUTABLE_PATH=\"${CHROMIUM_PATH}\""; \
         } >> /etc/bash.bashrc; \
+    else \
+        echo "ERROR: ヘッドレス用 Chromium が見つかりません（Playwright Chromium の置き場の名前が想定と違う）" >&2; exit 1; \
     fi
 
 
@@ -390,7 +396,7 @@ RUN if [ "$(dpkg --print-architecture)" = "amd64" ]; then \
 RUN if command -v google-chrome-stable >/dev/null 2>&1; then \
         printf '#!/bin/bash\nexec google-chrome-stable "$@"\n' > /usr/local/bin/claude-dev-chrome ; \
     else \
-        CHROMIUM_PATH=$(find ${USER_HOME}/.cache/ms-playwright -name "chrome" \( -path "*/chrome-linux/chrome" -o -path "*/chrome-linux64/chrome" \) 2>/dev/null | head -1) ; \
+        CHROMIUM_PATH=$(find ${USER_HOME}/.cache/ms-playwright -name "chrome" -path "*/chrome-linux*/chrome" 2>/dev/null | head -1) ; \
         [ -n "$CHROMIUM_PATH" ] || { echo "ERROR: GUI 用 Chromium が見つかりません（Playwright Chromium 未導入）" >&2; exit 1; } ; \
         printf '#!/bin/bash\nexec "%s" "$@"\n' "$CHROMIUM_PATH" > /usr/local/bin/claude-dev-chrome ; \
     fi \

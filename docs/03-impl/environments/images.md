@@ -52,6 +52,14 @@ graph LR
 まで巻き込んで再ビルド・再取得になる(`DSN-dist-01` / `NFR-perf-01`)。同梱外部バイナリの設置層も
 同じ理由で終端に置く(次の節)。
 
+ブラウザは `base` で Playwright 経由の Chromium を入れ、その実行ファイルを指すランチャーを2つ置く —
+ヘッドレス用の `chromium-browser`(`base`。`CHROME_PATH` などの環境変数も書く)と、
+GUI 用の `claude-dev-chrome`(`vnc-base`。amd64 は Google Chrome を優先し、arm64 は Chromium を使う)。
+実行ファイルは `~/.cache/ms-playwright/chromium-<rev>/chrome-linux*/chrome` を探して見つける
+(置き場の名前は Playwright の版とアーキで違う — amd64 は `chrome-linux64/`、arm64 は `chrome-linux-arm64/`)。
+
+- [DS-02] ヘッドレス用ランチャーの層も、Chromium が見つからなければ**ビルドを止める**(GUI 用と揃える。2026-11-24)— 理由: 以前は見つからないと何もせずに通り、arm64 ではランチャーと環境変数が黙って欠けたイメージが作られていた(置き場の名前が `chrome-linux-arm64/` に変わったため。GUI 用の層だけが止まっていたので日次ビルドの失敗としてしか見えなかった)。欠けたイメージを配るより、ビルドの失敗で知らせるほうが直すまでが短い / 見直す条件: Chromium を入れないイメージ(ブラウザを持たない派生)を作るとき
+
 docker-proxy のイメージは別の Dockerfile(`.devcontainer/Dockerfile.docker-proxy`)の2段で作る —
 ビルド段(`golang:<Go の版>-alpine<alpine の minor>`)で `CGO_ENABLED=0` の実行ファイルを作り、
 実行段(`alpine:<alpine の minor>`)にその1つと CA 証明書だけを置く。
@@ -230,6 +238,7 @@ graph LR
 | **同梱した MCP サーバーが更新されない** | `CHROME_DEVTOOLS_MCP_VERSION=latest` のまま渡すと、エージェント CLI と同じ理由で導入層が永久にヒットして中身だけ凍結する | CI の prepare ジョブで具体バージョンへ解決してから build-arg で渡す(`infra/local/ghcr.md`) |
 | 同梱エージェント CLI が更新されない | `CLAUDE_VERSION=latest` / `CODEX_VERSION=latest` / `AGY_VERSION=latest` のまま渡すと**文字列が変わらずキャッシュキーとして機能せず**、導入層が永久にヒットして中身だけ凍結する(2026-07 に実際に発生) | CI の prepare ジョブで具体バージョンへ解決してから build-arg で渡す(`infra/local/ghcr.md`) |
 | **agy の導入層が「版が指定と一致しません」で失敗する** | 版の解決(prepare ジョブ・`make update-claude`)と導入(公式インストーラは常に最新)のあいだに agy の新版が出た。または arm64 の配布元の版が amd64 とずれている(CI は amd64 の manifest で解決する) | ワークフロー・`make update-claude` を再実行する(版を解決し直す)。**過去の版を指定して焼き直す手段は無い**(`D0-dist-07` 項2)— 戻すときは古いイメージのタグを使う |
+| **arm64 のビルドが「GUI 用 Chromium が見つかりません」/「ヘッドレス用 Chromium が見つかりません」で失敗する** | Playwright が Chromium を置くディレクトリの名前が変わった(2026-11 に arm64 が `chrome-linux-arm64/` になり、`chrome-linux/` と `chrome-linux64/` だけを探していた探索に当たらなくなった。日次ビルドが 2026-09-09 から失敗し続けた) | ビルドのログの `downloaded to …/chromium-<rev>` と配布 zip の中身(`unzip -l`)で実際の置き場を確かめ、`Dockerfile.claude` の2か所の探索条件(`chrome-linux*/chrome`)を合わせる |
 | 取得が毎回フルダウンロードになる | 時刻由来の値をレイヤーチェーンに入れると、内容が変わらない日も全層が失効する | レイヤーチェーンに入れてよいのは**内容由来**の値だけ(`DSN-dist-01`)。時刻はラベルに置く |
 | VNC 層まで再ビルドされる | エージェント CLI の導入や同梱外部バイナリの設置を `base` の途中に置くと、`FROM base` の `vnc-base` まで失効が波及する | 導入・設置は終端ステージの最終レイヤーにのみ置く |
 | **`node` と打つと nvm ではなく fnm 側の Node が動く** | **仕様である。** nvm はシェル初期化で `--no-use` で読み込まれ、PATH を書き換えない(`FR-env-12-2` の経路を守るため) | nvm 側を使うときは `nvm use 26` のように系列を明示する |
