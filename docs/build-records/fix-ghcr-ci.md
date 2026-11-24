@@ -1,12 +1,12 @@
 ---
 slug: fix-ghcr-ci
-state: building
+state: awaiting-verify
 critical: false
 origin: human-report
 issue: なし
 started: 2026-11-24T23:25:25+09:00
-updated: 2026-11-24T23:25:25+09:00
-commit: -
+updated: 2026-11-25T00:55:00+09:00
+commit: d929a715fc9e004e110334fbeb1ff46dc8bb1176
 summary: 日次ビルド(GHCR)の arm64 の claude-vnc が、Playwright の Chromium の置き場の名前が変わったため見つけられずに失敗し続けていたのを直す
 ---
 
@@ -28,7 +28,13 @@ summary: 日次ビルド(GHCR)の arm64 の claude-vnc が、Playwright の Chro
 
 ## 主張
 
-- (段5 で埋める)
+- 触ったモジュールのテスト: green(ビルド定義に自動テストは無い。代わりに Dockerfile から2つの RUN の本体をそのまま抜き出し、`ubuntu:24.04` の中で実物の Playwright の置き場(amd64 = 手元で `npx -y playwright@latest install chromium` した `chromium-1255/chrome-linux64/`、arm64 = CI と同じ配布 zip を展開した `chromium-1255/chrome-linux-arm64/`)をマウントして実行 → 修正前 `old pw-arm64 gui: ERROR: GUI 用 Chromium が見つかりません（Playwright Chromium 未導入） rc=1` / 修正後 `new pw-arm64 gui: rc=0 exec "/home/dev/.cache/ms-playwright/chromium-1255/chrome-linux-arm64/chrome" "$@"`・`new pw-arm64 headless: rc=0`・`new pw-empty headless: … rc=1`)
+- lint / build: green(`docker buildx build --check -f .devcontainer/Dockerfile.claude .` → `Check complete, no warnings found.` / 実際のワークフロー: `gh workflow run ghcr-images.yml --ref work/2026-11-24-fix-ghcr-ci` → run 45425605050 `success`(prepare・build 6本・merge 3本がすべて success。agy は解決・導入とも 1.5.16。公開タグ `202611250026` と `latest`))
+- 資格情報の混入検査(secret_scan): 未設定(このリポジトリには `tests/` の宣言ファイル自体が無い。埋めるのはテスト基盤を入れるタスク)
+- 版がビルドと揃った環境で走ったか: 未宣言(`02-design/environments.md` に版の固定の見出しが無い)。見比べられた範囲では一致 — 最終の確認は配布物を作るワークフローそのもので行った。手元の再現は Playwright の版(chromium v1255)を CI のログと一致させた
+- 外部挙動の変化: あり(後方互換)— arm64 の配布イメージでヘッドレス用ランチャー `chromium-browser` と `CHROME_PATH` 等が再び入る。日次ビルドが再び公開できるようになった
+- 認証・決済・不可逆・個人情報・監査への接触: なし
+- E2E・全件テスト・ブラウザQA: 実施していない(/verify-tests に委ねる — 及第ライン)
 
 ## 基本要件の点検
 
@@ -77,6 +83,7 @@ summary: 日次ビルド(GHCR)の arm64 の claude-vnc が、Playwright の Chro
 - 2026-11-24 23:50 影響: `merge` ジョブは `needs: [prepare, build]` で、build の1本の失敗で毎回 skipped — 2026-09-09 以降(最後の success は run 34279906129、2026-09-08)、docker-proxy を含むどのイメージも GHCR へ公開されていない。初回の失敗 run 34404788223 も同じ原因(chromium-1243 の時点で既に当たらない)。
 - 2026-11-24 23:58 段4 タスク内整合確認: images.md の記述(ランチャー2つ・`chrome-linux*/chrome` の探索・見つからなければ止める)とコードが一致。差異なし。Dockerfile は relations の外で鏡の文書は無い。`docs/ux/` はクロージャ外。images.md を 1.7.0 → 1.8.0。
 - 2026-11-24 23:59 出口のシートを提示(論点1件: 実際のワークフローでの確認をいま作業ブランチから走らせるか)。回答待ち。
+- 2026-11-25 00:26 回答を転記しシートを削除。作業ブランチを push し、`gh workflow run ghcr-images.yml --ref work/2026-11-24-fix-ghcr-ci` → run 45425605050 が 00:50 に success(全ジョブ)。images.md を 1.8.0 で確定、履歴 `docs/histories/2026-11-24-fix-ghcr-ci.md`、索引を再生成。残務・課題票で解消するものなし(closure のパスを持つ残務の行は無い)。
 
 ## 直さなかった指摘(独立レビュー・探索的QA)
 
@@ -84,4 +91,4 @@ summary: 日次ビルド(GHCR)の arm64 の claude-vnc が、Playwright の Chro
 
 ## 申し送り
 
-- なし
+- 作業ブランチから公開したイメージ(`202611250026` / `latest`)は、main にこの修正を足した中身である。main へのマージ後、次の定時実行で同じ中身が再公開される。
