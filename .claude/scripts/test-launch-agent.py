@@ -148,6 +148,31 @@ def main() -> None:
         finally:
             launch_agent.ROLES = original
 
+    # 9. gemini(agy)。承認は --mode auto、役の本文は -i。モデルが無ければ gemini-3.8-flash / high へ。
+    models = ['gemini-3.8-flash-high', 'gemini-3.8-flash-medium', 'gemini-3.8-flash-low']
+    g = launch_agent.build_command('gemini', 'work', ['--model', 'gemini-3.8-flash', '--effort', 'low'],
+                                   gemini_models=models)
+    check('gemini: agy を --mode auto で起こす', g[:3] == ['agy', '--mode', 'auto'], str(g[:3]))
+    check('gemini: 役の本文が -i で渡る',
+          g[-2] == '-i' and g[-1] == (ROOT / '.claude/roles/work.md').read_text(encoding='utf-8'))
+    check('gemini: 在るモデルはそのまま', g[3:7] == ['--model', 'gemini-3.8-flash', '--effort', 'low'], str(g[3:7]))
+    g = launch_agent.build_command('gemini', 'work', ['--model', 'gemini-4-neon', '--effort', 'high'],
+                                   gemini_models=models)
+    check('gemini: 無いモデルは gemini-3.8-flash / high へ替わる',
+          g[3:7] == ['--model', 'gemini-3.8-flash', '--effort', 'high'], str(g[3:7]))
+    g = launch_agent.build_command('gemini', 'work', ['--model', 'gemini-4-neon', '--effort', 'medium'],
+                                   gemini_models=models)
+    check('gemini: 替えるときは effort も high にする', g[6] == 'high', str(g[3:7]))
+    for bad in (['--mode', 'plan'], ['--dangerously-skip-permissions'], ['-i', 'x'], ['-p', 'x']):
+        try:
+            launch_agent.build_command('gemini', 'work', bad, gemini_models=models)
+        except SystemExit:
+            check(f'gemini: {bad[0]} は渡せない', True)
+        else:
+            check(f'gemini: {bad[0]} は渡せない', False, '止まらなかった')
+    check('claude と codex は、モデルが無くても替えない(替え先は gemini だけ)',
+          launch_agent.build_command('claude', 'work', ['--model', 'no-such'])[-2:] == ['--model', 'no-such'])
+
     print()
     if failures:
         print(f'NG {len(failures)} 件: ' + ', '.join(failures))

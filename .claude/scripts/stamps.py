@@ -130,8 +130,8 @@ inspection-16 D1)。**これはデプロイゲートにも失効判定にも
                                              [--covers <path>]...   # 部分再検証
                                              [--full]               # 全数(all)を回した
                                              [--lens <名前>]        # 走った独立レビュー(critical 時の F2/F3 green に必須)
-                                             [--mode <a1|a2|o1|o2>] [--selected-mode <mode>]
-                                             [--executor <claude|codex>] [--review-engine <claude|codex|none>]
+                                             [--mode <a1|a1g|a2|o1|o2|g1|g2>] [--selected-mode <mode>]
+                                             [--executor <claude|codex|gemini>] [--review-engine <claude|codex|gemini|none>]
                                              [--review-reason <理由>] [--degradation-reason <理由>]
                                              [--model-limit <あり|なし>]  # 使うモデルを軽い層に固定して走ったか
     python3 .claude/scripts/stamps.py check              # 複合のデプロイゲートの判定
@@ -1073,11 +1073,22 @@ def mission_model_limit(root: Path) -> str | None:
     return found.pop() if found else None
 
 
+# 運用モード → (主実行エンジン, レビューのエンジン)。`orchestration.md` §1.2.1 の表と同じ。
+# a1g は a1 の縮退(codex が使えないとき、相手側だけ gemini に替える)で、選んで入るモードではない。
+MODES = {
+    "a1": ("claude", "codex"), "a1g": ("claude", "gemini"), "a2": ("claude", "claude"),
+    "o1": ("codex", "claude"), "o2": ("codex", "codex"),
+    "g1": ("gemini", "claude"), "g2": ("gemini", "gemini"),
+}
+# 選んだモードから自動で縮退してよい先(`orchestration.md` §1.3)。
+DEGRADATIONS = {("a1", "a1g"), ("a1", "a2"), ("o1", "o2"), ("g1", "g2")}
+
+
 def mission_modes(root: Path) -> tuple[str, str] | None:
     """明示選択した進行中の台帳だけ読む。モード明示なしの a1 は従来どおり扱う。
 
     **人間の明示が無いときの既定は中央エージェントのエンジンで決まる** — claude なら a1、
-    codex なら o1 である(`orchestration.md` §1.2.1)。台帳に書かれた値だけを見るこの関数から
+    codex なら o1、gemini なら g1 である(`orchestration.md` §1.2.1)。台帳に書かれた値だけを見るこの関数から
     見ると、その違いは「a1 かつ モード明示: なし」(= 従来の未選択 a1。旧形式の記録を
     そのまま許す)と「それ以外」(= 明示選択したものと同じ扱い。拡張記録を要求する)である。
     明示モードで引数を忘れて旧形式へ落ちるのを防ぐ。複数の明示台帳を推測で選ばない。
@@ -1088,7 +1099,7 @@ def mission_modes(root: Path) -> tuple[str, str] | None:
         if "選択モード" not in fields and "実効モード" not in fields:
             continue
         selected, effective = fields.get("選択モード"), fields.get("実効モード")
-        if selected not in ("a1", "a2", "o1", "o2") or effective not in ("a1", "a2", "o1", "o2"):
+        if selected not in MODES or effective not in MODES:
             raise ValueError("進行中の台帳のモード欄が欠落または不正")
         explicit = fields.get("モード明示", "なし" if selected == effective == "a1" else "あり")
         if explicit not in ("あり", "なし"):
@@ -1120,18 +1131,14 @@ def execution_metadata(mode: str | None, selected_mode: str | None,
     values = (mode, selected_mode, executor, review_engine, review_reason, degradation_reason)
     if all(v is None for v in values):
         return {"execution": {"model_limit": "あり"}} if model_limit == "あり" else {}
-    modes = ("a1", "a2", "o1", "o2")
-    if mode not in modes or executor not in ("claude", "codex"):
+    if mode not in MODES or executor not in ("claude", "codex", "gemini"):
         raise ValueError("拡張記録には --mode と --executor の正しい値が必要")
     selected = selected_mode if selected_mode is not None else mode
-    if selected not in modes or (selected != mode and (selected, mode) not in
-                                (("a1", "a2"), ("o1", "o2"))):
-        raise ValueError("選択モードからの自動縮退は a1→a2、o1→o2 だけ")
+    if selected not in MODES or (selected != mode and (selected, mode) not in DEGRADATIONS):
+        raise ValueError("選択モードからの自動縮退は a1→a1g、a1→a2、o1→o2、g1→g2 だけ")
     if selected != mode and not (degradation_reason or "").strip():
         raise ValueError("縮退後の記録には --degradation-reason が必要")
-    main_engine = "claude" if mode.startswith("a") else "codex"
-    expected_review = ("codex" if main_engine == "claude" else "claude") \
-        if mode.endswith("1") else main_engine
+    main_engine, expected_review = MODES[mode]
     if executor != main_engine:
         raise ValueError("主実行エンジンが実効モードの中心側と違う")
     if review_engine not in (expected_review, "none"):
@@ -2071,10 +2078,14 @@ def selftest() -> int:
     for mode, main_engine, reviewer in (("a1", "claude", "codex"),
                                         ("o1", "codex", "claude"),
                                         ("a2", "claude", "claude"),
-                                        ("o2", "codex", "codex")):
+                                        ("o2", "codex", "codex"),
+                                        ("a1g", "claude", "gemini"),
+                                        ("g1", "gemini", "claude"),
+                                        ("g2", "gemini", "gemini")):
         got = execution_metadata(mode, None, main_engine, reviewer, None, None, "独立文脈")
         assert got["execution"]["effective_mode"] == mode
-    for selected, effective, engine in (("a1", "a2", "claude"), ("o1", "o2", "codex")):
+    for selected, effective, engine in (("a1", "a2", "claude"), ("o1", "o2", "codex"),
+                                        ("a1", "a1g", "claude"), ("g1", "g2", "gemini")):
         got = execution_metadata(effective, selected, engine, "none", "小さい対象", "認証失敗", None)
         assert got["execution"]["degradation_reason"] == "認証失敗"
     for values in (("o1", None, "claude", "claude", None, None, "所見"),
@@ -2084,6 +2095,11 @@ def selftest() -> int:
                    ("a1", None, "claude", "none", None, None, None),
                    ("a1", None, "claude", "none", "免除", None, "架空のレビュー"),
                    ("a1", None, "claude", "codex", None, None, None),
+                   ("g1", None, "claude", "claude", None, None, "所見"),
+                   ("g1", None, "gemini", "gemini", None, None, "所見"),
+                   ("a1g", None, "claude", "codex", None, None, "所見"),
+                   ("g2", "a1", "gemini", "gemini", None, "障害", "所見"),
+                   ("g2", "g1", "gemini", "gemini", None, None, "所見"),
                    ("x", None, "claude", "codex", None, None, "所見")):
         try:
             execution_metadata(*values)

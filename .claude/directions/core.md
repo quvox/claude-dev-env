@@ -371,7 +371,7 @@ whoever launched it.**
   the sources, the filter, and the page's shape.
 - **Independent review** lives inside `/verify-docs`, `/verify-impl`, `/retrofit`, and
   `/relations` — never inside `/build` (independence is the verify net's job). F4 judgment review
-  follows `/verify-tests` in explicitly selected modes and where a codex central made o1 the
+  follows `/verify-tests` in explicitly selected modes and where a codex or gemini central made o1 or g1 the
   default; a1 with no explicit selection retains its existing F4 behavior and deploy gate. **One read-only
   independent review per run — mandatory, with exactly two defined exemptions** (an empty target
   set; a target of three files or fewer with no `critical: true` closure in the target set).
@@ -385,10 +385,10 @@ whoever launched it.**
   `中断(艦隊がレビュー役を用意していない)`. Never having asked is not that case — it is the
   run's own omission (`orchestration.md` §1.2). It is given only target/scope/criteria/format —
   **never your own findings or expected verdict**. **Under a fleet it is `@review`**, selected from the ledger's effective mode
-  (`orchestration.md` §1.2.1): the opposite engine to the main executor in a1/o1, a fresh context of
-  the same engine in a2/o2. With no human selection the mode defaults to the engine the central
+  (`orchestration.md` §1.2.1): the opposite engine to the main executor in a1/a1g/o1/g1, a fresh context of
+  the same engine in a2/o2/g2. With no human selection the mode defaults to the engine the central
   agent runs on — claude means a1 (what unselected projects and old ledgers have always had),
-  codex means o1 (2026-09-20). **Model restriction** (`orchestration.md` §1.5) is a separate,
+  codex means o1, gemini means g1 (2026-09-20; gemini 2026-11-22). **Model restriction** (`orchestration.md` §1.5) is a separate,
   human-instructed switch that pins every model to the light tier and changes no engine pairing,
   no effort, and no verdict rule; when an order carries it, say in the report that the light tier
   was all that ran. Outside a fleet the same
