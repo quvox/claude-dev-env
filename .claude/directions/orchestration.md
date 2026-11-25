@@ -52,6 +52,7 @@ colabtmux は**誰が走るか・誰が何をするかについて何も決め�
 # 下の2行は `/setup` が済ませている。まだ1度も走らせていないときだけ手で打つ:
 colabtmux start          # claude で立てる(既定。colabtmux.conf の [agent_kind.claude])
 # colabtmux start --kind codex   # codex で立てる(同 [agent_kind.codex])
+# colabtmux start --kind gemini  # gemini で立てる(同 [agent_kind.gemini]。端末の砂箱が使える環境だけ)
 #   どちらも .claude/scripts/launch-agent.py <kind> orchestrator を呼ぶ。
 #   起動行を明示するなら、そのまま打っても同じである:
 #     colabtmux start -- python3 .claude/scripts/launch-agent.py claude orchestrator \
@@ -75,7 +76,7 @@ colabtmux start          # claude で立てる(既定。colabtmux.conf の [agen
 **「役のファイルをパスで名指して読ませる」フォールバックは廃した** ★(2026-09-14)—
 読むかどうかが相手任せになる経路であり、§1.1 が「この script を通さずに起こさない」と
 定めた当のものだからである。**codex 側にも同じ経路はもう無い。**
-claude が使えないなら、その環境では codex で起こす(`--kind codex`)。両方だめなら人間に伝える。
+claude が使えないなら、その環境では codex(`--kind codex`)か gemini(`--kind gemini`)で起こす。すべてだめなら人間に伝える。
 
 **未配信の回収に常駐は要らない**(colabtmux は 2026-08-13 に `daemon` を廃止した。D0-core-31)。
 送り込みは相手がキー入力を受け付けられるときだけ成立し、それ以外は未配信で残るが、回収の契機が
@@ -202,6 +203,13 @@ id を返すだけだからである(§1.2)。**例外は先行起動の `@qa` �
 | 部下(サブエージェント) | 使える | 無い。一括読取が要るなら `@survey` を起こしてもらう(§9) |
 | 人間への問い | §6 の経路 | 同じ。**対話モードでも自分から人間に聞かない** |
 
+**gemini(`agy`)は、この表の第3の列である**(2026-11-22。表の列は増やさず、違いだけをここに書く)。
+`AGENTS.md` と `GEMINI.md` を自動で読む(移行用の説明より。未確認)。**役の本文は最初の発話(`-i`)として入る**
+(codex の `developer_instructions` のような「規範としての位置」ではなく、最初の1通である)。
+起動は `python3 .claude/scripts/launch-agent.py gemini <role> -- --model <M> --effort <E>` で、
+**承認は `--mode auto`**(端末の砂箱が要る。使えない環境では承認待ちで止まるので不調として扱う。§1.3)。
+スキルの実行・部下(サブエージェント)・人間への問いは、**gemini では未確認**である。
+
 **起動コマンドを手で組み立てない。** `launch-agent.py` を通す1本道にしてあるのは、
 役の本文が**両方の kind に同じだけ渡る**ことを、書き方の揃え方ではなく仕組みで守るためである。
 
@@ -318,7 +326,7 @@ codex sandbox -c sandbox_mode=danger-full-access -- /bin/true; echo $?   # 可�
 ```
 
 **判定の扱いは他の役と同じである** — 非ゼロなら、このホストでは `@qa` を codex で起こせないので
-§1.3 の許された縮退だけを行う。a1→a2 は claude-in-chrome の条件(§1.4)も確認し、
+§1.3 の許された縮退だけを行う。a1→a1g(`@qa` は claude のまま)と a1→a2 は claude-in-chrome の条件(§1.4)も確認し、
 o2 の Codex が不成立ならエンジンを替えず障害を記録する。
 
 **理由は役の仕事そのものに在った。** `@qa` は**アプリを立て、それをブラウザから触る**
@@ -597,10 +605,11 @@ id が返ったら、そこへ依頼文を post する(**何を渡すかは各�
 
 #### 1.2.1 運用モードから役のエンジンを決める ★
 
-**人間が a1/a2/o1/o2 を選ぶ。明示が無いときの既定は、中央エージェントが実際に動いている
-エンジンで決まる — claude なら a1、codex なら o1 である** ★(2026-09-20 に改めた。人間の指示。
-それまでは、どちらのエンジンで中央を起こしても既定は a1 だった)。
-**a2/o2 は人間の明示でしか選べない** — エンジンだけでは a1 と a2、o1 と o2 を区別できないからである。
+**人間が a1/a2/o1/o2/g1/g2 を選ぶ。明示が無いときの既定は、中央エージェントが実際に動いている
+エンジンで決まる — claude なら a1、codex なら o1、gemini なら g1 である** ★(2026-09-20 に改めた。人間の指示。
+それまでは、どちらのエンジンで中央を起こしても既定は a1 だった。**gemini の g1/g2 は 2026-11-22 に足した**)。
+**a2/o2/g2 は人間の明示でしか選べない** — エンジンだけでは a1 と a2、o1 と o2、g1 と g2 を区別できないからである。
+**`a1g` は選んで入るモードではない** — a1 で codex が使えないときの縮退の行き先である(§1.3)。
 **中央のエンジンが決めるのは既定のモードだけである** — どの役をどちらのエンジンが取るかは、
 決まったモードの下の表が決める(中央の種別から子の配車を直に決めることは、いまも無い)。
 選択モード・実効モードと、人間が明示したか(モード明示: あり/なし)を台帳へ書き、
@@ -610,6 +619,7 @@ id が返ったら、そこへ依頼文を post する(**何を渡すかは各�
 **この文書と各スキルが「未選択 a1」と呼ぶのは、人間の明示が無く既定が a1 になった台帳
 (a1 かつ モード明示: なし)である** — 呼び名の指す先は以後もこの1つだけであり、
 現行の配車既定・F4 の現行動作・旧形式の鮮度スタンプはそこで保たれる。
+**既定が g1 になった台帳も同じである** — gemini の中央で走っていた既存の配車は無い。
 **既定が o1 になった台帳は、人間が明示選択した o1 とまったく同じに扱う** ★ —
 保たねばならない旧動作がそこに無いからである(これまで codex の中央は a1 の中心側と種別が
 食い違うので配車そのものを始められず、「codex の中央で走っていた既存の配車」というものが
@@ -635,8 +645,8 @@ id が返ったら、そこへ依頼文を post する(**何を渡すかは各�
 
 ```bash
 colabtmux agent despawn --id orchestrator          # 旧エンジンの中央ウィンドウを閉じる(掲示板は残る)
-colabtmux agent spawn --id orchestrator --kind <claude|codex> --window orchestrator --json -- \
-  python3 .claude/scripts/launch-agent.py <claude|codex> orchestrator \
+colabtmux agent spawn --id orchestrator --kind <claude|codex|gemini> --window orchestrator --json -- \
+  python3 .claude/scripts/launch-agent.py <claude|codex|gemini> orchestrator \
     -- <人間が確認したモデル・effort の値(§1.5)>
 ```
 
@@ -645,16 +655,20 @@ colabtmux agent spawn --id orchestrator --kind <claude|codex> --window orchestra
 別の id・window 名で起こり、`COLABTMUX_AGENT_ID` から役を引く経路(`CLAUDE.md` §2)も
 `exclude_windows` の既定(`["orchestrator", "discuss-1"]`)も外れる。
 
-| 役・作業 | a1(現行) | a2 | o1(反転) | o2 |
-|---|---|---|---|---|
-| 中央・`triage`・`work`・F1〜F4・`discuss` | `claude` | `claude` | `codex` | `codex` |
-| `review`・`survey`・`qa` | `codex` | `claude` | `claude` | `codex` |
+| 役・作業 | a1(現行) | a1g(a1 の縮退) | a2 | o1(反転) | o2 | g1 | g2 |
+|---|---|---|---|---|---|---|---|
+| 中央・`triage`・`work`・F1〜F4・`discuss` | `claude` | `claude` | `claude` | `codex` | `codex` | `gemini` | `gemini` |
+| `review`・`survey`・`qa` | `codex` | `gemini`(`qa` だけは `claude`。下) | `claude` | `claude` | `codex` | `claude` | `gemini` |
 
-review は主実行者の反対側(a1/o1)、または同一エンジンの別文脈(a2/o2)である。
+review は主実行者の反対側(a1/a1g/o1/g1)、または同一エンジンの別文脈(a2/o2/g2)である。
+**`a1g` の `@qa` は claude である** ★ — 画面を触る操作の口(§1.4)を gemini が持つかは**未確認**で、
+確認できていないエンジンへ替えない。`@review` と `@survey` だけが gemini になる。
+**g2 の `@qa`(画面を触るほう)も同じ理由で起こせない** — 「探索的ブラウザQAを実行できない」として
+人間へ渡す(§1.4。実行基盤の不在は適用外の理由にならない)。コマンドを叩く `cli-qa` は gemini でも走る。
 対象への書込みと裁定は主実行者1体だけが所有する。所見を先に渡さず、同じ基準コミット・
 対象集合・範囲・検査項目・出力様式だけを渡す。文脈の独立とエンジンの多様性を分けて報告する。
 
-a1/o1 の作業側は colabtmux の別ウィンドウを基本にする。a2/o2 は作業ごとに隔離手段を選び、
+a1/a1g/o1/g1 の作業側は colabtmux の別ウィンドウを基本にする。a2/o2/g2 は作業ごとに隔離手段を選び、
 実際のエンジンとともに台帳へ記録する。短命で所見だけを返す仕事は空の文脈のサブエージェントを
 使えるが、受信・直接返信・常駐アプリ・独立した人間対話・役の起動時注入が要るなら colabtmux。
 サブエージェントが要件を満たすかは未確認のまま置換しない。利用不可なら同じエンジンの
@@ -669,22 +683,28 @@ Codex の常駐 review/survey は、他の役と同じ `danger-full-access` + `n
 
 ### 1.3 フォールバック — 中心を変えず単一エンジンへ縮退する
 
-**自動縮退は a1→a2、o1→o2 だけ。** 選択モードは動かさず、実効モードを切り替える。
-中心側が使えないとき、a2/o2 の唯一のエンジンが使えないときは障害を記録して停止する。
-a1↔o1、a2↔o2、縮退からの復帰は人間の選択を記録して行う。手間・好み・単価では縮退しない。
+**自動縮退は a1→a1g、a1→a2(a1g も成り立たないとき)、o1→o2、g1→g2 だけ。**
+選択モードは動かさず、実効モードを切り替える。
+**a1 で codex が使えないときは、まず反対側のエンジンだけを gemini に替える(a1g)** ★(2026-11-22 に足した。
+人間の指示。それまでは a2 へ直接縮退した)。中心は claude のままである。gemini も使えない(または a1g が
+成り立たない)ときに a2 へ落ちる。a1 が a2 へ落ちたときの値(§1.5 の「codex が使えないとき」の欄)は、
+**既存プロジェクトの挙動として凍結されており、変えない**。
+中心側が使えないとき、a2/o2/g2 の唯一のエンジンが使えないときは障害を記録して停止する。
+a1↔o1↔g1、a2↔o2↔g2、縮退からの復帰は人間の選択を記録して行う。手間・好み・単価では縮退しない。
 
 | 対象 | 不調を確認する証拠 |
 |---|---|
 | 両エンジン | CLI 不在、認証失敗・失効、rate limit/quota の明示出力、プロセス終了、必要機能の不成立 |
 | Codex | 実際の CODEX_HOME の信頼値不足、希望する実効砂箱での試験失敗、設定不適用、通信の失敗 |
 | Claude | 初回対話での停止、役本文を受け取れない CLI、auto 権限・必要プラグインの不足、選んだモデルによる短い応答の失敗 |
+| Gemini | CLI(`agy`)不在、未サインイン(`agy models` の失敗)、**`--mode auto is not available` の警告(端末の砂箱が無い環境では、承認を求めるモードへ戻って無人にならない)**、プロセス終了、rate limit/quota の明示出力。**指定のモデルがアカウントに無いことは不調ではない** — `launch-agent.py` が `gemini-3.8-flash` / `high` へ替えて起こす(替えたことは台帳へ記録する) |
 | 返信未達 | 画面・掲示板・進捗を確認し、通信不備と長時間作業を区別して確定した障害。タイムアウトだけでは不調と断定しない |
 
 起動前は /mission §0、役を起こす直前と直後にも必要機能・受信・応答を確認する。
 Claude の画面QAは claude-in-chrome とブラウザ接続、Codex は MCP と実効砂箱を別に確かめる。
 qa の操作能力はエンジンを替えただけでは成立しない(§1.4)。
 
-1. 切替日時・理由・失敗した役・確認結果を台帳の「モード変更の記録」へ残し、実効モードを a2/o2 にする。
+1. 切替日時・理由・失敗した役・確認結果を台帳の「モード変更の記録」へ残し、実効モードを縮退先(a1g/a2/o2/g2)にする。
 2. 反対側で進行中の役の結果・書込み・未返信指示・既返信結果を回収して照合する。新しい配車は
    実効モードに従い、旧エンジンの途中成果を黙って捨てたり二重処理したりしない。
 3. 回収後、中央が旧ウィンドウを先に despawn する。登録が生きているまま spawn しても
@@ -818,35 +838,41 @@ Codex は §1.1.2 の MCP、Claude は claude-in-chrome を使う。能力が欠
 
 ### 1.5 モデル・effort・費用上限は人間が起動のたびに確認する ★
 
-**kind は §1.2.1 の実効モードが決める。モデル・effort・費用上限は4モード共通の固定義務にしない。**
+**kind は §1.2.1 の実効モードが決める。モデル・effort・費用上限はどのモードにも共通の固定義務にしない。**
 人間が起動のたびに値と費用上限を確認し、その値を中央が起動行と台帳へ記録する。
 **人間が「モデル制限」を指示しているミッションでは、この節の表と散文が書いているモデルが
 まとめて軽い層へ置き換わる** ★ — 正はこの節の最後の小節「モデル制限モード」である。
 作業エージェントが自分の値を変えたり、規範だけから費用上限を作ったりしない。
 明示選択の無い既存 a1 は下の現行既定をそのまま使う。新しいモードの値を自動で転用しない。
-中央も選択モードの中心側で人間が起こす。colabtmux.conf の値は a1 の互換既定と Codex の
+中央も選択モードの中心側で人間が起こす。colabtmux.conf の値は a1 の互換既定と Codex・Gemini の
 起動例であり、子の配車モードや全モードのモデル義務ではない。
 
 #### a1 の互換既定(明示選択の無い既存プロジェクト)
 
 以下の表・規則・フロースキルの model 欄は a1 の現行動作を保つために残す。
-a2/o1/o2 を選んだ場合はこの固定表を適用せず、確認済みの起動値を使う。
+a2/o1/o2/g1/g2 を選んだ場合と、a1g へ縮退した場合は、この固定表のうち該当しない欄を適用せず、確認済みの起動値を使う。
 Claude の /setup・/dependabot・/kit-migrate・/project-desc の model frontmatter を上書きする経路は未確認なので、
 その値が実行中に効くことを起動記録へ含め、人間の指定と矛盾する場合は配車前に解消する。
 
-| 役 / 作業指示 | kind | モデル | effort | codex が使えないとき(§1.3) |
-|---|---|---|---|---|
-| 中央エージェント | **人間が選ぶ** | claude なら `opus` / codex なら `gpt-6.1-sol` | `high` | — |
-| `@triage`(束ね・分割・非交差) | claude | `sonnet` | `medium` | — |
-| **F1** 構築(`/build`) | claude | `opus` | `high` | — |
-| **F2** 文書整合(`/verify-docs`) | claude | `opus` | `high` | — |
-| **F3** 実装整合(`/verify-impl`) | claude | `opus` | **`medium`** | — |
-| **F4** 試験(`/verify-tests`) | claude | **`sonnet`** | `high` | — |
-| `@review`(独立レビュー) | codex | `gpt-6.1-sol` | `high` | **`opus` / `xhigh`** |
-| `@survey`(一括読取) | codex | `gpt-6-luna` | `low` | **`sonnet` / `low`** |
-| `@qa`(ブラウザ) | codex | `gpt-6-luna` | `medium` | **`opus` / `high`**(+ `claude-in-chrome`。条件は §1.4) |
-| `@discuss`(人間との議論。§1.6) | claude | `opus` | `high` | — |
-| 一括読取サブエージェント | claude 内部 | `sonnet` | `low` | — |
+| 役 / 作業指示 | kind | モデル | effort | codex が使えないとき: a1g(§1.3) | gemini も使えないとき: a2(凍結) |
+|---|---|---|---|---|---|
+| 中央エージェント | **人間が選ぶ** | claude なら `opus` / codex なら `gpt-6.2-sol` / gemini なら `gemini-4-neon` | `high` | — | — |
+| `@triage`(束ね・分割・非交差) | claude | `sonnet` | `medium` | — | — |
+| **F1** 構築(`/build`) | claude | `opus` | `high` | — | — |
+| **F2** 文書整合(`/verify-docs`) | claude | `opus` | `high` | — | — |
+| **F3** 実装整合(`/verify-impl`) | claude | `opus` | **`medium`** | — | — |
+| **F4** 試験(`/verify-tests`) | claude | **`sonnet`** | `high` | — | — |
+| `@review`(独立レビュー) | codex | `gpt-6.2-sol` | `high` | `gemini` / `gemini-4-neon` / `high` | **`opus` / `xhigh`** |
+| `@survey`(一括読取) | codex | `gpt-6.1-terra` | `low` | `gemini` / `gemini-3.8-flash` / `low` | **`sonnet` / `low`** |
+| `@qa`(ブラウザ) | codex | `gpt-6.1-terra` | `medium` | **claude の `opus` / `high`**(+ `claude-in-chrome`。条件は §1.4。gemini の画面操作の口は未確認なので替えない) | **`opus` / `high`**(+ `claude-in-chrome`。条件は §1.4) |
+| `@discuss`(人間との議論。§1.6) | claude | `opus` | `high` | — | — |
+| 一括読取サブエージェント | claude 内部 | `sonnet` | `low` | — | — |
+
+**a1 の codex のモデル名は 2026-11-22 に新しい名前へ替えた**(重い層 `gpt-6.1-sol` → `gpt-6.2-sol`、
+軽い・中の層 `gpt-6-luna` → `gpt-6.1-terra`。人間の指示。層と effort は変えていない)。
+**a1 から a2 への縮退で使う右端の欄の値は、これまでどおり凍結である。**
+**gemini のモデルがそのアカウントに無いときは `gemini-3.8-flash` / `high` に替える**(§1.3。
+替えたことは台帳へ記録する)。a1g の `@survey` の gemini は、そのとき `high` に上がる。
 
 ループの外の作業指示: `/setup`・`/dependabot`・`/kit-migrate` と 状態確認(§8.2 の再開の状態確認)は
 **`sonnet`** である(effort は `/setup` と 状態確認が `low`、`/dependabot` と `/kit-migrate` が `high`)。
@@ -911,7 +937,7 @@ Claude の /setup・/dependabot・/kit-migrate・/project-desc の model frontma
    `check-baseline-verdicts.py` の疑いの取り残しで見る。**後者が増えたら `high` へ戻す。**
    **この計器には穴が在る** ★ — 免除に当たる run(対象0件 / 3ファイル以下で `critical` 非含有)
    には独立レビューが1本も無いので、**所見0件を「取りこぼし無し」と読んではならない。**
-4. **`@review` は `gpt-6.1-sol` / `high` に固定である — こちらも上げない。**
+4. **`@review` は `gpt-6.2-sol` / `high` に固定である — こちらも上げない。**
    `/verify-docs` §2 が艦隊でないときのレビューをまさにその値に固定しているのは、
    **2つの run の所見が比較可能であり続けるため**である。艦隊側のウィンドウだけを動かすとそれが壊れる。
    **両方を一緒に上げるか、どちらも上げないかである。**
@@ -949,30 +975,38 @@ Claude の /setup・/dependabot・/kit-migrate・/project-desc の model frontma
 `/setup` の `low` はそこで効かない。**これは承知のうえで開けてある穴である**(2026-09-04 の裁定):
 `low` が効かないときに起きるのは考えすぎであって、判断の取り違えではない。
 
-#### o1・a2・o2 の等価表(明示選択したときだけ使う)★
+#### o1・a2・o2・g1・g2 の等価表(明示選択したときだけ使う)★
 
 **上の a1 の表とその6規則は、a1(未選択の既存プロジェクトを含む)専用のまま変えない** —
-既存プロジェクトの挙動を壊さないためである(§1.2.1)。人間が a2/o1/o2 を明示的に選んだ
-ミッションには、次の等価表を出発点にする。**モデルの対応は深さの層で読み替える**:
-`opus` ⇄ `gpt-6.1-sol`(重い層)、`sonnet` ⇄ `gpt-6-luna`(軽い層)。
-**`--effort <値>`(claude)と `-c model_reasoning_effort=<値>`(codex)は同じ値をそのまま使う**
+既存プロジェクトの挙動を壊さないためである(§1.2.1)。人間が a2/o1/o2/g1/g2 を明示的に選んだ
+ミッションには、次の等価表を出発点にする。**モデルの対応は深さの層で読み替える**(2026-11-22 に3エンジンへ広げた):
+
+| 層 | claude | codex | gemini |
+|---|---|---|---|
+| 重い | `opus` | `gpt-6.2-sol` | `gemini-4-neon` |
+| 中 | `sonnet` | `gpt-6.1-terra` | `gemini-4-hydrogen` |
+| 軽い(`low` の役) | `sonnet` | `gpt-6.1-terra` | `gemini-3.8-flash` |
+
+**gemini のモデルがそのアカウントに無いときは `gemini-3.8-flash` / `high` に替える**(§1.3。gemini だけ)。
+gemini の effort は `--effort <値>`(`agy`)で渡し、`low`/`medium`/`high` は他のエンジンと同じ値をそのまま使う。
+**`--effort <値>`(claude・gemini)と `-c model_reasoning_effort=<値>`(codex)は同じ値をそのまま使う**
 (`high`/`medium`/`low` は層の呼び名であって、エンジンごとに意味が違う値ではない)。
 
 **o1(a1 の反転)**
 
 | 役 / 作業指示 | kind | モデル | effort/reasoning |
 |---|---|---|---|
-| 中央エージェント | codex | `gpt-6.1-sol` | `high` |
-| `@triage` | codex | `gpt-6-luna` | `medium` |
-| **F1** 構築 | codex | `gpt-6.1-sol` | `high` |
-| **F2** 文書整合 | codex | `gpt-6.1-sol` | `high` |
-| **F3** 実装整合 | codex | `gpt-6.1-sol` | `medium` |
-| **F4** 試験 | codex | `gpt-6-luna` | `high` |
+| 中央エージェント | codex | `gpt-6.2-sol` | `high` |
+| `@triage` | codex | `gpt-6.1-terra` | `medium` |
+| **F1** 構築 | codex | `gpt-6.2-sol` | `high` |
+| **F2** 文書整合 | codex | `gpt-6.2-sol` | `high` |
+| **F3** 実装整合 | codex | `gpt-6.2-sol` | `medium` |
+| **F4** 試験 | codex | `gpt-6.1-terra` | `high` |
 | `@review`(反対側エンジン) | claude | `opus` | `high` |
 | `@survey` | claude | `sonnet` | `low` |
 | `@qa`(+ `claude-in-chrome`。条件は §1.4) | claude | `sonnet` | `medium` |
-| `@discuss` | codex | `gpt-6.1-sol` | `high` |
-| 一括読取 | — | — | codex の作業エージェントはサブエージェントを持たない。1回限りの新しい codex(`gpt-6-luna` / `low`。`delegation.md` の該当箇所)で代える |
+| `@discuss` | codex | `gpt-6.2-sol` | `high` |
+| 一括読取 | — | — | codex の作業エージェントはサブエージェントを持たない。1回限りの新しい codex(`gpt-6.1-terra` / `low`。`delegation.md` の該当箇所)で代える |
 
 **a2(claude のみ)**
 
@@ -1002,26 +1036,63 @@ Claude の /setup・/dependabot・/kit-migrate・/project-desc の model frontma
 
 | 役 / 作業指示 | kind | モデル | effort/reasoning |
 |---|---|---|---|
-| 中央エージェント | codex | `gpt-6.1-sol` | `high` |
-| `@triage` | codex | `gpt-6-luna` | `medium` |
-| **F1** 構築 | codex | `gpt-6.1-sol` | `high` |
-| **F2** 文書整合 | codex | `gpt-6.1-sol` | `high` |
-| **F3** 実装整合 | codex | `gpt-6.1-sol` | `medium` |
-| **F4** 試験 | codex | `gpt-6-luna` | `high` |
-| `@review`(同一エンジンの別文脈) | codex | `gpt-6.1-sol` | `high` |
-| `@survey` | codex | `gpt-6-luna` | `low` |
-| `@qa` | codex | `gpt-6-luna` | `medium` |
-| `@discuss` | codex | `gpt-6.1-sol` | `high` |
-| 一括読取 | — | — | 1回限りの新しい codex(`gpt-6-luna` / `low`) |
+| 中央エージェント | codex | `gpt-6.2-sol` | `high` |
+| `@triage` | codex | `gpt-6.1-terra` | `medium` |
+| **F1** 構築 | codex | `gpt-6.2-sol` | `high` |
+| **F2** 文書整合 | codex | `gpt-6.2-sol` | `high` |
+| **F3** 実装整合 | codex | `gpt-6.2-sol` | `medium` |
+| **F4** 試験 | codex | `gpt-6.1-terra` | `high` |
+| `@review`(同一エンジンの別文脈) | codex | `gpt-6.2-sol` | `high` |
+| `@survey` | codex | `gpt-6.1-terra` | `low` |
+| `@qa` | codex | `gpt-6.1-terra` | `medium` |
+| `@discuss` | codex | `gpt-6.2-sol` | `high` |
+| 一括読取 | — | — | 1回限りの新しい codex(`gpt-6.1-terra` / `low`) |
 
 **o1→o2 は新設の縮退なので、既存の値との衝突が無い** — o2 の上の表がそのまま出発点になる
 (o1 の表で claude だった `@review`/`@survey`/`@qa` を、この表の同じ役へ読み替えるだけである)。
 
+**g1(gemini が中心。反対側は claude)**(2026-11-22 に足した)
+
+| 役 / 作業指示 | kind | モデル | effort |
+|---|---|---|---|
+| 中央エージェント | gemini | `gemini-4-neon` | `high` |
+| `@triage` | gemini | `gemini-4-hydrogen` | `medium` |
+| **F1** 構築 | gemini | `gemini-4-neon` | `high` |
+| **F2** 文書整合 | gemini | `gemini-4-neon` | `high` |
+| **F3** 実装整合 | gemini | `gemini-4-neon` | `medium` |
+| **F4** 試験 | gemini | `gemini-4-hydrogen` | `high` |
+| `@review`(反対側エンジン) | claude | `opus` | `high` |
+| `@survey` | claude | `sonnet` | `low` |
+| `@qa`(+ `claude-in-chrome`。条件は §1.4) | claude | `sonnet` | `medium` |
+| `@discuss` | gemini | `gemini-4-neon` | `high` |
+| 一括読取 | — | — | gemini の作業エージェントはサブエージェントを持たない(未確認)。1回限りの新しい gemini(`gemini-3.8-flash` / `low`)で代える |
+
+**g2(gemini のみ)**
+
+| 役 / 作業指示 | kind | モデル | effort |
+|---|---|---|---|
+| 中央エージェント | gemini | `gemini-4-neon` | `high` |
+| `@triage` | gemini | `gemini-4-hydrogen` | `medium` |
+| **F1** 構築 | gemini | `gemini-4-neon` | `high` |
+| **F2** 文書整合 | gemini | `gemini-4-neon` | `high` |
+| **F3** 実装整合 | gemini | `gemini-4-neon` | `medium` |
+| **F4** 試験 | gemini | `gemini-4-hydrogen` | `high` |
+| `@review`(同一エンジンの別文脈) | gemini | `gemini-4-neon` | `high` |
+| `@survey` | gemini | `gemini-3.8-flash` | `low` |
+| `@qa`(`cli-qa` のみ。画面を触るほうは起こせない。§1.2.1) | gemini | `gemini-4-hydrogen` | `medium` |
+| `@discuss` | gemini | `gemini-4-neon` | `high` |
+| 一括読取 | — | — | 1回限りの新しい gemini(`gemini-3.8-flash` / `low`) |
+
+**g1→g2 は新設の縮退である**(反対側の claude が使えないとき。g1 の表で claude だった役を、g2 の表の同じ役へ読み替える)。
+**gemini の4系は、4系を使えるプランのアカウントでだけ動く** — 使えないアカウントでは、`launch-agent.py` が
+`gemini-3.8-flash` / `high` へ替える(§1.3)ので、**表の値で起きたとは限らない。起動時の標準エラーと台帳の記録で、
+実際に使われたモデルを確かめること。**
+
 **ループの外(この節冒頭の3箇所目。`/setup`・`/dependabot`・`/kit-migrate`・状態確認・
-`/relations`・`/retrofit`・`/kit-improve`・転記だけの `/build`)を o1/o2 で走らせる場合**、
-モデルは a1 の値を上の層の対応で読み替える: `sonnet` → `gpt-6-luna`
-(`/setup`・`/dependabot`・`/kit-migrate`・状態確認)、`opus` → `gpt-6.1-sol`
-(`/relations`・`/retrofit`・`/kit-improve`・転記だけの `/build` は `sonnet` → `gpt-6-luna`)。
+`/relations`・`/retrofit`・`/kit-improve`・転記だけの `/build`)を o1/o2/g1/g2 で走らせる場合**、
+モデルは a1 の値を上の層の対応で読み替える: `sonnet` → `gpt-6.1-terra`(g1/g2 は `gemini-3.8-flash`)
+(`/setup`・`/dependabot`・`/kit-migrate`・状態確認)、`opus` → `gpt-6.2-sol`(g1/g2 は `gemini-4-neon`)
+(`/relations`・`/retrofit`・`/kit-improve`・転記だけの `/build` は `sonnet` → `gpt-6.1-terra`)。
 effort は a1 と同じ値のままである。**起こす側の居ない経路で `model_reasoning_effort` が
 効かないことがあるのは、claude の frontmatter の穴(上の散文)と同じ性質であり、
 同じく承知のうえで開けてある。**
@@ -1037,7 +1108,7 @@ effort は a1 と同じ値のままである。**起こす側の居ない経路�
 触る危険を減らすこと**である。重い層のモデルは同じ仕事でも枠を速く使うので、
 急がないミッションや枠を使い切りたくないミッションを、**軽い層だけで一式動かせるようにしておく。**
 
-**運用モード(a1/a2/o1/o2)とは独立である。** どの役をどちらのエンジンが取るかは1つも変わらない —
+**運用モード(a1/a1g/a2/o1/o2/g1/g2)とは独立である。** どの役をどちらのエンジンが取るかは1つも変わらない —
 変わるのは**モデルだけ**であり、a1 のままでも o1 のままでも、この制限に入れる。
 
 **入るのは人間が指示したときだけで、既定は「なし」である。** AI は自分で入らず、自分で外さない。
@@ -1047,10 +1118,11 @@ effort は a1 と同じ値のままである。**起こす側の居ない経路�
 | エンジン | 制限下で使うモデル | 置き換わる元の値 |
 |---|---|---|
 | claude | **`sonnet`** | `opus`(中央・F1・F2・F3・`@discuss`、codex が使えないときの `@review`・`@qa`、`/relations`・`/retrofit`・`/kit-improve`) |
-| codex | **`gpt-6-luna`** | `gpt-6.1-sol`(o1/o2 の同じ役と、同じループの外の作業指示) |
+| codex | **`gpt-6.1-terra`** | `gpt-6.2-sol`(o1/o2 の同じ役と、同じループの外の作業指示。a1 の `@review`、中央が codex のとき) |
+| gemini | **`gemini-3.8-flash`** | `gemini-4-neon` と `gemini-4-hydrogen`(g1/g2 の同じ役と、同じループの外の作業指示。a1g の `@review`) |
 
 **「すべて」である** — 上の a1 の表も、o1・a2・o2 の等価表も、「codex が使えないとき」の欄も、
-ループの外の作業指示を書いた散文も、例外ではない。もともと軽い層(`sonnet` / `gpt-6-luna`)の
+ループの外の作業指示を書いた散文も、例外ではない。もともと軽い層(`sonnet` / `gpt-6.1-terra` / `gemini-3.8-flash`)の
 ものは何も変わらないので、**結果として、制限下では中央から一括読取まで全部が軽い層の1モデルになる。**
 **claude の `/setup`・`/dependabot`・`/kit-migrate` の frontmatter は元から `sonnet`** なので、
 制限のために直すものは無い(この節の「3箇所目」はそのままでよい)。
@@ -1638,15 +1710,18 @@ F3 ×2・F2 ×1 で足りたところに F3 ×3・F2 ×2 を払った)。
 **最初に台帳の実効モードを読み、§1.2.1 の表で kind を選ぶ。** 下の固定起動行は a1 の互換例。
 o1/o2 の work/triage/discuss は `launch-agent.py codex <役>` に
 人間が確認した `--model <M> -c model_reasoning_effort=<E>` を渡し、spawn の kind も codex にする。
+g1/g2 の work/triage/discuss と、a1g・g2 の review/survey は `launch-agent.py gemini <役>` に
+`--model <M> --effort <E>` を渡し、spawn の kind も gemini にする。**承認の方式(`--mode auto`)は
+launch-agent.py が決める** — 端末の砂箱が使えない環境では起こせない(§1.3 の Gemini の欄)。
 **砂箱は渡さない** — 役によらず `danger-full-access` が入る(§1.1.1)。
-o1 の review/survey/qa は `launch-agent.py claude <役>` に確認した `--model <M> --effort <E>` を
-渡す。a2/o2 は隔離手段も作業ごとに選ぶ(§1.2.1)。無人モードと役注入は launch-agent.py が守る。
+o1/g1 の review/survey/qa と、a1g の qa は `launch-agent.py claude <役>` に確認した `--model <M> --effort <E>` を
+渡す。a2/o2/g2 は隔離手段も作業ごとに選ぶ(§1.2.1)。無人モードと役注入は launch-agent.py が守る。
 
 
 **明示モードの起動は次の形で行う。** 変数は台帳の実効モードの表・起動前確認・人間の確認値から
 設定する。呼出し側が選び、launch-agent.py は配車モードを推定しない。
 **台帳の `モデル制限:` が あり なら、`worker_model` には軽い層の値
-(claude は `sonnet`、codex は `gpt-6-luna`)を入れる。`worker_effort` はそのままである**(§1.5)。
+(claude は `sonnet`、codex は `gpt-6.1-terra`、gemini は `gemini-3.8-flash`)を入れる。`worker_effort` はそのままである**(§1.5)。
 
 ```bash
 : "${worker_kind:?台帳の実効モードの表で決める}"
@@ -1665,6 +1740,13 @@ case "$worker_kind" in
     colabtmux agent spawn --id "$worker_id" --kind "$worker_kind" --role "$worker_role" --json -- \
       python3 .claude/scripts/launch-agent.py "$worker_kind" "$worker_role" \
         -- --model "$worker_model" -c "model_reasoning_effort=$worker_effort"
+    ;;
+  gemini)
+    # 承認は launch-agent.py が `--mode auto` で決める(端末の砂箱が要る。§1.3 の Gemini の欄)。
+    # 指定のモデルがそのアカウントに無いときは gemini-3.8-flash / high に替わる(標準エラーに出る。台帳へ記録する)
+    colabtmux agent spawn --id "$worker_id" --kind "$worker_kind" --role "$worker_role" --json -- \
+      python3 .claude/scripts/launch-agent.py "$worker_kind" "$worker_role" \
+        -- --model "$worker_model" --effort "$worker_effort"
     ;;
   *) echo '台帳の kind が不正' >&2; exit 1 ;;
 esac
@@ -1717,14 +1799,14 @@ colabtmux agent spawn --id worker-251440 --kind claude --role work --json -- \
 #     **分が変わればそれが新しい番号である**(下は 14:33 に起こした形。枝番は要らない)
 colabtmux agent spawn --id review-251433 --kind codex --role review --json -- \
   python3 .claude/scripts/launch-agent.py codex review \
-    -- --model gpt-6.1-sol -c model_reasoning_effort="high"
+    -- --model gpt-6.2-sol -c model_reasoning_effort="high"
 
 # 1'-qa) **`@qa` の起動行も他の役と同じである**(砂箱が1つになったので、ここで分かれるものは
 #      もう無い。§1.1.1)。**`--model` と `model_reasoning_effort` は §1.5 が正であり、
 #      `@qa` の値は上の行と違う**
 colabtmux agent spawn --id qa-251434 --kind codex --role qa --json -- \
   python3 .claude/scripts/launch-agent.py codex qa \
-    -- --model gpt-6-luna -c model_reasoning_effort="medium"
+    -- --model gpt-6.1-terra -c model_reasoning_effort="medium"
 
 # 1''') **qa が走る作業指示は、送る前にここで `@qa` を起こす**(§1.2 の先行起動の唯一の例外。
 #       **その語の定義と条件と理由は §1.4** — 名指したものだけでなく**引数なしも含む**)。
@@ -2445,10 +2527,10 @@ hook に任せると「1作業指示につき1回」の音が鳴り続ける。�
 ---
 mission: <mid>
 状態: 進行中 | 完了 | 中断
-選択モード: a1 | a2 | o1 | o2
-実効モード: a1 | a2 | o1 | o2
+選択モード: a1 | a2 | o1 | o2 | g1 | g2
+実効モード: a1 | a1g | a2 | o1 | o2 | g1 | g2   # a1g は a1 の縮退の行き先(選んで入るモードではない。§1.3)
 # モード明示 が無い a1 台帳は未選択として読み、F4 の現行動作を保つ。
-# 人間の明示が無いときの既定は中央のエンジンで決まる(claude なら a1、codex なら o1。§1.2.1)
+# 人間の明示が無いときの既定は中央のエンジンで決まる(claude なら a1、codex なら o1、gemini なら g1。§1.2.1)
 モード明示: あり | なし
 # モデル制限 は運用モードとは独立の「使うモデルを軽い層に固定する」指示(§1.5 の最後の小節)。
 # **人間が指示したときだけ あり**。欄そのものが無い台帳(この欄の導入より古いもの)は なし と読む
@@ -2719,6 +2801,7 @@ colabtmux 側にこれが入ったら、上の1は不要になる(届いたメ�
 ```bash
 colabtmux start          # claude で立てる(既定。colabtmux.conf の [agent_kind.claude])
 # colabtmux start --kind codex   # codex で立てる(同 [agent_kind.codex])
+# colabtmux start --kind gemini  # gemini で立てる(同 [agent_kind.gemini]。端末の砂箱が使える環境だけ)
 #   どちらも .claude/scripts/launch-agent.py <kind> orchestrator を呼ぶ。
 #   起動行を明示するなら、そのまま打っても同じである:
 #     colabtmux start -- python3 .claude/scripts/launch-agent.py claude orchestrator \

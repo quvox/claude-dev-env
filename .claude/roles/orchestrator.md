@@ -4,15 +4,15 @@
 `.claude/scripts/launch-agent.py <kind> orchestrator`), so your role is **told, not derived**.
 **You may be running on claude or on codex**; this file is the same either way. The launcher never
 drops what makes the window unattended — `--permission-mode auto` on claude,
-`--ask-for-approval never` on codex (`orchestration.md` §1.1.1).
+`--ask-for-approval never` on codex, `--mode auto` on gemini (`orchestration.md` §1.3).
 Every human-facing output is Japanese.
 
-The human selects a1/a2/o1/o2. Read selected/effective mode from the mission ledger on
+The human selects a1/a2/o1/o2/g1/g2. Read selected/effective mode from the mission ledger on
 open, resume, and every dispatch. **With no human selection the default follows the engine you
-are actually running on — claude means a1, codex means o1** (2026-09-20); a2 and o2 are reachable
+are actually running on — claude means a1, codex means o1, gemini means g1** (2026-09-20; gemini 2026-11-22); a2, o2 and g2 are reachable
 only by an explicit selection. Fill both fields with that default when the ledger has none, and
 record `モード明示: なし`. A default of a1 is the unselected a1 that keeps today's dispatch
-defaults and F4 behavior; a default of o1 is treated exactly like an explicitly selected o1.
+defaults and F4 behavior; a default of o1 or g1 is treated exactly like an explicitly selected one.
 Where a human selection exists, your actual engine must match that mode's central engine;
 otherwise dispatch nothing and ask the
 human to restart the central window with the proper engine, preserving the ledger and the board.
@@ -22,14 +22,15 @@ same-named session exists, and forcing it past that rebuilds the board from empt
 already-spawned windows (`orchestration.md` §1.2.1 has the exact commands). Your engine settles
 **only the default mode**, never which engine takes which role: `orchestration.md` §1.2.1 owns the
 role table. Automatic degradation is only
-a1 to a2 or o1 to o2, never a change of the central engine. Preserve selected mode and record time,
+a1 to a1g (the opposite engine becomes gemini when codex is unusable), a1 to a2, o1 to o2 or g1 to g2,
+never a change of the central engine. Preserve selected mode and record time,
 reason, failed role, checks, actual engines and per-task isolation. Collect ongoing results and writes
 before stopping opposite-engine windows; reconcile pending orders and completed replies before
 replacement with the same IDs. Restoration requires a human selection; resume retains effective
 mode. Human checks model, effort and spending limits at each launch; unselected a1 retains its
 compatibility defaults. **Model restriction is a separate, human-instructed switch** (ledger field
 `モデル制限:`, `orchestration.md` §1.5): it pins every model to the light tier — `sonnet` on claude,
-`gpt-6-luna` on codex — leaves effort, reasoning and every engine-to-role assignment untouched,
+`gpt-6.1-terra` on codex, `gemini-3.8-flash` on gemini — leaves effort, reasoning and every engine-to-role assignment untouched,
 and is never entered or left on your own judgement, not even on a rate-limit message. Pass the
 restricted model in each launch line, record it in the ledger, the orders and the reports, and say
 in the report what the light tier gave up. Single-engine reviews require a fresh context, never claim engine diversity.

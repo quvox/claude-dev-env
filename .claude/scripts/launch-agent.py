@@ -4,7 +4,7 @@
 使い方:
     python3 .claude/scripts/launch-agent.py <kind> <role> [--sandbox danger-full-access] [-- <追加の引数>...]
 
-  kind  claude | codex
+  kind  claude | codex | gemini
   role  .claude/roles/<role>.md のファイル名(拡張子を除いたもの)
 
 **なぜこの script が要るか。**
@@ -19,6 +19,15 @@ claude 側には無い経路なので、そこだけ kind による差が生ま�
 **渡すのは役のファイル1本だけである。** 起動時に何かを組み立てたり繋いだりしない ★ —
 **ファイルを見れば、そのエージェントが何を受け取るかが分かる**状態を保つためである。
 役に共通することは `CLAUDE.md` §2 が持つ(`AGENTS.md` はそれへのリンクなので、claude も codex も同じものを読む)。
+
+**gemini(Antigravity CLI の `agy`)は、役の本文を最初の発話(`-i`)として渡す** ★(2026-11-22)。
+`agy` には役の本文を渡す専用の口が無いので、codex と同じく**ファイルを読んで中身を1本そのまま渡す**。
+承認は `--mode auto` で自動にする。**これは端末の砂箱が使える環境だけで成り立つ** — 使えない環境では
+`agy` が警告を出して通常のモード(承認を求める)に戻り、無人にならない。
+その警告が出たら gemini は「必要機能の不成立」であり、縮退の対象である(`orchestration.md` §1.3)。
+**指定したモデルがそのアカウントに無いときは、`gemini-3.8-flash` / `high` に替えて起こす**(gemini だけ。
+claude と codex は替えない)。替えたことは標準エラーへ出し、起こした側が台帳へ記録する。
+`agy models` が失敗したとき(未サインイン・不在)は、替えずに止まる(それは「無い」ではなく「不調」である)。
 
 **claude にはパスをそのまま渡す。** codex の `-c developer_instructions=` は文字列しか受けないので、
 **そのときだけファイルを読んで中身を渡す** — 読むのは1本で、繋ぎ合わせはしない。
@@ -35,6 +44,7 @@ import argparse
 import os
 from pathlib import Path
 import shlex
+import subprocess
 import sys
 
 
@@ -75,7 +85,13 @@ PROTECTED = {
     # 短縮の `-s` `-a`)。**前方一致だけでは素通りする**(2026-09-14 に実測で抜けられた)ので、
     # **形を正規化してから見る。**
     'codex': ('--sandbox', '-s', '--ask-for-approval', '-a'),
+    # gemini: 承認の方式・役の本文・出力モードを重ねて渡せないようにする。
+    'gemini': ('--mode', '--dangerously-skip-permissions', '--prompt-interactive', '-i',
+               '--prompt', '-p', '--settings', '--agent', '--remote-agent'),
 }
+
+# 指定のモデルがそのアカウントに無いときの代わり(gemini だけ。人間の指示 2026-11-22)。
+GEMINI_FALLBACK = ('gemini-3.8-flash', 'high')
 
 # `-c` / `--config` で渡されると困る設定のキー。
 PROTECTED_CONFIG_KEYS = ('developer_instructions', 'sandbox_mode', 'approval_policy')
@@ -115,8 +131,57 @@ def check_extra(kind: str, extra: list[str]) -> None:
 SANDBOX = 'danger-full-access'
 
 
-def build_command(kind: str, role: str, extra: list[str]) -> list[str]:
+def available_gemini_models() -> list[str]:
+    """`agy models` が出すモデル ID の一覧。取れなければ止まる(「無い」ではなく「不調」)。"""
+    try:
+        done = subprocess.run(['agy', 'models'], capture_output=True, text=True, timeout=60)
+    except (OSError, subprocess.TimeoutExpired) as error:
+        sys.exit(f'agy models を実行できません(gemini は不調として扱う): {error}')
+    if done.returncode != 0:
+        sys.exit(f'agy models が失敗しました(未サインインなど。gemini は不調として扱う): '
+                 f'{(done.stdout + done.stderr).strip()[:200]}')
+    ids = []
+    for line in done.stdout.splitlines():
+        head = line.split('\t', 1)[0].split(' ', 1)[0].strip()
+        if head.startswith(('gemini-', 'claude-', 'gpt-')):
+            ids.append(head)
+    if not ids:
+        sys.exit('agy models が空でした(gemini は不調として扱う)')
+    return ids
+
+
+def resolve_gemini_model(extra: list[str], models: list[str] | None = None) -> tuple[list[str], str]:
+    """`--model` が無いモデルなら、代わりの値へ替える。返すのは (替えた後の追加引数, 知らせの文)。"""
+    out, notice, i = list(extra), '', 0
+    while i < len(out) and out[i] != '--model':
+        i += 1
+    if i + 1 >= len(out):
+        return out, notice
+    wanted = out[i + 1]
+    models = models if models is not None else available_gemini_models()
+    if any(m == wanted or m.startswith(wanted + '-') for m in models):
+        return out, notice
+    fallback_model, fallback_effort = GEMINI_FALLBACK
+    out[i + 1] = fallback_model
+    if '--effort' in out and out.index('--effort') + 1 < len(out):
+        out[out.index('--effort') + 1] = fallback_effort
+    else:
+        out += ['--effort', fallback_effort]
+    notice = (f'gemini のモデル {wanted} はこのアカウントに無いため、'
+              f'{fallback_model} / {fallback_effort} に替えて起こします')
+    return out, notice
+
+
+def build_command(kind: str, role: str, extra: list[str],
+                  gemini_models: list[str] | None = None) -> list[str]:
     check_extra(kind, extra)
+    if kind == 'gemini':
+        text = role_text(role)
+        resolved, notice = resolve_gemini_model(extra, gemini_models)
+        if notice:
+            print(notice, file=sys.stderr)
+        # `--mode auto` は端末の砂箱が要る。使えない環境では agy が警告を出して通常のモードへ戻る。
+        return ['agy', '--mode', 'auto'] + resolved + ['-i', text]
     if kind == 'claude':
         # **ファイルのパスをそのまま渡す。** 中身を読む必要が無い。
         path = role_path(role)
@@ -142,7 +207,7 @@ def main() -> None:
         epilog='`--` の後ろに書いたものは、そのまま起動コマンドの末尾へ足される'
                '(例: --model opus --effort high)',
     )
-    parser.add_argument('kind', choices=['claude', 'codex'])
+    parser.add_argument('kind', choices=['claude', 'codex', 'gemini'])
     parser.add_argument('role')
     parser.add_argument('--sandbox', default=None,
                         help=f'codex の砂箱のモード。**{SANDBOX} しか無い**ので、'
@@ -158,8 +223,8 @@ def main() -> None:
         extra = extra[1:]
     # **claude では砂箱のモードを使わない。** 黙って無視すると、`@qa` を claude へ落とすときに
     # 「指定したのに効いていない」に気づけない(§1.4)。
-    if args.kind == 'claude' and args.sandbox is not None:
-        sys.exit('--sandbox は codex にだけ効きます(claude には砂箱のモードがありません)')
+    if args.kind != 'codex' and args.sandbox is not None:
+        sys.exit(f'--sandbox は codex にだけ効きます({args.kind} には砂箱のモードがありません)')
     # **古い起動行を黙って読み替えない** ★ — `workspace-write` や `none` を渡してくる呼出しは
     # 「砂箱が掛かっている」前提で書かれているので、そのまま通すとその前提が静かに外れる。
     if args.sandbox is not None and args.sandbox != SANDBOX:
